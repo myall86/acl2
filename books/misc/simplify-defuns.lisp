@@ -52,7 +52,7 @@
          (hint-settings state)
          (cond ((null hint-settings)
                 (mv nil state))
-               (t (thanks-for-the-hint nil hint-settings state))) ;BB
+               (t (thanks-for-the-hint nil hint-settings nil state))) ;BB
          (er-let* ((pspv (load-hint-settings-into-pspv
                           t hint-settings saved-pspv nil wrld ctx state)))
            (cond
@@ -100,7 +100,7 @@
                      (sl-let ;from simplify-clause1
                       (contradictionp simplify-clause-pot-lst)
                       (setup-simplify-clause-pot-lst current-clause
-                                                     (pts-to-ttree-lst 
+                                                     (pts-to-ttree-lst
                                                       pts)
                                                      nil ;; RBK: fc-pair-lst
                                                      type-alist

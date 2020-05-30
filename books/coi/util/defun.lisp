@@ -135,7 +135,7 @@
                  ;; And here we can add congruence proofs ..
                  ,@(process-congruence-arguments name args cong-hints cong-specs induction-defun)
 
-                 ,@(and disable `((in-theory (disable ,name))))
+                 ,@(and disable `((in-theory (disable ,name ,@(and (null args) `((,name)))))))
 
                  )))))))))
 
@@ -145,8 +145,7 @@
 (defun defun-fn-wrapper (disable name args body state)
   (declare (xargs :mode :program))
   (met ((doc decls xbody) (decompose-defun-body body))
-    (met ((err tbody)
-          (acl2::pseudo-translate xbody (list (cons name args)) (w state)))
+    (met ((err tbody) (acl2::pseudo-translate xbody (list (cons name args)) (w state)))
       (met ((case base) (lift-base (list name) tbody args))
 	(declare (ignore base))
 	(let ((event (if (not (equal case acl2::*nil*))
@@ -177,6 +176,12 @@
 (defmacro def::signature (fname args &rest vals)
   (met ((hints vals) (extract-hints vals))
     `(acl2::progn ,@(signature-fn fname args vals hints))))
+
+(defmacro def::signatured (name &rest args)
+  `(progn
+     (def::signature ,name ,@args)
+     (in-theory (disable ,name))
+     ))
 
 (defmacro def::congruence (fname argspec &rest vals)
   (let ((args (symbol-fns::item-to-numbered-symbol-list 'acl2::x (len argspec))))

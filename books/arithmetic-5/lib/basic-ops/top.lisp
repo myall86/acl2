@@ -25,7 +25,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(deftheory base 
+(deftheory base
   (current-theory :here))
 
 ;;; marker for determining whether this library is active
@@ -52,6 +52,7 @@
 (deftheory minimal-start-a
   (current-theory :here))
 
+; (depends-on "build/ground-zero-theory.certdep" :dir :system)
 (deftheory-static arithmetic-5-minimal-start-a
   (current-theory :here))
 
@@ -109,10 +110,10 @@
 (deftheory-static arithmetic-5-minimal-end-b
   (current-theory :here))
 
-(deftheory full 
+(deftheory full
   (current-theory :here))
 
-(deftheory minimal-arithmetic-theory 
+(deftheory minimal-arithmetic-theory
    (union-theories
     (theory 'base)
     (union-theories (set-difference-theories (theory 'minimal-end-a)
@@ -125,12 +126,12 @@
 			   (theory 'natp-posp-start)))
 
 (defmacro enable-natp-pposp-theory ()
-  '(progn 
+  '(progn
      (in-theory (enable natp-posp-theory))
      (in-theory (disable natp posp))))
 
 (defmacro disable-natp-posp-theory ()
-  '(progn 
+  '(progn
      (in-theory (disable natp-posp-theory))
      (in-theory (enable natp posp))))
 
@@ -154,7 +155,7 @@
 ;;; in default-hint.lisp.
 
 (deftheory scatter-exponents-theory
-    '(|(expt x (+ m n))| 
+    '(|(expt x (+ m n))|
       |(expt x (+ m n)) non-zero (+ m n)|
       |(expt x (+ m n)) non-zero x|
       ;;|(expt x (+ m n)) non-pos m and n|
@@ -208,10 +209,10 @@
 
 (prefer-positive-addends)
 
-(theory-invariant 
- (if (active-runep '(:definition boil-that-dustspeck))
+(theory-invariant
+ (if (active-runep '(:definition arith-5-active-flag))
      (not (and (active-runep '(:rewrite |(expt x (+ m n))|))
-	       (active-runep '(:rewrite normalize-factors-gather-exponents))))
+               (active-runep '(:rewrite normalize-factors-gather-exponents))))
    t)
  :error nil)
 
@@ -258,7 +259,7 @@
 		    |arith (* x (expt x (- n)))|
                     |arith (* x (/ (expt x n)))|
                     |arith (* (numerator x) (/ (denominator x)))|
-                    |arith (* c (* d x))| 
+                    |arith (* c (* d x))|
 		    |arith (* x (expt (- x) (- n)))|
 		    |arith (* x (/ (expt (- x) n)))|
                     |arith (* (/ x) (expt x n))| |arith (* (/ x) (expt (- x) n))|
@@ -298,7 +299,7 @@
                     |(arith-collect-* y x)| |(arith-collect-+ y x)|
                     arith-find-matching-factor-scatter-exponents
                     arith-normalize-factors-scatter-exponents
-                    arith-normalize-addends 
+                    arith-normalize-addends
 		    arith-find-matching-addend))
 
 (in-arithmetic-theory '(|arith (expt x c)|
@@ -334,7 +335,7 @@
 			|arith (* x (expt x (- n)))|
 			|arith (* x (/ (expt x n)))|
 			|arith (* (numerator x) (/ (denominator x)))|
-			|arith (* c (* d x))| 
+			|arith (* c (* d x))|
 			|arith (* x (expt (- x) (- n)))|
 			|arith (* x (/ (expt (- x) n)))|
 			|arith (* (/ x) (expt x n))| |arith (* (/ x) (expt (- x) n))|
@@ -358,7 +359,7 @@
 			|arith (+ x x)| |arith (+ x (- x))|
 			|arith (+ x (* c x))| |arith (+ (- x) (* c x))|
 			|arith (+ (* c x) (* d x))|
-			;arith-collect-+ 
+			;arith-collect-+
 			arith-collect-+-problem-finder
 			;arith-collect-*
 			arith-collect-*-problem-finder
@@ -376,7 +377,7 @@
 			|(arith-collect-* y x)| |(arith-collect-+ y x)|
 			;arith-find-matching-factor-scatter-exponents
 			arith-normalize-factors-scatter-exponents
-			arith-normalize-addends 
+			arith-normalize-addends
 			;arith-find-matching-addend
 			))
 
@@ -396,7 +397,7 @@
 		    Nonnegative-product
 		    Rationalp-implies-acl2-numberp
 		    Expt-type-prescription-non-zero-base
-		    default-+-1 default-+-2 
+		    default-+-1 default-+-2
 		    default-*-1 default-*-2
 		    default-unary-minus default-unary-/
 		    default-<-1 default-<-2
@@ -418,3 +419,4 @@
 (include-book "banner"
 ; Avoid printing banner twice:
               :load-compiled-file nil)
+

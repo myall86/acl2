@@ -30,8 +30,9 @@
 
 (in-package "ACL2")
 (include-book "../ls")
+(include-book "../catpath")
 (include-book "std/util/defconsts" :dir :system)
-(include-book "misc/assert" :dir :system)
+(include-book "std/testing/assert" :dir :system)
 
 (defconsts (*files* state)
   (oslib::ls! "."))
@@ -50,6 +51,24 @@
 (assert! (member-equal "Makefile" *acl2-all*))     ;; Regular file without extension
 (assert! (member-equal "emacs" *acl2-all*))        ;; Directory
 
+
+(defconsts (*files2* state)
+  (oslib::ls! "../"))
+
+(defconsts (*files3* state)
+  (b* ((acl2-src-dir (f-get-global 'acl2::acl2-sources-dir state))
+       (oslib-dir    (oslib::catpath acl2-src-dir "books/oslib"))) 
+    (oslib::ls! oslib-dir)))
+
+(defconsts (*files4* state)
+  (b* ((acl2-src-dir (f-get-global 'acl2::acl2-sources-dir state))
+       (oslib-dir    (oslib::catpath acl2-src-dir "books/oslib/../oslib")))
+    (oslib::ls! oslib-dir)))
+
+(assert! (member-equal "ls-logic.lisp" *files2*))
+(assert! (member-equal "ls-logic.lisp" *files3*))
+(assert! (member-equal "ls-logic.lisp" *files4*))
+
 (defconsts (*acl2reg* state)
   (b* ((acl2-src-dir (f-get-global 'acl2::acl2-sources-dir state)))
     (oslib::ls-files! acl2-src-dir)))
@@ -63,10 +82,14 @@
 
 (assert! (member-equal "emacs" *acl2dirs*))
 (assert! (subsetp-equal *acl2dirs* *acl2-all*))
-(assert! (or (subsetp-equal *acl2-all* (append *acl2dirs* *acl2reg*))
-             (cw "Oops, somehow acl2-all has files that aren't dirs or regular? ~x0~%"
-                 (set-difference-equal *acl2-all*
-                                       (append *acl2dirs* *acl2reg*)))))
+;; sswords: this test fails whenever there is somethink like a broken symlink
+;; in the acl2 directory -- and emacs sometimes leaves behind broken symlinks
+;; named .#foobar, I think to record who is editing the file. Removing the test
+;; for now since it doesn't seem important.
+;; (assert! (or (subsetp-equal *acl2-all* (append *acl2dirs* *acl2reg*))
+;;              (cw "Oops, somehow acl2-all has files that aren't dirs or regular? ~x0~%"
+;;                  (set-difference-equal *acl2-all*
+;;                                        (append *acl2dirs* *acl2reg*)))))
 
 (assert! (or (not (intersection-equal *acl2dirs* *acl2reg*))
              (cw "Oops, intersecting files and dirs?  ~x0~%"
@@ -82,3 +105,44 @@
 
 (assert! *err*)
 (assert! (not *val*))
+
+
+;; I later found that there were problems following ".." paths in certain
+;; directories.  See lstest-dir.sh for the setup and comments about it.
+
+(defttag sys-call)
+
+(make-event
+ (b* ((- (cw "Preparing lstest-dir.~%"))
+      (cbd    (cbd))
+      (script (oslib::catpath cbd "make-lstest.sh"))
+      ((mv err val state) (sys-call+ script nil state))
+      (- (cw "~S0" val))
+      (- (or (not err)
+             (er hard? 'make-lstest.sh
+                 "Error running make-lstest.sh: err ~x0 val ~x1"
+                 err val))))
+   (value '(value-triple :invisible))))
+
+(defmacro ensure-has (dir file)
+  `(make-event
+    (b* ((dir ',dir)
+         (file ',file)
+         (- (cw "Checking ~s0 for ~s1: " dir file))
+         ((mv files state) (oslib::ls-files! dir))
+         ((when (member-equal file files))
+          (cw "found.~%")
+          (value '(value-triple :success))))
+      (er soft 'ensure-has "File ~s0 not found in ~s1: found files are ~x2"
+          file dir files))))
+
+(ensure-has "lstest-dir" "file1.txt")
+(ensure-has "lstest-dir/subdir1" "file2.txt")
+(ensure-has "lstest-dir/subdir1/xxxdir" "xxx.txt")
+(ensure-has "lstest-dir/subdir1/subdir2" "file3.txt")
+(ensure-has "lstest-dir/subdir1/subdir2/yyydir" "yyy.txt")
+
+;; this doesn't work yet
+;; subdir3 is a symlink to subdir1/subdir2, so when we do subdir3/.., we
+;; should end up in subdir1(!) 
+;; (ensure-has "lstest-dir/subdir3/.." "file2.txt")

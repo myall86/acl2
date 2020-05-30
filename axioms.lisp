@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 8.3 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2020, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -24,29 +24,41 @@
 ; which are not already provided in Common Lisp.  In some cases, the
 ; implementation of a function is identical to its axiomatization (cf.
 ; implies).  In other cases, we provide functions whose semantics are
-; applicative but whose implementations are decidely ``von
+; applicative but whose implementations are decidedly ``von
 ; Neumann-esque''.  For example, we implement the array, property
 ; list, and io primitives with non-applicative techniques.
 
-; This file is read by Common Lisp in two ways.  First, we bring ACL2
-; into its initial state with the function boot-strap, which loads
-; this file.  Second, this file is read and compiled in the
-; implementation of ACL2 itself.  To support these two readings, we
-; use the #+ and #- read macro feature of Common Lisp.  While we are
-; loading this file in boot-strap, we arrange for *features* to
-; contain the symbol :acl2-loop-only; otherwise, *features* does not
-; contain :acl2-loop-only.  Thus, during boot-strap, forms immediately
-; preceded by #+acl2-loop-only are ``seen'', whereas those
-; immediately preceded by #-acl2-loop-only are invisible.  The
-; converse is true when we are compiling and loading the code for
-; ACL2.
+; This file, as with other ACL2 source files, is read in two ways: first by
+; Common Lisp, and second by the ACL2 read-eval-print loop.  The process is
+; roughly as follows ("roughly", because for example we never compile
+; acl2.lisp).
+
+;   (1) If the Lisp compiles on-the-fly (currently SBCL or CCL), then this step
+;       is skipped.  Otherwise we compile the ACL2 source files.
+
+;   (2) In a fresh Lisp session, we load the source files if the Lisp compiles
+;       on-the-fly (currently SBCL or CCL), and otherwise, the compiled files.
+
+;   (3) In the same session as (2), we add :acl2-loop-only to *features* and
+;       then we LD each source file.
+
+; Suppose for example a source file has the following code.
+
+;   (defun foo (x)
+;     #-acl2-loop-only
+;     <expression_1>
+;     #+acl2-loop-only
+;     <expression_2>)
+
+; Then in steps (1) and (2) the body of this definition is <expression_1>, but
+; in step (3) it is <expression_2>.
 
 ; If a symbol described in CLTL is axiomatized here, then we give it
 ; exactly the same semantics as it has in CLTL, under restrictions for
 ; which we check.  (Actually, this is currently a lie about DEFUN,
-; DEFMACRO, and PROGN, but we will provide someday a check that that
+; DEFMACRO, and PROGN, but we will provide someday a check that
 ; those are only used in files in ways such that their ACL2 and Common
-; Lisp meanings are prefectly consistent.)  Thus, when we talk about
+; Lisp meanings are perfectly consistent.)  Thus, when we talk about
 ; +, we really mean the Common Lisp +.  However, our + does not handle
 ; floating point numbers, so there is a guard on + that checks that
 ; its args are rationals.  The symbols in the list
@@ -74,9 +86,9 @@
 ; Note that however we handle this constant, it is crucial that its value be
 ; independent of the implementation, lest we can prove something about its
 ; length (say) in one Lisp that is false in another.  Our requirement on this
-; list is that it allow the compiler to deal correctly with Common Lisp functions
-; such as CAR that we are bringing into the ACL2 environment, and the dpANS list
-; certainly satisfies that requirement.
+; list is that it allow the compiler to deal correctly with Common Lisp
+; functions such as CAR that we are bringing into the ACL2 environment, and the
+; dpANS list certainly satisfies that requirement.
 
 (acl2::defconst acl2::*common-lisp-symbols-from-main-lisp-package*
 
@@ -668,6 +680,21 @@
 
       ))
 
+#+acl2-loop-only
+(defconst nil 'nil
+
+; We cannot document a NIL symbol.
+
+ " NIL, a symbol, represents in Common Lisp both the false truth value
+ and the empty list.")
+
+#+acl2-loop-only
+(defconst t 't
+
+; We cannot document a NIL symbol.  So, we do not document T either.
+
+  "T, a symbol, represents the true truth value in Common Lisp.")
+
 (defconst *stobj-inline-declare*
 
 ; This constant is being introduced in v2-8.  In this file it is only used in
@@ -979,7 +1006,7 @@
           entry)))
 
 (defmacro remove-package-entry (name known-package-alist)
-  `(delete-assoc-equal ,name ,known-package-alist))
+  `(remove1-assoc-equal ,name ,known-package-alist))
 
 (defmacro change-package-entry-hidden-p (entry value)
   `(let ((entry ,entry))
@@ -1006,14 +1033,22 @@
       `(fgetprop ,symb ,key ,default ,world-alist)
     `(sgetprop ,symb ,key ,default ,world-name ,world-alist)))
 
+(defmacro getpropc (symb key &optional default (world-alist '(w state)))
+
+; The "c" in "getpropc" suggests "current-acl2-world".
+
+  `(getprop ,symb ,key ,default 'current-acl2-world ,world-alist))
+
 #-acl2-loop-only
 (progn
 
-(defvar *user-stobj-alist* nil)
+(defvar *user-stobj-alist*
 
-; The value of the above variable is an alist that pairs user-defined
-; single-threaded object names with their live ones.  It does NOT
-; contain an entry for STATE, which is not user-defined.
+; The value of this variable is an alist that pairs user-defined
+; single-threaded object names with their live ones.  It does NOT contain an
+; entry for STATE, which is not user-defined.
+
+  nil)
 
 ; The following SPECIAL VARIABLE, *wormholep*, when non-nil, means that we
 ; are within a wormhole and are obliged to undo every change visited upon
@@ -1158,8 +1193,12 @@
 
 #-acl2-loop-only
 (progn
+
+; The following are valid exactly when *wormhole-iprint-ar* is not nil.
+
 (defvar *wormhole-iprint-ar* nil)
 (defvar *wormhole-iprint-hard-bound* nil)
+(defvar *wormhole-iprint-fal* nil)
 (defvar *wormhole-iprint-soft-bound* nil)
 )
 
@@ -1205,10 +1244,44 @@
 ; whether we add the redundant one or not.
 
   (cond ((null *wormhole-cleanup-form*)
-         (interface-er
-          "push-wormhole-undo-formi was called with an empty ~
-           *wormhole-cleanup-form*.  Supposedly, push-wormhole-undo-formi is ~
-           only called when *wormholep* is non-nil and, supposedly, when ~
+
+; Originally we used interface-er here.  However, that could get us into an
+; infinite loop in Version_8.1, for example as follows.
+
+;   (accumulated-persistence t)
+;   (trace$ pop-accp-fn)
+;   (mini-proveall)
+
+; The essence of the problem in the example just above was that pop-accp-fn is
+; called inside wormhole-eval (see pop-accp), which doesn't seem to accommodate
+; state modification; indeed, as documented, wormhole1 should be used in that
+; case.  Yet state global trace-level was modified during tracing, by
+; custom-trace-ppr.  (That is no longer the case, but was so in Version_8.1.)
+; The following example, derived from the one above, makes this more clear.
+
+;   (defn foo (n) n)
+;   (value :q)
+;   ; Derived from (trace$ foo):
+;   (CCL:ADVISE foo
+;               (PROGN (SETQ *TRACE-ARGLIST* CCL:ARGLIST)
+;                      (CUSTOM-TRACE-PPR
+;                       :IN
+;                       (CONS 'FOO
+;                             (TRACE-HIDE-WORLD-AND-STATE
+;                              *TRACE-ARGLIST*))))
+;               :WHEN
+;               :BEFORE)
+;   (lp)
+;   (wormhole-eval 'demo
+;                  '(lambda (whs) (set-wormhole-data whs (foo 6)))
+;                  nil)
+
+; So now we use error instead of interface-er, to avoid the infinite loop.
+
+         (error
+          "push-wormhole-undo-formi was called with an empty~%~
+           *wormhole-cleanup-form*.  Supposedly, push-wormhole-undo-formi is~%~
+           only called when *wormholep* is non-nil and, supposedly, when~%~
            *wormholep* is non-nil, the *wormhole-cleanup-form* is too.")))
   (let ((qarg1 (list 'quote arg1))
         (undo-forms-and-last-two (cddr *wormhole-cleanup-form*)))
@@ -1250,6 +1323,7 @@
                                ((member arg1
                                         '(iprint-ar
                                           iprint-hard-bound
+                                          iprint-fal
                                           iprint-soft-bound)
                                         :test 'eq)
 
@@ -1259,17 +1333,21 @@
 
                                 `(progn
                                    (when (null *wormhole-iprint-ar*)
-                                     (setq *wormhole-iprint-ar*
-                                           (f-get-global
-                                            'iprint-ar
-                                            *the-live-state*))
                                      (setq *wormhole-iprint-hard-bound*
                                            (f-get-global
                                             'iprint-hard-bound
                                             *the-live-state*))
+                                     (setq *wormhole-iprint-fal*
+                                           (f-get-global
+                                            'iprint-fal
+                                            *the-live-state*))
                                      (setq *wormhole-iprint-soft-bound*
                                            (f-get-global
                                             'iprint-soft-bound
+                                            *the-live-state*))
+                                     (setq *wormhole-iprint-ar*
+                                           (f-get-global
+                                            'iprint-ar
                                             *the-live-state*)))
                                    ,@(when (eq arg1 'iprint-ar)
                                        `((let ((qarg2 (quote ,arg2)))
@@ -1305,8 +1383,10 @@
                          *the-live-state*)
                        (cddr *wormhole-cleanup-form*)))))
       (otherwise
-       (interface-er "Unrecognized op in push-wormhole-undo-formi,~
-                          ~x0." op)))))
+
+; See the comment above describing why we avoid interface-er.
+
+       (error "Unrecognized op in push-wormhole-undo-formi, ~s." op)))))
 
 ; The following symbol is the property under which we store Common
 ; Lisp streams on the property lists of channels.
@@ -1338,7 +1418,7 @@
    then the root cause may be call of a :program mode~%~
    function that has the wrong guard specified, or even no~%~
    guard specified (i.e., an implicit guard of t).~%~
-   See :DOC guards.~&")
+   See :DOC raw-lisp-error and see :DOC guards.~&")
 
 (defvar *acl2-error-msg-certify-book-step1*
   "~%The message above might explain the error.  If it mentions packages,
@@ -1401,8 +1481,10 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
            add-to-set-eq-exec
            aref1 ; already inlined in Version_6.2 and before
            aref2 ; already inlined in Version_6.2 and before
+           bitp
            booleanp
            complex-rationalp
+           cons-with-hint
            eqlablep
            fix
            fn-symb
@@ -1412,6 +1494,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
            integer-abs
            integer-range-p
            len
+           logicp ; formerly macro logicalp; preserving efficiency
            member-equal
            natp
            nfix
@@ -1428,6 +1511,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
            strip-cdrs
            symbol-<
            unsigned-byte-p
+           untouchable-marker
            xor
            zip
            zp
@@ -1536,9 +1620,29 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 (defmacro defun-overrides (name formals &rest rest)
 
-; This is basically defun, for a function that takes the live state and has a
-; guard of t.  We push name onto *defun-overrides* so that add-trip knows to
-; leave the *1* definition in place.
+; This defines the function symbol, name, in raw Lisp.  Name should include
+; STATE as a formal, have a guard of t and should have unknown-constraints.  We
+; push name onto *defun-overrides* so that add-trip knows to leave the *1*
+; definition in place.
+
+; Warning: The generated definitions will replace both the raw Lisp and *1*
+; definitions of name.  We must ensure that these definitions can't be
+; evaluated when proving theorems unless each has unknown-constraints and never
+; returns two values for the same input.  The latter condition may be taken
+; care of by passing in live states with different, or unknown, oracles.  If
+; state is not a formal (or even if it is), this latter condition -- i.e.,
+; being a function, must be true in order for the use of defun-overrides to be
+; sound!
+
+; Note: In apply-raw.lisp we use a relaxed version of the expansion of
+; defun-overrides that ignores the requirement that STATE be a formal!  We use
+; that relaxed code to define doppelganger-badge-userfn and
+; doppelganger-apply$-userfn.  The basic argument is that it is ok to secretly
+; look at the current world as long as we cause an error if the current world
+; does not specify a value for the notion being ``defined'' and that once the
+; world does specify a value that value never changes.  If more functions like
+; these two arise in the future we may wish to relax defun-overrides or at
+; least define a relaxed version of it.
 
   (assert (member 'state formals :test 'eq))
   `(progn (push ',name *defun-overrides*) ; see add-trip
@@ -1599,10 +1703,6 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   arg)
 
 (defmacro deflabel (&rest args)
-  (declare (ignore args))
-  nil)
-
-(defmacro defdoc (&rest args)
   (declare (ignore args))
   nil)
 
@@ -1733,9 +1833,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                         defaxioms-okp
                         skip-proofs-okp
                         ttags
-                        dir
-                        doc)
-  (declare (ignore uncertified-okp defaxioms-okp skip-proofs-okp ttags doc))
+                        dir)
+  (declare (ignore uncertified-okp defaxioms-okp skip-proofs-okp ttags))
   `(include-book-raw ,user-book-name nil ,load-compiled-file ,dir
                      '(include-book . ,user-book-name)
                      *the-live-state*))
@@ -1815,21 +1914,6 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 ;                               LOGIC
 
-#+acl2-loop-only
-(defconst nil 'nil
-
-; We cannot document a NIL symbol.
-
- " NIL, a symbol, represents in Common Lisp both the false truth value
- and the empty list.")
-
-#+acl2-loop-only
-(defconst t 't
-
-; We cannot document a NIL symbol.  So, we do not document T either.
-
-  "T, a symbol, represents the true truth value in Common Lisp.")
-
 (defun insist (x)
 
 ; This function is used in guard-clauses-for-fn, so in order to be sure that
@@ -1877,13 +1961,13 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   (if p (if q t nil) t))
 
 (defthm iff-implies-equal-implies-1
-  (implies (iff y y-equiv)
-           (equal (implies x y) (implies x y-equiv)))
+  (implies (iff x x-equiv)
+           (equal (implies x y) (implies x-equiv y)))
   :rule-classes (:congruence))
 
 (defthm iff-implies-equal-implies-2
-  (implies (iff x x-equiv)
-           (equal (implies x y) (implies x-equiv y)))
+  (implies (iff y y-equiv)
+           (equal (implies x y) (implies x y-equiv)))
   :rule-classes (:congruence))
 
 #+acl2-loop-only
@@ -1926,8 +2010,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   #-:non-standard-analysis
   `(complex-rationalp ,x))
 
-; Comments labeled "RAG" are from Ruben Gamboa, pertaining to his work
-; in creating ACL2(r) (see :doc real).
+; Comments labeled "Historical Comment from Ruben Gamboa" are from Ruben
+; Gamboa, pertaining to his work in creating ACL2(r) (see :doc real).
 
 (defun true-listp (x)
   (declare (xargs :guard t :mode :logic))
@@ -2597,7 +2681,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 #-acl2-loop-only
 (defvar *hard-error-returns-nilp*
 
-; For an explanation of the this defvar, see the comment in hard-error, below.
+; For an explanation of this defvar, see the comment in hard-error, below.
 
   nil)
 
@@ -2654,7 +2738,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
          (throw 'raw-ev-fncall val))))
 
 #-acl2-loop-only
-(defvar *hard-error-is-error* nil)
+(defvar *hard-error-is-error* t) ; set to nil at the end of the boot-strap
 
 (defun hard-error (ctx str alist)
 
@@ -2704,7 +2788,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; See the comment after ILLEGAL (below) for a discussion of an earlier,
 ; inadequate handling of these issues.
 
-  (declare (xargs :guard t))
+  (declare (xargs :guard t :mode :logic))
   #-acl2-loop-only
   (when (not *hard-error-returns-nilp*)
 
@@ -2721,13 +2805,17 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
        (*hard-error-is-error*
         (hard-error-is-error ctx str alist))
        (t
-        (let ((*standard-output* *error-output*)
-              (*wormholep* nil))
-          (error-fms t ctx str alist state))
+        (when (not (and (f-get-global 'inhibit-er-hard state)
+                        (member 'error
+                                (f-get-global 'inhibit-output-lst state)
+                                :test #'eq)))
+          (let ((*standard-output* *error-output*)
+                (*wormholep* nil))
+            (error-fms t ctx str alist state)))
 
 ; Once upon a time hard-error took a throw-flg argument and did the
 ; following throw-raw-ev-fncall only if the throw-flg was t.  Otherwise,
-; it signalled an interface-er.  Note that in either case it behaved like
+; it signaled an interface-er.  Note that in either case it behaved like
 ; an error -- interface-er's are rougher because they do not leave you in
 ; the ACL2 command loop.  I think this aspect of the old code was a vestige
 ; of the pre-*ld-level* days when we didn't know if we could throw or not.
@@ -2816,7 +2904,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; symbol-package of sym is one of those known to ACL2.  Thus, the only case of
 ; concern is the case that sym resides in the "COMMON-LISP" package.  Since sym
 ; is an ACL2 object, then by the Invariant on Symbols in the Common Lisp
-; Package (see bad-lisp-objectp), its symbol-package is *main-lisp-package* or
+; Package (see bad-lisp-atomp), its symbol-package is *main-lisp-package* or
 ; else its *initial-lisp-symbol-mark* property is "COMMON-LISP".  So we set the
 ; *initial-lisp-symbol-mark* for ans in each of these sub-cases, which
 ; preserves the above invariant.
@@ -2873,15 +2961,26 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                   :mode :logic))
   last-arg)
 
+(defun return-last-fn (qfn)
+
+; Return nil unless qfn is of the form (quote s) for a symbol s.
+
+  (declare (xargs :guard t))
+  (and (consp qfn)
+       (eq (car qfn) 'quote)
+       (consp (cdr qfn))
+       (symbolp (cadr qfn))
+       (null (cddr qfn))
+       (cadr qfn)))
+
 #-acl2-loop-only
-(defmacro return-last (qfn arg2 arg3)
-  (let* ((fn (and (consp qfn)
-                  (eq (car qfn) 'quote)
-                  (consp (cdr qfn))
-                  (symbolp (cadr qfn))
-                  (null (cddr qfn))
-                  (cadr qfn)))
-         (arg2
+(defun return-last-arg2 (fn arg2)
+
+; Here fn is known to be a symbol, for example as returned by applying
+; return-last-fn to the first argument of a call of return-last.  Note that fn
+; can be nil, in which case the second cond clause below is taken.  We think of
+; arg2 as being the second argument of a call of return-last, and here we cause
+; that argument to be evaluated with attachments when appropriate.
 
 ; There is no logical problem with using attachments when evaluating the second
 ; argument of return-last, because logically the third argument provides the
@@ -2893,16 +2992,34 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 ; See also the related treatment of aokp in ev-rec-return-last.
 
-          (cond
-           ((or (eq fn 'mbe1-raw) ; good test, though subsumed by the next line
-                (and fn (macro-function fn))
-                (symbolp arg2)      ; no point in doing extra bindings below
-                (and (consp arg2)
-                     (eq (car arg2) ; no point in doing extra bindings below
-                         'quote)))
-            arg2)
-           (t `(let ((*aokp* t))
-                 ,arg2)))))
+  (cond ((or (eq fn 'mbe1-raw) ; good test, though subsumed by the next line
+             (and fn (macro-function fn))
+             (symbolp arg2)
+             (and (consp arg2)
+                  (or (eq (car arg2)
+                          'quote)
+; Avoid paying the price of binding *aokp* below when arg2 is of the form
+; (untouchable-marker (quote name)), as generated by defmacro-untouchable:
+                      (and (eq (car arg2)
+                               'untouchable-marker)
+                           (consp (cdr arg2))
+                           (null (cddr arg2))
+                           (let ((arg (cadr arg2)))
+                             (and (consp arg)
+                                  (consp (cdr arg))
+                                  (null (cddr arg))
+                                  (eq (car arg) 'quote)))))))
+
+; Under each of the conditions above, we avoid doing the *aokp* binding below.
+
+         arg2)
+        (t `(let ((*aokp* t))
+              ,arg2))))
+
+#-acl2-loop-only
+(defmacro return-last (qfn arg2 arg3)
+  (let* ((fn (return-last-fn qfn))
+         (arg2 (return-last-arg2 fn arg2)))
     (cond ((and fn (fboundp fn))
 
 ; Translation for evaluation requires that if the first argument is a quoted
@@ -3292,6 +3409,18 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
            (eqlable-alistp x))
   :rule-classes :forward-chaining)
 
+(defun character-alistp (x)
+  (declare (xargs :guard t))
+  (cond ((atom x) (eq x nil))
+        (t (and (consp (car x))
+                (characterp (car (car x)))
+                (character-alistp (cdr x))))))
+
+(defthm character-alistp-forward-to-eqlable-alistp
+  (implies (character-alistp x)
+           (eqlable-alistp x))
+  :rule-classes :forward-chaining)
+
 ; Assoc
 
 (defun-with-guard-check assoc-eq-exec (x alist)
@@ -3537,16 +3666,15 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
         ((null (cdr rst)) (list 'binary-* 1 (car rst)))
         (t (xxxjoin 'binary-* rst))))
 
-;; RAG - This function was modified to accept all complex arguments,
+;; Historical Comment from Ruben Gamboa:
+;; This function was modified to accept all complex arguments,
 ;; not just the complex-rationalps
 
 #+acl2-loop-only
 (defun conjugate (x)
   (declare (xargs :guard (acl2-numberp x)))
-  (if (complex/complex-rationalp x)
-      (complex (realpart x)
-               (- (imagpart x)))
-      x))
+  (complex (realpart x)
+           (- (imagpart x))))
 
 (defun add-suffix (sym str)
   (declare (xargs :guard (and (symbolp sym)
@@ -3557,51 +3685,65 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 (defconst *inline-suffix* "$INLINE") ; also see above defun-inline-form
 
+#-(or acl2-loop-only gcl)
+(declaim
+
+; This declaim form avoids warnings that would otherwise be generated during
+; the boot-strap (in CCL, at least) by ec-call.  We don't bother in GCL because
+; the declaim form itself has caused a warning!
+
+ (ftype function
+        acl2_*1*_acl2::apply$
+        acl2_*1*_acl2::rewrite-rule-term-exec
+        acl2_*1*_acl2::conjoin
+        acl2_*1*_acl2::pairlis$
+        acl2_*1*_acl2::close-input-channel))
+
 #-acl2-loop-only
 (defmacro ec-call1-raw (ign x)
   (declare (ignore ign))
-  (assert (and (consp x) (symbolp (car x)))) ; checked by translate11
-  (let ((*1*fn (*1*-symbol (car x)))
-        (*1*fn$inline (*1*-symbol (add-suffix (car x) *inline-suffix*))))
-    `(cond
-      (*safe-mode-verified-p* ; see below for discussion of this case
-       ,x)
-      (t
-       (funcall
-        (cond
-         ((fboundp ',*1*fn) ',*1*fn)
-         ((fboundp ',*1*fn$inline)
+  (cond
+   ((not (and (consp x) (symbolp (car x))))
+
+; This case is normally impossible, as enforced by translate.  However, it can
+; happen if we are not translating for execution; an example is (non-exec
+; (ec-call x)).  In that case we simply cause an error at execution time, as a
+; precaution, while fully expecting that we never actually hit this case.
+
+    `(error "Implementation error: It is unexpected to be executing a call~%~
+             of ec-call on other than the application of a symbol to~%~
+             arguments, but we are executing it on the form,~%~s."
+            x))
+   (t
+    (let ((*1*fn (*1*-symbol (car x)))
+          (*1*fn$inline (add-suffix (*1*-symbol (car x)) *inline-suffix*)))
+      `(cond
+        (*safe-mode-verified-p* ; see below for discussion of this case
+         ,x)
+
+; Through Version_8.2 we had a single funcall below, where the first argument
+; depended on whether (fboundp ',*1*fn) or else (fboundp ',*1*fn$inline).  But
+; SBCL took a very long to compile the function apply$-prim in
+; books/projects/apply-model-2/apply-prim.lisp (and perhaps other such
+; apply$-prim definitions), which we fixed by lifting those fboundp tests above
+; the calls of funcall.  This reduced the time (presumably virtually all of it
+; for compilation) from 1294.33 seconds to 8.12 seconds.
+
+        ((fboundp ',*1*fn)
+         (funcall ',*1*fn ,@(cdr x)))
+        ((fboundp ',*1*fn$inline)
+         (funcall
           (assert$ (macro-function ',(car x)) ; sanity check; could be omitted
-                   ',*1*fn$inline))
-         (t
-
-; We should never hit this case, unless the user is employing trust tags or raw
-; Lisp.  For ACL2 events that might hit this case, such as a defconst using
-; ec-call in a book (see below), we should ensure that *safe-mode-verified-p*
-; is bound to t.  For example, we do so in the raw Lisp definition of defconst,
-; which is justified because when ACL2 processes the defconst it will evaluate
-; in safe-mode to ensure that no raw Lisp error could occur.
-
-; Why is the use above of *safe-mode-verified-p* necessary?  If an event in a
-; book calls ec-call in raw Lisp, then we believe that the event is a defpkg or
-; defconst event.  In such cases, ec-call may be expected to invoke a *1*
-; function.  Unfortunately, the *1* function definitions are laid down (by
-; write-expansion-file) at the end of the expansion file.  However, we cannot
-; simply move the *1* definitions to the front of the expansion file, because
-; some may refer to constants or packages defined in the book.  We might wish
-; to consider interleaving *1* definitions with events from the book but that
-; seems difficult to do.  Instead, we arrange with *safe-mode-verified-p* to
-; avoid the *1* function calls entirely when loading the expansion file (or its
-; compilation).
-
-          (error "Undefined function, ~s.  Please contact the ACL2 ~
-                  implementors."
-                 ',*1*fn)))
-        ,@(cdr x))))))
+                   ',*1*fn$inline)
+          ,@(cdr x)))
+        (t
+         (error "Undefined function, ~s.  Please contact the ACL2 ~
+                 implementors."
+                ',*1*fn)))))))
 
 (defmacro ec-call1 (ign x)
 
-; We introduce ec-call1 inbetween the utlimate macroexpansion of an ec-call
+; We introduce ec-call1 inbetween the ultimate macroexpansion of an ec-call
 ; form to a return-last form, simply because untranslate will produce (ec-call1
 ; nil x) from (return-last 'ec-call1-raw nil x).
 
@@ -3689,7 +3831,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
        (not (< 0 (- x)))))
   :rule-classes nil)
 
-;; RAG - This axiom was weakened to accomodate real x and y
+;; Historical Comment from Ruben Gamboa:
+;; This axiom was weakened to accommodate real x and y
 
 (defaxiom Positive
   (and (implies (and (< 0 x) (< 0 y))
@@ -3725,23 +3868,27 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   (implies (rationalp x) (realp x))
   :rule-classes nil)
 
-;; RAG - This axiom was weakened to accomodate the reals.
+;; Historical Comment from Ruben Gamboa:
+;; This axiom was weakened to accommodate the reals.
 
 (defaxiom complex-implies1
   (and (real/rationalp (realpart x))
        (real/rationalp (imagpart x)))
   :rule-classes nil)
 
-;; RAG - This axiom was strengthened to include the reals.
+;; Historical Comment from Ruben Gamboa:
+;; This axiom was strengthened to include the reals.
+; (Note: We turned this into a disabled rewrite rule after ACL2 7.4.)
 
 (defaxiom complex-definition
   (implies (and (real/rationalp x)
                 (real/rationalp y))
            (equal (complex x y)
-                  (+ x (* #c(0 1) y))))
-  :rule-classes nil)
+                  (+ x (* #c(0 1) y)))))
+(in-theory (disable complex-definition))
 
-;; RAG - This axiom was weakened to accomodate the reals.
+;; Historical Comment from Ruben Gamboa:
+;; This axiom was weakened to accommodate the reals.
 
 ; This rule was called complex-rationalp-has-nonzero-imagpart before
 ; Version_2.5.
@@ -3757,7 +3904,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 ; We think that the following two axioms can be proved from the others.
 
-;; RAG - This axiom was strengthened to include the reals.
+;; Historical Comment from Ruben Gamboa:
+;; This axiom was strengthened to include the reals.
 
 (defaxiom realpart-complex
   (implies (and (real/rationalp x)
@@ -3765,7 +3913,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
            (equal (realpart (complex x y))
                   x)))
 
-;; RAG - This axiom was also strengthened to include the reals.
+;; Historical Comment from Ruben Gamboa:
+;; This axiom was also strengthened to include the reals.
 
 (defaxiom imagpart-complex
   (implies (and (real/rationalp x)
@@ -3773,7 +3922,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
            (equal (imagpart (complex x y))
                   y)))
 
-;; RAG - Another axiom strengthened to include the reals.
+;; Historical Comment from Ruben Gamboa:
+;; Another axiom strengthened to include the reals.
 
 (defthm complex-equal
   (implies (and (real/rationalp x1)
@@ -3805,17 +3955,19 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 ; See the comment in check-built-in-constants.
 
-;; RAG - As promised by the comment above, this number had to be
+;; Historical Comment from Ruben Gamboa:
+;; As promised by the comment above, this number had to be
 ;; changed to get ACL2 to compile.  The number "104" is magical.  I
 ;; figured it out by compiling ACL2, getting the error message that
 ;; said *force-xnume* should be "104" but wasn't, and then changed the
 ;; definition here.  The comment in check-built-in-constants explains
 ;; why we need to play this (apparently silly) game.
 
-;; RAG - After adding the non-standard predicates, this number grew to 110.
+;; Historical Comment from Ruben Gamboa:
+;; After adding the non-standard predicates, this number grew to 110.
 
 (defconst *force-xnume*
-  (let ((x 129))
+  (let ((x 132))
     #+:non-standard-analysis
     (+ x 12)
     #-:non-standard-analysis
@@ -3832,11 +3984,13 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 ; See the comment in check-built-in-constants.
 
-;; RAG - The value of "107" was modified as suggested during the
+;; Historical Comment from Ruben Gamboa:
+;; The value of "107" was modified as suggested during the
 ;; compilation of ACL2.  It's magic.  See the comment in
 ;; check-built-in-constants to find out more.
 
-;; RAG - After adding the non-standard predicates, this changed to 113.
+;; Historical Comment from Ruben Gamboa:
+;; After adding the non-standard predicates, this changed to 113.
 
 (defconst *immediate-force-modep-xnume*
   (+ *force-xnume* 3))
@@ -3866,21 +4020,19 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 (defun synp (vars form term)
 
-; Top-level calls of this function in the hypothesis of a linear or
-; rewrite rule are given special treatment when relieving the rule's
-; hypotheses.  (When the rule class gives such special treatment, it
-; is an error to use synp in other than at the top-level.)  The
-; special treatment is as follows.  Term is evaluated, binding state
-; to the live state and mfc to the current metafunction context, as
-; with meta rules.  The result of this evaluation should be either t,
-; nil, or an alist binding variables to terms, else we get a hard
-; error.  Moreover, if we get an alist then either (1) vars should be
-; t, representing the set of all possible vars, and none of the keys
-; in the alist should already be bound; or else (2) vars should be of
-; the form (var1 ... vark), the keys of alist should all be among the
-; vari, and none of vari should already be bound (actually this is
-; checked when the rule is submitted) -- otherwise we get a hard
-; error.
+; Top-level calls of this function in the hypothesis of a linear or rewrite
+; rule on quoted arguments are given special treatment when relieving the
+; rule's hypotheses.  (When the rule class gives such special treatment, it is
+; an error to use synp in other than at the top-level.)  The special treatment
+; is as follows.  Term is evaluated, binding state to the live state and mfc to
+; the current metafunction context, as with meta rules.  The result of this
+; evaluation should be either t, nil, or an alist binding variables to terms,
+; else we get a hard error.  Moreover, if we get an alist then either (1) vars
+; should be t, representing the set of all possible vars, and none of the keys
+; in the alist should already be bound; or else (2) vars should be of the form
+; (var1 ... vark), the keys of alist should all be among the vari, and none of
+; vari should already be bound (actually this is checked when the rule is
+; submitted) -- otherwise we get a hard error.
 
 ; As of Version_2.7 there are two macros that expand into calls to synp:
 
@@ -3892,9 +4044,9 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ;      `(synp (quote ,vars) (quote (bind-free ,form ,vars)) (quote ,form))
 ;    `(synp (quote t) (quote (bind-free ,form)) (quote ,form))))
 
-; Warning: This function must be defined to always return t in order
-; for our treatment of it (in particular, in translate) to be sound.
-; The special treatment referred to above happens within relieve-hyp.
+; Warning: This function must be defined to always return t in order for our
+; treatment of it (in particular, in translate) to be sound.  The special
+; treatment referred to above happens within relieve-hyp.
 
   (declare (xargs :mode :logic :guard t)
            (ignore vars form term))
@@ -3931,7 +4083,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; We deflabel Rule-Classes here, so we can refer to it in the doc string for
 ; tau-system.  We define tau-system (the noop fn whose rune controls the
 ; whether the tau database is used during proofs) in axioms.lisp because we
-; build in the nume of its executable counterpart as a constant (e.g., as we do
+; build in the nume of its executable-counterpart as a constant (e.g., as we do
 ; with FORCE) and do not want constants additions to the sources to require
 ; changing that nume (as would happen if tau-system were defined in
 ; rewrite.lisp where rule-classes was originally defined).
@@ -4036,37 +4188,26 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   '(20 . NATP)
   #-non-standard-analysis
   '(17 . NATP))
+(defconst *tau-bitp-pair*
+  #+non-standard-analysis
+  '(21 . BITP)
+  #-non-standard-analysis
+  '(18 . BITP))
 (defconst *tau-posp-pair*
   #+non-standard-analysis
-  '(21 . POSP)
+  '(22 . POSP)
   #-non-standard-analysis
-  '(18 . POSP))
+  '(19 . POSP))
 (defconst *tau-minusp-pair*
   #+non-standard-analysis
-  '(29 . MINUSP)
+  '(30 . MINUSP)
   #-non-standard-analysis
-  '(26 . MINUSP))
-#+acl2-legacy-doc
+  '(27 . MINUSP))
 (defconst *tau-booleanp-pair*
-  #+(and (not non-standard-analysis) acl2-par)
-  '(109 . BOOLEANP)
-  #+(and (not non-standard-analysis) (not acl2-par))
-  '(108 . BOOLEANP)
-  #+(and non-standard-analysis (not acl2-par))
-  '(111 . BOOLEANP)
-  #+(and non-standard-analysis acl2-par)
-  '(112 . BOOLEANP)
-  )
-#-acl2-legacy-doc
-(defconst *tau-booleanp-pair*
-  #+(and (not non-standard-analysis) acl2-par)
-  '(108 . BOOLEANP)
-  #+(and (not non-standard-analysis) (not acl2-par))
-  '(107 . BOOLEANP)
-  #+(and non-standard-analysis (not acl2-par))
-  '(110 . BOOLEANP)
-  #+(and non-standard-analysis acl2-par)
-  '(111 . BOOLEANP)
+  #-non-standard-analysis
+  '(32 . BOOLEANP)
+  #+non-standard-analysis
+  '(35 . BOOLEANP)
   )
 
 ; Note: The constants declared above are checked for accuracy after bootstrap
@@ -4077,7 +4218,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; Eventually we will replace some of these axioms by theorems.  But not now
 ; because things are too fluid.
 
-;; RAG - This axiom was strengthened to include the reals.  Amusingly,
+;; Historical Comment from Ruben Gamboa:
+;; This axiom was strengthened to include the reals.  Amusingly,
 ;; it was also weakened, since it leaves open the possibility that for
 ;; rational x, x*x is irrational.  Luckily, the type-system knows this
 ;; isn't the case, so hopefully we have not weakened ACL2.
@@ -4185,7 +4327,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 ; We catch Boolean type-prescriptions and convert them to tau signature rules.
 ; The first lemma below links booleanp to symbolp and thus to the other recogs.
-; The next two deal with special cases: boolean functionse that do not have
+; The next two deal with special cases: boolean functions that do not have
 ; type-prescriptions because we have special functions for computing their
 ; type-sets.
 
@@ -4211,6 +4353,10 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 (defaxiom characterp-rubout
   (characterp #\Rubout)
+  :rule-classes nil)
+
+(defaxiom characterp-return
+  (characterp #\Return)
   :rule-classes nil)
 
 ; No-duplicatesp
@@ -4260,9 +4406,12 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
    (t ; (equal test 'equal)
     `(no-duplicatesp-equal ,x))))
 
-; The following is used in stobj-let.
-
 (defun chk-no-duplicatesp (lst)
+
+; This function is used in the implementation of stobj-let.  Do not modify it
+; without seeing where it is used and understand the implications of the
+; change.
+
   (declare (xargs :guard (and (eqlable-listp lst)
                               (no-duplicatesp lst)))
            (ignore lst))
@@ -4361,6 +4510,14 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   (if (member x *standard-chars*)
       t
     nil))
+
+(defun standard-char-p+ (x)
+
+; The following guard is required by p. 234 of CLtL.
+
+  (declare (xargs :guard t))
+  (and (characterp x)
+       (standard-char-p x)))
 
 (defun standard-char-listp (l)
   (declare (xargs :guard t))
@@ -4817,7 +4974,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   (declare (xargs :guard t))
   (if (rationalp x) x 0))
 
-;; RAG - I added "realfix" to coerce numbers into reals.  I would have
+;; Historical Comment from Ruben Gamboa:
+;; I added "realfix" to coerce numbers into reals.  I would have
 ;; liked to use "rfix" for it, but "rfix" was taken for the
 ;; rationals.  "ifix" as in "irrational-fix" would be a misnomer,
 ;; since it's the identity functions for rationals as well as
@@ -4837,72 +4995,16 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
       x
     0))
 
-(defun string-equal1 (str1 str2 i maximum)
-  (declare (xargs :guard (and (stringp str1)
-                              (standard-char-listp (coerce str1 'list))
-                              (stringp str2)
-                              (standard-char-listp (coerce str2 'list))
-                              (integerp i)
-                              (integerp maximum)
-                              (<= maximum (length str1))
-                              (<= maximum (length str2))
-                              (<= 0 i)
-                              (<= i maximum))
-
-; We make this function :program until we know enough about o-p
-; to prove its termination.
-
-                  :mode :program))
-  (let ((i (nfix i)))
-    (cond
-     ((>= i (ifix maximum))
-      t)
-     (t (and (char-equal (char str1 i)
-                         (char str2 i))
-             (string-equal1 str1 str2 (+ 1 i) maximum))))))
+; We make 1+ and 1- macros in order to head off the potentially common error of
+; using these as nonrecursive functions on left-hand sides of rewrite rules.
 
 #+acl2-loop-only
-(defun string-equal (str1 str2)
-  (declare (xargs :guard (and (stringp str1)
-                              (standard-char-listp (coerce str1 'list))
-                              (stringp str2)
-                              (standard-char-listp (coerce str2 'list)))
-                  :mode :program))
-  (let ((len1 (length str1)))
-    (and (= len1 (length str2))
-         (string-equal1 str1 str2 0 len1))))
+(defmacro 1+ (x)
+  (list '+ 1 x))
 
-(defun standard-string-alistp (x)
-  (declare (xargs :guard t))
-  (cond ((atom x) (eq x nil))
-        (t (and (consp (car x))
-                (stringp (car (car x)))
-                (standard-char-listp (coerce (car (car x)) 'list))
-                (standard-string-alistp (cdr x))))))
-
-(defthm standard-string-alistp-forward-to-alistp
-  (implies (standard-string-alistp x)
-           (alistp x))
-  :rule-classes :forward-chaining)
-
-(defun assoc-string-equal (str alist)
-  (declare (xargs :guard (and (stringp str)
-                              (standard-char-listp (coerce str 'list))
-                              (standard-string-alistp alist))
-                  :mode :program))
-  (cond
-   ((endp alist)
-    nil)
-   ((string-equal str (car (car alist)))
-    (car alist))
-   (t (assoc-string-equal str (cdr alist)))))
-
-; Ordinal stuff.  It seems more or less impossible to get o<g and o< admitted
-; during boot-strapping unless we cheat by declaring them explicitly :mode
-; :logic so that they will be admitted in the first pass of the build.  But
-; then we also need to declare functions on which they depend to be :mode
-; :logic as well (since :logic mode functions cannot have :program mode
-; functions in their bodies).
+#+acl2-loop-only
+(defmacro 1- (x)
+  (list '- x 1))
 
 (defun natp (x)
   (declare (xargs :guard t :mode :logic))
@@ -4914,6 +5016,127 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
          (and (integerp x)
               (<= 0 x)))
   :rule-classes :compound-recognizer)
+
+(defun nat-alistp (x) ; used in the guards of some system functions
+  (declare (xargs :guard t))
+  (cond ((atom x) (eq x nil))
+        (t (and (consp (car x))
+                (natp (car (car x)))
+                (nat-alistp (cdr x))))))
+
+(defthm nat-alistp-forward-to-eqlable-alistp
+  (implies (nat-alistp x)
+           (eqlable-alistp x))
+  :rule-classes :forward-chaining)
+
+(defun standard-string-p1 (x n)
+  (declare (xargs :guard (and (stringp x)
+                              (natp n)
+                              (<= n (length x)))))
+  (cond ((zp n) t)
+        (t (let ((n (1- n)))
+             (and (standard-char-p (char x n))
+                  (standard-string-p1 x n))))))
+
+(defun standard-string-p (x)
+  (declare (xargs :guard (stringp x)))
+  (standard-string-p1 x (length x)))
+
+(defun standard-string-listp (x)
+  (declare (xargs :guard t))
+  (cond ((atom x) (eq x nil))
+        (t (and (stringp (car x))
+                (standard-string-p (car x))
+                (standard-string-listp (cdr x))))))
+
+(defun string-equal1 (str1 str2 i maximum)
+  (declare (xargs :guard (and (stringp str1)
+                              (standard-string-p str1)
+                              (stringp str2)
+                              (standard-string-p str2)
+                              (integerp i)
+                              (integerp maximum)
+                              (<= maximum (length str1))
+                              (<= maximum (length str2))
+                              (<= 0 i)
+                              (<= i maximum))
+                  :measure (nfix (- (ifix maximum) (nfix i)))
+                  :mode :program))
+  (let ((i (nfix i)))
+    (cond
+     ((>= i (ifix maximum))
+      t)
+     (t (and (char-equal (char str1 i)
+                         (char str2 i))
+             (string-equal1 str1 str2 (+ 1 i) maximum))))))
+
+#+acl2-loop-only ; Commented out for patch file
+(defun string-equal (str1 str2)
+  (declare (xargs :guard (and (stringp str1)
+                              (standard-string-p str1)
+                              (stringp str2)
+                              (standard-string-p str2))
+                  :mode :program))
+  (let ((len1 (length str1)))
+    (and (= len1 (length str2))
+         (string-equal1 str1 str2 0 len1))))
+
+(defun member-string-equal (str lst)
+  (declare (xargs :guard (and (stringp str)
+                              (standard-string-p str)
+                              (standard-string-listp lst))
+                  :mode :program))
+  (cond
+   ((endp lst) nil)
+   (t (or (string-equal str (car lst))
+          (member-string-equal str (cdr lst))))))
+
+(defun standard-string-alistp (x)
+  (declare (xargs :guard t))
+  (cond
+   ((atom x) (eq x nil))
+   (t (and (consp (car x))
+           (stringp (car (car x)))
+           (standard-string-p (car (car x)))
+           (standard-string-alistp (cdr x))))))
+
+(defthm standard-string-alistp-forward-to-alistp
+  (implies (standard-string-alistp x)
+           (alistp x))
+  :rule-classes :forward-chaining)
+
+(defun assoc-string-equal (str alist)
+  (declare
+   (xargs :guard (and (stringp str)
+                      (standard-string-p str)
+                      (standard-string-alistp alist))
+          :mode :program))
+  (cond ((endp alist) nil)
+        ((string-equal str (car (car alist)))
+         (car alist))
+        (t (assoc-string-equal str (cdr alist)))))
+
+; Ordinal stuff.  It seems more or less impossible to get o<g and o< admitted
+; during boot-strapping unless we cheat by declaring them explicitly :mode
+; :logic so that they will be admitted in the first pass of the build.  But
+; then we also need to declare functions on which they depend to be :mode
+; :logic as well (since :logic mode functions cannot have :program mode
+; functions in their bodies).
+
+(defun bitp (x)
+  (declare (xargs :guard t :mode :logic))
+  (or (eql x 0)
+      (eql x 1)))
+
+(defthm bitp-compound-recognizer
+  (equal (bitp x)
+         (or (equal x 0)
+             (equal x 1)))
+  :rule-classes :compound-recognizer)
+
+(defthm bitp-as-inequality
+  (implies (bitp x) (and (natp x) (< x 2)))
+  :rule-classes :tau-system)
 
 (defun posp (x)
   (declare (xargs :guard t :mode :logic))
@@ -5032,7 +5255,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 (defvar *aokp*
 
-; The variable *aokp* indicates that state of using attachments, and can take
+; The variable *aokp* indicates the state of using attachments, and can take
 ; any of three sorts of values, as follows.
 
 ; nil
@@ -5061,7 +5284,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 ; Before Version_7.0, *aokp* was Boolean and a separate special variable,
 ; *attached-fn-called*, was used for holding a function symbol whose
-; attachement has been called.  By folding that role into *aokp* we reduced the
+; attachment has been called.  By folding that role into *aokp* we reduced the
 ; time for (defthm spec-body ...) in
 ; books/misc/misc2/reverse-by-separation.lisp from 188 seconds to 181 seconds,
 ; a savings of about 4%.
@@ -5069,6 +5292,9 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   t)
 
 (defmacro aokp ()
+
+; See *aokp* for explanation of that variable.
+
   '*aokp*)
 
 #+hons
@@ -5093,7 +5319,13 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; bound.
 
     `(let ((,at-fn-var ,at-fn)) ; to look up special var value only once
-       (cond ((and ,at-fn-var (aokp))
+       (declare (special ,at-fn-var *warrant-reqs*))
+       (cond ((and ,at-fn-var
+                   ,(if (member fn '(apply$-userfn badge-userfn)
+                                :test #'eq)
+                        '(or (aokp)
+                             *warrant-reqs*)
+                      '(aokp)))
               #+hons
               (update-attached-fn-called ',fn)
               (funcall ,(if *1*-p
@@ -5381,6 +5613,12 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
            nil))
   :rule-classes nil)
 
+(defthm default-pkg-imports
+  (implies (not (stringp x))
+           (equal (pkg-imports x)
+                  nil))
+  :hints (("Goal" :use completion-of-pkg-imports)))
+
 ; These axioms are just the ones that would be added by defpkg had the packages
 ; in question been introduced that way.
 
@@ -5517,16 +5755,16 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                   (and (character-listp x)
                        (character-listp y)))))
 
-; We make 1+ and 1- macros in order to head off the potentially common error of
-; using these as nonrecursive functions on left-hand sides of rewrite rules.
-
-#+acl2-loop-only
-(defmacro 1+ (x)
-  (list '+ 1 x))
-
-#+acl2-loop-only
-(defmacro 1- (x)
-  (list '- x 1))
+(defun cons-with-hint (x y hint)
+  (declare (xargs :guard t)
+           (ignorable hint))
+  #-acl2-loop-only
+  (when (and (consp hint)
+             (eql (car hint) x)
+             (eql (cdr hint) y))
+    (return-from cons-with-hint
+                 hint))
+  (cons x y))
 
 ; Remove
 
@@ -5550,7 +5788,9 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 (defun remove-equal (x l)
   (declare (xargs :guard (true-listp l)))
-  #-acl2-loop-only ; for assoc-eq, Jared Davis found native assoc efficient
+  #-acl2-loop-only
+; For assoc-eq, Jared Davis found it more efficient to use the native assoc; so
+; we do the analogous thing here, in raw Lisp.
   (remove x l :test #'equal)
   #+acl2-loop-only
   (cond ((endp l) nil)
@@ -5595,7 +5835,9 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   (cond ((endp l) nil)
         ((eq x (car l))
          (cdr l))
-        (t (cons (car l) (remove1-eq-exec x (cdr l))))))
+        (t (cons-with-hint (car l)
+                           (remove1-eq-exec x (cdr l))
+                           l))))
 
 (defun-with-guard-check remove1-eql-exec (x l)
   (if (eqlablep x)
@@ -5604,14 +5846,18 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   (cond ((endp l) nil)
         ((eql x (car l))
          (cdr l))
-        (t (cons (car l) (remove1-eql-exec x (cdr l))))))
+        (t (cons-with-hint (car l)
+                           (remove1-eql-exec x (cdr l))
+                           l))))
 
 (defun remove1-equal (x l)
   (declare (xargs :guard (true-listp l)))
   (cond ((endp l) nil)
         ((equal x (car l))
          (cdr l))
-        (t (cons (car l) (remove1-equal x (cdr l))))))
+        (t (cons-with-hint (car l)
+                           (remove1-equal x (cdr l))
+                           l))))
 
 (defmacro remove1-eq (x lst)
   `(remove1 ,x ,lst :test 'eq))
@@ -5647,21 +5893,27 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   (cond
    ((endp l) nil)
    ((member-eq (car l) (cdr l)) (remove-duplicates-eq-exec (cdr l)))
-   (t (cons (car l) (remove-duplicates-eq-exec (cdr l))))))
+   (t (cons-with-hint (car l)
+                      (remove-duplicates-eq-exec (cdr l))
+                      l))))
 
 (defun-with-guard-check remove-duplicates-eql-exec (l)
   (eqlable-listp l)
   (cond
    ((endp l) nil)
    ((member (car l) (cdr l)) (remove-duplicates-eql-exec (cdr l)))
-   (t (cons (car l) (remove-duplicates-eql-exec (cdr l))))))
+   (t (cons-with-hint (car l)
+                      (remove-duplicates-eql-exec (cdr l))
+                      l))))
 
 (defun remove-duplicates-equal (l)
   (declare (xargs :guard (true-listp l)))
   (cond
    ((endp l) nil)
    ((member-equal (car l) (cdr l)) (remove-duplicates-equal (cdr l)))
-   (t (cons (car l) (remove-duplicates-equal (cdr l))))))
+   (t (cons-with-hint (car l)
+                      (remove-duplicates-equal (cdr l))
+                      l))))
 
 (defmacro remove-duplicates-eq (x)
   `(remove-duplicates ,x :test 'eq))
@@ -5796,7 +6048,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 (defun pairlis$-tailrec (x y acc)
   (declare (xargs :guard (and (true-listp x)
                               (true-listp y)
-			      (true-listp acc))))
+                              (true-listp acc))))
   (cond ((endp x) (reverse acc))
         (t (pairlis$-tailrec (cdr x) (cdr y) (cons (cons (car x) (car y)) acc)))))
 
@@ -5898,7 +6150,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     (event         "4" nil nil nil)
     (summary       "4" nil nil nil)
 ;   (chronology    "5" t   nil nil)
-    (proof-checker "6" nil nil nil)
+    (proof-builder "6" nil nil nil)
     (history       "t" t   t   t)
     (temporary     "t" t   t   t)
     (query         "q" t   t   t)))
@@ -5918,7 +6170,12 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
       (equal x nil)))
 
 (defconst *summary-types*
-  '(header form rules hint-events warnings time steps value splitter-rules))
+
+; Warning: Keep this list in sync with :doc summary.
+
+  '(errors form header hint-events rules splitter-rules
+           steps ; shown as "Prover steps counted"
+           system-attachments time value warnings))
 
 (defmacro with-evisc-tuple (form &key ; from *evisc-tuple-sites*
                                  (term 'nil termp)
@@ -5970,7 +6227,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                              (cons #\1 :gag-mode))))))
          ((eq (car args) :evisc) ; we leave it to without-evisc to check syntax
           (with-output-fn ctx (cddr args) off on gag-mode off-on-p gag-p
-                            stack summary summary-p (cadr args) t))
+                          stack summary summary-p (cadr args) t))
          ((eq (car args) :stack)
           (cond
            (stack
@@ -6068,13 +6325,15 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     (let ((form
            `(state-global-let*
              (,@
-              (and gag-p
+              (and (or gag-p
+                       (eq stack :pop))
                    `((gag-mode (f-get-global 'gag-mode state)
                                set-gag-mode-fn)))
               ,@
               (and (or off-on-p
                        (eq stack :pop))
-                   '((inhibit-output-lst (f-get-global 'inhibit-output-lst state))))
+                   '((inhibit-output-lst (f-get-global 'inhibit-output-lst
+                                                       state))))
               ,@
               (and stack
                    '((inhibit-output-lst-stack
@@ -6087,13 +6346,13 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                          (list 'quote
                                (set-difference-eq *summary-types* summary)))))))
              (er-progn
-              ,@(and gag-p
-                     `((pprogn (set-gag-mode ,gag-mode)
-                               (value nil))))
               ,@(and stack
                      `((pprogn ,(if (eq stack :pop)
                                     '(pop-inhibit-output-lst-stack state)
                                   '(push-inhibit-output-lst-stack state))
+                               (value nil))))
+              ,@(and gag-p
+                     `((pprogn (set-gag-mode ,gag-mode)
                                (value nil))))
               ,@(and off-on-p
                      `((set-inhibit-output-lst
@@ -6137,18 +6396,44 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   (declare (xargs :guard
                    (and (integerp n)
                         (not (< n 0))
-                        (true-listp l))))
+                        (true-listp l))
+                   :verify-guards nil))
   #-acl2-loop-only
   (when (<= n most-positive-fixnum)
     (return-from take
                  (loop for i fixnum from 1 to n
 
 ; Warning: Do not use "as x in l collect x" on the next line.  Sol Swords
-; disovered that at least in CCL, the looping stops in that case when l is
+; discovered that at least in CCL, the looping stops in that case when l is
 ; empty.
 
                        collect (pop l))))
-  (first-n-ac n l nil))
+  (mbe :logic
+       (if (zp n)
+           nil
+         (cons (car l)
+               (take (1- n) (cdr l))))
+       :exec
+       (first-n-ac n l nil)))
+
+(encapsulate
+  ()
+
+  (local
+   (defthm
+     take-guard-lemma-1
+     (equal (first-n-ac i l ac)
+            (revappend ac (take i l)))))
+
+  (verify-guards take))
+
+(defthm true-listp-take
+
+; This rule was not needed until we added verify-termination-boot-strap for
+; first-n-ac and take.
+
+  (true-listp (take n l))
+  :rule-classes :type-prescription)
 
 #+acl2-loop-only
 (defun butlast (lst n)
@@ -6161,12 +6446,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
         nil
       (take (- lng n) lst))))
 
-#-acl2-loop-only
-(defmacro with-output (&rest args)
-  (car (last args)))
-
-#+acl2-loop-only
-(defmacro with-output (&rest args)
+(defmacro with-output! (&rest args)
   `(if (eq (ld-skip-proofsp state) 'include-book)
        ,(car (last args))
      ,(let ((val (with-output-fn 'with-output
@@ -6175,6 +6455,14 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
             (illegal 'with-output
                      "Macroexpansion of ~q0 failed."
                      (list (cons #\0 (cons 'with-output args))))))))
+
+#-acl2-loop-only
+(defmacro with-output (&rest args)
+  (car (last args)))
+
+#+acl2-loop-only
+(defmacro with-output (&rest args)
+  `(with-output! ,@args))
 
 ; Mutual Recursion
 
@@ -6190,13 +6478,14 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                 (member-eq (car (car rst)) '(defun defund defun-nx defund-nx))
                 (mutual-recursion-guardp (cdr rst))))))
 
-(defun collect-cadrs-when-car-eq (x alist)
-  (declare (xargs :guard (assoc-eq-equal-alistp alist)))
+(defun collect-cadrs-when-car-member-eq (x alist)
+  (declare (xargs :guard (and (symbol-listp x)
+                              (assoc-eq-equal-alistp alist))))
   (cond ((endp alist) nil)
-        ((eq x (car (car alist)))
+        ((member-eq (car (car alist)) x)
          (cons (cadr (car alist))
-               (collect-cadrs-when-car-eq x (cdr alist))))
-        (t (collect-cadrs-when-car-eq x (cdr alist)))))
+               (collect-cadrs-when-car-member-eq x (cdr alist))))
+        (t (collect-cadrs-when-car-member-eq x (cdr alist)))))
 
 (defmacro value (x)
 
@@ -6204,13 +6493,18 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
   `(mv nil ,x state))
 
-(defun value-triple-fn (form on-skip-proofs check)
+(defun value-triple-fn (form on-skip-proofs check ctx)
   (declare (xargs :guard t))
   `(cond ((and ,(not on-skip-proofs)
                (f-get-global 'ld-skip-proofsp state))
           (value :skipped))
+         ((and (eq ,on-skip-proofs :interactive)
+               (eq (f-get-global 'ld-skip-proofsp state)
+                   'include-book))
+          (value :skipped))
          (t ,(let ((form
-                    `(let ((check ,check))
+                    `(let ((check ,check)
+                           (ctx ,ctx))
                        (cond (check
                               (cond
                                ((check-vars-not-free
@@ -6218,11 +6512,11 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                                  ,form)
                                 :passed)
                                ((tilde-@p check)
-                                (er hard 'value-triple
+                                (er hard ctx
                                     "Assertion failed:~%~@0~|"
                                     check))
                                (t
-                                (er hard 'value-triple
+                                (er hard ctx
                                     "Assertion failed on form:~%~x0~|"
                                     ',form))))
                              (t ,form)))))
@@ -6231,34 +6525,30 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                  (value ,form))))))
 
 #+acl2-loop-only
-(defmacro value-triple (form &key on-skip-proofs check)
-  (value-triple-fn form on-skip-proofs check))
+(defmacro value-triple (form &key on-skip-proofs check (ctx ''value-triple))
+  (value-triple-fn form on-skip-proofs check ctx))
 
 (defmacro assert-event (form &key on-skip-proofs msg)
   (declare (xargs :guard (booleanp on-skip-proofs)))
   `(value-triple ,form
                  :on-skip-proofs ,on-skip-proofs
-                 :check ,(or msg t)))
+                 :check ,(or msg t)
+                 :ctx 'assert-event))
 
-(defun xd-name (event-type name)
-  (declare (xargs :guard (member-eq event-type '(defund defthmd))))
-  (cond
-   ((eq event-type 'defund)
-    (list :defund  name))
-   ((eq event-type 'defthmd)
-    (list :defthmd name))
-   (t (illegal 'xd-name
-               "Unexpected event-type for xd-name, ~x0"
-               (list (cons #\0 event-type))))))
+(defun event-keyword-name (event-type name)
+  (declare (xargs :guard (member-eq event-type
+                                    '(defund defthmd defun-nx defund-nx))))
+  (list (intern (symbol-name event-type) "KEYWORD") name))
 
-(defun defund-name-list (defuns acc)
+(defun event-keyword-name-lst (defuns acc)
   (declare (xargs :guard (and (mutual-recursion-guardp defuns)
                               (true-listp acc))))
   (cond ((endp defuns) (reverse acc))
-        (t (defund-name-list
+        (t (event-keyword-name-lst
              (cdr defuns)
-             (cons (if (eq (caar defuns) 'defund)
-                       (xd-name 'defund (cadar defuns))
+             (cons (if (member-eq (caar defuns)
+                                  '(defund defthmd defun-nx defund-nx))
+                       (event-keyword-name (caar defuns) (cadar defuns))
                      (cadar defuns))
                    acc)))))
 
@@ -6308,31 +6598,49 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     (error "This error is caused by what should be dead code!"))
   nil)
 
-(defun defun-nx-fn (form disabledp)
+(defun defun-nx-form (form)
   (declare (xargs :guard (and (true-listp form)
-                              (true-listp (caddr form)))
+                              (true-listp (caddr form))
+                              (member-eq (car form) '(defun-nx defund-nx)))
                   :verify-guards nil))
-  (let ((name (cadr form))
+  (let ((defunx (if (eq (car form) 'defun-nx) 'defun 'defund))
+        (name (cadr form))
         (formals (caddr form))
-        (rest (cdddr form))
-        (defunx (if disabledp 'defund 'defun)))
+        (rest (cdddr form)))
     `(,defunx ,name ,formals
        (declare (xargs :non-executable t :mode :logic))
        ,@(butlast rest 1)
        (prog2$ (throw-nonexec-error ',name (list ,@formals))
                ,@(last rest)))))
 
+(defun defun-nx-fn (form)
+  (declare (xargs :guard (and (true-listp form)
+                              (true-listp (caddr form))
+                              (member-eq (car form) '(defun-nx defund-nx)))
+                  :verify-guards nil))
+  `(with-output :stack :push :off :all
+       (progn (with-output :stack :pop
+                ,(defun-nx-form form))
+              (encapsulate
+                ()
+                (logic)
+                (with-output :stack :pop :off summary
+                  (in-theory (disable (:e ,(cadr form))))))
+              (with-output :stack :pop :off summary
+                (value-triple
+                 ',(event-keyword-name (car form) (cadr form)))))))
+
 (defmacro defun-nx (&whole form &rest rest)
   (declare (xargs :guard (and (true-listp form)
                               (true-listp (caddr form))))
            (ignore rest))
-  (defun-nx-fn form nil))
+  (defun-nx-fn form))
 
 (defmacro defund-nx (&whole form &rest rest)
   (declare (xargs :guard (and (true-listp form)
                               (true-listp (caddr form))))
            (ignore rest))
-  (defun-nx-fn form t))
+  (defun-nx-fn form))
 
 (defun update-mutual-recursion-for-defun-nx-1 (defs)
   (declare (xargs :guard (mutual-recursion-guardp defs)
@@ -6340,10 +6648,10 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   (cond ((endp defs)
          nil)
         ((eq (caar defs) 'defun-nx)
-         (cons (defun-nx-fn (car defs) nil)
+         (cons (defun-nx-form (car defs))
                (update-mutual-recursion-for-defun-nx-1 (cdr defs))))
         ((eq (caar defs) 'defund-nx)
-         (cons (defun-nx-fn (car defs) t)
+         (cons (defun-nx-form (car defs))
                (update-mutual-recursion-for-defun-nx-1 (cdr defs))))
         (t
          (cons (car defs)
@@ -6357,10 +6665,105 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
          (update-mutual-recursion-for-defun-nx-1 defs))
         (t defs)))
 
+(defun keyword-value-listp (l)
+  (declare (xargs :guard t))
+  (cond ((atom l) (null l))
+        (t (and (keywordp (car l))
+                (consp (cdr l))
+                (keyword-value-listp (cddr l))))))
+
+(defthm keyword-value-listp-forward-to-true-listp
+  (implies (keyword-value-listp x)
+           (true-listp x))
+  :rule-classes :forward-chaining)
+
+(defun assoc-keyword (key l)
+  (declare (xargs :guard (keyword-value-listp l)))
+  (cond ((endp l) nil)
+        ((eq key (car l)) l)
+        (t (assoc-keyword key (cddr l)))))
+
+(defun program-declared-p2 (dcls)
+  (declare (xargs :guard t))
+  (cond ((atom dcls) nil)
+        ((and (consp (car dcls))
+              (eq (caar dcls) 'xargs)
+              (keyword-value-listp (cdr (car dcls)))
+              (eq (cadr (assoc-keyword :mode (cdr (car dcls))))
+                  :program))
+         t)
+        (t (program-declared-p2 (cdr dcls)))))
+
+(defun program-declared-p1 (lst)
+  (declare (xargs :guard t))
+  (cond ((atom lst) nil)
+        ((and (consp (car lst))
+              (eq (caar lst) 'declare))
+         (or (program-declared-p2 (cdar lst))
+             (program-declared-p1 (cdr lst))))
+        (t (program-declared-p1 (cdr lst)))))
+
+(defun program-declared-p (def)
+
+; Def is a definition with the initial DEFUN or DEFUND stripped off.  We return
+; t if the declarations in def are minimally well-formed and there is an xargs
+; declaration of :mode :program.
+
+  (declare (xargs :guard (true-listp def)))
+  (program-declared-p1 (butlast (cddr def) 1)))
+
+(defun true-list-listp (x)
+  (declare (xargs :guard t))
+  (cond ((atom x) (eq x nil))
+        (t (and (true-listp (car x))
+                (true-list-listp (cdr x))))))
+
+(defthm true-list-listp-forward-to-true-listp
+  (implies (true-list-listp x)
+           (true-listp x))
+  :rule-classes :forward-chaining)
+
+(defun some-program-declared-p (defs)
+  (declare (xargs :guard (true-list-listp defs)))
+  (cond ((endp defs) nil)
+        (t (or (program-declared-p (car defs))
+               (some-program-declared-p (cdr defs))))))
+
+(defun pairlis-x1 (x1 lst)
+
+; Cons x1 onto the front of each element of lst.
+
+  (declare (xargs :guard (true-listp lst)))
+  (cond ((endp lst) nil)
+        (t (cons (cons x1 (car lst))
+                 (pairlis-x1 x1 (cdr lst))))))
+
+(defun pairlis-x2 (lst x2)
+
+; Make an alist pairing each element of lst with x2.
+
+  (declare (xargs :guard (true-listp lst)))
+  (cond ((endp lst) nil)
+        (t (cons (cons (car lst) x2)
+                 (pairlis-x2 (cdr lst) x2)))))
+
+(defmacro append? (x y)
+
+; We use defmacro because defabbrev has not yet been defined at this point in
+; the boot-strap.
+
+  `(let ((x ,x) (y ,y))
+     (cond ((null y) x)
+           (t (append x y)))))
+
 #+acl2-loop-only
-(defmacro mutual-recursion (&whole event-form &rest rst)
-  (declare (xargs :guard (mutual-recursion-guardp rst)))
-  (let ((rst (update-mutual-recursion-for-defun-nx rst)))
+(defmacro mutual-recursion (&whole event-form &rest rst0)
+  (declare (xargs :guard (mutual-recursion-guardp rst0)))
+  (let ((rst (update-mutual-recursion-for-defun-nx rst0)))
+
+; It would be nice to use let* instead of nested let expressions here, but let*
+; has not been defined at this point in the file.
+
     (let ((form (list 'defuns-fn
                       (list 'quote (strip-cdrs rst))
                       'state
@@ -6368,16 +6771,45 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                       #+:non-standard-analysis ; std-p
                       nil)))
       (cond
-       ((assoc-eq 'defund rst)
-        (list 'er-progn
-              form
-              (list
-               'with-output
-               :off 'summary
+       ((or (and (assoc-eq 'defund rst0)
+
+; It is of course possible that the default defun-mode is :program and thus no
+; definition expicitly declares :program mode.  In that case, we might generate
+; in-theory events but they would be skipped because the default defun-mode is
+; :program.  Note by the way that all functions introduced by mutual-recursion
+; have the same defun-mode, which allows us to avoid thinking about mixed
+; defun-mode cases.
+
+                 (not (some-program-declared-p (strip-cdrs rst0))))
+            (assoc-eq 'defun-nx rst0)
+            (assoc-eq 'defund-nx rst0))
+        (let ((in-theory-form
                (list 'in-theory
                      (cons 'disable
-                           (collect-cadrs-when-car-eq 'defund rst))))
-              (list 'value-triple (list 'quote (defund-name-list rst nil)))))
+                           (append?
+                            (collect-cadrs-when-car-member-eq
+                             '(defund)
+                             rst)
+                            (pairlis-x1
+                             ':executable-counterpart
+                             (pairlis$ (collect-cadrs-when-car-member-eq
+                                        '(defun-nx defund-nx)
+                                        rst0)
+                                       nil)))))))
+          (list 'er-progn
+                form
+                (list
+                 'with-output
+                 :off :all
+                 (if (or (assoc-eq 'defun-nx rst0)
+                         (assoc-eq 'defund-nx rst0))
+                     `(encapsulate
+                        nil
+                        (logic)
+                        ,in-theory-form)
+                   in-theory-form))
+                (list 'value-triple
+                      (list 'quote (event-keyword-name-lst rst0 nil))))))
        (t
         form)))))
 
@@ -6519,6 +6951,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 (defconst *0* (quote (quote 0)))
 (defconst *1* (quote (quote 1)))
 (defconst *-1* (quote (quote -1)))
+(defconst *2* (quote (quote 2)))
 
 (defun kwote (x)
   (declare (xargs :guard t))
@@ -6538,12 +6971,171 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
              ((eql x -1) *-1*)
              (t (list 'quote x)))))
 
+(defun maybe-kwote (x)
+
+; Return an untranslated term that represents (quote x).
+
+  (declare (xargs :guard t))
+  (cond ((or (acl2-numberp x)
+             (stringp x)
+             (characterp x)
+             (eq x nil)
+             (eq x t)
+             (keywordp x))
+         x)
+        (t (kwote x))))
+
 (defun kwote-lst (lst)
   (declare (xargs :guard (true-listp lst)))
   (cond ((endp lst) nil)
         (t (cons (kwote (car lst)) (kwote-lst (cdr lst))))))
 
 (defmacro unquote (x) (list 'cadr x))
+
+; Lambda Object Accessor Functions
+
+; The following functions access the formals, declare statement (if any), and
+; body of a well-formed lambda object.  However, they do not assume that their
+; arguments are well-formed.  They may return ill-formed results on ill-formed
+; ``lambdas''.  See the Essay on Lambda Objects and Lambda$ for some context
+; and conventions.  The formals are the *1* cadr of the ``lambda object,'' and
+; the dcl and body are either nil and the *1* caddr or the *1* caddr and the
+; *1* cadddr, depending on whether the object is a true-list of len 3 or 4.
+; The dcl and body are both nil for objects that are not true-lists of len 3 or
+; 4.
+
+; More verbosely, there are two forms of well-formed lambda objects (called
+; simple and declared), and three ``accessor'' functions:
+
+;                         simple                       declared
+;                   (LAMBDA vars body)         (LAMBDA vars dcl body)
+
+; lambda-object-formals     vars                       vars
+; lambda-object-dcl         nil                        dcl
+; lambda-object-body        body                       body
+
+; Put another way,
+
+; lambda-object-formals     cadr                       cadr
+; lambda-object-dcl         nil                        caddr
+; lambda-object-body        caddr                      cadddr
+
+; except we always mean the *1*-counterparts of those car/cdr nests so that
+; these accessors are guard verified with guards of T.  Insufficient
+; cons-structure can make lambda-object-dcl and lambda-object-body return nil.
+; A nil dcl is interpreted as though we'd seen a simple lambda with no dcl.
+; But a nil body is an ill-formed answer because nil is not a term.
+
+; Lambda-object-formals is always *1* cadr.  But lambda-object-dcl and
+; lambda-object-body have to decide whether an ill-formed lambda object, x, is
+; supposed to be treated like a simple lambda or a declared one.  The answer is
+; if it's a true-list of len 3, it's simple, if it's a true-list of len 4, it's
+; declared, and otherwise we return nil.
+
+(defun lambda-object-formals (x)
+
+; If x is a well-formed lambda object, e.g., something of the form (LAMBDA vars
+; dcl body) or (LAMBDA vars body), we return vars.  But x is not necessarily
+; well-formed and there is no guarantee that the answer is well-formed.  See
+; the discussion above.
+
+; This function has a guard of T so that it can be used without an ec-call in
+; apply$-lambda-logical and elsewhere.
+
+  (declare (xargs :guard t))
+
+; We could have defined this as indicated by the thm below, but we wanted to be
+; more efficient and guard-verified.
+
+; (thm (equal (lambda-object-formals x)
+;             (cadr x)))
+
+  (if (and (consp x)
+           (consp (cdr x)))
+      (cadr x)
+      nil))
+
+(defun lambda-object-dcl (x)
+
+; If x is a well-formed lambda object, e.g., something of the form (LAMBDA vars
+; dcl body) or (LAMBDA vars body), we return the dcl or nil if there's no dcl.
+; But x is not necessarily well-formed and there is no guarantee that the
+; answer is well-formed.  See the discussion above.
+
+; This function has a guard of T so that it can be used without an ec-call in
+; apply$-lambda-logical and elsewhere.
+
+; On Performance: One wonders whether this function would be faster if we
+; avoided repeated cdrs by let-binding.  We tried variations of this function
+; in which we bound temp successively to the cdr of temp in the obvious way so
+; as to avoid duplicated computations of cdr expressions.  We then compared
+; them on a billion well-formed lambdas of both lengths 3 and 4.  This was the
+; fastest.  The lesson: cdr is faster than let-binding/variable lookup.
+
+  (declare (xargs :guard t))
+
+; We could have used this definition:
+; (thm (equal (lambda-object-dcl x)
+;             (cond ((and (true-listp x) (= (len x) 3)) nil)
+;                   ((and (true-listp x) (= (len x) 4)) (caddr x))
+;                   (t nil))))
+; By the way, arithmetic-5/top and (equal (equal (len x) 0) (atom x)) are
+; needed to prove the thm above.
+
+  (cond ((and (consp x)               ; (= (len x) 4)
+              (consp (cdr x))
+              (consp (cddr x))
+              (consp (cdddr x))
+              (null (cddddr x)))
+         (caddr x))
+        (t nil)))
+
+(defun lambda-object-body (x)
+
+; If x is a well-formed lambda object, e.g., something of the form (LAMBDA vars
+; dcl body) or (LAMBDA vars body), we return the body.  But x is not
+; necessarily well-formed and there is no guarantee that the answer is
+; well-formed.  See the discussion above.
+
+; This function has a guard of T so that it can be used without an ec-call in
+; apply$-lambda-logical and elsewhere.
+
+  (declare (xargs :guard t))
+
+; We could have used this definition:
+; (thm (equal (lambda-object-body x)
+;             (cond
+;              ((and (true-listp x) (= (len x) 3)) (caddr x))
+;              ((and (true-listp x) (= (len x) 4)) (cadddr x))
+;              (t nil))))
+; By the way, arithmetic-5/top and (equal (equal (len x) 0) (atom x)) are
+; needed to prove the thm above.
+
+  (cond ((and (consp x)               ; (>= (len x) 3)
+              (consp (cdr x))
+              (consp (cddr x)))
+         (cond ((atom (cdddr x))      ; (= (len x) 3)
+                (if (null (cdddr x)) (caddr x) nil))
+               ((null (cddddr x))     ; (= (len x) 4)
+                (cadddr x))
+               (t nil)))
+        (t nil)))
+
+(defun lambda-object-shapep (fn)
+  (declare (xargs :guard t))
+  (and (consp fn)
+       (eq (car fn) 'lambda)
+       (consp (cdr fn))
+       (consp (cddr fn))
+       (or (null (cdddr fn))
+           (and (consp (cdddr fn))
+                (null (cddddr fn))))))
+
+(defun make-lambda-object (formals dcl body)
+  (declare (xargs :guard t))
+  `(lambda ,formals
+     ,@(if dcl (list dcl) nil)
+     ,body))
 
 (defmacro ffn-symb (x) (list 'car x))
 
@@ -6603,7 +7195,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; macro expansion of lst at hand, one could manufacture a variable
 ; that was not free in the expansion with genvars, and that would do.
 
-; As a less than elegant rememdy to the situation, we introduce below
+; As a less than elegant remedy to the situation, we introduce below
 ; the macro check-vars-not-free, which takes two arguments, the first
 ; a not-to-be-evaluated list of variable names and the second an
 ; expression.  We arrange to return the translation of the expression
@@ -6755,6 +7347,45 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                  (list 'cons (car chars) (car forms))
                  (make-fmt-bindings (cdr chars) (cdr forms))))))
 
+(defconst *base-10-chars*
+
+; This constant is inlined in the definition of
+; *base-10-array*.
+
+  '(#\0 #\1 #\2 #\3 #\4 #\5 #\6 #\7 #\8 #\9))
+
+(defmacro warning$ (ctx summary str+ &rest fmt-args)
+
+; Warning: Keep this in sync with warning$-cw1.
+
+; Note: This macro was originally defined in basis-a.lisp, but was moved
+; forward after *acl2-files* was changed so that "hons-raw" occurs before
+; "basis-a".
+
+; A typical use of this macro might be:
+; (warning$ ctx "Loops" "The :REWRITE rule ~x0 loops forever." name) or
+; (warning$ ctx nil "The :REWRITE rule ~x0 loops forever." name).
+; If the second argument is wrapped in a one-element list, as in
+; (warning$ ctx ("Loops") "The :REWRITE rule ~x0 loops forever." name),
+; then that argument is quoted, and no check will be made for whether the
+; warning is disabled, presumably because we are in a context where we know the
+; warning is enabled.
+
+  (list 'warning1
+        ctx
+
+; We seem to have seen a GCL 2.6.7 compiler bug, laying down bogus calls of
+; load-time-value, when replacing (consp (cadr args)) with (and (consp (cadr
+; args)) (stringp (car (cadr args)))).  But it seems fine to have the semantics
+; of warning$ be that conses are quoted in the second argument position.
+
+        (if (consp summary)
+            (kwote summary)
+          summary)
+        str+
+        (make-fmt-bindings *base-10-chars* fmt-args)
+        'state))
+
 (defmacro msg (str &rest args)
 
 ; Fmt is defined much later.  But we need msg now because several of our macros
@@ -6763,7 +7394,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
   (declare (xargs :guard (<= (length args) 10)))
 
-  `(cons ,str ,(make-fmt-bindings '(#\0 #\1 #\2 #\3 #\4 #\5 #\6 #\7 #\8 #\9) args)))
+  `(cons ,str ,(make-fmt-bindings *base-10-chars* args)))
 
 (defun check-vars-not-free-test (vars term)
   (declare (xargs :guard (and (symbol-listp vars)
@@ -6776,7 +7407,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 (defmacro check-vars-not-free (vars form)
 
 ; Warning: We actually handle this macro directly in translate11, in case that
-; is an effficiency win.  Keep this macro and that part of translate11 in sync.
+; is an efficiency win.  Keep this macro and that part of translate11 in sync.
 
 ; A typical use of this macro is (check-vars-not-free (my-erp my-val) ...)
 ; which just expands to the translation of ... provided my-erp and my-val do
@@ -6925,7 +7556,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   (cond
    ((endp lst) nil)
    ((eq item (car lst))
-    acc)
+    (mbe :logic (fix acc) :exec acc))
    (t (position-ac-eq-exec item (cdr lst) (1+ acc)))))
 
 (defun-with-guard-check position-ac-eql-exec (item lst acc)
@@ -6936,7 +7567,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   (cond
    ((endp lst) nil)
    ((eql item (car lst))
-    acc)
+    (mbe :logic (fix acc) :exec acc))
    (t (position-ac-eql-exec item (cdr lst) (1+ acc)))))
 
 (defun position-equal-ac (item lst acc)
@@ -6950,7 +7581,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   (cond
    ((endp lst) nil)
    ((equal item (car lst))
-    acc)
+    (mbe :exec acc :logic (fix acc)))
    (t (position-equal-ac item (cdr lst) (1+ acc)))))
 
 (defmacro position-ac-equal (item lst acc)
@@ -7058,21 +7689,20 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   #+acl2-loop-only
   (if (or (= (nfix j) 0)
           (< (ifix i) j))
+
+; As noted by Mihir Mehta, the test above could reasonably be replaced by an
+; mbe call whose :logic component is as shown above and whose :exec component
+; is (< i j), but that wouldn't enhance performance, given the #-acl2-loop-only
+; code above.  (See : DOC developers-guide-background for discussion of
+; #-acl2-loop-only.)
+
+; If this code nevertheless is changed to use mbe, consider that there may be
+; many other similar opportunities to use mbe.
+
       0
     (+ 1 (nonnegative-integer-quotient (- i j) j))))
 
 ; Next we develop let* in the logic.
-
-(defun true-list-listp (x)
-  (declare (xargs :guard t))
-  (cond ((atom x) (eq x nil))
-        (t (and (true-listp (car x))
-                (true-list-listp (cdr x))))))
-
-(defthm true-list-listp-forward-to-true-listp
-  (implies (true-list-listp x)
-           (true-listp x))
-  :rule-classes :forward-chaining)
 
 (defun legal-let*-p (bindings ignore-vars ignored-seen top-form)
 
@@ -7154,13 +7784,13 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                      (hard-error 'let*-macro
                                  "Implementation error: Ignored variables ~x0 ~
                                   must be bound in superior LET* form!"
-                                 ignore-vars))
+                                 (list (cons #\0 ignore-vars))))
                  (prog2$ (or (null ignorable-vars)
                              (hard-error 'let*-macro
                                          "Implementation error: Ignorable ~
                                           variables ~x0 must be bound in ~
                                           superior LET* form!"
-                                         ignorable-vars))
+                                         (list (cons #\0 ignorable-vars))))
                          body)))
         (t ; (consp bindings)
          (cons 'let
@@ -7271,8 +7901,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 #+(and :non-standard-analysis (not acl2-loop-only))
 (defun floor1 (x)
 
-; See "RAG" comment in the definition of floor for an explanation of why we
-; need this function.
+; See "Historical Comment from Ruben Gamboa" comment in the definition of floor
+; for an explanation of why we need this function.
 
   (floor x 1))
 
@@ -7281,7 +7911,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 (defun floor (i j)
 
-;; RAG - This function had to be modified in a major way.  It was
+;; Historical Comment from Ruben Gamboa:
+;; This function had to be modified in a major way.  It was
 ;; originally defined only for rationals, and it used the fact that
 ;; the floor of "p/q" could be found by repeatedly subtracting "q"
 ;; from "p" (roughly speaking).  This same trick, sadly, does not work
@@ -7315,7 +7946,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
           (t (+ (- (nonnegative-integer-quotient (- n) d)) -1))))
   )
 
-;; RAG - This function was also modified to fit in the reals.  It's
+;; Historical Comment from Ruben Gamboa:
+;; This function was also modified to fit in the reals.  It's
 ;; also defined in terms of the _undefined_ function floor1 (which
 ;; corresponds to the usual unary floor function).
 
@@ -7345,7 +7977,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
           (t (- (nonnegative-integer-quotient (- n) d)))))
   )
 
-;; RAG - Another function  modified to fit in the reals, using floor1.
+;; Historical Comment from Ruben Gamboa:
+;; Another function  modified to fit in the reals, using floor1.
 
 (defun truncate (i j)
   (declare (xargs :guard (and (real/rationalp i)
@@ -7373,7 +8006,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
           (t (- (nonnegative-integer-quotient (- n) d)))))
   )
 
-;; RAG - Another function  modified to fit in the reals, using floor1.
+;; Historical Comment from Ruben Gamboa:
+;; Another function  modified to fit in the reals, using floor1.
 
 (defun round (i j)
   (declare (xargs :guard (and (real/rationalp i)
@@ -7403,7 +8037,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                             (t (+ cl -1)))))))))
   )
 
-;; RAG - I only had to modify the guards here to allow the reals,
+;; Historical Comment from Ruben Gamboa:
+;; I only had to modify the guards here to allow the reals,
 ;; since this function is defined in terms of the previous ones.
 
 (defun mod (x y)
@@ -7431,21 +8066,24 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                   :guard (acl2-numberp x)))
   (eql x 0))
 
-;; RAG - Only the guard changed here.
+;; Historical Comment from Ruben Gamboa:
+;; Only the guard changed here.
 
 (defun plusp (x)
   (declare (xargs :mode :logic
                   :guard (real/rationalp x)))
   (> x 0))
 
-;; RAG - Only the guard changed here.
+;; Historical Comment from Ruben Gamboa:
+;; Only the guard changed here.
 
 (defun minusp (x)
   (declare (xargs :mode :logic
                   :guard (real/rationalp x)))
   (< x 0))
 
-;; RAG - Only the guard changed here.
+;; Historical Comment from Ruben Gamboa:
+;; Only the guard changed here.
 
 (defun min (x y)
   (declare (xargs :guard (and (real/rationalp x)
@@ -7454,7 +8092,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
       x
     y))
 
-;; RAG - Only the guard changed here.
+;; Historical Comment from Ruben Gamboa:
+;; Only the guard changed here.
 
 (defun max (x y)
   (declare (xargs :guard (and (real/rationalp x)
@@ -7463,7 +8102,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
       x
     y))
 
-;; RAG - Only the guard changed here.  The docstring below says that
+;; Historical Comment from Ruben Gamboa:
+;; Only the guard changed here.  The doc string below says that
 ;; abs must not be used on complex arguments, since that could result
 ;; in a non-ACL2 object.
 
@@ -7497,6 +8137,26 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 )
 
+(encapsulate
+  ()
+  (local (defthm hack
+           (implies (integerp i)
+                    (equal (+ -1 1 i)
+                           i))))
+  (local
+   (defthm standard-string-p1-forward-to-standard-char-p
+     (implies (and (standard-string-p1 s n) ; n is free
+                   (stringp s)
+                   (integerp n)
+                   (natp i)
+                   (< i n))
+              (standard-char-p (nth i (coerce s 'list))))))
+
+  (verify-termination-boot-strap string-equal1))
+
+; The following was probably formerly needed for the event just above,
+; (verify-termination-boot-strap string-equal1).  It's no longer necessary for
+; that but it's a nice rule nonetheless.
 (defthm standard-char-p-nth
   (implies (and (standard-char-listp chars)
                 (<= 0 i)
@@ -7504,10 +8164,9 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
            (standard-char-p (nth i chars)))
   :hints (("Goal" :in-theory (enable standard-char-listp))))
 
-(verify-termination-boot-strap (string-equal1
-                     (declare (xargs :measure (nfix (- maximum (nfix i)))))))
 (verify-termination-boot-strap string-equal)
 (verify-termination-boot-strap assoc-string-equal)
+(verify-termination-boot-strap member-string-equal)
 (verify-termination-boot-strap xxxjoin)
 
 #+acl2-loop-only
@@ -7574,7 +8233,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
            (not (equal (expt r i) 0)))
   :rule-classes :type-prescription)
 
-;; RAG - I added the following lemma, similar to the rational case.
+;; Historical Comment from Ruben Gamboa:
+;; I added the following lemma, similar to the rational case.
 
 #+:non-standard-analysis
 (defthm realp-expt-type-prescription
@@ -7801,7 +8461,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 ; The idea is that it returns the 3 results of evaluating body except before
 ; propagating those results upwards it runs one of the two cleanup forms,
-; depending on whether the body signalled an error.  The cleanup forms return
+; depending on whether the body signaled an error.  The cleanup forms return
 ; state.  In typical use the cleanup forms restore the values of state global
 ; variables that were "temporarily" set by body.  [Note that the "expl"
 ; is a string and it is always ignored.  Its only use is to tag the elements
@@ -7822,7 +8482,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; unwind-protect in the macroexpansion of each acl2-unwind-protect.
 
 ; The (imagined) unwind-protect is almost always irrelevant because "errors"
-; signalled by body are in fact not Lisp errors.  But should the user cause an
+; signaled by body are in fact not Lisp errors.  But should the user cause an
 ; abort during body, the unwind-protect will ensure that cleanup1 is executed.
 ; This is a logically arbitrary choice; we might have said cleanup2 is
 ; executed.  By "ensure" we mean not only will the Lisp unwind-protect fire
@@ -7840,7 +8500,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; correct with respect to the (non-logical) semantics we have described.
 ; Furthermore, it bears pointing out that cleanup1 might be called upon to undo
 ; the work of a "partial" execution of cleanup2!  This happens if the body
-; completes normally and without signalling an error, cleanup2 is undertaken,
+; completes normally and without signaling an error, cleanup2 is undertaken,
 ; and then the user aborts.  So the rule is that if an abort occurs during an
 ; acl2-unwind-protect, cleanup1 is executed without interrupts.
 
@@ -7866,7 +8526,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 ; (unwind-protect ,body
 ;   (cond (<body was aborted> ,cleanup1 <pass abort up>)
-;         (<body signalled erp> ,cleanup1 <pass (mv erp val state') up>)
+;         (<body signaled erp> ,cleanup1 <pass (mv erp val state') up>)
 ;         (t ,cleanup2 <pass (mv erp val state') up>)))
 
 ; where we do whatever we have to do to detect aborts and to pass aborts up in
@@ -7932,6 +8592,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 (defmacro acl2-unwind-protect (expl body cleanup1 cleanup2)
 
+; Warning: Keep in sync with acl2-unwind-protect-raw.
+
 ; Note: If the names used for the erp and val results are changed in the #+
 ; code, then change them in the #- code also.  We use the same names (rather
 ; than using gensym) just because we know they are acceptable if translate
@@ -7956,21 +8618,21 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                       acl2-unwind-protect-val
                       state))))
     `(mv-let (acl2-unwind-protect-erp acl2-unwind-protect-val state)
-             (check-vars-not-free
-              (acl2-unwind-protect-erp acl2-unwind-protect-val)
-              ,body)
-             ,(cond
-               ((equal cleanup1 cleanup2)
-                cleanup1-form)
-               (t `(cond
-                    (acl2-unwind-protect-erp
-                     ,cleanup1-form)
-                    (t (pprogn (check-vars-not-free
-                                (acl2-unwind-protect-erp acl2-unwind-protect-val)
-                                ,cleanup2)
-                               (mv acl2-unwind-protect-erp
-                                   acl2-unwind-protect-val
-                                   state))))))))
+       (check-vars-not-free
+        (acl2-unwind-protect-erp acl2-unwind-protect-val)
+        ,body)
+       ,(cond
+         ((equal cleanup1 cleanup2)
+          cleanup1-form)
+         (t `(cond
+              (acl2-unwind-protect-erp
+               ,cleanup1-form)
+              (t (pprogn (check-vars-not-free
+                          (acl2-unwind-protect-erp acl2-unwind-protect-val)
+                          ,cleanup2)
+                         (mv acl2-unwind-protect-erp
+                             acl2-unwind-protect-val
+                             state))))))))
 
 ; The raw code is very similar.  But it starts out by pushing onto the undo
 ; stack the name of the cleanup function and the values of the arguments.  Note
@@ -7992,14 +8654,16 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; say.
 
   #-acl2-loop-only
-  `(let ((temp (and (live-state-p state)
+  (let ((temp (gensym)))
+    `(let ((,temp (and (live-state-p state)
 
 ; We have seen warnings from LispWorks 4.2.7 of this form that appear to be
-; related to the present binding, but we do not yet know how to eliminate them:
+; related to the present binding, but we do not yet know how to eliminate them
+; (note: this is from before temp was a gensym):
 ;
 ; Eliminating a test of a variable with a declared type : TEMP [type CONS]
 
-                    (cons ,expl (function (lambda nil ,cleanup1))))))
+                       (cons ,expl (function (lambda nil ,cleanup1))))))
 
 ; FUNCTION captures the binding environment in which cleanup1 would
 ; have been executed.  So by applying the resulting function to no
@@ -8007,13 +8671,13 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; this cons in temp so we can recognize it below.  If we're not
 ; operating on the live state, temp is nil.
 
-     (cond (temp
-            (push-car temp
-                      *acl2-unwind-protect-stack*
-                      'acl2-unwind-protect)))
+       (cond (,temp
+              (push-car ,temp
+                        *acl2-unwind-protect-stack*
+                        'acl2-unwind-protect)))
 
-     (mv-let (acl2-unwind-protect-erp acl2-unwind-protect-val state)
-             ,body
+       (mv-let (acl2-unwind-protect-erp acl2-unwind-protect-val state)
+         ,body
 
 ; Roughly speaking, we should execute cleanup1 or cleanup2, as
 ; appropriate based on acl2-unwind-protect-erp, and then pop the
@@ -8023,26 +8687,26 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; first restore the stack to just after the pushing of temp, if we
 ; pushed temp.
 
-             (cond (temp (acl2-unwind -1 temp)))
+         (cond (,temp (acl2-unwind -1 ,temp)))
 
-             (cond
-              (acl2-unwind-protect-erp
-               (pprogn ,cleanup1
-                       (cond (temp
-                              (pop (car *acl2-unwind-protect-stack*))
-                              state)
-                             (t state))
-                       (mv acl2-unwind-protect-erp
-                           acl2-unwind-protect-val
-                           state)))
-              (t (pprogn ,cleanup2
-                         (cond (temp
-                                (pop (car *acl2-unwind-protect-stack*))
-                                state)
-                               (t state))
-                         (mv acl2-unwind-protect-erp
-                             acl2-unwind-protect-val
-                             state)))))))
+         (cond
+          (acl2-unwind-protect-erp
+           (pprogn ,cleanup1
+                   (cond (,temp
+                          (pop (car *acl2-unwind-protect-stack*))
+                          state)
+                         (t state))
+                   (mv acl2-unwind-protect-erp
+                       acl2-unwind-protect-val
+                       state)))
+          (t (pprogn ,cleanup2
+                     (cond (,temp
+                            (pop (car *acl2-unwind-protect-stack*))
+                            state)
+                           (t state))
+                     (mv acl2-unwind-protect-erp
+                         acl2-unwind-protect-val
+                         state))))))))
 
 #-acl2-loop-only
 (defun-one-output acl2-unwind (n flg)
@@ -8217,11 +8881,12 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; This completes the Essay on Unwind-Protect.  There are some additional
 ; comments in the code for EV.
 
-; It is IMPERATIVE that the following macro, when-logic, is ONLY used when its
-; second argument is a form that evaluates to an error triple.  Keep this
-; function in sync with boot-translate.
-
 (defmacro when-logic (str x)
+
+; It is IMPERATIVE that this is ONLY used when its second argument is a form
+; that evaluates to an error triple.  Keep this function in sync with
+; boot-translate.
+
   (list 'if
         '(eq (default-defun-mode-from-state state)
              :program)
@@ -8263,6 +8928,12 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; Keep this in sync with get-cmds-from-portcullis1, make-hidden-defpkg,
 ; equal-modulo-hidden-defpkgs, and (of course) the #-acl2-loop-only definition
 ; of defpkg.
+
+; Note: It is tempting to remove the doc argument, as we have done for many
+; other event forms after Version_7.1.  However, all defpkg calls with non-nil
+; book-path or hidden-p would need to be revisited, both in the regression
+; suite and in every user application of ACL2 outside the regression suite.
+; That doesn't seem worth the trouble.
 
   (list 'defpkg-fn
         (list 'quote name)
@@ -8329,7 +9000,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 #+acl2-loop-only
 (defmacro verify-guards (&whole event-form name &key hints otf-flg guard-debug
-                                doc)
+                                (guard-simplify 't))
 
 ; Warning: See the Important Boot-Strapping Invariants before modifying!
 
@@ -8343,7 +9014,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
        (list 'quote hints)
        (list 'quote otf-flg)
        (list 'quote guard-debug)
-       (list 'quote doc)
+       (list 'quote guard-simplify)
        (list 'quote event-form)))
 
 (defmacro verify-guards+ (name &rest rest)
@@ -8407,8 +9078,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                        &key (rule-classes '(:REWRITE))
                        instructions
                        hints
-                       otf-flg
-                       doc)
+                       otf-flg)
 
 ; Warning: See the Important Boot-Strapping Invariants before modifying!
 
@@ -8420,26 +9090,130 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
         (list 'quote instructions)
         (list 'quote hints)
         (list 'quote otf-flg)
-        (list 'quote doc)
         (list 'quote event-form)
         #+:non-standard-analysis ; std-p
         nil))
+
+(defmacro er (severity context str &rest str-args)
+
+; Keep in sync with er@par.
+
+  (declare (xargs :guard (and (true-listp str-args)
+                              (member-symbol-name (symbol-name severity)
+                                                  '(hard hard? hard! hard?!
+                                                         soft very-soft))
+                              (<= (length str-args) 10))))
+
+; Note: We used to require (stringp str) but then we started writing such forms
+; as (er soft ctx msg x y z), where msg was bound to the error message str
+; (because the same string was used many times).
+
+; The special form (er hard "..." &...) expands into a call of illegal on "..."
+; and an alist built from &....  Since illegal has a guard of nil, the attempt
+; to prove the correctness of a fn producing a hard error will require proving
+; that the error can never occur.  At runtime, illegal causes a CLTL error.
+
+; The form (er soft ctx "..." &...) expands into a call of error1 on ctx, "..."
+; and an alist built from &....  At runtime error1 builds an error object and
+; returns it.  Thus, soft errors are not errors at all in the CLTL sense and
+; any function calling one which might cause an error ought to handle it.
+
+; Just to make it easier to debug our code, we have arranged for the er macro
+; to actually produce a prog2 form in which the second arg is as described
+; above but the preceding one is an fmt statement which will actually print the
+; error str and alist.  Thus, we can see when soft errors occur, whether or not
+; the calling program handles them appropriately.
+
+; We do not advertise the hard! or very-soft severities, at least not yet.  The
+; implementation uses the former to force a hard error even in contexts where
+; we would normally return nil.
+
+  (let ((alist (make-fmt-bindings *base-10-chars* str-args))
+        (severity-name (symbol-name severity)))
+    (cond ((equal severity-name "SOFT")
+           (list 'error1 context str alist 'state))
+          ((equal severity-name "VERY-SOFT")
+           (list 'error1-safe context str alist 'state))
+          ((equal severity-name "HARD?")
+           (list 'hard-error context str alist))
+          ((equal severity-name "HARD")
+           (list 'illegal context str alist))
+          ((equal severity-name "HARD!")
+           #+acl2-loop-only (list 'illegal context str alist)
+           #-acl2-loop-only `(let ((*hard-error-returns-nilp* nil))
+                              (illegal ,context ,str ,alist)))
+          ((equal severity-name "HARD?!")
+           #+acl2-loop-only (list 'hard-error context str alist)
+           #-acl2-loop-only `(let ((*hard-error-returns-nilp* nil))
+                              (hard-error ,context ,str ,alist)))
+          (t
+
+; The final case should never happen.
+
+           (illegal 'top-level
+                    "Illegal severity, ~x0; macroexpansion of ER failed!"
+                    (list (cons #\0 severity)))))))
+
+#+acl2-par
+(defmacro er@par (severity context str &rest str-args)
+
+; Keep in sync with er.
+
+  (declare (xargs :guard (and (true-listp str-args)
+                              (member-symbol-name (symbol-name severity)
+                                                  '(hard hard? hard! hard?!
+                                                         soft very-soft))
+                              (<= (length str-args) 10))))
+  (let ((alist (make-fmt-bindings *base-10-chars* str-args))
+        (severity-name (symbol-name severity)))
+    (cond ((equal severity-name "SOFT")
+           (list 'error1@par context str alist 'state))
+          (t
+
+; The final case should never happen.
+
+           (illegal 'top-level
+                    "Illegal severity, ~x0; macroexpansion of ER@PAR failed!"
+                    (list (cons #\0 severity)))))))
 
 #+acl2-loop-only
 (defmacro defthmd (&whole event-form
                           name term
                           &rest rst)
-  (declare (xargs :guard t) (ignore term rst))
-  (list 'progn
-        (cons 'defthm (cdr event-form))
-        (list
-         'with-output
-         :off 'summary
-         (list 'in-theory
-               (list 'disable name)))
-        (list 'value-triple
-              (list 'quote (xd-name 'defthmd name))
-              :on-skip-proofs t)))
+  (declare (xargs :guard t) (ignore term))
+  (let ((tmp (member :rule-classes rst)))
+    (cond
+     ((and tmp
+           (cdr tmp)
+           (eq (cadr tmp) nil))
+      (er hard (cons 'defthmd name)
+          "It is illegal to specify :rule-classes nil with ~x0, since there ~
+           is no rule to disable."
+          'defthmd))
+     (t (list 'with-output
+              :stack :push
+              :off :all
+
+; The following allows reporting of macroexpansion errors.
+
+              :on 'error
+              (list 'progn
+                    (list 'with-output
+                          :stack :pop
+                          (cons 'defthm (cdr event-form)))
+                    (list 'with-output
+                          :stack :pop
+
+; We never want to see the summary here.  But we do want to see a redundancy
+; message, which is printed in stop-redundant-event with (io? event ...) --
+; unless event output is inhibited at the start of the defthmd call.
+
+                          :off 'summary
+                          (list 'in-theory
+                                (list 'disable name)))
+                    (list 'value-triple
+                          (list 'quote (event-keyword-name 'defthmd name))
+                          :on-skip-proofs t)))))))
 
 #+(and acl2-loop-only :non-standard-analysis)
 (defmacro defthm-std (&whole event-form
@@ -8447,8 +9221,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                        &key (rule-classes '(:REWRITE))
                        instructions
                        hints
-                       otf-flg
-                       doc)
+                       otf-flg)
   (list 'defthm-fn
         (list 'quote name)
         (list 'quote term)
@@ -8457,14 +9230,12 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
         (list 'quote instructions)
         (list 'quote hints)
         (list 'quote otf-flg)
-        (list 'quote doc)
         (list 'quote event-form)
         t))
 
 #+acl2-loop-only
 (defmacro defaxiom (&whole event-form name term
-                    &key (rule-classes '(:REWRITE))
-                         doc)
+                    &key (rule-classes '(:REWRITE)))
 
 ; Warning: See the Important Boot-Strapping Invariants before modifying!
 
@@ -8473,11 +9244,10 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
         (list 'quote term)
         'state
         (list 'quote rule-classes)
-        (list 'quote doc)
         (list 'quote event-form)))
 
 #+acl2-loop-only
-(defmacro deflabel (&whole event-form name &key doc)
+(defmacro deflabel (&whole event-form name)
 
 ; Warning: See the Important Boot-Strapping Invariants before modifying!
 
@@ -8488,11 +9258,10 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   (list 'deflabel-fn
         (list 'quote name)
         'state
-        (list 'quote doc)
         (list 'quote event-form)))
 
 #+acl2-loop-only
-(defmacro deftheory (&whole event-form name expr &key doc)
+(defmacro deftheory (&whole event-form name expr &key redundant-okp ctx)
 
 ; Warning: See the Important Boot-Strapping Invariants before modifying!
 
@@ -8504,12 +9273,17 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
         (list 'quote name)
         (list 'quote expr)
         'state
-        (list 'quote doc)
+        (list 'quote redundant-okp)
+        (list 'quote ctx)
         (list 'quote event-form)))
+
+(defmacro defthy (name &rest args)
+  `(deftheory ,name ,@args :redundant-okp t :ctx (defthy . ,name)))
 
 (defmacro deftheory-static (name theory)
   `(make-event
     (let ((world (w state)))
+      (declare (ignorable world))
       (list 'deftheory ',name
          (list 'quote ,theory)))))
 
@@ -8529,7 +9303,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
         (list 'quote event-form)))
 
 #+acl2-loop-only
-(defmacro in-theory (&whole event-form expr &key doc)
+(defmacro in-theory (&whole event-form expr)
 
 ; Warning: See the Important Boot-Strapping Invariants before modifying!
 
@@ -8540,11 +9314,10 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   (list 'in-theory-fn
         (list 'quote expr)
         'state
-        (list 'quote doc)
         (list 'quote event-form)))
 
 #+acl2-loop-only
-(defmacro in-arithmetic-theory (&whole event-form expr &key doc)
+(defmacro in-arithmetic-theory (&whole event-form expr)
 
 ; Warning: See the Important Boot-Strapping Invariants before modifying!
 
@@ -8555,11 +9328,10 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   (list 'in-arithmetic-theory-fn
         (list 'quote expr)
         'state
-        (list 'quote doc)
         (list 'quote event-form)))
 
 #+acl2-loop-only
-(defmacro regenerate-tau-database (&whole event-form &key doc)
+(defmacro regenerate-tau-database (&whole event-form)
 
 ; Warning: See the Important Boot-Strapping Invariants before modifying!
 
@@ -8569,11 +9341,10 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
   (list 'regenerate-tau-database-fn
         'state
-        (list 'quote doc)
         (list 'quote event-form)))
 
 #+acl2-loop-only
-(defmacro push-untouchable (&whole event-form name fn-p &key doc)
+(defmacro push-untouchable (&whole event-form name fn-p)
 
 ; Warning: See the Important Boot-Strapping Invariants before modifying!
 
@@ -8589,11 +9360,10 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
         (list 'quote name)
         (list 'quote fn-p)
         'state
-        (list 'quote doc)
         (list 'quote event-form)))
 
 #+acl2-loop-only
-(defmacro remove-untouchable (&whole event-form name fn-p &key doc)
+(defmacro remove-untouchable (&whole event-form name fn-p)
 
 ; Warning: See the Important Boot-Strapping Invariants before modifying!
 
@@ -8613,7 +9383,6 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                    (list 'quote name)
                    (list 'quote fn-p)
                    'state
-                   (list 'quote doc)
                    (list 'quote event-form)))))
 
 #+acl2-loop-only
@@ -8657,6 +9426,38 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
         'state
         (list 'quote event-form)))
 
+(defmacro partial-encapsulate (sigs supporters &rest cmd-lst)
+
+; We considered instead allowing an event like (make-unknown-constraint fn),
+; rather than providing partial-encapsulate as an interface to encapsulate with
+; an invocation of set-unknown-constraints-supporters.  But that would make it
+; too easy for users to introduce unsoundness with trust tags (always a
+; possibility, but as a courtesy we'd like to encourage sound use of trust
+; tags!).  Consider for example this book.
+
+;   (in-package "ACL2")
+;   (defstub f (x) t)
+;   (local (make-unknown-constraint f))
+;   (include-raw "f-raw")
+
+; After including the book, f no longer has unknown-constraints, yet if
+; f-raw.lsp provides a way to compute with f, we can now prove theorems that
+; don't follow from the (trivial) axioms of f.  A proof of nil with functional
+; instantiation would not be far behind!
+
+; So instead, we insist that unknown-constraints are put on the function as
+; part of the encapsulate that introduces it.
+
+  (declare (xargs :guard (symbol-listp supporters)))
+  (cond
+   ((null cmd-lst)
+    (er hard 'partial-encapsulate
+        "There must be at least one event form following the supporters in a ~
+         call of partial-encapsulate."))
+   (t `(encapsulate ,sigs
+         ,@cmd-lst
+         (set-unknown-constraints-supporters ,@supporters)))))
+
 (defconst *load-compiled-file-values*
   '(t nil :warn :default :comp))
 
@@ -8672,8 +9473,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                                (defaxioms-okp 't)
                                (skip-proofs-okp 't)
                                (ttags ':default)
-                               dir
-                               doc)
+                               dir)
 
 ; Warning: See the Important Boot-Strapping Invariants before modifying!
 
@@ -8683,12 +9483,11 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
         (list 'quote user-book-name)
         'state
         (list 'quote load-compiled-file)
-        (list 'quote :none)
+        (list 'quote nil)
         (list 'quote uncertified-okp)
         (list 'quote defaxioms-okp)
         (list 'quote skip-proofs-okp)
         (list 'quote ttags)
-        (list 'quote doc)
         (list 'quote dir)
         (list 'quote event-form)))
 
@@ -8713,35 +9512,39 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 ; We use record-expansion (as described in :doc make-event-details) in order to
 ; support redundancy of encapsulate, as implemented by redundant-encapsulatep
-; and its subroutines.  Here is a summary of the issue.  Consider: (encapsulate
-; ((foo (x) t)) ... (make-event <form>)).  We have several goals.
-; + Be able to execute this form a second time and have it be redundant.
-; + If this form is redundant yet in a book, it cannot cause a new expansion
-;   result for the make-event or the encapsulate, and include-book has to do
-;   the right thing even, if possible, in raw mode.
-; + We want to store a proper expansion of an encapsulate.
-; + We want to recognize redundancy without having to execute the encapsulate.
-; + If an encapsulate form is redundant then its stored version is identical
-;   to the stored version of the earlier form for which it is redundant.
-; The last of these properties is important because otherwise unsoundness could
-; result!  Suppose for example that a book bar.lisp contains (local
-; (include-book "foo")), where foo.lisp contains an encapsulate that causes a
-; later encapsulate in bar.lisp to be redundant.  What should we know at the
-; point we see the later encapsulate?  We should know that the event logically
-; represented by the encapsulate is the same as the one logically represented
-; by the earlier encapsulate, so we certainly do not want to re-do its
-; expansion at include-book time.  Thus, when an encapsulate is redundant, we
-; store the expanded version of the earlier encapsulate as the expansion of the
-; current unexpanded encapsulate, unless the two are identical.  But how do we
-; expand a non-redundant encapsulate?  We expand it by replacing every
-; sub-event ev by (record-expansion ev exp), when ev has an expansion exp.
-; Then, we recognize a subsequent encapsulate as redundant with this one if
-; their signatures are equal and each of the subsequent encapsulate's events,
-; ev2, is either the same as the corresponding event ev1 of the old encapsulate
-; or else ev1 is of the form (record-expansion ev2 ...).
+; and its subroutines.  Here is a summary of the redundancy issue.
 
-; We elide local forms arising from make-event expansions when writing to book
-; certificates, in order to save space.  See elide-locals.
+; We have these two key goals regarding redundancy
+
+; + We prefer to recognize redundancy without having to execute the
+;   encapsulate.
+
+; + If an encapsulate form is redundant with an earlier form that is local, and
+;   thus including the book causes only the latter form to be processed, then
+;   the resulting event stored at include-book time should agree logically with
+;   the event stored at certification time.
+
+; The latter of these properties is important because otherwise unsoundness
+; could result!  Suppose for example that a book bar.lisp contains (local
+; (include-book "foo")), where foo.lisp contains an encapsulate that causes a
+; second encapsulate in bar.lisp to be redundant.  What should we know at the
+; point we see the second encapsulate as redundant?  We should know that the
+; event logically represented by the encapsulate is the same as the one
+; logically represented by the earlier encapsulate, so we certainly do not want
+; to re-do its expansion at include-book time.  Thus, when an encapsulate is
+; redundant, we store the expanded version of the earlier encapsulate as the
+; expansion of the current encapsulate.  But how do we expand a non-redundant
+; encapsulate?  We expand it by replacing every sub-event by its expansion (if
+; it has an expansion).  Then, we may recognize a subsequent encapsulate as
+; redundant with this one if their signatures are equal, they have the same
+; length, and each of the subsequent encapsulate's events, ev2, is either the
+; same as the corresponding event ev1 of the old encapsulate or their
+; expansions match up.  Note that two local events always "match up" in this
+; sense when each is under an encapsulate or in a book.
+
+; We elide local forms arising from make-event expansions when writing
+; expansion-alists to book certificates, in order to save space.  See
+; elide-locals.
 
 ; Note that when :puff (specifically puff-command-block) is applied to an
 ; include-book form, it uses the expansion-alist from the book's certificate if
@@ -8910,7 +9713,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; already set) if the event is evaluated with a non-nil value of state global
 ; 'ld-skip-proofsp, unless we are inside an include-book or the second pass of
 ; an encapsulate.  (Note that the certificate of a book already carries the
-; information of whether skip-proofs was invoked during cerification, and we
+; information of whether skip-proofs was invoked during certification, and we
 ; use that information when including a book.)  We may also avoid setting
 ; 'skip-proofs-seen if the event has no logical content, for example, a
 ; deflabel event.  However, we avoid updating 'skip-proofs-seen in the cases of
@@ -8925,7 +9728,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; world, that is not a problem.
 
 ; Up through Version_3.4, we updated world globals 'skip-proofs-seen and
-; 'redef-seen in maybe-add-command-landmark intead of as indicated above (in
+; 'redef-seen in maybe-add-command-landmark instead of as indicated above (in
 ; particular, instead of using install-event).  But with progn!, this is
 ; misguided -- these should be updated at the event level, not the command
 ; level -- as the following example shows.
@@ -9012,6 +9815,24 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 ; Developer note.  A substantial test suite is stored at this UT CS file:
 ; /projects/acl2/devel-misc/books-devel/examples/defattach/test.lisp
+
+; It may be tempting to allow defattach events to be redundant.  There is at
+; least one good reason not to do so: the value of keyword :attach is not
+; stored in the world, at least not in an easily accessible way.  It seems
+; possible that there are such issues with the :skip-checks keyword too.
+
+; We could add a new macro, (defattach? f g), which skips the defattach when g
+; is already attached to f, regardless of keywords.  But more generally, we
+; would want to support (defattach? (f1 g1) ... (fn gn)), in which case thought
+; would need to be given to the case that some, but not all, fi already have gi
+; as an attachment.  Whatever the decision in that case, the result could be
+; confusing to some.  Also confusing could be the issue described above, of
+; keywords not being checked.  On a more mundane level, attention might be
+; needed to ensure that errors and warnings reference "defattach?" rather than
+; "defattach".
+
+; So, at least until a reasonably convincing case is presented for why
+; redundancy is important for defattach events, we leave things as they are.
 
   (list 'defattach-fn
         (list 'quote args)
@@ -9162,10 +9983,6 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                               (plist-worldp world-alist))))
   (cons (cons symb (cons key value)) world-alist))
 
-; Occasionally you will find comments of the form:
-
-; On Metering
-
 ; Occasionally in this code you will see forms protected by
 ; #+acl2-metering.  If you (push :acl2-metering *features*) and then
 ; recompile the affected forms, you will get some additional printing
@@ -9281,12 +10098,15 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ;
 ; (compile
 ;  (defun update-fgetprop-stats (sym key)
-;    (let* ((sym-entry (assoc sym fgetprop-stats :test #'eq))
-;           (key-entry (assoc key (cdr sym-entry) :test #'eq)))
+;    (let* ((sym-entry (hons-get sym fgetprop-stats))
+;           (key-entry (hons-get key (cdr sym-entry))))
 ;      (cond (key-entry (setf (cdr key-entry) (1+ (cdr key-entry))))
-;            (sym-entry (setf (cdr sym-entry) (cons (cons key 1) (cdr sym-entry))))
+;            (sym-entry (setf (cdr sym-entry)
+;                             (hons-acons key 1 (cdr sym-entry))))
 ;            (t (setq fgetprop-stats
-;                     (cons (cons sym (list (cons key 1))) fgetprop-stats)))))))
+;                     (hons-acons sym
+;                                 (hons-acons key 1 nil)
+;                                 fgetprop-stats)))))))
 ;
 ; (compile
 ;  (defun analyze-fgetprop-stats nil
@@ -9481,56 +10301,106 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
         (t (cons (car l)
                  (add-pair key value (cdr l))))))
 
-; Delete-assoc
+; Remove1-assoc
 
-(defun-with-guard-check delete-assoc-eq-exec (key alist)
+(defun-with-guard-check remove1-assoc-eq-exec (key alist)
   (if (symbolp key)
       (alistp alist)
     (symbol-alistp alist))
   (cond ((endp alist) nil)
         ((eq key (caar alist)) (cdr alist))
-        (t (cons (car alist) (delete-assoc-eq-exec key (cdr alist))))))
+        (t (cons (car alist) (remove1-assoc-eq-exec key (cdr alist))))))
 
-(defun-with-guard-check delete-assoc-eql-exec (key alist)
+(defun-with-guard-check remove1-assoc-eql-exec (key alist)
   (if (eqlablep key)
       (alistp alist)
     (eqlable-alistp alist))
   (cond ((endp alist) nil)
         ((eql key (caar alist)) (cdr alist))
-        (t (cons (car alist) (delete-assoc-eql-exec key (cdr alist))))))
+        (t (cons (car alist) (remove1-assoc-eql-exec key (cdr alist))))))
 
-(defun delete-assoc-equal (key alist)
+(defun remove1-assoc-equal (key alist)
   (declare (xargs :guard (alistp alist)))
   (cond ((endp alist) nil)
         ((equal key (caar alist)) (cdr alist))
-        (t (cons (car alist) (delete-assoc-equal key (cdr alist))))))
+        (t (cons (car alist) (remove1-assoc-equal key (cdr alist))))))
 
-(defmacro delete-assoc-eq (key lst)
-  `(delete-assoc ,key ,lst :test 'eq))
+(defmacro remove1-assoc-eq (key lst)
+  `(remove1-assoc ,key ,lst :test 'eq))
 
-(defthm delete-assoc-eq-exec-is-delete-assoc-equal
-  (equal (delete-assoc-eq-exec key lst)
-         (delete-assoc-equal key lst)))
+(defthm remove1-assoc-eq-exec-is-remove1-assoc-equal
+  (equal (remove1-assoc-eq-exec key lst)
+         (remove1-assoc-equal key lst)))
 
-(defthm delete-assoc-eql-exec-is-delete-assoc-equal
-  (equal (delete-assoc-eql-exec key lst)
-         (delete-assoc-equal key lst)))
+(defthm remove1-assoc-eql-exec-is-remove1-assoc-equal
+  (equal (remove1-assoc-eql-exec key lst)
+         (remove1-assoc-equal key lst)))
 
-(defmacro delete-assoc (key alist &key (test ''eql))
+(defmacro remove1-assoc (key alist &key (test ''eql))
   (declare (xargs :guard (or (equal test ''eq)
                              (equal test ''eql)
                              (equal test ''equal))))
   (cond
    ((equal test ''eq)
     `(let-mbe ((key ,key) (alist ,alist))
-              :logic (delete-assoc-equal key alist)
-              :exec  (delete-assoc-eq-exec key alist)))
+              :logic (remove1-assoc-equal key alist)
+              :exec  (remove1-assoc-eq-exec key alist)))
    ((equal test ''eql)
     `(let-mbe ((key ,key) (alist ,alist))
-              :logic (delete-assoc-equal key alist)
-              :exec  (delete-assoc-eql-exec key alist)))
+              :logic (remove1-assoc-equal key alist)
+              :exec  (remove1-assoc-eql-exec key alist)))
    (t ; (equal test 'equal)
-    `(delete-assoc-equal ,key ,alist))))
+    `(remove1-assoc-equal ,key ,alist))))
+
+(defun-with-guard-check remove-assoc-eq-exec (x alist)
+  (if (symbolp x)
+      (alistp alist)
+    (symbol-alistp alist))
+  (cond ((endp alist) nil)
+        ((eq x (car (car alist))) (remove-assoc-eq-exec x (cdr alist)))
+        (t (cons (car alist)
+                 (remove-assoc-eq-exec x (cdr alist))))))
+
+(defun-with-guard-check remove-assoc-eql-exec (x alist)
+  (if (eqlablep x)
+      (alistp alist)
+    (eqlable-alistp alist))
+  (cond ((endp alist) nil)
+        ((eql x (car (car alist))) (remove-assoc-eql-exec x (cdr alist)))
+        (t (cons (car alist) (remove-assoc-eql-exec x (cdr alist))))))
+
+(defun remove-assoc-equal (x alist)
+  (declare (xargs :guard (alistp alist)))
+  (cond ((endp alist) nil)
+        ((equal x (car (car alist))) (remove-assoc-equal x (cdr alist)))
+        (t (cons (car alist) (remove-assoc-equal x (cdr alist))))))
+
+(defmacro remove-assoc-eq (x lst)
+  `(remove-assoc ,x ,lst :test 'eq))
+
+(defthm remove-assoc-eq-exec-is-remove-assoc-equal
+  (equal (remove-assoc-eq-exec x l)
+         (remove-assoc-equal x l)))
+
+(defthm remove-assoc-eql-exec-is-remove-assoc-equal
+  (equal (remove-assoc-eql-exec x l)
+         (remove-assoc-equal x l)))
+
+(defmacro remove-assoc (x alist &key (test ''eql))
+  (declare (xargs :guard (or (equal test ''eq)
+                             (equal test ''eql)
+                             (equal test ''equal))))
+  (cond
+   ((equal test ''eq)
+    `(let-mbe ((x ,x) (alist ,alist))
+              :logic (remove-assoc-equal x alist)
+              :exec  (remove-assoc-eq-exec x alist)))
+   ((equal test ''eql)
+    `(let-mbe ((x ,x) (alist ,alist))
+              :logic (remove-assoc-equal x alist)
+              :exec  (remove-assoc-eql-exec x alist)))
+   (t ; (equal test 'equal)
+    `(remove-assoc-equal ,x ,alist))))
 
 (defun getprops1 (alist)
 
@@ -9574,7 +10444,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
          (let ((alist (getprops symb world-name (cdr world-alist))))
            (if (eq (cddar world-alist) *acl2-property-unbound*)
                (if (assoc-eq (cadar world-alist) alist)
-                   (delete-assoc-eq (cadar world-alist) alist)
+                   (remove1-assoc-eq (cadar world-alist) alist)
                  alist)
              (add-pair (cadar world-alist)
                        (cddar world-alist)
@@ -9709,10 +10579,10 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
   (declare (xargs :guard (and (symbolp var)
                               (plist-worldp wrld))))
-  (getprop var 'global-value
-           '(:error "GLOBAL-VAL didn't find a value.  Initialize this ~
+  (getpropc var 'global-value
+            '(:error "GLOBAL-VAL didn't find a value.  Initialize this ~
                      symbol in PRIMORDIAL-WORLD-GLOBALS.")
-           'current-acl2-world wrld))
+            wrld))
 
 ; Declarations.
 
@@ -9730,14 +10600,144 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
   (declare (xargs :guard (and (symbolp sym)
                               (plist-worldp wrld))))
-  (not (eq (getprop sym 'formals t 'current-acl2-world wrld) t)))
+  (not (eq (getpropc sym 'formals t wrld) t)))
+
+(defmacro fcons-term* (&rest x)
+
+; ; Start experimental code mod, to check that calls of fcons-term are legitimate
+; ; shortcuts in place of the corresponding known-correct calls of cons-term.
+;   #-acl2-loop-only
+;   `(let* ((fn-used-only-in-fcons-term* ,(car x))
+;           (args-used-only-in-fcons-term* (list ,@(cdr x)))
+;           (result (cons fn-used-only-in-fcons-term*
+;                         args-used-only-in-fcons-term*)))
+;      (assert$ (equal result (cons-term fn-used-only-in-fcons-term*
+;                                        args-used-only-in-fcons-term*))
+;               result))
+;   #+acl2-loop-only
+; ; End experimental code mod.
+
+  (cons 'list x))
+
+(defun conjoin2 (t1 t2)
+
+; This function returns a term representing the logical conjunction of
+; t1 and t2.  The term is IFF-equiv to (AND t1 t2).  But, the term is
+; not EQUAL to (AND t1 t2) because if t2 is *t* we return t1's value,
+; while (AND t1 t2) would return *t* if t1's value were non-NIL.
+
+  (declare (xargs :guard t))
+  (cond ((equal t1 *nil*) *nil*)
+        ((equal t2 *nil*) *nil*)
+        ((equal t1 *t*) t2)
+        ((equal t2 *t*) t1)
+        (t (fcons-term* 'if t1 t2 *nil*))))
+
+(defun conjoin (l)
+  (declare (xargs :guard (true-listp l)))
+  (cond ((endp l) *t*)
+        ((endp (cdr l)) (car l))
+        (t (conjoin2 (car l) (conjoin (cdr l))))))
+
+(defun conjoin-untranslated-terms (l)
+
+; This function is analogous to conjoin, but where the terms need not be
+; translated.  Normally we expect that the result will be translated; but as a
+; courtesy to those who might want to use this utility, we attempt to return a
+; "pretty" untranslated term.
+
+  (declare (xargs :guard (true-listp l)))
+  (cond ((or (member nil l :test 'eq)
+             (member *nil* l :test 'equal))
+         nil)
+        (t (let* ((l2 (if (member t l :test 'eq)
+                          (remove t l :test 'eq)
+                        l))
+                  (l3 (if (member *t* l2 :test 'equal)
+                          (remove *t* l2 :test 'equal)
+                        l2)))
+             (cond ((null l3) t)
+                   ((null (cdr l3)) (car l3))
+                   (t (cons 'and l3)))))))
+
+(defun disjoin2 (t1 t2)
+
+; We return a term IFF-equiv (but not EQUAL) to (OR t1 t2).  For example,
+; if t1 is 'A and t2 is 'T, then we return 'T but (OR t1 t2) is 'A.
+; Note:  If you really want a term EQUAL to (OR t1 t2) see disjoin?!
+
+  (declare (xargs :guard t))
+  (cond ((equal t1 *t*) *t*)
+        ((equal t2 *t*) *t*)
+        ((equal t1 *nil*) t2)
+        ((equal t2 *nil*) t1)
+        (t (fcons-term* 'if t1 *t* t2))))
+
+(defun disjoin (lst)
+  (declare (xargs :guard (true-listp lst)))
+  (cond ((endp lst) *nil*)
+        ((endp (cdr lst)) (car lst))
+        (t (disjoin2 (car lst) (disjoin (cdr lst))))))
+
+(defun disjoin-lst (clause-list)
+  (declare (xargs :guard (true-list-listp clause-list)))
+  (cond ((endp clause-list) nil)
+        (t (cons (disjoin (car clause-list))
+                 (disjoin-lst (cdr clause-list))))))
+
+; In the following tflg = T means we return a fully translated term; else
+; we are free to use abbreviations like AND, OR, T, NIL, and 23.
+
+(defun kwote? (tflg evg)
+  (declare (xargs :guard t))
+  (if tflg (kwote evg) evg))
+
+(defun conjoin? (tflg lst)
+  (declare (xargs :guard (true-listp lst)))
+  (cond
+   (tflg (conjoin lst))
+   ((null lst) T)
+   ((null (cdr lst)) (car lst))
+   (t (cons 'and lst))))
+
+(defun <=? (tflg x y)
+  (declare (xargs :guard t))
+  (if tflg
+      `(NOT (< ,y ,x))
+      `(<= ,x ,y)))
+
+(defun >? (tflg x y)
+  (declare (xargs :guard t))
+  (if tflg
+      `(< ,y ,x)
+      `(> ,x ,y)))
+
+(defun disjoin? (tflg lst)
+
+; We return a term that is EQUAL to (OR . lst).  If tflg is nil, the result is
+; not necessarily in translated form -- it may actually have the OR macro in
+; it.  If tflg is t, we return an IF-term instead of using OR.
+
+  (declare (xargs :guard (true-listp lst)))
+  (cond
+   (tflg (or-macro lst))
+   ((null lst) NIL)
+   ((null (cdr lst)) (car lst))
+   (t (cons 'or lst))))
 
 ; We define translate-declaration-to-guard and accompanying functions in
 ; program mode, including the-fn, simply so that they take up a little less
 ; space in the image by avoiding the need to store 'def-bodies and
 ; 'unnormalized-body properties.
 
-(defun translate-declaration-to-guard/integer (lo var hi)
+; Use of the word ``translate'' in the names of the next few functions is a bit
+; misleading since the results can be UNtranslated terms if tflg is nil.  We
+; should have, perhaps, used the word ``transform''!
+
+(defun translate-declaration-to-guard/integer-gen (lo var hi tflg)
+
+; See get-guards2 for a discussion of tflg.
+
   (declare (xargs :guard t
                   :mode :program))
   (let ((lower-bound
@@ -9758,16 +10758,20 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                (t nil))))
     (cond ((and upper-bound lower-bound)
            (cond ((eq lower-bound '*)
-                  (cond ((eq upper-bound '*)
-                         (list 'integerp var))
-                        (t (list 'and
+                  (cond
+                   ((eq upper-bound '*)
+                    (list 'integerp var))
+                   (t (conjoin? tflg
+                                (list
                                  (list 'integerp var)
-                                 (list '<= var upper-bound)))))
-                 (t (cond ((eq upper-bound '*)
-                           (list 'and
+                                 (<=? tflg var (kwote? tflg upper-bound)))))))
+                 (t (cond
+                     ((eq upper-bound '*)
+                      (conjoin? tflg
+                                (list
                                  (list 'integerp var)
-                                 (list '<= lower-bound var)))
-                          (t
+                                 (<=? tflg (kwote? tflg lower-bound) var))))
+                     (t
 
 ; It is tempting to use integer-range-p below.  However, integer-range-p was
 ; introduced in Version_2.7 in support of signed-byte-p and unsigned-byte-p,
@@ -9777,11 +10781,23 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; needs.  (It feels wrong to use (< var (1+ upper-bound)), even though not
 ; unsound.)
 
-                           (list 'and
-                                 (list 'integerp var)
-                                 (list '<= lower-bound var)
-                                 (list '<= var upper-bound)))))))
+                      (conjoin?
+                       tflg
+                       (list
+                        (list 'integerp var)
+                        (<=? tflg (kwote? tflg lower-bound) var)
+                        (<=? tflg var (kwote? tflg upper-bound)))))))))
           (t nil))))
+
+(defun translate-declaration-to-guard/integer (lo var hi)
+
+; This is just the special case of translate-declaration-to-guard/integer-gen
+; for tflg = nil, for backwards compatibility.  See get-guard2 for a discussion
+; of tflg.
+
+  (declare (xargs :guard t
+                  :mode :program))
+  (translate-declaration-to-guard/integer-gen lo var hi nil))
 
 (defun weak-satisfies-type-spec-p (x)
   (declare (xargs :guard t))
@@ -9791,16 +10807,20 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
        (equal (length x) 2)
        (symbolp (cadr x))))
 
-;; RAG - I added entries for 'real and 'complex.  Guards with 'complex
+;; Historical Comment from Ruben Gamboa:
+;; I added entries for 'real and 'complex.  Guards with 'complex
 ;; have CHANGED SEMANTICS!  Yikes!  Before, the moniker 'complex had
 ;; the semantics of complex-rationalp.  Now, it has the semantics of
 ;; complexp.  I added a new declaration, 'complex-rational, to stand
 ;; for the old semantics of 'complex.
 
-(defun translate-declaration-to-guard1 (x var wrld)
+(defun translate-declaration-to-guard1-gen (x var tflg wrld)
 
 ; Wrld is either an ACL2 logical world or a symbol; see
-; translate-declaration-to-guard.
+; translate-declaration-to-guard.  If tflg is t we return a fully translated
+; term; else we return a user level term possibly containing the macros AND and
+; OR and unquoted Ts and NILs and numbers.  See get-guards2 for a discussion of
+; tflg.
 
   (declare (xargs :guard (or (symbolp wrld)
                              (plist-worldp wrld))
@@ -9812,7 +10832,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
               (eq (car x) 'integer)
               (true-listp x)
               (equal (length x) 3))
-         (translate-declaration-to-guard/integer (cadr x) var (caddr x)))
+         (translate-declaration-to-guard/integer-gen (cadr x) var
+                                                     (caddr x) tflg))
         ((eq x 'rational) (list 'rationalp var))
         ((eq x 'real) (list 'real/rationalp var))
         ((eq x 'complex) (list 'complex/complex-rationalp var))
@@ -9843,26 +10864,34 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                (cond
                 ((eq upper-bound '*)
                  (list 'rationalp var))
-                (t (list 'and
-                         (list 'rationalp var)
-                         (cond ((consp upper-bound)
-                                (list '< var (car upper-bound)))
-                               (t (list '<= var upper-bound)))))))
+                (t (conjoin?
+                    tflg
+                    (list
+                     (list 'rationalp var)
+                     (cond ((consp upper-bound)
+                            (list '< var (kwote? tflg (car upper-bound))))
+                           (t (<=? tflg var (kwote? tflg upper-bound)))))))))
               (t (cond
                   ((eq upper-bound '*)
-                   (list 'and
-                         (list 'rationalp var)
-                         (cond ((consp lower-bound)
-                                (list '< (car lower-bound) var))
-                               (t (list '<= lower-bound var)))))
-                  (t (list 'and
-                           (list 'rationalp var)
-                           (cond ((consp lower-bound)
-                                  (list '< (car lower-bound) var))
-                                 (t (list '<= lower-bound var)))
-                           (cond ((consp upper-bound)
-                                  (list '> (car upper-bound) var))
-                                 (t (list '<= var upper-bound)))))))))
+                   (conjoin?
+                    tflg
+                    (list
+                     (list 'rationalp var)
+                     (cond ((consp lower-bound)
+                            (list '< (kwote? tflg (car lower-bound)) var))
+                           (t (<=? tflg (kwote? tflg lower-bound) var))))))
+                  (t (conjoin?
+                      tflg
+                      (list
+                       (list 'rationalp var)
+                       (cond
+                        ((consp lower-bound)
+                         (list '< (kwote? tflg (car lower-bound)) var))
+                        (t (<=? tflg (kwote? tflg lower-bound) var)))
+                       (cond
+                        ((consp upper-bound)
+                         (>? tflg (kwote? tflg (car upper-bound)) var))
+                        (t (<=? tflg var (kwote? tflg upper-bound)))))))))))
             (t nil))))
         ((and (consp x)
               (eq (car x) 'real)
@@ -9891,36 +10920,46 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                (cond
                 ((eq upper-bound '*)
                  (list 'real/rationalp var))
-                (t (list 'and
-                         (list 'real/rationalp var)
-                         (cond ((consp upper-bound)
-                                (list '< var (car upper-bound)))
-                               (t (list '<= var upper-bound)))))))
+                (t (conjoin?
+                    tflg
+                    (list
+                     (list 'real/rationalp var)
+                     (cond ((consp upper-bound)
+                            (list '< var (kwote? tflg (car upper-bound))))
+                           (t (<=? tflg var (kwote? tflg upper-bound)))))))))
               (t (cond
                   ((eq upper-bound '*)
-                   (list 'and
-                         (list 'real/rationalp var)
-                         (cond ((consp lower-bound)
-                                (list '< (car lower-bound) var))
-                               (t (list '<= lower-bound var)))))
-                  (t (list 'and
-                           (list 'real/rationalp var)
-                           (cond ((consp lower-bound)
-                                  (list '< (car lower-bound) var))
-                                 (t (list '<= lower-bound var)))
-                           (cond ((consp upper-bound)
-                                  (list '> (car upper-bound) var))
-                                 (t (list '<= var upper-bound)))))))))
+                   (conjoin?
+                    tflg
+                    (list
+                     (list 'real/rationalp var)
+                     (cond ((consp lower-bound)
+                            (list '< (kwote? tflg (car lower-bound)) var))
+                           (t (<=? tflg (kwote? tflg lower-bound) var))))))
+                  (t (conjoin?
+                      tflg
+                      (list
+                       (list 'real/rationalp var)
+                       (cond
+                        ((consp lower-bound)
+                         (list '< (kwote? tflg (car lower-bound)) var))
+                        (t (<=? tflg (kwote? tflg lower-bound) var)))
+                       (cond
+                        ((consp upper-bound)
+                         (>? tflg (kwote? tflg (car upper-bound)) var))
+                        (t (<=? tflg var (kwote? tflg upper-bound)))))))))))
             (t nil))))
-        ((eq x 'bit) (list 'or
-                           (list 'equal var 1)
-                           (list 'equal var 0)))
+        ((eq x 'bit) (disjoin? tflg
+                               (list
+                                (list 'equal var (kwote? tflg 1))
+                                (list 'equal var (kwote? tflg 0)))))
         ((and (consp x)
               (eq (car x) 'mod)
               (true-listp x)
               (equal (length x) 2)
               (integerp (cadr x)))
-         (translate-declaration-to-guard/integer 0 var (1- (cadr x))))
+         (translate-declaration-to-guard/integer-gen 0 var
+                                                     (1- (cadr x)) tflg))
         ((and (consp x)
               (eq (car x) 'signed-byte)
               (true-listp x)
@@ -9929,7 +10968,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
               (> (cadr x) 0))
          (list 'signed-byte-p (cadr x) var))
         ((eq x 'unsigned-byte)
-         (translate-declaration-to-guard/integer 0 var '*))
+         (translate-declaration-to-guard/integer-gen 0 var '* tflg))
         ((and (consp x)
               (eq (car x) 'unsigned-byte)
               (true-listp x)
@@ -9947,11 +10986,12 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; look like we're saying "This is an unrecognized declaration."
 
          ''nil)
-        ((eq x 'null) (list 'eq var nil))
-        ((eq x 'ratio) (list 'and
-                             (list 'rationalp var)
-                             (list 'not (list 'integerp var))))
-        ((eq x 'standard-char) (list 'standard-charp var))
+        ((eq x 'null) (list 'eq var (kwote? tflg nil)))
+        ((eq x 'ratio) (conjoin? tflg
+                                 (list
+                                  (list 'rationalp var)
+                                  (list 'not (list 'integerp var)))))
+        ((eq x 'standard-char) (list 'standard-char-p+ var))
         ((eq x 'string) (list 'stringp var))
         ((and (consp x)
               (eq (car x) 'string)
@@ -9959,39 +10999,52 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
               (equal (length x) 2)
               (integerp (cadr x))
               (>= (cadr x) 0))
-         (list 'and
-               (list 'stringp var)
-               (list 'equal
-                     (list 'length var)
-                     (cadr x))))
+         (conjoin? tflg
+                   (list
+                    (list 'stringp var)
+                    (list 'equal
+                          (list 'length var)
+                          (kwote? tflg (cadr x))))))
         ((eq x 'symbol) (list 'symbolp var))
-        ((eq x 't) t)
+        ((eq x 't) (kwote? tflg t))
         ((and (weak-satisfies-type-spec-p x)
               (or (symbolp wrld)
-                  (eql (length (getprop (cadr x) 'formals nil
-                                        'current-acl2-world wrld))
+                  (eql (length (getpropc (cadr x) 'formals nil wrld))
                        1)))
          (list (cadr x) var))
         ((and (consp x)
               (eq (car x) 'member)
               (eqlable-listp (cdr x)))
-         (list 'member var (list 'quote (cdr x))))
+         (list (if tflg 'member-equal 'member) var (list 'quote (cdr x))))
         (t nil)))
+
+(defun translate-declaration-to-guard1 (x var wrld)
+
+; This is just the special case of translate-declaration-to-guard1-gen for tflg
+; = nil, for backwards compatibility.  See get-guards2 for a discussion of
+; tflg.
+
+  (declare (xargs :guard (or (symbolp wrld)
+                             (plist-worldp wrld))
+                  :mode :program))
+  (translate-declaration-to-guard1-gen x var nil wrld))
 
 (mutual-recursion
 
-;; RAG - This was modified to change the moniker 'complex to use
-;; complexp instead of complex-rationalp.
+ ;; Historical Comment from Ruben Gamboa:
+ ;; This was modified to change the moniker 'complex to use
+ ;; complexp instead of complex-rationalp.
 
-(defun translate-declaration-to-guard (x var wrld)
+(defun translate-declaration-to-guard-gen (x var tflg wrld)
 
 ; This function is typically called on the sort of x you might write in a TYPE
 ; declaration, e.g., (DECLARE (TYPE x var1 ... varn)).  Thus, x might be
 ; something like '(or symbol cons (integer 0 128)) meaning that var is either a
 ; symbolp, a consp, or an integer in the given range.  X is taken as a
-; declaration about the variable symbol var and is converted into an
-; UNTRANSLATED term about var, except that we return nil if x is seen not to be
-; a valid type-spec for ACL2.
+; declaration about the variable symbol var and is converted into an either an
+; untranslated term or a translated term about var (depending on tflg), except
+; that we return nil if x is seen not to be a valid type-spec for ACL2.  See
+; get-guards2 for a discussion of tflg.
 
 ; Wrld is an ACL2 logical world or a symbol (typically, nil), the difference
 ; being that a symbol indicates that we should do a weaker check.  This extra
@@ -10004,83 +11057,124 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                              (plist-worldp wrld))
                   :mode :program
 
-; See the comment above translate-declaration-to-guard/integer.
+; See the comment above translate-declaration-to-guard/integer-gen.
 
 ;                  :measure (acl2-count x)
                   ))
-  (cond ((atom x) (translate-declaration-to-guard1 x var wrld))
+  (cond ((atom x) (translate-declaration-to-guard1-gen x var tflg wrld))
         ((eq (car x) 'not)
          (cond ((and (true-listp x)
                      (equal (length x) 2))
-                (let ((term (translate-declaration-to-guard (cadr x)
-                                                            var
-                                                            wrld)))
+                (let ((term (translate-declaration-to-guard-gen
+                             (cadr x)
+                             var
+                             tflg
+                             wrld)))
                   (and term
                        (list 'not term))))
                (t nil)))
         ((eq (car x) 'and)
          (cond ((true-listp x)
                 (cond ((null (cdr x)) t)
-                      (t (let ((args (translate-declaration-to-guard-lst
+                      (t (let ((args (translate-declaration-to-guard-gen-lst
                                       (cdr x)
                                       var
+                                      tflg
                                       wrld)))
-                           (cond (args (cons 'and args))
+                           (cond (args (conjoin? tflg args))
                                  (t nil))))))
                (t nil)))
         ((eq (car x) 'or)
          (cond ((true-listp x)
                 (cond ((null (cdr x)) ''nil)
-                      (t (let ((args (translate-declaration-to-guard-lst
+                      (t (let ((args (translate-declaration-to-guard-gen-lst
                                       (cdr x)
                                       var
+                                      tflg
                                       wrld)))
-                           (cond (args (cons 'or args))
+                           (cond (args (disjoin? tflg args))
                                  (t nil))))))
                (t nil)))
         ((eq (car x) 'complex)
          (cond ((and (consp (cdr x))
                      (null (cddr x)))
-                (let ((r (translate-declaration-to-guard (cadr x)
-                                                         (list 'realpart var)
-                                                         wrld))
-                      (i (translate-declaration-to-guard (cadr x)
-                                                         (list 'imagpart var)
-                                                         wrld)))
+                (let ((r (translate-declaration-to-guard-gen
+                          (cadr x)
+                          (list 'realpart var)
+                          tflg
+                          wrld))
+                      (i (translate-declaration-to-guard-gen
+                          (cadr x)
+                          (list 'imagpart var)
+                          tflg
+                          wrld)))
                   (cond ((and r i)
-                         (list 'and
-                               (list 'complex/complex-rationalp var)
-                               r
-                               i))
+                         (conjoin?
+                          tflg
+                          (list (list 'complex/complex-rationalp var) r i)))
                         (t nil))))
                (t nil)))
-        (t (translate-declaration-to-guard1 x var wrld))))
+        (t (translate-declaration-to-guard1-gen x var tflg wrld))))
 
-(defun translate-declaration-to-guard-lst (l var wrld)
+(defun translate-declaration-to-guard-gen-lst (l var tflg wrld)
 
 ; Wrld is an ACL2 logical world or a symbol; see
-; translate-declaration-to-guard.
+; translate-declaration-to-guard-gen.
 
   (declare (xargs ; :measure (acl2-count l)
-                  :guard (and (true-listp l)
-                              (consp l)
-                              (or (null wrld)
-                                  (plist-worldp wrld)))
-                  :mode :program))
+            :guard (and (true-listp l)
+                        (consp l)
+                        (or (null wrld)
+                            (plist-worldp wrld)))
+            :mode :program))
   (and (consp l)
-       (let ((frst (translate-declaration-to-guard (car l) var wrld)))
+       (let ((frst (translate-declaration-to-guard-gen
+                    (car l)
+                    var
+                    tflg
+                    wrld)))
          (cond ((null frst)
                 nil)
                ((endp (cdr l))
                 (list frst))
-               (t (let ((rst (translate-declaration-to-guard-lst
+               (t (let ((rst (translate-declaration-to-guard-gen-lst
                               (cdr l)
                               var
+                              tflg
                               wrld)))
                     (cond ((null rst) nil)
                           (t (cons frst rst)))))))))
 
-)
+ )
+
+(defun translate-declaration-to-guard (x var wrld)
+  (declare (xargs :guard (or (symbolp wrld)
+                             (plist-worldp wrld))
+                  :mode :program
+
+; See the comment above translate-declaration-to-guard/integer-gen.
+
+;                  :measure (acl2-count x)
+                  ))
+
+; This is just the special case of translate-declaration-to-guard-gen for tflg
+; = nil for backwards compatibility.  See get-guards2 for a discussion of tflg.
+
+  (translate-declaration-to-guard-gen x var nil wrld))
+
+(defun translate-declaration-to-guard-lst (l var wrld)
+  (declare (xargs ; :measure (acl2-count l)
+            :guard (and (true-listp l)
+                        (consp l)
+                        (or (null wrld)
+                            (plist-worldp wrld)))
+            :mode :program))
+
+; This is just the special case of translate-declaration-to-guard-gen-lst for
+; tflg = nil for backwards compatibility.  See get-guards2 for a discussion of
+; tflg.
+
+  (translate-declaration-to-guard-gen-lst l var nil wrld))
 
 (defun the-check (guard x y)
 
@@ -10095,8 +11189,9 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 ; Warning: Keep this in sync with the-fn-for-*1*.
 
-; As noted above the definition of translate-declaration-to-guard/integer, we
-; are trying to save a little space in the image.
+; As noted above the definition of
+; translate-declaration-to-guard/integer-gen, we are trying to save a little
+; space in the image.
 
                   :mode :program))
   (let ((guard (translate-declaration-to-guard x 'var nil)))
@@ -10202,7 +11297,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; case of a one dimensional array, the dimension is a list of length
 ; one which is a nonnegative integer one greater than the maximum
 ; permitted index.  (Other keywords, e.g. :purpose, for
-; identification, are permitted and ignored.)  Formally speakign, to
+; identification, are permitted and ignored.)  Formally speaking, to
 ; find the value of a non-negative integer key in such an alist, we
 ; search the alist (with the function aref1) for the first pair whose
 ; car matches the key.  If such a pair is found, then aref1 returns
@@ -10232,7 +11327,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; compress1 then associates with the alist (under the name) a ``real''
 ; array.  Compress1 returns a list that begins with the header and has
 ; its other elements in key-ascending order unless otherwise indicated
-; by the hearder, with aref1-irrelevant pairs deleted.  If the alist
+; by the header, with aref1-irrelevant pairs deleted.  If the alist
 ; is already in this normal form, then no consing is done.  If there
 ; is already an array associated with the given name, and if it
 ; happens to have the desired length, then no array allocation is done
@@ -10395,7 +11490,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; 11.6 ; no patch, but inline
 ;  4.3 ; patch and inline
 
-; #+ACL2-PAR note: Unsurpisingly, when we add the semi-necessary locking to the
+; #+ACL2-PAR note: Unsurprisingly, when we add the semi-necessary locking to the
 ; array caching scheme (alternatively, we could investigate using a
 ; compare-and-swap-based mechanism like atomic increments), we experience a
 ; very large slow down.  In Rager's experiment, it was about 40x slower.  This
@@ -10507,24 +11602,6 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   (implies (bounded-integer-alistp x n)
            (eqlable-alistp x))
   :rule-classes :forward-chaining)
-
-(defun keyword-value-listp (l)
-  (declare (xargs :guard t))
-  (cond ((atom l) (null l))
-        (t (and (keywordp (car l))
-                (consp (cdr l))
-                (keyword-value-listp (cddr l))))))
-
-(defthm keyword-value-listp-forward-to-true-listp
-  (implies (keyword-value-listp x)
-           (true-listp x))
-  :rule-classes :forward-chaining)
-
-(defun assoc-keyword (key l)
-  (declare (xargs :guard (keyword-value-listp l)))
-  (cond ((endp l) nil)
-        ((eq key (car l)) l)
-        (t (assoc-keyword key (cddr l)))))
 
 ; The following seems useful, though at this point its use isn't clear.
 
@@ -10651,7 +11728,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                                acl2::*1*-package-prefix*
                                name))
         (proposed-imports ; avoid sort-symbol-listp for toothbrush
-         (delete-duplicates (sort (copy-list imports) 'symbol-<))))
+         (remove-adjacent-duplicates-eq (sort (copy-list imports) 'symbol-<))))
     (assert pkg) ; see defpkg-raw
 
 ; We bind proposed-imports to the value of the imports argument.  We do not
@@ -10699,9 +11776,9 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                                  book-path
                                  (strip-cars
                                   (symbol-value 'acl2::*load-compiled-stack*))
-                                 (getprop 'include-book-path 'global-value
-                                          nil 'current-acl2-world
-                                          (w *the-live-state*))))
+                                 (getpropc 'include-book-path 'global-value
+                                           nil
+                                           (w *the-live-state*))))
                            :defpkg-event-form event-form)
                           *ever-known-package-alist*))
               (when proposed-imports
@@ -10734,21 +11811,21 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                         (unintern sym))
             (delete-package (find-package name)))))))))
 
-(defmacro defpkg-raw (name imports book-path event-form)
+(defun defpkg-raw (name imports book-path event-form)
 
 ; Defpkg checks that name is a string.  Event-form is a cons.  So we don't need
 ; to worry about capture below.
 
-  `(let ((package-entry (find-package-entry ,name *ever-known-package-alist*))
-         (*safe-mode-verified-p* t))
-     (cond
-      ((and package-entry
-            (let ((old-event-form
-                   (package-entry-defpkg-event-form package-entry)))
-              (and (equal (cadr old-event-form) (cadr ,event-form))
-                   (equal (caddr old-event-form) (caddr ,event-form)))))
+  (let ((package-entry (find-package-entry name *ever-known-package-alist*))
+        (*safe-mode-verified-p* t))
+    (cond
+     ((and package-entry
+           (let ((old-event-form
+                  (package-entry-defpkg-event-form package-entry)))
+             (and (equal (cadr old-event-form) (cadr event-form))
+                  (equal (caddr old-event-form) (caddr event-form)))))
 
-; This shorcut is potentially a big concern!  We are checking that the name and
+; This shortcut is potentially a big concern!  We are checking that the name and
 ; term of the defpkg form agrees with an old defpkg form.  But these two forms
 ; may have been evaluated in different worlds!  Nevertheless, for now we trust
 ; that they really are equivalent, for efficiency's sake.  Defpkg-fn will call
@@ -10756,11 +11833,11 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; chk-package-reincarnation-import-restrictions, and if there is a discrepancy
 ; between the current and old package, we'll find out then.
 
-       ,name)
-      (t
-       (maybe-introduce-empty-pkg-1 ,name)
-       (maybe-introduce-empty-pkg-2 ,name)
-       (defpkg-raw1 ,name ,imports ,book-path ,event-form)))))
+      name)
+     (t
+      (maybe-make-three-packages name)
+      (maybe-introduce-empty-pkg-2 name)
+      (defpkg-raw1 name imports book-path event-form)))))
 )
 
 #-acl2-loop-only
@@ -11252,7 +12329,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; current-acl2-world.  When that world is installed, we will note that
 ; a non-virgin name, *type-set-binary-+-table*, is being defconst'd and so
 ; we will DO NOTHING, leaving ptr1 as the value of the Common Lisp
-; global contant *type-set-binary-+-table*.  So, because of the code below,
+; global constant *type-set-binary-+-table*.  So, because of the code below,
 ; all logical copies of this array are represented by ptr1.
 
 ; In the old days, compress2 put ptr2 into the car of the 'acl2-array
@@ -11266,7 +12343,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; slow-array-warning.
 
 ; The following historical comment no longer applies to
-; 'global-enabled-stucture, but it is still relevant to
+; 'global-enabled-structure, but it is still relevant to
 ; 'global-arithmetic-enabled-structure.
 
 ; This preservation (eq) of the old array is also crucial to the way
@@ -11277,7 +12354,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; side-effects the underlying von Neumann array but returns the very
 ; same (eq) structure.  We then discard that structure, having only
 ; wanted the side effect!  Before we exploited this, we had to cons up
-; a new global-enabled-structure and rebind 'global-enabled-stucture
+; a new global-enabled-structure and rebind 'global-enabled-structure
 ; in the world.  This had the bad effect of sometimes putting more
 ; than one binding of that variable.
 
@@ -11685,6 +12762,20 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   #-acl2-loop-only
   (set-acl2-array-property name nil))
 
+(defun maybe-flush-and-compress1 (name ar)
+  (declare (xargs :guard (array1p name ar)))
+  #+acl2-loop-only
+  (compress1 name ar)
+  #-acl2-loop-only
+  (let ((old (get-acl2-array-property name)))
+    (cond
+     ((null old)
+      (compress1 name ar))
+     ((eq (car old) ar)
+      ar)
+     (t (prog2$ (flush-compress name)
+                (compress1 name ar))))))
+
 ; MULTIPLE VALUE returns, done our way, not Common Lisp's way.
 
 ; We implement an efficient mechanism for returning a multiple value,
@@ -12064,6 +13155,37 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 (defmacro mv-list (input-arity x)
   `(cons ,x (mv-refs (1- ,input-arity))))
 
+(defmacro swap-stobjs (x y)
+
+; The call (swap-stobjs st1 st2) logically swaps two input stobjs st1 and st2,
+; but with the same stobjs-out as (mv st1 st2).  See translate11
+
+; Note that since there are no duplicate live stobjs, it should be fine to call
+; this macro even if one or both inputs are locally-bound (by with-local-stobj
+; or stobj-let).  Ultimately, the user-stobj-alist is put right by the calls of
+; latch-stobjs in raw-ev-fncall.
+
+; Trans-eval does not itself manage the user-stobj-alist, so we disallow the
+; use of swap-stobjs at the top level; see translate11 and macroexpand1*-cmp.
+; Before implementing that restriction, the following example illustrated that
+; the user-stobj-alist wasn't being suitably updated by top-level calls.
+
+;   (defstobj st1 fld1)
+;   (defstobj st2 fld2 :congruent-to st1)
+;   (defun foo (st1 st2)
+;     (declare (xargs :stobjs (st1 st2)))
+;     (swap-stobjs st1 st2))
+;   (update-fld1 3 st1)
+;   (update-fld1 4 st2)
+;   (swap-stobjs st1 st2)
+;   (fld1 st1) ; ERROR: 3, but should be 4
+;   (fld1 st2) ; ERROR: 4, but should be 3
+;   (foo st1 st2)
+;   (fld1 st1) ; 4, now as expected
+;   (fld1 st2) ; 3, now as expected
+
+  `(mv ,y ,x))
+
 (defun update-nth (key val l)
   (declare (xargs :guard (true-listp l))
            (type (integer 0 *) key))
@@ -12088,14 +13210,14 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 (defmacro maximum-positive-32-bit-integer ()
   *maximum-positive-32-bit-integer*)
 
-(defmacro maximum-positive-32-bit-integer-minus-1 ()
+(defmacro minimum-negative-32-bit-integer ()
   (+ (- *maximum-positive-32-bit-integer*) -1))
 
 (defun 32-bit-integerp (x)
   (declare (xargs :guard t))
   (and (integerp x)
        (<= x (maximum-positive-32-bit-integer))
-       (>= x (maximum-positive-32-bit-integer-minus-1))))
+       (>= x (minimum-negative-32-bit-integer))))
 
 (defthm 32-bit-integerp-forward-to-integerp
   (implies (32-bit-integerp x)
@@ -12126,7 +13248,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
            (acl2-number-listp x))
   :rule-classes :forward-chaining)
 
-;; RAG - This function is analogous to rational-listp.
+;; Historical Comment from Ruben Gamboa:
+;; This function is analogous to rational-listp.
 
 #+:non-standard-analysis
 (defun real-listp (l)
@@ -12136,7 +13259,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
         (t (and (realp (car l))
                 (real-listp (cdr l))))))
 
-;; RAG - Standard forward chaining theorem about <type>-listp.
+;; Historical Comment from Ruben Gamboa:
+;; Standard forward chaining theorem about <type>-listp.
 
 #+:non-standard-analysis
 (defthm real-listp-forward-to-acl2-number-listp
@@ -12168,7 +13292,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
            (integer-listp x))
   :rule-classes :forward-chaining)
 
-;; RAG - Analogous to the forward rule from integers to rationals.
+;; Historical Comment from Ruben Gamboa:
+;; Analogous to the forward rule from integers to rationals.
 
 #+:non-standard-analysis
 (defthm rational-listp-forward-to-real-listp
@@ -12353,7 +13478,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     push-clause
     :induct))
 
-(defconst *primitive-program-fns-with-raw-code*
+(defconst *initial-program-fns-with-raw-code*
 
 ; Warning: Do not assume that every symbol in this list is a function symbol.
 ; While that is more or less our intention, we have included some symbols that
@@ -12381,7 +13506,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     ev-fncall! ; apply
     open-trace-file-fn ; *trace-output*
     set-trace-evisc-tuple ; *trace-evisc-tuple*
-    ev-fncall-w ; *the-live-state*
+    ev-fncall-w-body ; *the-live-state*
     ev-rec ; wormhole-eval
     setup-simplify-clause-pot-lst1 ; dmr-flush
     save-exec-fn ; save-exec-raw, etc.
@@ -12389,9 +13514,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     recompress-global-enabled-structure ; get-acl2-array-property
     ev-w ; *the-live-state*
     verbose-pstack ; *verbose-pstk*
-    user-stobj-alist-safe ; chk-user-stobj-alist
     comp-fn ; compile-uncompiled-defuns
-    fmt-ppr ; print-infix
+    #+acl2-infix fmt-ppr
     acl2-raw-eval ; eval
     pstack-fn ; *pstk-stack*
     dmr-start-fn ; dmr-start-fn-raw
@@ -12408,7 +13532,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     include-book-fn
     set-w ; retract-world1, extend-world1, ...
     prove-loop ; *deep-gstack*
-    chk-virgin ; chk-virgin2
+    chk-virgin-msg
     w-of-any-state ; live-state-p
     ld-fn-body ; reset-parallelism-variables, *first-entry-to-ld-fn-body-flg*
     untranslate ; *the-live-state*
@@ -12418,8 +13542,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     ev-synp ; *metafunction-context*
     add-polys ; *add-polys-counter*
     dmr-stop-fn ; dmr-stop-fn-raw
-    ld-print-results ; print-infix
-    flpr ; print-flat-infix
+    ld-print-results
+    #+acl2-infix flpr
     close-trace-file-fn ; *trace-output*
     ev-fncall-rec ; raw-ev-fncall
     ev-fncall ; live-state-p
@@ -12431,7 +13555,6 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     untrace$-fn1 ; eval
     bdd-top ; (GCL only) si::sgc-on
     defstobj-field-fns-raw-defs ; call to memoize-flush when #+hons
-    expansion-alist-pkg-names
     times-mod-m31 ; gcl has raw code
     iprint-ar-aref1
     prove ; #+write-arithmetic-goals
@@ -12464,11 +13587,22 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     certify-book-finish-complete
     chk-absstobj-invariants
     get-stobj-creator
-    restore-iprint-ar-from-wormhole
+    iprint-oracle-updates
+    iprint-oracle-updates@par
     ld-fix-command
+    update-enabled-structure-array
+    update-enabled-structure
+    #+acl2-devel apply$-lambda
+    fchecksum-obj2
+    check-sum-obj
+    verify-guards-fn1 ; to update *cl-cache*
+    ev-fncall+-w
+    extend-current-theory
+    defstobj-fn ; might be avoidable; see comment in that definition
+    apply-user-stobj-alist-or-kwote ; no raw code but ill-guarded; see comments
     ))
 
-(defconst *primitive-logic-fns-with-raw-code*
+(defconst *initial-logic-fns-with-raw-code*
 
 ; This is the list of :logic mode functions generated by
 ; fns-different-wrt-acl2-loop-only.  We have commented on those functions whose
@@ -12515,6 +13649,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     hard-error ; *HARD-ERROR-RETURNS-NILP*, FUNCALL, ...
     abort! p! ; THROW
     flush-compress ; SETF [may be critical for correctness]
+    maybe-flush-and-compress1
     alphorder ; [bad atoms]
     extend-world ; EXTEND-WORLD1
     default-total-parallelism-work-limit ; for #+acl2-par (raw Lisp error)
@@ -12577,24 +13712,35 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     HONS-CLEAR HONS-CLEAR!
     HONS-WASH HONS-WASH!
     FAST-ALIST-CLEAN FAST-ALIST-FORK HONS-EQUAL-LITE
-    CLEAR-HASH-TABLES NUMBER-SUBTREES
+    NUMBER-SUBTREES
     FAST-ALIST-SUMMARY HONS-ACONS! CLEAR-MEMOIZE-TABLES HONS-COPY HONS-ACONS
     CLEAR-MEMOIZE-TABLE FAST-ALIST-FREE HONS-EQUAL HONS-RESIZE-FN HONS-GET HONS
     FAST-ALIST-CLEAN! FAST-ALIST-FORK! MEMOIZE-SUMMARY CLEAR-MEMOIZE-STATISTICS
     make-fast-alist
     serialize-read-fn serialize-write-fn
     read-object-suppress
+    read-object-with-case
+    print-object$-preserving-case
     assign-lock
     throw-or-attach-call
-    oracle-apply oracle-apply-raw
     time-tracker-fn
     gc-verbose-fn
     set-absstobj-debug-fn
     sys-call-status ; *last-sys-call-status*
     sys-call ; system-call
     sys-call+ ; system-call+
+    sys-call* ; system-call+
 
-    canonical-pathname ; under dependent clause-processor
+    canonical-pathname ; redefined from partial-encapsulate
+
+    doppelganger-badge-userfn ; redefined from partial-encapsulate
+    doppelganger-apply$-userfn ; redefined from partial-encapsulate
+
+    ev-fncall-w-guard1
+
+; Found in apply-raw so users can see the *cl-cache*:
+
+    print-cl-cache-fn
 
 ; mfc functions
 
@@ -12604,16 +13750,16 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     mfc-type-alist ; *metafunction-context*
     mfc-unify-subst ; *metafunction-context*
     mfc-world ; *metafunction-context*
-    mfc-ap-fn ; under dependent clause-processor
-    mfc-relieve-hyp-fn ; under dependent clause-processor
-    mfc-relieve-hyp-ttree ; under dependent clause-processor
-    mfc-rw+-fn ; under dependent clause-processor
-    mfc-rw+-ttree ; under dependent clause-processor
-    mfc-rw-fn ; under dependent clause-processor
-    mfc-rw-ttree ; under dependent clause-processor
-    mfc-ts-fn ; under dependent clause-processor
-    mfc-ts-ttree ; under dependent clause-processor
-    magic-ev-fncall ; under dependent clause-processor
+    mfc-ap-fn ; redefined from partial-encapsulate
+    mfc-relieve-hyp-fn ; redefined from partial-encapsulate
+    mfc-relieve-hyp-ttree ; redefined from partial-encapsulate
+    mfc-rw+-fn ; redefined from partial-encapsulate
+    mfc-rw+-ttree ; redefined from partial-encapsulate
+    mfc-rw-fn ; redefined from partial-encapsulate
+    mfc-rw-ttree ; redefined from partial-encapsulate
+    mfc-ts-fn ; redefined from partial-encapsulate
+    mfc-ts-ttree ; redefined from partial-encapsulate
+    magic-ev-fncall ; redefined from partial-encapsulate
     never-memoize-fn
 
 ; The following are introduced into the logic by an encapsulate, but have raw
@@ -12629,11 +13775,17 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     print-clause-id-okp
     too-many-ifs-post-rewrite
     too-many-ifs-pre-rewrite
-
-    set-gc-strategy gc-strategy
+    set-gc-strategy-fn gc-strategy
+    read-file-into-string2
+    cons-with-hint
+    file-length$
+    delete-file$
+    set-bad-lisp-consp-memoize
+    #-acl2-devel apply$-lambda
+    apply$-prim
   ))
 
-(defconst *primitive-macros-with-raw-code*
+(defconst *initial-macros-with-raw-code*
 
 ; This list is generated by fns-different-wrt-acl2-loop-only.
 
@@ -12644,7 +13796,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     delete-include-book-dir delete-include-book-dir! certify-book progn!
     f-put-global push-untouchable
     set-backchain-limit set-default-hints!
-    set-rw-cache-state! set-override-hints-macro
+    set-rw-cache-state! set-induction-depth-limit! set-override-hints-macro
     deftheory pstk verify-guards defchoose
     set-default-backchain-limit set-state-ok
     set-ignore-ok set-non-linearp set-tau-auto-mode with-output
@@ -12656,7 +13808,6 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     defuns add-default-hints!
     local encapsulate remove-default-hints!
     include-book pprogn set-enforce-redundancy
-    #+acl2-legacy-doc set-ignore-doc-string-error
     logic er deflabel mv-let program value-triple
     set-body comp set-bogus-defun-hints-ok
     dmr-stop defpkg set-measure-function
@@ -12673,7 +13824,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     make-event set-verify-guards-eagerness
     wormhole verify-termination-boot-strap start-proof-tree
     f-decrement-big-clock defabsstobj defstobj defund defttag
-    defdoc push-gframe defthmd f-get-global
+    push-gframe defthmd f-get-global
 
 ; Most of the following were discovered after we included macros defined in
 ; #+acl2-loop-only whose definitions are missing in #-acl-loop-only.
@@ -12723,9 +13874,39 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     with-fast-alist-raw with-stolen-alist-raw fast-alist-free-on-exit-raw
     stobj-let
     add-ld-keyword-alias! set-ld-keyword-aliases!
+    with-guard-checking-event
+    when-pass-2
+    loop$
+    our-with-terminal-input
     ))
 
-(defmacro with-live-state (form)
+(defun untouchable-marker (mac)
+
+; See :doc defmacro-untouchable.
+
+  (declare (ignore mac)
+           (xargs :guard t))
+  t)
+
+(defmacro defmacro-untouchable (mac args &rest rest)
+  (declare (xargs :guard (and (symbolp mac)
+
+; Warning: Keep this in sync with :doc defmacro-untouchable (in community book
+; books/system/doc/acl2-doc.lisp).
+
+; A better (stronger) conjunct here would be (macro-args-structurep args), but
+; that hasn't been defined yet.  We'll just let defmacro report bad arguments.
+
+                              (true-listp args)
+                              (consp rest))))
+  `(defmacro ,mac ,args
+     ,@(butlast rest 1)
+     (let ((form ,(car (last rest))))
+       (list 'prog2$
+             (list 'untouchable-marker (list 'quote ',mac))
+             form))))
+
+(defmacro-untouchable with-live-state (form)
 
 ; Occasionally macros will generate uses of STATE, which is fine in the ACL2
 ; loop but can cause compiler warnings in raw Lisp.  For example, in v3-4 with
@@ -12770,7 +13951,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 ; The problem was that state was bound to *the-live-state* for evaluation
 ; during a proof, where lexically state had a different binding that should
-; have ruled.  This macro's conde included the check (eq (symbol-value 'state)
+; have ruled.  This macro's cond included the check (eq (symbol-value 'state)
 ; *the-live-state*), which unfortunately was no check at all: it was already
 ; true because symbol-value returns the global value, and is not affected by a
 ; superior lexical binding of state.
@@ -12798,6 +13979,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
      ,form))
 
 (defun init-iprint-ar (hard-bound enabledp)
+
+; Warning: Consider also calling init-iprint-fal when calling this function.
 
 ; We return an iprint-ar with the given hard-bound.
 
@@ -12939,11 +14122,10 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; The reason MCL needs special treatment is that (char-code #\Newline) = 13 in
 ; MCL, not 10.  See also :DOC version.
 
-; ACL2 Version 7.1
+; ACL2 Version 8.3
 
 ; We put the version number on the line above just to remind ourselves to bump
-; the value of state global 'acl2-version, which gets printed out with the
-; check-sum info.
+; the value of state global 'acl2-version, which gets printed in .cert files.
 
 ; Leave this here.  It is read when loading acl2.lisp.  This constant should be
 ; a string containing at least one `.'.  The function save-acl2-in-akcl in
@@ -12965,14 +14147,16 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; reformatting :DOC comments.
 
                   ,(concatenate 'string
-                                "ACL2 Version 7.1"
+                                "ACL2 Version 8.3"
                                 #+non-standard-analysis
                                 "(r)"
                                 #+(and mcl (not ccl))
                                 "(mcl)"))
+    (acl2-world-alist . nil)
     (acl2p-checkpoints-for-summary . nil)
     (axiomsp . nil)
     (bddnotes . nil)
+    (book-hash-alistp . nil) ; set in LP
     (boot-strap-flg .
 
 ; Keep this state global in sync with world global of the same name.  We expect
@@ -12985,12 +14169,15 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; corresponding state global.
 
                     t)
+    (brr-evisc-tuple-initialized . nil)
+    (cert-data . nil)
     (certify-book-info .
 
 ; Certify-book-info is non-nil when certifying a book, in which case it is a
 ; certify-book-info record.
 
                        nil)
+    (check-invariant-risk . :WARNING)
     (check-sum-weirdness . nil)
     (checkpoint-forced-goals . nil) ; default in :doc
     (checkpoint-processors . ; avoid unbound var error with collect-checkpoints
@@ -13017,8 +14204,6 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     (deferred-ttag-notes . :not-deferred)
     (deferred-ttag-notes-saved . nil)
     (dmrp . nil)
-    #+acl2-legacy-doc (doc-char-subst-table . nil)
-    #+acl2-legacy-doc (doc-fmt-alist . nil)
     (evisc-hitp-without-iprint . nil)
     (eviscerate-hide-terms . nil)
     (fmt-hard-right-margin . ,*fmt-hard-right-margin-default*)
@@ -13038,7 +14223,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     (in-prove-flg . nil)
     (in-verify-flg . nil) ; value can be set to the ld-level
     (including-uncertified-p . nil) ; valid only during include-book
-    (infixp . nil)                   ; See the Essay on Infix below
+    #+acl2-infix (infixp . nil) ; See the Essay on Infix below
+    (inhibit-er-hard . nil)
     (inhibit-output-lst . (summary)) ; Without this setting, initialize-acl2
                                      ; will print a summary for each event.
                                      ; Exit-boot-strap-mode sets this list
@@ -13047,6 +14233,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     (inhibited-summary-types . nil)
     (inside-skip-proofs . nil)
     (iprint-ar . ,(init-iprint-ar *iprint-hard-bound-default* nil))
+    (iprint-fal . nil)
     (iprint-hard-bound . ,*iprint-hard-bound-default*)
     (iprint-soft-bound . ,*iprint-soft-bound-default*)
     (keep-tmp-files . nil)
@@ -13057,16 +14244,13 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     (ld-okp . :default) ; see :DOC calling-ld-in-bad-contexts
     (ld-redefinition-action . nil)
     (ld-skip-proofsp . nil)
-    (logic-fns-with-raw-code . ,*primitive-logic-fns-with-raw-code*)
-    (macros-with-raw-code . ,*primitive-macros-with-raw-code*)
+    (logic-fns-with-raw-code . ,*initial-logic-fns-with-raw-code*)
+    (macros-with-raw-code . ,*initial-macros-with-raw-code*)
     (main-timer . 0)
     (make-event-debug . nil)
     (make-event-debug-depth . 0)
     (match-free-error . nil) ; if t, modify :doc for set-match-free-error
     (modifying-include-book-dir-alist . nil)
-    #+acl2-legacy-doc (more-doc-max-lines . 45)
-    #+acl2-legacy-doc (more-doc-min-lines . 35)
-    #+acl2-legacy-doc (more-doc-state . nil)
     (parallel-execution-enabled . nil)
     (parallelism-hazards-action . nil) ; nil or :error, else treated as :warn
     (pc-erp . nil)
@@ -13084,8 +14268,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     (print-circle . nil)
     (print-circle-files . t) ; set to nil for #+gcl in LP
     (print-clause-ids . nil)
-    #+acl2-legacy-doc (print-doc-start-column . 15)
     (print-escape . t)
+    (print-gv-defaults . nil)
     (print-length . nil)
     (print-level . nil)
     (print-lines . nil)
@@ -13093,7 +14277,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     (print-radix . nil)
     (print-readably . nil)
     (print-right-margin . nil)
-    (program-fns-with-raw-code . ,*primitive-program-fns-with-raw-code*)
+    (program-fns-with-raw-code . ,*initial-program-fns-with-raw-code*)
     (prompt-function . default-print-prompt)
     (prompt-memo . nil)
     (proof-tree . nil)
@@ -13102,19 +14286,23 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     (proof-tree-indent . "|  ")
     (proof-tree-start-printed . nil)
     (proofs-co . acl2-output-channel::standard-character-output-0)
+    (protect-memoize-statistics . nil)
     (raw-arity-alist . nil)
+    (raw-guard-warningp . nil)
     (raw-include-book-dir!-alist . :ignore)
     (raw-include-book-dir-alist . :ignore)
     (raw-proof-format . nil)
+    (raw-warning-format . nil)
     (redo-flat-fail . nil)
     (redo-flat-succ . nil)
     (redundant-with-raw-code-okp . nil)
     (retrace-p . nil)
     (safe-mode . nil)
-    (save-expansion-file . nil)
+    (save-expansion-file . nil) ; potentially set in LP
     (saved-output-p . nil)
     (saved-output-reversed . nil)
     (saved-output-token-lst . nil)
+    (script-mode . nil)
     (serialize-character . nil)
     (serialize-character-system . nil) ; set for #+hons in LP
     (show-custom-keyword-hint-expansion . nil)
@@ -13122,11 +14310,13 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     (skip-proofs-by-system . nil)
     (skip-proofs-okp-cert . t) ; t when not inside certify-book
     (skip-reset-prehistory . nil) ; non-nil skips (reset-prehistory nil)
+    (slow-apply$-action . t)
     (slow-array-action . :break) ; set to :warning in exit-boot-strap-mode
     (splitter-output . t)
     (standard-co . acl2-output-channel::standard-character-output-0)
     (standard-oi . acl2-output-channel::standard-object-input-0)
     (step-limit-record . nil)
+    (system-attachments-cache . nil) ; see modified-system-attachments
     (system-books-dir . nil) ; set in enter-boot-strap-mode and perhaps lp
     (temp-touchable-fns . nil)
     (temp-touchable-vars . nil)
@@ -13137,7 +14327,6 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
      . ,(default-total-parallelism-work-limit))
     (total-parallelism-work-limit-error . t) ; for #+acl2-par
     (trace-co . acl2-output-channel::standard-character-output-0)
-    (trace-level . 0)
     (trace-specs . nil)
     (triple-print-prefix . " ")
     (ttags-allowed . :all)
@@ -13149,6 +14338,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
     (user-home-dir . nil) ; set first time entering lp
     (verbose-theory-warning . t)
+    (verify-termination-on-raw-program-okp . (apply$-lambda))
     (walkabout-alist . nil)
     (waterfall-parallelism . nil) ; for #+acl2-par
     (waterfall-parallelism-timing-threshold
@@ -13175,6 +14365,26 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
               nil)))
 
 ; Essay on Infix
+
+; Note: As of late July 2017, infix printing is no longer supported.  As a
+; result, it is now possible to execute some forms in safe-mode that were
+; formerly prohibited; for example, evaluation of the form
+
+;   (defconst *c* (fms-to-string "abc~x0" (list (cons #\0 (expt 2 4)))))
+
+; formerly failed with an error saying that a call of flpr had been made in
+; safe-mode, which was illegal because flpr had raw Lisp code -- which is no
+; longer the case.  Note, however, that we have left the infix-printing code in
+; place for the case #+acl2-infix, in case it becomes desirable to restore it
+; in the future.  Indeed, if you build ACL2 with :acl2-info pushed to
+; *features*, you may be able to do infix printing.  Warning: In that case,
+; some user books may fail, since more functions would have raw Lisp code,
+; hence would be disqualified from evaluation in safe-mode.  Here is an
+; example:
+
+;   (defconst *c* (fms-to-string "abc~x0" (list (cons #\0 (expt 2 4)))))
+
+; Below is the rest of the Essay on Infix.
 
 ; ACL2 has a hook for providing a different syntax.  We call this different
 ; syntax "infix" but it could be anything.  If the state global variable
@@ -13223,6 +14433,16 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; (defun flatsize-infix (x termp j max state eviscp) ...)
 
 ; We document each of these when we define them for the silly $ syntax.
+
+; It is common to bind state global infixp to nil, so we create the following
+; macro for that purpose.
+
+(defmacro with-infixp-nil (form)
+  #+acl2-infix
+  `(state-global-let* ((infixp nil))
+                      ,form)
+  #-acl2-infix
+  form)
 
 (defun all-boundp (alist1 alist2)
   (declare (xargs :guard (and (eqlable-alistp alist1)
@@ -13501,14 +14721,12 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                    (global-table x))
        (plist-worldp (cdr (assoc 'current-acl2-world (global-table x))))
        (symbol-alistp
-        (getprop 'acl2-defaults-table 'table-alist nil
-                 'current-acl2-world
-                 (cdr (assoc 'current-acl2-world (global-table x)))))
+        (getpropc 'acl2-defaults-table 'table-alist nil
+                  (cdr (assoc 'current-acl2-world (global-table x)))))
        (timer-alistp (cdr (assoc 'timer-alist (global-table x))))
        (known-package-alistp
-        (getprop 'known-package-alist 'global-value nil
-                 'current-acl2-world
-                 (cdr (assoc 'current-acl2-world (global-table x)))))
+        (getpropc 'known-package-alist 'global-value nil
+                  (cdr (assoc 'current-acl2-world (global-table x)))))
        (true-listp (t-stack x))
        (32-bit-integer-listp (32-bit-integer-stack x))
        (integerp (big-clock-entry x))
@@ -13534,14 +14752,12 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                         (nth 2 x))
             (plist-worldp (cdr (assoc 'current-acl2-world (nth 2 x))))
             (symbol-alistp
-             (getprop 'acl2-defaults-table 'table-alist nil
-                      'current-acl2-world
-                      (cdr (assoc 'current-acl2-world (nth 2 x)))))
+             (getpropc 'acl2-defaults-table 'table-alist nil
+                       (cdr (assoc 'current-acl2-world (nth 2 x)))))
             (timer-alistp (cdr (assoc 'timer-alist (nth 2 x))))
             (known-package-alistp
-             (getprop 'known-package-alist 'global-value nil
-                      'current-acl2-world
-                      (cdr (assoc 'current-acl2-world (nth 2 x)))))
+             (getpropc 'known-package-alist 'global-value nil
+                       (cdr (assoc 'current-acl2-world (nth 2 x)))))
             (true-listp (nth 3 x))
             (32-bit-integer-listp (nth 4 x))
             (integerp (nth 5 x))
@@ -13835,7 +15051,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                                             (get-global x state-state))))))
          (makunbound (global-symbol x))
          (return-from makunbound-global *the-live-state*)))
-  (update-global-table (delete-assoc-eq
+  (update-global-table (remove1-assoc-eq
                         x
                         (global-table state-state))
                        state-state))
@@ -13845,7 +15061,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 ; Wart: We use state-state instead of state because of a bootstrap problem.
 
-; Keep this in sync with the #+acl2-loop-only definition of get-global (which
+; Keep this in sync with the #-acl2-loop-only definition of get-global (which
 ; uses qfuncall).
 
   (declare (xargs :guard (and (symbolp x)
@@ -13908,7 +15124,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   (list 'put-global key value st))
 
 #+acl2-par
-(defmacro f-put-global@par (key value st)
+(defmacro-untouchable f-put-global@par (key value st)
 
 ; WARNING: Every use of this macro deserves an explanation that addresses the
 ; following concern!  This macro is used to modify the live ACL2 state, without
@@ -13948,7 +15164,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     (ld-query-control-alist . nil)
     (ld-verbose . "~sv.  Level ~Fl.  Cbd ~xc.~|System books ~
                    directory ~xb.~|Type :help for help.~%Type (good-bye) to ~
-                   quit completely out of ACL2.~|~%")))
+                   quit completely out of ACL2.~|~%")
+    (ld-user-stobjs-modified-warning . nil)))
 
 (defun always-boundp-global (x)
   (declare (xargs :guard (symbolp x)))
@@ -14169,7 +15386,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; If a user sends an "offending call" as requested in the email below, consider
 ; adding a parallelism wart in the definition of the function being called,
 ; documenting that a user has actually encountered an execution of ACL2(p) that
-; ran a function that we have indentified as not thread-safe (via
+; ran a function that we have identified as not thread-safe (via
 ; warn-about-parallelism-hazard) inside a context that we have identified as
 ; eligible for parallel execution (via with-parallelism-hazard-warnings).  (Or
 ; better yet, make a fix.)  See the comments at the top of this function for
@@ -14246,19 +15463,123 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
          ,cleanup)))))
 
 #-acl2-loop-only
+(progn
+
+(defmacro our-multiple-value-prog1 (form &rest other-forms)
+
+; WARNING: If other-forms causes any calls to mv, then use protect-mv so that
+; when #-acl2-mv-as-values, the multiple values returned by evaluation of form
+; are those returned by the call of our-multiple-value-prog1.
+
+  `(#+acl2-mv-as-values
+    multiple-value-prog1
+    #-acl2-mv-as-values
+    prog1
+    ,form
+    ,@other-forms))
+
+(eval `(mv ,@(make-list *number-of-return-values* :initial-element 0)))
+
+#-acl2-mv-as-values
+(defconst *mv-vars*
+  (let ((ans nil))
+    (dotimes (i (1- *number-of-return-values*))
+      (push (gensym) ans))
+    ans))
+
+#-acl2-mv-as-values
+(defconst *mv-var-values*
+  (mv-refs-fn (1- *number-of-return-values*)))
+
+#-acl2-mv-as-values
+(defconst *mv-extra-var* (gensym))
+
+(defun protect-mv (form &optional multiplicity)
+
+; We assume here that form is evaluated only for side effect and that we don't
+; care what is returned by protect-mv.  All we care about is that form is
+; evaluated and that all values stored by mv will be restored after the
+; evaluation of form.
+
+  #+acl2-mv-as-values
+  (declare (ignore multiplicity))
+  #-acl2-mv-as-values
+  (when (and multiplicity
+             (not (and (integerp multiplicity)
+                       (< 0 multiplicity))))
+    (error "PROTECT-MV must be called with an explicit multiplicity, when ~
+            supplied, unlike ~s"
+           multiplicity))
+  `(progn
+     #+acl2-mv-as-values
+     ,form
+     #-acl2-mv-as-values
+     ,(cond
+       ((eql multiplicity 1)
+        form)
+       ((eql multiplicity 2)
+        `(let ((,(car *mv-vars*)
+                ,(car *mv-var-values*)))
+           ,form
+           (mv 0 ,(car *mv-vars*))))
+       (t (mv-let (mv-vars mv-var-values)
+                  (cond (multiplicity
+                         (mv (nreverse
+                              (let ((ans nil)
+                                    (tail *mv-vars*))
+                                (dotimes (i (1- multiplicity))
+                                  (push (car tail) ans)
+                                  (setq tail (cdr tail)))
+                                ans))
+                             (mv-refs-fn (1- multiplicity))))
+                        (t (mv *mv-vars* *mv-var-values*)))
+                  `(mv-let ,(cons *mv-extra-var* mv-vars)
+                           (mv 0 ,@mv-var-values)
+                           (declare (ignore ,*mv-extra-var*))
+                           (progn ,form
+                                  (mv 0 ,@mv-vars))))))
+     nil))
+)
+
+#-acl2-loop-only
+(defmacro acl2-unwind-protect-raw (expl body cleanup)
+
+; Warning: Keep in sync with the #-acl2-loop-only code for acl2-unwind-protect.
+; We omit comments here; see acl2-unwind-protect.
+
+; This variant of (acl2-unwind-protect expl body cleanup cleanup) is only for
+; use in raw Lisp.  It too should be called from inside the ACL2 loop (also see
+; push-car), that is, when *acl2-unwind-protect-stack* is non-nil.
+
+  (let ((temp (gensym)))
+    `(let* ((,temp (cons ,expl (function (lambda nil ,cleanup)))))
+       (unless *acl2-unwind-protect-stack*
+         (error "Attempted to execute acl2-unwind-protect-raw in raw Lisp!"))
+       (cond (,temp
+              (push-car ,temp
+                        *acl2-unwind-protect-stack*
+                        'acl2-unwind-protect)))
+       (our-multiple-value-prog1
+        ,body
+        (cond (,temp (acl2-unwind -1 ,temp)))
+        (protect-mv ,cleanup)
+        (cond (,temp (pop (car *acl2-unwind-protect-stack*))))))))
+
+#-acl2-loop-only
 (defmacro state-free-global-let* (bindings body)
 
-; This raw Lisp macro is a variant of state-global-let* that should be used
-; only when state is *not* lexically available, or at least not a formal
-; parameter of the enclosing function or not something we care about tracking
-; (because we are in raw Lisp).  It is used to bind state globals that may have
-; raw-Lisp side effects.  If state were available this sort of binding could be
-; inappropriate, since one could observe a change in state globals under the
-; state-free-global-let* that was not justified by the logic.
+; This variant of state-global-let* is only for use in raw Lisp.  See also
+; state-free-global-let*-safe for a safer, but probably less efficient,
+; alternative.  That alternative must be used inside the ACL2 loop when any
+; call of state-global-let* (or similar call of acl2-unwind-protect could bind
+; a variable of bindings during the evaluation of body.  Otherwise, the wrong
+; value will be stored in *acl2-unwind-protect-stack*, causing the wrong value
+; to be restored after an abort during that evaluation.
 
-; State-free-global-let* provides a nice alternative to state-global-let* when
-; we want to avoid involving the acl2-unwind-protect mechanism, for example
-; during parallel evaluation.
+; WARNING: If this macro is used when accessible in body, then the value read
+; for a variable bound in bindings may not be justified in the logic.  So state
+; should not be accessible in body unless you (think you) know what you are
+; doing!
 
 ; Comment for #+acl2-par: When using state-free-global-let* inside functions
 ; that might execute in parallel (for example, functions that occur inside the
@@ -14279,6 +15600,33 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
            (declare (special ,@(nreverse syms)))
            ,body)))))
 
+#-acl2-loop-only
+(defmacro state-free-global-let*-safe (bindings body)
+
+; Warning: Keep in sync with the #-acl2-loop-only code for acl2-unwind-protect.
+; We omit comments here; see state-global-let*.
+
+; This variant of state-global-let* is only for use in raw Lisp.  See also
+; state-free-global-let* for a more efficient alternative that can be used in
+; some situations.
+
+; WARNING: If this macro is used when accessible in body, then the value read
+; for a variable bound in bindings may not be justified in the logic.  So state
+; should not be accessible in body unless you (think you) know what you are
+; doing!
+
+  `(if #-acl2-par *acl2-unwind-protect-stack* #+acl2-par nil
+       (let* ((state *the-live-state*)
+              (state-global-let*-cleanup-lst
+               (list ,@(state-global-let*-get-globals bindings))))
+         ,@(and (null bindings)
+                '((declare (ignore state-global-let*-cleanup-lst))))
+         (acl2-unwind-protect-raw
+          "state-free-global-let*"
+          (check-vars-not-free (state-global-let*-cleanup-lst) ,body)
+          (progn ,@(state-global-let*-cleanup bindings 0))))
+       (state-free-global-let* ,bindings ,body)))
+
 ; With state-global-let* defined, we may now define a few more primitives and
 ; finish some unfinished business.
 
@@ -14296,7 +15644,21 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; definitions were kept similar to those that had been in the ihs library for
 ; some time.
 
-  (declare (xargs :guard (and (integerp lower) (integerp upper))))
+; We considered Alessandro Coglio's suggestion to fix the first two arguments,
+; specifically by changing the body to the following.
+
+;   (mbe :logic (and (integerp x)
+;                    (<= (ifix lower) x)
+;                    (< x (ifix upper)))
+;        :exec (and (integerp x)
+;                   (<= lower x)
+;                   (< x upper))))
+
+; However, that caused at least 19 regression failures, and we quickly found
+; one that looked awkward to fix.  So we are abandoning that idea, at least for
+; now.
+
+  (declare (type integer lower upper))
   (and (integerp x)
        (<= lower x)
        (< x upper)))
@@ -14319,9 +15681,9 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   (declare (xargs :guard t))
   (and (integerp bits)
        (< 0 bits)
-       (integer-range-p (- (expt 2 (1- bits)))
-                        (expt 2 (1- bits))
-                        x)))
+       (let ((y ; proof fails for mbe with :exec = (ash 1 (1- bits))
+              (expt 2 (1- bits))))
+         (integer-range-p (- y) y x))))
 
 (defun unsigned-byte-p (bits x)
   (declare (xargs :guard t))
@@ -14541,9 +15903,9 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                  (not (equal x y))))
    :hints (("Goal" :in-theory (enable symbol-< string<))))
 
- (defthm ordered-symbol-alistp-delete-assoc-eq
+ (defthm ordered-symbol-alistp-remove1-assoc-eq
    (implies (ordered-symbol-alistp l)
-            (ordered-symbol-alistp (delete-assoc-eq key l))))
+            (ordered-symbol-alistp (remove1-assoc-eq key l))))
 
  (defthm symbol-<-irreflexive
    (implies (symbolp x)
@@ -14606,7 +15968,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
    ((null args)
     -1)
    ((null (cdr args))
-    (car args))
+    `(the integer ,(car args)))
    (t (xxxjoin 'binary-logand args))))
 
 #+acl2-loop-only
@@ -14615,7 +15977,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
    ((null args)
     -1)
    ((null (cdr args))
-    (car args))
+    `(the integer ,(car args)))
    (t (xxxjoin 'binary-logeqv args))))
 
 #+acl2-loop-only
@@ -14624,7 +15986,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
    ((null args)
     0)
    ((null (cdr args))
-    (car args))
+    `(the integer ,(car args)))
    (t (xxxjoin 'binary-logior args))))
 
 #+acl2-loop-only
@@ -14633,7 +15995,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
    ((null args)
     0)
    ((null (cdr args))
-    (car args))
+    `(the integer ,(car args)))
    (t (xxxjoin 'binary-logxor args))))
 
 #+acl2-loop-only
@@ -14911,7 +16273,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 ; This was made non-local in order to support the verify-termination-boot-strap
 ; for chars-for-tilde-@-clause-id-phrase/periods in file
-; boot-strap-pass-2.lisp.
+; boot-strap-pass-2-a.lisp.
 
   (implies (true-listp ans)
            (true-listp (explode-nonnegative-integer n print-base ans)))
@@ -15244,7 +16606,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
   (declare (xargs :guard (and (symbolp name)
                               (plist-worldp wrld))))
-  (getprop name 'table-alist nil 'current-acl2-world wrld))
+  (getpropc name 'table-alist nil wrld))
 
 (defun ruler-extenders-msg-aux (vals return-last-table)
 
@@ -15275,7 +16637,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
          nil)
         ((and (consp x)
               (eq (car x) 'quote))
-         (msg "~x0 has a superfluous QUOTE, which you may wish to remove"
+         (msg "~x0 has a superfluous QUOTE, which needs to be removed"
               x))
         ((not (symbol-listp x))
          (msg "~x0 is not a true list of symbols" x))
@@ -15285,26 +16647,46 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                              (table-alist 'return-last-table wrld))))
              (cond (vals
                     (msg "~&0 ~#0~[is not a~/are not~] legal ruler-extenders ~
-                          value~#0~[~/s~].~@1"
+                          value~#0~[~/s~]~@1"
                          vals
                          (cond (suspects
-                                (msg "  Note in particular that ~&0 ~#0~[is a ~
+                                (msg ".  Note in particular that ~&0 ~#0~[is a ~
                                       macro~/are macros~] that may expand to ~
                                       calls of ~x1, which you may want to ~
-                                      specify instead."
+                                      specify instead"
                                      suspects 'return-last))
                                (t ""))))
                    (t nil))))))
 
-(defmacro chk-ruler-extenders (x soft ctx wrld)
+(defun strict-symbol-<-sortedp (x)
+  (declare (xargs :guard (symbol-listp x)))
+  (cond ((or (endp x) (null (cdr x)))
+         t)
+        (t (and (symbol-< (car x) (cadr x))
+                (strict-symbol-<-sortedp (cdr x))))))
+
+(defmacro chk-ruler-extenders (x type ctx wrld)
+
+; We check whether x is a legal value for ruler-extenders.  This is really two
+; macros, depending on whether type is 'soft or 'hard.  If type is 'soft, then
+; we return an error triple; otherwise we return an ordinary value but cause a
+; hard error if x is illegal.  Moreover, if x is hard then we check that x is
+; sorted.
+
+  (declare (xargs :guard (member-eq type '(soft hard))))
   (let ((err-str "The proposed ruler-extenders is illegal because ~@0."))
     `(let ((ctx ,ctx)
            (err-str ,err-str)
-           (msg (ruler-extenders-msg ,x ,wrld)))
-       (cond (msg ,(cond ((eq soft 'soft) `(er soft ctx err-str msg))
-                         (t `(illegal ctx err-str (list (cons #\0 msg))))))
-             (t ,(cond ((eq soft 'soft) '(value t))
-                       (t t)))))))
+           (x ,x))
+       (let ((msg (ruler-extenders-msg x ,wrld)))
+         (cond (msg ,(cond ((eq type 'soft) `(er soft ctx err-str msg))
+                           (t `(illegal ctx err-str (list (cons #\0 msg))))))
+               ,@(and (eq type 'hard)
+                      `(((not (strict-symbol-<-sortedp x))
+                         (illegal ctx err-str
+                                  (list (cons #\0 "it is not sorted"))))))
+               (t ,(cond ((eq type 'soft) '(value t))
+                         (t t))))))))
 
 (defmacro fixnum-bound () ; most-positive-fixnum in Allegro CL and many others
   (1- (expt 2 29)))
@@ -15330,6 +16712,33 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
         (t (and (consp (car x))
                 (include-book-dir-alist-entry-p (caar x) (cdar x) os)
                 (include-book-dir-alistp (cdr x) os)))))
+
+(defconst *check-invariant-risk-values*
+
+; In the case of the acl2-defaults-table setting for :check-invariant-risk,
+; :DEFAULT is also a legal value; but it is not included in the value of this
+; constant.
+
+  '(t nil :ERROR :WARNING))
+
+(defun ttag (wrld)
+
+; This function returns nil if there is no active ttag.
+
+  (declare (xargs :guard
+                  (and (plist-worldp wrld)
+                       (alistp (table-alist 'acl2-defaults-table wrld)))))
+  (cdr (assoc-eq :ttag (table-alist 'acl2-defaults-table wrld))))
+
+(defun get-register-invariant-risk-world (wrld)
+  (declare (xargs :guard
+                  (and (plist-worldp wrld)
+                       (alistp (table-alist 'acl2-defaults-table wrld)))))
+  (let ((pair (assoc-eq :register-invariant-risk
+                        (table-alist 'acl2-defaults-table wrld))))
+    (cond (pair (cdr pair))
+          (t ; default
+           t))))
 
 (table acl2-defaults-table nil nil
 
@@ -15357,9 +16766,6 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
          (member val '(0 1 2)))
         ((eq key :enforce-redundancy)
          (member-eq val '(t nil :warn)))
-        #+acl2-legacy-doc
-        ((eq key :ignore-doc-string-error)
-         (member-eq val '(t nil :warn)))
         ((eq key :compile-fns)
          (member-eq val '(t nil)))
         ((eq key :measure-function)
@@ -15369,7 +16775,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; The length expression below is just (arity val world) but we don't have arity
 ; yet.
 
-              (= (length (getprop val 'formals t 'current-acl2-world world))
+              (= (length (getpropc val 'formals t world))
                  1)))
         ((eq key :well-founded-relation)
          (and (symbolp val)
@@ -15457,6 +16863,38 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
         ((eq key :memoize-ideal-okp)
          (or (eq val :warn)
              (booleanp val)))
+        ((eq key :check-invariant-risk)
+         (or (eq val :CLEAR)
+             (and (member-eq val *check-invariant-risk-values*)
+                  (or val
+                      (ttag world)
+                      (illegal 'acl2-defaults-table
+                               "An active trust tag is required for setting ~
+                                the :check-invariant-risk key to nil in the ~
+                                acl2-defaults-table."
+                               nil)))))
+        ((eq key :register-invariant-risk)
+         (or (eq val t)
+             (and (eq val nil)
+                  (or (null (get-register-invariant-risk-world world))
+                      (ttag world)
+                      (illegal 'acl2-defaults-table
+                               "An active trust tag is required for setting ~
+                                the :register-invariant-risk key to nil in ~
+                                the acl2-defaults-table."
+                               nil)))))
+        ((eq key :user)
+
+; The :user key is reserved for users; the ACL2 system will not consult or
+; modify it (except as part of general maintenance of the acl2-defaults-table).
+; In order to support more than one use of this key, we insist that it's an
+; alist; thus, one user could "own" one key of that alist, and a different user
+; could own another, so that for example :user is bound to ((:k1 . val1) (:k2
+; . val2)).
+
+         (alistp val))
+        ((eq key :in-theory-redundant-okp)
+         (booleanp val))
         (t nil)))
 
 ; (set-state-ok t)
@@ -15853,97 +17291,6 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 #-acl2-loop-only
 (defvar *print-circle-stream* nil)
 
-(defmacro er (severity context str &rest str-args)
-
-; Keep in sync with er@par.
-
-  (declare (xargs :guard (and (true-listp str-args)
-                              (member-symbol-name (symbol-name severity)
-                                                  '(hard hard? hard! hard?!
-                                                         soft very-soft))
-                              (<= (length str-args) 10))))
-
-; Note: We used to require (stringp str) but then we started writing such forms
-; as (er soft ctx msg x y z), where msg was bound to the error message str
-; (because the same string was used many times).
-
-; The special form (er hard "..." &...) expands into a call of illegal on "..."
-; and an alist built from &....  Since illegal has a guard of nil, the attempt
-; to prove the correctness of a fn producing a hard error will require proving
-; that the error can never occur.  At runtime, illegal causes a CLTL error.
-
-; The form (er soft ctx "..." &...) expands into a call of error1 on ctx, "..."
-; and an alist built from &....  At runtime error1 builds an error object and
-; returns it.  Thus, soft errors are not errors at all in the CLTL sense and
-; any function calling one which might cause an error ought to handle it.
-
-; Just to make it easier to debug our code, we have arranged for the er macro
-; to actually produce a prog2 form in which the second arg is as described
-; above but the preceding one is an fmt statement which will actually print the
-; error str and alist.  Thus, we can see when soft errors occur, whether or not
-; the calling program handles them appropriately.
-
-; We do not advertise the hard! or very-soft severities, at least not yet.  The
-; implementation uses the former to force a hard error even in contexts where
-; we would normally return nil.
-
-  (let ((alist (make-fmt-bindings '(#\0 #\1 #\2 #\3 #\4
-                                    #\5 #\6 #\7 #\8 #\9)
-                                  str-args))
-        (severity-name (symbol-name severity)))
-    (cond ((equal severity-name "SOFT")
-           (list 'error1 context str alist 'state))
-          ((equal severity-name "VERY-SOFT")
-           (list 'error1-safe context str alist 'state))
-          ((equal severity-name "HARD?")
-           (list 'hard-error context str alist))
-          ((equal severity-name "HARD")
-           (list 'illegal context str alist))
-          ((equal severity-name "HARD!")
-           #+acl2-loop-only (list 'illegal context str alist)
-           #-acl2-loop-only `(let ((*hard-error-returns-nilp* nil))
-                              (illegal ,context ,str ,alist)))
-          ((equal severity-name "HARD?!")
-           #+acl2-loop-only (list 'hard-error context str alist)
-           #-acl2-loop-only `(let ((*hard-error-returns-nilp* nil))
-                              (hard-error ,context ,str ,alist)))
-          (t
-
-; The final case should never happen.
-
-           (illegal 'top-level
-                    "Illegal severity, ~x0; macroexpansion of ER failed!"
-                    (list (cons #\0 severity)))))))
-
-#+acl2-par
-(defmacro er@par (severity context str &rest str-args)
-
-; Keep in sync with er.
-
-  (declare (xargs :guard (and (true-listp str-args)
-                              (member-symbol-name (symbol-name severity)
-                                                  '(hard hard? hard! hard?!
-                                                         soft very-soft))
-                              (<= (length str-args) 10))))
-  (let ((alist (make-fmt-bindings '(#\0 #\1 #\2 #\3 #\4
-                                    #\5 #\6 #\7 #\8 #\9)
-                                  str-args))
-        (severity-name (symbol-name severity)))
-    (cond ((equal severity-name "SOFT")
-           (list 'error1@par context str alist 'state))
-          (t
-
-; The final case should never happen.
-
-           (illegal 'top-level
-                    "Illegal severity, ~x0; macroexpansion of ER@PAR failed!"
-                    (list (cons #\0 severity)))))))
-
-(defun get-serialize-character (state)
-  (declare (xargs :guard (and (state-p state)
-                              (boundp-global 'serialize-character state))))
-  (f-get-global 'serialize-character state))
-
 (defun w (state)
   (declare (xargs :guard (state-p state)
 
@@ -15956,10 +17303,57 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                   :verify-guards nil))
   (f-get-global 'current-acl2-world state))
 
+(defun get-serialize-character (state)
+  (declare (xargs :guard (and (state-p state)
+                              (boundp-global 'serialize-character state))))
+  (f-get-global 'serialize-character state))
+
 (defun hons-enabledp (state)
+
+; ACL2 is now (starting with Version_7.2) always hons-enabled.  But we keep
+; this function around, as well as other code that supported builds that are
+; not hons-enabled, just in case we want to restore the ability to create such
+; builds.  Anyone who wants to do so should visit every occurrence of
+; "hons-enabled" in these sources.  Indeed, there may be very little necessary,
+; since we intend (at least for awhile) to leave the code in place that allows
+; for hons-enabled builds.  However, some error messages (for example) may
+; change, as in the "illegal to build ... non-ANSI" message in acl2-init.lisp.
+
   (declare (xargs :verify-guards nil ; wait for w
                   :guard (state-p state)))
   (global-val 'hons-enabled (w state)))
+
+(defun set-serialize-character-fn (c system-p state)
+  (declare (xargs :verify-guards nil ; wait for hons-enabledp
+                  :guard (and (state-p state)
+                              (or (null c)
+                                  (and (hons-enabledp state)
+                                       (member c '(#\Y #\Z)))))))
+  (let ((caller (if system-p
+                    'serialize-character-system
+                  'serialize-character)))
+    (cond
+     ((or (null c)
+          (and (hons-enabledp state)
+               (member c '(#\Y #\Z))))
+      (if system-p
+          (f-put-global 'serialize-character-system c state)
+        (f-put-global 'serialize-character c state)))
+     (t ; presumably guard-checking is off
+      (prog2$
+       (cond ((not (hons-enabledp state)) ; and note that c is not nil
+              (er hard caller
+                  "It is currently only legal to call ~x0 with a non-nil ~
+                   first argument in a hons-enabled version of ACL2.  If this ~
+                   presents a problem, feel free to contact the ACL2 ~
+                   implementors."
+                  caller))
+             (t
+              (er hard caller
+                  "The first argument of a call of ~x0 must be ~v1.  The ~
+                   argument ~x2 is thus illegal."
+                  caller '(nil #\Y #\Z) c)))
+       state)))))
 
 (defun set-serialize-character (c state)
   (declare (xargs :verify-guards nil ; wait for hons-enabledp
@@ -15967,26 +17361,24 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                               (or (null c)
                                   (and (hons-enabledp state)
                                        (member c '(#\Y #\Z)))))))
-  (cond
-   ((or (null c)
-        (and (hons-enabledp state)
-             (member c '(#\Y #\Z))))
-    (f-put-global 'serialize-character c state))
-   (t ; presumably guard-checking is off
-    (prog2$
-     (cond ((not (hons-enabledp state)) ; and note that c is not nil
-            (er hard 'set-serialize-character
-                "It is currently only legal to call ~x0 with a non-nil first ~
-                 argument in a hons-enabled version of ACL2.  If this ~
-                 presents a problem, feel free to contact the ACL2 ~
-                 implementors."
-                'set-serialize-character))
-           (t
-            (er hard 'set-serialize-character
-                "The first argument of a call of ~x0 must be ~v1.  The ~
-                 argument ~x2 is thus illegal."
-                'set-serialize-character '(nil #\Y #\Z) c)))
-     state))))
+  (set-serialize-character-fn c nil state))
+
+(defun set-serialize-character-system (c state)
+
+; By putting the form (set-serialize-character-system nil state) into one's
+; acl2-customization file, one can make .cert files and .port files (among
+; others) human-readable.  For example:
+
+; cd books ; \
+; make basic \
+; ACL2_CUSTOMIZATION=`pwd`/../acl2-customization-files/no-serialize.lisp
+
+  (declare (xargs :verify-guards nil ; wait for hons-enabledp
+                  :guard (and (state-p state)
+                              (or (null c)
+                                  (and (hons-enabledp state)
+                                       (member c '(#\Y #\Z)))))))
+  (set-serialize-character-fn c t state))
 
 (defun print-object$-ser (x serialize-character channel state-state)
 
@@ -16089,6 +17481,52 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                               (open-output-channel-p channel
                                                      :object state))))
   (print-object$-ser x (get-serialize-character state) channel state))
+
+#-acl2-loop-only
+(defmacro set-acl2-readtable-case (mode)
+  (declare (ignore mode))
+  #+gcl
+  (if (fboundp 'system::set-readtable-case)
+      '(setf (readtable-case *acl2-readtable*) :preserve)
+    nil)
+  #-gcl
+  '(setf (readtable-case *acl2-readtable*) :preserve))
+
+(defun print-object$-preserving-case (x channel state)
+
+; Logically, this function is just print-object$.  Is it unsound to identify
+; these functions, since they print differently?  We think not, because the
+; only way to see what resides in a file is with the various ACL2 reading
+; functions, which all use a file-clock.  See the discussion of "deus ex
+; machina" in :doc current-package.
+
+  (declare (xargs :guard (and (state-p state)
+                              (eq (get-serialize-character state)
+
+; It's not clear that it makes sense to print preserving case when doing
+; serialize printing.  If that capability is needed we can address weakening the
+; guard to match the guard of print-object$.
+
+                                  nil)
+                              (symbolp channel)
+                              (open-output-channel-p channel
+                                                     :object state))))
+  #-acl2-loop-only
+  (cond ((live-state-p state)
+         (cond
+          #+gcl
+          ((not (fboundp 'system::set-readtable-case))
+           (cerror "Use print-object$ instead"
+                   "Sorry, but ~s is not supported in this older version of ~%~
+                    GCL (because raw Lisp function ~s is undefined)."
+                   'print-object$-preserving-case
+                   'system::set-readtable-case))
+          (t
+           (return-from print-object$-preserving-case
+             (let ((*acl2-readtable* (copy-readtable *acl2-readtable*)))
+               (set-acl2-readtable-case :preserve)
+               (print-object$ x channel state)))))))
+  (print-object$ x channel state))
 
 ;  We start the file-clock at one to avoid any possible confusion with
 ; the wired in standard-input/output channels, whose names end with
@@ -16270,6 +17708,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; return t; otherwise we return nil.
 
   (cond
+   #+acl2-infix
    ((null (f-get-global 'infixp *the-live-state*))
     t)
    (t
@@ -16292,7 +17731,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; unix command should return error code 3 if the parse fails.  Otherwise, the
 ; parse is assumed to have worked.
 
-#-acl2-loop-only
+#+(and acl2-infix (not acl2-loop-only))
 (defun-one-output parse-infix-file (infile outfile)
 
 ; This function is only used with the silly $ infix syntax.  It is the analogue
@@ -16322,6 +17761,74 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                           (file-position file1))))
           (go loop)))))
 
+#-acl2-loop-only
+(defvar *read-file-alist*
+
+; This alist associates each key, an ACL2 filename (see the Essay on
+; Pathnames), with both a file-clock and its file-write-date.  Recall that the
+; keys into the readable-files component of the ACL2 state are of the form
+; (list file-name typ file-clock); see open-input-channel.  In order to
+; preserve our logical story about file IO, we must avoid logically associating
+; such a key with two different character lists.  That could happen if
+; read-file-into-string is called twice on the same filename, say "F", in the
+; case that there is an intervening write not performed by ACL2.  We avoid that
+; problem by associating "F" with its current file-write-date, FWD, in the
+; global *read-file-alist* just before opening a character input channel to
+; "F".  That global is cleared whenever the file-clock of the state is updated,
+; except when under read-file-into-string (or any with-local-state actually).
+; Now suppose we later attempt to open a (new) character input channel to "F"
+; when the file-clock of the state is as before.  Then we cause an error if the
+; file-write-date is later than FWD.
+
+; But consider the following situation: when we close an input channel on
+; behalf of read-file-into-string, the file-write-date of "F" is not FWD.  In
+; that case we could simply update the file-write-date associated with "F" in
+; *read-file-alist*, provided this is the first time that read-file-into-string
+; has been called on "F" when the file-clock is FC.  We could record whether
+; this was indeed the first time, but instead, we avoid that overhead and
+; simply cause an error in this (presumably) rare case; see
+; read-file-into-string2.
+
+; Any time the file-clock of the state is updated outside
+; read-file-into-string, we assign *read-file-alist* to nil (if it is not
+; already nil).
+
+  nil)
+
+#-acl2-loop-only
+(defvar *inside-with-local-state* nil)
+
+#-acl2-loop-only
+(defun increment-*file-clock* ()
+  (incf *file-clock*)
+  (when (not *inside-with-local-state*)
+    (setq *read-file-alist* nil)) ; see *read-file-alist*
+  *file-clock*)
+
+#-acl2-loop-only
+(defun check-against-read-file-alist (filename
+                                      &optional
+                                      (fwd (our-ignore-errors
+                                            (file-write-date$ filename
+                                                              *the-live-state*))))
+
+; See *read-file-alist* for relevant background.
+
+  (let ((pair (assoc-equal filename *read-file-alist*)))
+    (cond (pair
+           (cond
+            ((null fwd)
+             (error "Unable to determine file-write-date of file ~
+                     ~s.~%Therefore, considering consecutive reads from that ~
+                     file to be illegal;~%see :DOC read-file-into-string."
+                    filename))
+            ((< (cdr pair) fwd)
+             (error "Illegal consecutive reads from file ~s.~%See :DOC ~
+                     read-file-into-string."
+                    filename))
+            (t fwd)))
+          (t nil))))
+
 (skip-proofs
 (defun open-input-channel (file-name typ state-state)
 
@@ -16344,7 +17851,9 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
          (return-from
           open-input-channel
           (progn
-            (setq *file-clock* (1+ *file-clock*))
+            (when (eq typ :character)
+              (check-against-read-file-alist file-name))
+            (increment-*file-clock*)
 
 ; We do two different opens here because the default :element-type is
 ; different in CLTL and CLTL2.
@@ -16376,7 +17885,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                         (interface-er "Illegal input-type ~x0." typ)))))
                 (cond
                  ((null stream) (mv nil *the-live-state*))
-                 #+akcl
+                 #+(and acl2-infix akcl)
                  ((and (eq typ :object)
                        (not (lisp-book-syntaxp os-file-name)))
 
@@ -16435,7 +17944,6 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                            (open-input-channels state-state))
                  state-state))))
             (t (mv nil state-state))))))
-
 )
 
 (defthm nth-update-nth
@@ -16483,7 +17991,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
          (return-from
           close-input-channel
           (progn
-            (setq *file-clock* (1+ *file-clock*))
+            (increment-*file-clock*)
             (let ((stream (get channel *open-input-channel-key*)))
               (remprop channel *open-input-channel-key*)
               (remprop channel *open-input-channel-type-key*)
@@ -16504,7 +18012,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
               state-state)))
         (let ((state-state
                (update-open-input-channels
-                (delete-assoc-eq channel (open-input-channels state-state))
+                (remove1-assoc-eq channel (open-input-channels state-state))
                 state-state)))
           state-state)))))
 
@@ -16552,7 +18060,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
          (return-from
           open-output-channel
           (progn
-            (setq *file-clock* (1+ *file-clock*))
+            (increment-*file-clock*)
             (let* ((os-file-name
                     (and (not (eq file-name :string))
                          (pathname-unix-to-os file-name *the-live-state*)))
@@ -16640,48 +18148,90 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   `(and (mbt* ,test)
         ,form))
 
-(defun fmt-to-comment-window (str alist col evisc-tuple)
+(defun fmt-to-comment-window (str alist col evisc-tuple print-base-radix)
 
 ; WARNING: Keep this in sync with fmt-to-comment-window!.
 
-; Logically, this is the constant function returning nil.  However, it
-; has a side-effect on the "comment window" which is imagined to be a
-; separate window on the user's screen that cannot possibly be
-; confused with the normal ACL2 display of the files in STATE.  Using
-; this function it is possible for an ACL2 expression to cause
-; characters to appear in the comment window.  Nothing whatsoever can
-; be proved about these characters.  If you want to prove something
-; about ACL2 output, it must be directed to the channels and files in
+; Logically, this is the constant function returning nil.  However, it has a
+; side-effect on the "comment window" which is imagined to be a separate window
+; on the user's screen that cannot possibly be confused with the normal ACL2
+; display of the files in STATE.  Using this function it is possible for an
+; ACL2 expression to cause characters to appear in the comment window.  Nothing
+; whatsoever can be proved about these characters.  If you want to prove
+; something about ACL2 output, it must be directed to the channels and files in
 ; STATE.
 
   (declare (xargs :guard t))
   #+acl2-loop-only
-  (declare (ignore str alist col evisc-tuple))
+  (declare (ignore str alist col evisc-tuple print-base-radix))
   #+acl2-loop-only
   nil
 
-; Note:  One might wish to bind *wormholep* to nil around this fmt1 expression,
+; Note: One might wish to bind *wormholep* to nil around this fmt1 expression,
 ; to avoid provoking an error if this fn is called while *wormholep* is t.
-; However, the fact that we're printing to *standard-co* accomplishes the
-; same thing.  See the comment on synonym streams in princ$.
+; However, the fact that we're printing to *standard-co* accomplishes the same
+; thing.  See the comment on synonym streams in princ$.
 
   #-acl2-loop-only
-  (progn (fmt1 str alist col *standard-co* *the-live-state* evisc-tuple)
-         nil))
+  (progn
+    (cond
+     ((null print-base-radix) ; common case
+      (fmt1 str alist col *standard-co* *the-live-state* evisc-tuple))
+     (t
+      (mv-let (new-print-base new-print-radix state)
+        (cond ((consp print-base-radix)
+               (mv (car print-base-radix)
+                   (cdr print-base-radix)
+                   *the-live-state*))
+              (t (mv print-base-radix
+                     (if (eql print-base-radix 10)
+                         nil
+                       t)
+                     *the-live-state*)))
+        (state-global-let*
+         ((print-base (f-get-global 'print-base state))
+          (print-radix new-print-radix))
+         (pprogn
+          (set-print-base new-print-base state)
+          (mv-let (col state)
+            (fmt1 str alist col *standard-co* *the-live-state* evisc-tuple)
+            (value col)))))))
+    nil))
 
-(defun fmt-to-comment-window! (str alist col evisc-tuple)
+(defun fmt-to-comment-window! (str alist col evisc-tuple print-base-radix)
 
 ; WARNING: Keep this in sync with fmt-to-comment-window.
 
   (declare (xargs :guard t))
   #+acl2-loop-only
-  (declare (ignore str alist col evisc-tuple))
+  (declare (ignore str alist col evisc-tuple print-base-radix))
   #+acl2-loop-only
   nil
   #-acl2-loop-only
-  (progn (fmt1! str alist col *standard-co* *the-live-state*
-                evisc-tuple)
-         nil))
+  (progn
+    (cond
+     ((null print-base-radix) ; common case
+      (fmt1! str alist col *standard-co* *the-live-state* evisc-tuple))
+     (t
+      (mv-let (new-print-base new-print-radix state)
+        (cond ((consp print-base-radix)
+               (mv (car print-base-radix)
+                   (cdr print-base-radix)
+                   *the-live-state*))
+              (t (mv print-base-radix
+                     (if (eql print-base-radix 10)
+                         nil
+                       t)
+                     *the-live-state*)))
+        (state-global-let*
+         ((print-base (f-get-global 'print-base state))
+          (print-radix new-print-radix))
+         (pprogn
+          (set-print-base new-print-base state)
+          (mv-let (col state)
+            (fmt1! str alist col *standard-co* *the-live-state* evisc-tuple)
+            (value col)))))))
+    nil))
 
 (defun pairlis2 (x y)
 ; Like pairlis$ except is controlled by y rather than x.
@@ -16718,20 +18268,34 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; logically returning (mv a b c).
 
   `(fmt-to-comment-window ,str
-                          (pairlis2 '(#\0 #\1 #\2 #\3 #\4
-                                      #\5 #\6 #\7 #\8 #\9)
-                                    (list ,@args))
-                          0 nil))
+                          (pairlis2 *base-10-chars* (list ,@args))
+                          0 nil nil))
 
 (defmacro cw! (str &rest args)
 
 ; WARNING: Keep this in sync with cw.
 
   `(fmt-to-comment-window! ,str
-                           (pairlis2 '(#\0 #\1 #\2 #\3 #\4
-                                       #\5 #\6 #\7 #\8 #\9)
-                                     (list ,@args))
-                           0 nil))
+                           (pairlis2 *base-10-chars* (list ,@args))
+                           0 nil nil))
+
+(defmacro cw-print-base-radix (print-base-radix str &rest args)
+
+; WARNING: Keep this in sync with cw.
+
+  `(fmt-to-comment-window ,str
+                          (pairlis2 *base-10-chars* (list ,@args))
+                          0 nil
+                          ,print-base-radix))
+
+(defmacro cw-print-base-radix! (print-base-radix str &rest args)
+
+; WARNING: Keep this in sync with cw.
+
+  `(fmt-to-comment-window! ,str
+                           (pairlis2 *base-10-chars* (list ,@args))
+                           0 nil
+                           ,print-base-radix))
 
 (defun subseq-list (lst start end)
   (declare (xargs :guard (and (true-listp lst)
@@ -16841,11 +18405,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
        (defmacro ,macro-symbol (&rest args)
          (list* 'with-lock ',lock-symbol args)))))
 
-(deflock
-
-; Keep in sync with :DOC topic with-output-lock.
-
-  *output-lock*)
+(deflock *output-lock*) ; Keep in sync with :DOC with-output-lock.
+(deflock *local-state-lock*)
 
 (skip-proofs ; as with open-output-channel
 (defun get-output-stream-string$-fn (channel state-state)
@@ -16919,51 +18480,48 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; Wart: We use state-state instead of state because of a bootstrap problem.
 
   (declare (xargs :guard
-                  (and (not
-                        (eq channel
-                            'acl2-output-channel::standard-character-output-0))
+                  (and (not (eq channel *standard-co*))
                        (state-p1 state-state)
                        (symbolp channel)
                        (open-output-channel-any-p1 channel state-state))))
   #-acl2-loop-only
   (cond ((live-state-p state-state)
-         (when (eq channel (f-get-global 'standard-co state-state))
-
-; First, we cause a hard error if the channel is the value of state global
-; 'standard-co.  Comments below say more about this, but for now we point out
-; that even though we cause an error, we won't get the error from term
-; evaluation during proofs, because state-state will not be the live state.
-
-           (mv (cond
-                ((eq channel *standard-co*)
+         (when (eq channel *standard-co*)
 
 ; This case might seem impossible because it would be a guard violation.  But
 ; if a :program mode function call leads to the present call of
 ; close-output-channel, then the guard need not hold, so we make sure to cause
 ; an error here.
 
-                 (mv (er hard! 'close-output-channel
-                         "It is illegal to call close-output-channel on ~
-                          *standard-co*.")))
-                (t
+           (return-from
+            close-output-channel
+            (mv (state-free-global-let*
+                 ((standard-co *standard-co*))
+                 (er hard! 'close-output-channel
+                     "It is illegal to call close-output-channel on ~
+                      *standard-co*."))
+                state-state)))
+         (when (eq channel (f-get-global 'standard-co state-state))
 
 ; In Version_6.1 and probably before, we have seen an infinite loop occur
-; when attempting to close standard-co.
+; when attempting to close standard-co.  So we just say how to do it properly.
 
-                 (state-free-global-let*
-                  ((standard-co *standard-co*))
-                  (er hard! 'close-output-channel
-                      "It is illegal to call close-output-channel on ~
-                       standard-co.  Consider instead evaluating the ~
-                       following form:~|~%~X01."
-                      '(let ((ch (standard-co state)))
-                         (er-progn
-                          (set-standard-co *standard-co* state)
-                          (pprogn
-                           (close-output-channel ch state)
-                           (value t))))
-                      nil))))
-               state-state))
+           (return-from
+            close-output-channel
+            (mv (state-free-global-let*
+                 ((standard-co *standard-co*))
+                 (er hard! 'close-output-channel
+                     "It is illegal to call close-output-channel on ~
+                      standard-co.  Consider instead evaluating the following ~
+                      form:~|~%~X01."
+                     '(let ((ch (standard-co state)))
+                        (er-progn
+                         (set-standard-co *standard-co* state)
+                         (pprogn
+                          (close-output-channel ch state)
+                          (value t))))
+                     nil))
+                state-state)))
          (cond (*wormholep*
                 (wormhole-er 'close-output-channel (list channel))))
 
@@ -16972,7 +18530,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; April 2009: It seems that the last half of this month or so, occasionally
 ; there have been regression failures during inclusion of books that were
 ; apparently already certified.  Those may all have been with Allegro CL.  In
-; particular, on 4/29/09 there were two successive regression failes as
+; particular, on 4/29/09 there were two successive regression failures as
 ; community book books/rtl/rel8/support/lib2.delta1/reps.lisp tried to include
 ; "bits" in that same directory.  We saw a web page claiming an issue in old
 ; versions of Allegro CL for which finish-output didn't do the job, and
@@ -16994,7 +18552,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
          (return-from
           close-output-channel
           (progn
-            (setq *file-clock* (1+ *file-clock*))
+            (increment-*file-clock*)
             (let ((str (get channel *open-output-channel-key*)))
               (remprop channel *open-output-channel-key*)
               (remprop channel *open-output-channel-type-key*)
@@ -17016,7 +18574,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
               state-state)))
         (let ((state-state
                (update-open-output-channels
-                (delete-assoc-eq channel (open-output-channels state-state))
+                (remove1-assoc-eq channel (open-output-channels state-state))
                 state-state)))
           state-state)))))
 
@@ -17145,7 +18703,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                    (open-input-channels state-state))
          state-state))))
 
-#-acl2-loop-only
+#+(and acl2-infix (not acl2-loop-only))
 (defun-one-output parse-infix-from-terminal (eof)
 
 ; Eof is an arbitrary lisp object.  If the terminal input is empty, return eof.
@@ -17212,7 +18770,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; seems trivial.)
 
                   (cons nil nil))
-                 (*package* (find-package
+                 (*package* (find-package-fast
                              (current-package *the-live-state*)))
                  (*readtable* *acl2-readtable*)
                  #+cltl2 (*read-eval* t)
@@ -17223,10 +18781,12 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                                 (eq channel *standard-ci*))
                             nil
                           si:*notify-gbc*))
+                 #+acl2-infix
                  (infixp (f-get-global 'infixp state-state))
                  (stream (get-input-stream-from-channel channel))
                  (obj
                   (cond
+                   #+acl2-infix
                    ((and (or (eq infixp t) (eq infixp :in))
                          (eq stream (get-input-stream-from-channel  *standard-ci*)))
                     (let ((obj (parse-infix-from-terminal read-object-eof)))
@@ -17248,16 +18808,16 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                    (t
                     (read stream nil read-object-eof nil)))))
 
-; The following dynamic-extent declaration looks fine.  But there have been
-; spurious ill-formed certificate and checksum problems with Allegro CL for a
-; few months (as of Aug. 2009) and I am suspicious that this could be the cause
-; (in which case we have hit an Allegro CL compiler bug, if I'm correct about
-; this declaration being fine).  The efficiency improvement given by this
-; declaration seems rather trivial, so I'll comment it out and see what
-; happens.
+; The following dynamic-extent declaration looks fine.  There were spurious
+; ill-formed certificate and checksum problems with Allegro CL for a few months
+; (as of Aug. 2009) and I was suspicious that this could be the cause (in which
+; case we have hit an Allegro CL compiler bug, if I'm correct about this
+; declaration being fine).  The time improvement given by this declaration
+; seems rather trivial, but the space improvement can be substantial; so I'll
+; include it.
 
-;           #+cltl2
-;           (declare (dynamic-extent read-object-eof))
+            #+cltl2
+            (declare (dynamic-extent read-object-eof))
 
             (cond ((eq obj read-object-eof)
                    (mv t nil state-state))
@@ -17274,6 +18834,35 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                           (open-input-channels state-state))
                 state-state)))
           (t (mv t nil state-state)))))
+
+(defun read-object-with-case (channel mode state)
+  (declare (xargs :guard
+                  (and (state-p state)
+                       (symbolp channel)
+                       (open-input-channel-p channel :object state)
+                       (member-eq mode ; case sensitivity mode
+                                  '(:upcase :downcase :preserve :invert)))))
+  #+acl2-loop-only
+  (declare (ignore mode))
+  #-acl2-loop-only
+  (cond ((live-state-p state)
+         (cond
+          #+gcl
+          ((not (fboundp 'system::set-readtable-case))
+           (cerror "Use read-object instead"
+                   "Sorry, but ~s is not supported in this older version of ~%~
+                    GCL (because raw Lisp function ~s is undefined)."
+                   'read-object-with-case
+                   'system::set-readtable-case))
+          (t
+           (return-from read-object-with-case
+             (cond ((eq mode :upcase) ; optimization
+                    (read-object channel state))
+                   (t (let ((*acl2-readtable*
+                             (copy-readtable *acl2-readtable*)))
+                        (set-acl2-readtable-case :preserve)
+                        (read-object channel state)))))))))
+  (read-object channel state))
 
 (defun read-object-suppress (channel state)
 
@@ -17309,13 +18898,6 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     #\a #\b #\c #\d #\e #\f
     #\+ #\- #\. #\^ #\_))
 
-(defconst *base-10-chars*
-
-; This constant is inlined in the definition of
-; *base-10-array*.
-
-  '(#\0 #\1 #\2 #\3 #\4 #\5 #\6 #\7 #\8 #\9))
-
 (defconst *hex-chars*
 
 ; This constant is inlined in the definition of
@@ -17337,11 +18919,48 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 (defconst *slashable-chars*
 
-; This constant is inlined in the definition of *slashable-array*.
+; This list must contain exactly the characters whose codes are associated with
+; T in *slashable-array*, so that the #+acl2-loop-only and #-acl2-loop-only
+; code in may-need-slashes-fn are consistent.  This is checked at build time by
+; the function check-slashable.
 
-  '(#\Newline #\Page #\Space #\" #\# #\' #\( #\) #\, #\: #\; #\\ #\`
-    #\a #\b #\c #\d #\e #\f #\g #\h #\i #\j #\k #\l #\m #\n #\o #\p
-    #\q #\r #\s #\t #\u #\v #\w #\x #\y #\z #\|))
+  (list (CODE-CHAR 0) (CODE-CHAR 1) (CODE-CHAR 2) (CODE-CHAR 3)
+        (CODE-CHAR 4) (CODE-CHAR 5) (CODE-CHAR 6) (CODE-CHAR 7)
+        (CODE-CHAR 8) (CODE-CHAR 9) (CODE-CHAR 10) (CODE-CHAR 11)
+        (CODE-CHAR 12) (CODE-CHAR 13) (CODE-CHAR 14) (CODE-CHAR 15)
+        (CODE-CHAR 16) (CODE-CHAR 17) (CODE-CHAR 18) (CODE-CHAR 19)
+        (CODE-CHAR 20) (CODE-CHAR 21) (CODE-CHAR 22) (CODE-CHAR 23)
+        (CODE-CHAR 24) (CODE-CHAR 25) (CODE-CHAR 26) (CODE-CHAR 27)
+        (CODE-CHAR 28) (CODE-CHAR 29) (CODE-CHAR 30) (CODE-CHAR 31)
+        (CODE-CHAR 32) (CODE-CHAR 34) (CODE-CHAR 35) (CODE-CHAR 39)
+        (CODE-CHAR 40) (CODE-CHAR 41) (CODE-CHAR 44) (CODE-CHAR 58)
+        (CODE-CHAR 59) (CODE-CHAR 92) (CODE-CHAR 96) (CODE-CHAR 97)
+        (CODE-CHAR 98) (CODE-CHAR 99) (CODE-CHAR 100) (CODE-CHAR 101)
+        (CODE-CHAR 102) (CODE-CHAR 103) (CODE-CHAR 104) (CODE-CHAR 105)
+        (CODE-CHAR 106) (CODE-CHAR 107) (CODE-CHAR 108) (CODE-CHAR 109)
+        (CODE-CHAR 110) (CODE-CHAR 111) (CODE-CHAR 112) (CODE-CHAR 113)
+        (CODE-CHAR 114) (CODE-CHAR 115) (CODE-CHAR 116) (CODE-CHAR 117)
+        (CODE-CHAR 118) (CODE-CHAR 119) (CODE-CHAR 120) (CODE-CHAR 121)
+        (CODE-CHAR 122) (CODE-CHAR 124) (CODE-CHAR 127) (CODE-CHAR 128)
+        (CODE-CHAR 129) (CODE-CHAR 130) (CODE-CHAR 131) (CODE-CHAR 132)
+        (CODE-CHAR 133) (CODE-CHAR 134) (CODE-CHAR 135) (CODE-CHAR 136)
+        (CODE-CHAR 137) (CODE-CHAR 138) (CODE-CHAR 139) (CODE-CHAR 140)
+        (CODE-CHAR 141) (CODE-CHAR 142) (CODE-CHAR 143) (CODE-CHAR 144)
+        (CODE-CHAR 145) (CODE-CHAR 146) (CODE-CHAR 147) (CODE-CHAR 148)
+        (CODE-CHAR 149) (CODE-CHAR 150) (CODE-CHAR 151) (CODE-CHAR 152)
+        (CODE-CHAR 153) (CODE-CHAR 154) (CODE-CHAR 155) (CODE-CHAR 156)
+        (CODE-CHAR 157) (CODE-CHAR 158) (CODE-CHAR 159) (CODE-CHAR 160)
+        (CODE-CHAR 168) (CODE-CHAR 170) (CODE-CHAR 175) (CODE-CHAR 178)
+        (CODE-CHAR 179) (CODE-CHAR 180) (CODE-CHAR 181) (CODE-CHAR 184)
+        (CODE-CHAR 185) (CODE-CHAR 186) (CODE-CHAR 188) (CODE-CHAR 189)
+        (CODE-CHAR 190) (CODE-CHAR 224) (CODE-CHAR 225) (CODE-CHAR 226)
+        (CODE-CHAR 227) (CODE-CHAR 228) (CODE-CHAR 229) (CODE-CHAR 230)
+        (CODE-CHAR 231) (CODE-CHAR 232) (CODE-CHAR 233) (CODE-CHAR 234)
+        (CODE-CHAR 235) (CODE-CHAR 236) (CODE-CHAR 237) (CODE-CHAR 238)
+        (CODE-CHAR 239) (CODE-CHAR 240) (CODE-CHAR 241) (CODE-CHAR 242)
+        (CODE-CHAR 243) (CODE-CHAR 244) (CODE-CHAR 245) (CODE-CHAR 246)
+        (CODE-CHAR 248) (CODE-CHAR 249) (CODE-CHAR 250) (CODE-CHAR 251)
+        (CODE-CHAR 252) (CODE-CHAR 253) (CODE-CHAR 254) (CODE-CHAR 255)))
 
 (defun some-slashable (l)
   (declare (xargs :guard (character-listp l)))
@@ -17423,7 +19042,9 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   (cond ((endp lst)
          t)
         ((member (car lst) potnum-chars)
-         (may-need-slashes1 (cdr lst) nil potnum-chars))
+         (may-need-slashes1 (cdr lst)
+                            (member (car lst) *letter-chars*)
+                            potnum-chars))
         ((member (car lst) *letter-chars*)
          (cond (flg nil)
                (t (may-need-slashes1 (cdr lst) t potnum-chars))))
@@ -17469,7 +19090,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
         (not (member (aref (the string ,s) (the fixnum (1- ,n)))
                      '(#\+ #\-)))
 
-; The strong consists entirely of digits, signs, ratio markers, decimal points,
+; The string consists entirely of digits, signs, ratio markers, decimal points,
 ; extension characters, and number markers (i.e. letters, but no two in a
 ; row).  The logic code for this is may-need-slashes1.
 
@@ -17480,7 +19101,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                 (declare (type fixnum ch))
                 (cond ((or (svref ,ar+ ch)
                            (int= ch *char-code-slash*))
-                       (setq prev-letter-p nil))
+                       (setq prev-letter-p
+                             (svref *letter-array* ch)))
                       ((svref *letter-array* ch)
                        (cond (prev-letter-p (return nil))
                              (t (setq prev-letter-p t))))
@@ -17495,13 +19117,13 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 (defun may-need-slashes-fn (x print-base)
 
 ; We determine if the string x, a symbol name or symbol-package name, should be
-; printed using |..|.  The main ideas are to escape lower-case characters and
-; to avoid the possibility of reading the printed result back in as a number
+; printed using |..|.  The main ideas are to escape characters as necessary,
+; including lower-case characters and certain others such as #\Tab, and to
+; avoid the possibility of reading the printed result back in as a number
 ; instead of a symbol.
 
-; More precisely: This function should return true if x represents a potential
-; number, and ideally only if that is the case (in order to avoid needless use
-; of |..|).  The notion of "potential number" is discussed below.  We perhaps
+; In particular, this function should return true if x represents a potential
+; number.  The notion of "potential number" is discussed below.  We perhaps
 ; escape more than necessary if print-base is 2, 4, or 8; the Common Lisp spec
 ; may not be clear on this, and anyhow it's simplest to be conservative and
 ; treat those bases as we treat base 10.
@@ -17846,11 +19468,10 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
  (verify-termination-boot-strap subseq-list)
 
  (local
-  (defthm character-listp-first-n-ac
+  (defthm character-listp-of-take
     (implies (and (character-listp x)
-                  (character-listp y)
                   (<= n (length x)))
-             (character-listp (first-n-ac n x y)))))
+             (character-listp (take n x)))))
 
  (local
   (defthm len-nthcdr
@@ -17881,7 +19502,9 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 (verify-guards w)
 (verify-guards hons-enabledp)
+(verify-guards set-serialize-character-fn)
 (verify-guards set-serialize-character)
+(verify-guards set-serialize-character-system)
 
 (defun mswindows-drive1 (filename)
   (declare (xargs :mode :program))
@@ -17923,45 +19546,44 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                                    nil))))))
       ""))
 
+#-acl2-loop-only
 (defun pathname-os-to-unix (str os state)
 
-; This function takes a pathname string in the host OS syntax and converts it
-; to Unix syntax.
+; Warning: Keep this in sync with the corresponding redefinition in file
+; non-ascii-pathnames-raw.lsp, under books/kestrel/.
 
-  (declare (xargs :mode :program))
+; This function takes an OS pathname and converts it to an ACL2 pathname; see
+; the Essay on Pathnames.
+
   (if (equal str "")
       str
-    (case os
-      (:unix str)
-      ((:apple :mswindows)
-       (let ((sep (if (eq os :apple) #\: #\\)))
-         (let* ((relative-p-apple ; relevant only for apple
-                 (eql (char str 0) sep))
-                (str0 (substitute
-                       *directory-separator* sep
-                       (cond
-                        ((eq os :mswindows)
-                         str)
-                        (relative-p-apple (subseq str 1 (length str)))
-                        (t str)))))
-           (cond
-            ((and (eq os :apple)
-                  (not relative-p-apple))
-             (string-append *directory-separator-string* str0))
-            ((and (eq os :mswindows)
-                  (eql (char str0 0) *directory-separator*))
+    (let ((result
+           (case os
+             (:unix str)
+             (:mswindows
+              (let* ((sep #\\)
+                     (str0 (substitute *directory-separator* sep str)))
+                (cond
+                 ((and (eq os :mswindows)
+                       (eql (char str0 0) *directory-separator*))
 
 ; Warning: Do not append the drive if there is already a drive present.  We
-; rely on this in LP, where we initialize state global 'system-books-dir
-; using unix-full-pathname (which calls pathname-os-to-unix) based on
-; environment variable ACL2_SYSTEM_BOOKS, which might already have a drive that
-; differs from that of the user.
+; rely on this in LP, where we initialize state global 'system-books-dir based
+; on environment variable ACL2_SYSTEM_BOOKS, which might already have a drive
+; that differs from that of the user.
 
-             (string-append (mswindows-drive nil state)
-                            str0))
-            (t
-             str0)))))
-      (otherwise (os-er os 'pathname-os-to-unix)))))
+                  (string-append (mswindows-drive nil state)
+                                 str0))
+                 (t
+                  str0))))
+             (otherwise (os-er os 'pathname-os-to-unix)))))
+      (let ((msg (and result
+                      *check-namestring* ; always true unless a ttag is used
+                      (bad-lisp-stringp result))))
+        (cond (msg (interface-er
+                    "Illegal ACL2 pathname, ~x0:~%~@1"
+                    result msg))
+              (t result))))))
 
 #+(and (not acl2-loop-only) ccl)
 (defun ccl-at-least-1-3-p ()
@@ -17971,14 +19593,17 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
            (> (symbol-value 'ccl::*openmcl-minor-version*) 2)
          (> (symbol-value 'ccl::*openmcl-major-version*) 1))))
 
+#-acl2-loop-only
 (defun pathname-unix-to-os (str state)
 
-; This function takes a Unix-style pathname string and converts it to a
-; filename in the host OS.  In the case of :mswindows, the "Unix-style"
-; filename may or may not start with the drive, but the result definitely does.
+; Warning: Keep this in sync with the corresponding redefinition in file
+; non-ascii-pathnames-raw.lsp, under books/kestrel/.
 
-  (declare (xargs :mode :program))
-  #+(and (not acl2-loop-only) ccl mswindows)
+; This function takes an ACL2 pathname and converts it to an OS pathname; see
+; the Essay on Pathnames.  In the case of :mswindows, the ACL2 filename may or
+; may not start with the drive, but the result definitely does.
+
+  #+(and ccl mswindows)
 
 ; We believe that CCL 1.2 traffics in Unix-style pathnames, so it would be a
 ; mistake to convert them to use #\\, because then (for example) probe-file may
@@ -17999,30 +19624,23 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     (let ((os (os (w state))))
       (case os
         (:unix str)
-        ((:apple :mswindows)
-         (let ((sep (if (eq os :apple) #\: #\\)))
+        (:mswindows
+         (let ((sep #\\))
            (if (position sep str)
                (illegal 'pathname-unix-to-os
-                "Unable to convert pathname ~p0 for OS ~p1 because ~
-                 character ~p2 occurs in that pathname string at position ~p3."
-                (list (cons #\0 str)
-                      (cons #\1 os)
-                      (cons #\2 sep)
-                      (cons #\3 (position sep str))))
+                        "Unable to convert pathname ~p0 for OS ~p1 because ~
+                         character ~p2 occurs in that pathname string at ~
+                         position ~p3."
+                        (list (cons #\0 str)
+                              (cons #\1 os)
+                              (cons #\2 sep)
+                              (cons #\3 (position sep str))))
              (let* ((sep-is-first (eql (char str 0) *directory-separator*))
-                    (str0 (substitute sep *directory-separator*
-                                      (if (and (eq os :apple)
-                                               sep-is-first)
-                                          (subseq str 1 (length str))
-                                        str))))
-               (if (eq os :apple)
-                   (if sep-is-first
-                       str0
-                     (string-append ":" str0))
-                 (if sep-is-first
-                     (string-append (mswindows-drive nil state)
-                                    str0)
-                   str0))))))
+                    (str0 (substitute sep *directory-separator* str)))
+               (if sep-is-first
+                   (string-append (mswindows-drive nil state)
+                                  str0)
+                 str0)))))
         (otherwise (os-er os 'pathname-unix-to-os))))))
 
 (defun shrink-t-stack (n state-state)
@@ -18514,7 +20132,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   #-acl2-loop-only
   (when (live-state-p state)
     (return-from getenv$
-                 (value (and (stringp str) (getenv$-raw str)))))
+                 (value (and (stringp str) ; guard check, for robustness
+                             (getenv$-raw str)))))
   (read-acl2-oracle state))
 
 (defun setenv$ (str val)
@@ -18525,11 +20144,19 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   #-acl2-loop-only
   (when (and (stringp str) (stringp val))
     (or #+cmu
-        (and (boundp ext::*environment-list*)
-             (let* ((key (intern str :keyword))
-                    (pair (cdr (assoc-eq key ext::*environment-list*))))
-               (cond (pair (setf (cdr pair) val))
-                     (t (push (cons key val) ext::*environment-list*)))))
+        (progn (when *cmucl-unix-setenv-fn*
+
+; It's not enough to update ext::*environment-list* if we want the process's
+; environment to be updated, as opposed to merely supporting an update seen by
+; run-program.  We use funcall just below in case the "UNIX" package doesn't
+; exist, though most likely it does.  See *cmucl-unix-setenv-fn*.
+
+                 (funcall *cmucl-unix-setenv-fn* str val 1))
+               (when (boundp 'ext::*environment-list*)
+                 (let* ((key (intern str :keyword))
+                        (pair (cdr (assoc-eq key ext::*environment-list*))))
+                   (cond (pair (setf (cdr pair) val))
+                         (t (push (cons key val) ext::*environment-list*))))))
         #+allegro
         (setf (sys::getenv str) val)
         #+clisp
@@ -18586,15 +20213,40 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 (defvar *last-sys-call-status* 0)
 
 (defun sys-call (command-string args)
-  (declare (xargs :guard t))
+  (declare (xargs :guard (and (stringp command-string)
+                              (string-listp args))))
   #+acl2-loop-only
   (declare (ignore command-string args))
   #-acl2-loop-only
-  (let ((rslt (system-call command-string args)))
-    (progn (setq *last-sys-call-status* rslt)
-           nil))
+  (cond
+   ((or (f-get-global 'in-prove-flg *the-live-state*)
+        (f-get-global 'in-verify-flg *the-live-state*))
+
+; We use (er hard ...) rather than (er hard! ...) to avoid a distracting error
+; when reasoning about calls of sys-call on concrete data during a proof.  We
+; really only want to see this error message when sys-call is invoked by a
+; metafunction or a clause-processor.
+
+    (er hard 'sys-call
+        "It is illegal to call ~x0 inside the ~s1.  Consider using ~x2 ~
+         or ~x3 instead."
+        'sys-call
+        (if (f-get-global 'in-prove-flg *the-live-state*)
+            "prover"
+          "proof-builder")
+        'sys-call+
+        'sys-call*))
+   (t
+    (let ((rslt (system-call command-string args)))
+      (progn (setq *last-sys-call-status* rslt)
+             nil))))
   #+acl2-loop-only
   nil)
+
+; Avoid running sys-call on terms.  We already prevent this under prover and
+; proof-builder calls, but not for example under the expander from community
+; book books/misc/expander.lisp.
+(in-theory (disable (:executable-counterpart sys-call)))
 
 (defun sys-call-status (state)
   (declare (xargs :stobjs state))
@@ -18606,172 +20258,6 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
           (read-acl2-oracle state)
           (declare (ignore erp))
           (mv val state)))
-
-#-acl2-loop-only
-(defun read-file-by-lines (file &optional delete-after-reading)
-  (let ((acc nil)
-        (eof '(nil))
-        missing-newline-p)
-    (with-open-file
-     (s file :direction :input)
-     (loop (multiple-value-bind (line temp)
-               (read-line s nil eof)
-             (cond ((eq line eof)
-                    (return acc))
-                   (t
-                    (setq missing-newline-p temp)
-                    (setq acc
-                          (if acc
-                              (concatenate 'string acc (string #\Newline) line)
-                            line)))))))
-    (when delete-after-reading
-      (delete-file file))
-    (if missing-newline-p
-        acc
-      (concatenate 'string acc (string #\Newline)))))
-
-#-acl2-loop-only
-(defun system-call+ (string arguments)
-
-; Warning: Keep this in sync with system-call.
-
-  (let* (exit-code ; assigned below
-         #+(or gcl clisp)
-         (tmp-file (format nil
-                           "~a/tmp~s"
-                           (or (f-get-global 'tmp-dir *the-live-state*)
-                               "/tmp")
-                           (getpid$)))
-         no-error
-         (output-string
-          (our-ignore-errors
-           (prog1
-               #+gcl ; does wildcard expansion
-             (progn (setq exit-code
-                          (si::system
-                           (let ((result string))
-                             (dolist
-                               (x arguments)
-                               (setq result (concatenate 'string result " " x)))
-                             (concatenate 'string result " > " tmp-file))))
-                    (read-file-by-lines tmp-file t))
-             #+lispworks ; does wildcard expansion (see comment below)
-             (with-output-to-string
-               (s)
-               (setq exit-code
-                     (system::call-system-showing-output
-
-; It was tempting to use (cons string arguments).  This would cause the given
-; command, string, to be applied to the given arguments, without involving the
-; shell.  But then a command such as "ls" would not work; one would have to
-; provide a string such as "/bin/ls".  So instead of using a list here, we use
-; a string, which according to the LispWorks manual will invoke the shell,
-; which will find commands (presumably including built-ins and also using the
-; user's path).
-
-                      (let ((result string))
-                        (dolist
-                          (x arguments)
-                          (setq result (concatenate 'string result " " x)))
-                        result)
-                      :output-stream s
-                      :prefix ""
-                      :show-cmd nil
-                      :kill-process-on-abort t))
-               #+windows ; process is returned above, not exit code
-               (setq exit-code nil))
-             #+allegro ; does wildcard expansion
-             (multiple-value-bind
-                 (stdout-lines stderr-lines exit-status)
-                 (excl.osi::command-output
-                  (let ((result string))
-                    (dolist
-                      (x arguments)
-                      (setq result (concatenate 'string result " " x)))
-                    result))
-               (declare (ignore stderr-lines))
-               (setq exit-code exit-status)
-               (let ((acc nil))
-                 (loop for line in stdout-lines
-                       do
-                       (setq acc
-                             (if acc
-                                 (concatenate 'string
-                                              acc
-                                              (string #\Newline)
-                                              line)
-                               line)))
-                 acc))
-             #+cmu
-             (with-output-to-string
-               (s)
-               (setq exit-code
-                     (let (temp)
-                       (if (ignore-errors
-                             (progn
-                               (setq temp
-                                     (ext:process-exit-code
-                                      (common-lisp-user::run-program
-                                       string arguments
-                                       :output s)))
-                               1))
-                           temp
-                         1))))
-             #+sbcl
-             (with-output-to-string
-               (s)
-               (setq exit-code
-                     (let (temp)
-                       (if (ignore-errors
-                             (progn
-                               (setq temp
-                                     (sb-ext:process-exit-code
-                                      (sb-ext:run-program string arguments
-                                                          :output s
-                                                          :search t)))
-                               1))
-                           temp
-                         1))))
-             #+clisp
-             (progn (setq exit-code
-                          (or (ext:run-program string
-                                               :arguments arguments
-                                               :output tmp-file)
-                              0))
-                    (read-file-by-lines tmp-file t))
-             #+ccl
-             (with-output-to-string
-               (s)
-               (setq exit-code
-                     (let* ((proc
-                             (ccl::run-program string arguments
-                                               :output s
-                                               :wait t))
-                            (status (multiple-value-list
-                                     (ccl::external-process-status proc))))
-                       (if (not (and (consp status)
-                                     (eq (car status) :EXITED)
-                                     (consp (cdr status))
-                                     (integerp (cadr status))))
-                           1 ; just some non-zero exit code here
-                         (cadr status)))))
-             #-(or gcl lispworks allegro cmu sbcl clisp ccl)
-             (declare (ignore string arguments))
-             #-(or gcl lispworks allegro cmu sbcl clisp ccl)
-             (error "SYSTEM-CALL is not yet defined in this Lisp.")
-             (setq no-error t)))))
-    (values (cond ((integerp exit-code)
-                   exit-code)
-                  ((null exit-code)
-                   (if no-error 0 1))
-                  (t (format t
-                             "WARNING: System-call produced non-integer, ~
-                              non-nil exit code:~%~a~%"
-                             exit-code)
-                     0))
-            (if (stringp output-string)
-                output-string
-              ""))))
 
 (encapsulate
  ()
@@ -18800,29 +20286,56 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 (in-theory (disable update-acl2-oracle))
 
 (defun sys-call+ (command-string args state)
-  (declare (xargs :stobjs state))
+  (declare (xargs :stobjs state
+                  :guard (and (stringp command-string)
+                              (string-listp args))))
   #+acl2-loop-only
   (declare (ignore command-string args))
-  #+acl2-loop-only
-  (mv-let (erp1 erp state)
-          (read-acl2-oracle state)
-          (declare (ignore erp1))
-          (mv-let (erp2 val state)
-                  (read-acl2-oracle state)
-                  (declare (ignore erp2))
-                  (mv (and (integerp erp)
-                           (not (eql 0 erp))
-                           erp)
-                      (if (stringp val) val "")
-                      state)))
   #-acl2-loop-only
-  (multiple-value-bind
-      (status rslt)
-      (system-call+ command-string args)
-    (mv (if (eql status 0)
+  (when (live-state-p state)
+    (return-from sys-call+
+      (multiple-value-bind
+          (status rslt)
+          (system-call+ command-string args)
+        (mv (if (eql status 0)
+                nil
+              status)
+            rslt
+            state))))
+  (mv-let (erp1 erp state)
+    (read-acl2-oracle state)
+    (declare (ignore erp1))
+    (mv-let (erp2 val state)
+      (read-acl2-oracle state)
+      (declare (ignore erp2))
+      (mv (and (integerp erp)
+               (not (eql 0 erp))
+               erp)
+          (if (stringp val) val "")
+          state))))
+
+(defun sys-call* (command-string args state)
+  (declare (xargs :stobjs state
+                  :guard (and (stringp command-string)
+                              (string-listp args))))
+  #+acl2-loop-only
+  (declare (ignore command-string args))
+  #-acl2-loop-only
+  (when (live-state-p state)
+    (return-from sys-call*
+      (let ((status (system-call command-string args)))
+        (mv (if (eql status 0)
+                nil
+              status)
             nil
-          status)
-        rslt
+            state))))
+  (mv-let (erp1 erp state)
+    (read-acl2-oracle state)
+    (declare (ignore erp1))
+    (mv (and (integerp erp)
+             (not (eql 0 erp))
+             erp)
+        nil
         state)))
 
 ; End of system calls
@@ -19190,6 +20703,13 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 (defthm rationalp-implies-acl2-numberp
   (implies (rationalp x) (acl2-numberp x)))
 
+; Addition suggested by Dmitry Nadezhin (a proof that succeeded in ACL2 using
+; the lemma just above failed without the following):
+
+#+:non-standard-analysis
+(defthm realp-implies-acl2-numberp
+  (implies (realp x) (acl2-numberp x)))
+
 (defun pop-timer (name flg state)
 
 ; If flg is nil we discard the popped value.  If flg is t we
@@ -19255,12 +20775,10 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     ((add-pair key value l)))))
 
 (defthm assoc-add-pair
-  (implies (and (symbolp sym2)
-                (ordered-symbol-alistp alist))
-           (equal (assoc sym1 (add-pair sym2 val alist))
-                  (if (equal sym1 sym2)
-                      (cons sym1 val)
-                    (assoc sym1 alist)))))
+  (equal (assoc sym1 (add-pair sym2 val alist))
+         (if (equal sym1 sym2)
+             (cons sym1 val)
+           (assoc sym1 alist))))
 
 (defthm add-pair-preserves-all-boundp
   (implies (and (eqlable-alistp alist1)
@@ -19325,7 +20843,9 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 (skip-proofs
 (defun print-rational-as-decimal (x channel state)
   (declare (xargs :guard (and (rationalp x)
+                              (symbolp channel)
                               (state-p state)
+                              (boundp-global 'print-base state)
                               (equal (print-base) 10)
                               (open-output-channel-p channel :character state))))
   (let ((x00 (round (* 100 (abs x)) 1)))
@@ -19343,14 +20863,16 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
              (t (princ$ r channel state)))))))
 )
 
-(skip-proofs
 (defun print-timer (name channel state)
   (declare (xargs :guard (and (symbolp name)
                               (state-p state)
+                              (boundp-global 'print-base state)
+                              (symbolp channel)
                               (open-output-channel-p channel :character state)
-                      (consp (get-timer name state)))))
+                              (equal (print-base) 10)
+                              (consp (get-timer name state))
+                              (rationalp (car (get-timer name state))))))
   (print-rational-as-decimal (car (get-timer name state)) channel state))
-)
 
 (defthm state-p1-update-print-base
   (implies (state-p1 state)
@@ -19401,11 +20923,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; primordial-world-globals is called.
 
   (declare (xargs :guard (state-p state)))
-  (getprop 'known-package-alist
-           'global-value
-           nil
-           'current-acl2-world
-           (w state)))
+  (getpropc 'known-package-alist 'global-value))
 
 ;  Prin1
 
@@ -19485,6 +21003,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                       (#\Page    "Page")
                       (#\Tab     "Tab")
                       (#\Rubout  "Rubout")
+                      (#\Return  "Return")
                       (otherwise x))
                     stream))
                   ((stringp x)
@@ -19535,6 +21054,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                     (#\Page    "Page")
                     (#\Tab     "Tab")
                     (#\Rubout  "Rubout")
+                    (#\Return  "Return")
                     (otherwise x))
                   channel state)))
         ((stringp x)
@@ -19602,13 +21122,9 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   (implies (and (state-p1 state)
                 (plist-worldp wrld)
                 (known-package-alistp
-                 (getprop 'known-package-alist 'global-value nil
-                          'current-acl2-world
-                          wrld))
-                (symbol-alistp (getprop 'acl2-defaults-table
-                                        'table-alist
-                                        nil 'current-acl2-world
-                                        wrld)))
+                 (getpropc 'known-package-alist 'global-value nil wrld))
+                (symbol-alistp (getpropc 'acl2-defaults-table 'table-alist nil
+                                         wrld)))
            (state-p1 (update-nth 2
                                  (add-pair 'current-acl2-world
                                            wrld (nth 2 state))
@@ -19652,11 +21168,13 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ;                                         *current-acl2-world-key*)))
 ;         nil))
 
+; Note that f-put-global@par, with-live-state, and when-pass-2 are macros,
+; hence are not in this list (but are defined using defmacro-untouchable).
+
   '(coerce-state-to-object
     coerce-object-to-state
     create-state
     user-stobj-alist
-    user-stobj-alist-safe
 
     f-put-ld-specials
 
@@ -19675,7 +21193,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
     ev-fncall ev ev-lst ev-fncall!
     ev-fncall-rec ev-rec ev-rec-lst ev-rec-acl2-unwind-protect
-    ev-w ev-w-lst
+    ev-fncall-w ev-fncall-w-body ev-w ev-w-lst
 
     set-w set-w! cloaked-set-w!
 
@@ -19721,19 +21239,23 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     set-evisc-tuple-lst
     set-evisc-tuple-fn1
     set-iprint-ar
+    init-iprint-fal update-iprint-fal-rec update-iprint-fal init-iprint-fal+
 
     checkpoint-world
 
-    let-beta-reduce
-
-    f-put-global@par ; for #+acl2-par (modifies state under the hood)
-
-    with-live-state ; see comment in that macro
+    untouchable-marker
 
     stobj-evisceration-alist ; returns bad object
     trace-evisceration-alist ; returns bad object
 
-    oracle-apply-raw
+    update-enabled-structure-array ; many assumptions for calling correctly
+
+    apply-user-stobj-alist-or-kwote ; extra-logical EQ use; see its commments
+
+; See the Essay on Memoization with Attachments for why
+; doppelganger-apply$-userfn and doppelganger-badge-userfn are untouchable.
+
+    doppelganger-apply$-userfn doppelganger-badge-userfn
 
 ; We briefly included maybe-install-acl2-defaults-table, but that defeated the
 ; ability to call :puff.  It now seems unnecessary to include
@@ -19769,6 +21291,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
     current-acl2-world
     undone-worlds-kill-ring
+    acl2-world-alist
     timer-alist
 
     main-timer
@@ -19843,7 +21366,6 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     logic-fns-with-raw-code
     macros-with-raw-code
     dmrp
-    trace-level ; can change under the hood without logic explanation
     trace-specs
     retrace-p
     parallel-execution-enabled
@@ -19868,6 +21390,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ;   print-readably ; generalized boolean
     print-right-margin ; nil or non-negative integer
     iprint-ar
+    iprint-fal
     iprint-hard-bound
     iprint-soft-bound
 ;   ld-evisc-tuple ; already mentioned above
@@ -19891,9 +21414,16 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
     illegal-to-certify-message
     acl2-sources-dir
     including-uncertified-p
+    check-invariant-risk ; set- function ensures proper values
+    print-gv-defaults
+    global-enabled-structure
+    cert-data
+    verify-termination-on-raw-program-okp
+    prompt-memo
+    system-attachments-cache
     ))
 
-; There are a variety of state global variables, 'ld-skip-proofsp among them,
+; There is a variety of state global variables, 'ld-skip-proofsp among them,
 ; that are "bound" by LD in the sense that their values are protected by
 ; pushing them upon entrance to LD and popping them upon exit.  These globals
 ; are called the "LD specials".  For each LD special there are accessor and
@@ -19908,31 +21438,66 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 #-acl2-loop-only
 (save-def
-(defun-one-output bad-lisp-objectp (x)
+(defun-one-output bad-lisp-stringp (x)
+  (cond
+   ((not (simple-string-p x))
+    (cons "The strings of ACL2 must be simple strings, but ~x0 is not simple."
+          (list (cons #\0 x))))
+   (t
+    (do ((i 0 (1+ i)))
+        ((= i (length x)))
+        (declare (type fixnum i))
+        (let ((ch (char (the string x) i)))
+          (cond
+           ((legal-acl2-character-p ch) nil)
+           (t (let ((code (char-code ch)))
+                (cond ((not (< code 256))
+                       (return
+                        (cons "The strings of ACL2 may contain only ~
+                               characters whose char-code does not exceed ~
+                               255.  The object CLTL displays as ~s0 has ~
+                               char-code ~x1 and hence is not one of those."
+                              (list (cons #\0 (coerce (list ch)
+                                                      'string))
+                                    (cons #\1 (char-code ch))))))
+                      ((eql (the character ch)
+                            (the character (code-char code)))
 
-; This routine does a root and branch exploration of x and guarantees that x is
-; composed entirely of complex rationals, rationals, 8-bit characters that are
-; "canonical" in the sense that they are the result of applying code-char to
-; their character code, strings of such characters, symbols made from such
-; strings (and "interned" in a package known to ACL2) and conses of the
-; foregoing.
+; We allow the canonical character with code less than 256 in a string, even
+; the character #\Null (for example) or any such character that may not be a
+; legal-acl2-character-p, because in a string (unlike as a character object)
+; the character will be printed in a way that can be read back in, not using a
+; print name that may not be standard across all Lisps.
 
-; We return nil or non-nil.  If nil, then x is a legal ACL2 object.  If we
-; return non-nil, then x is a bad object and the answer is a message, msg, such
-; that (fmt "~@0" (list (cons #\0 msg)) ...)  will explain why.
+                       nil)
+                      (t
+                       (return
+                        (cons "ACL2 strings may contain only characters ~
+                               without attributes.  The character with ~
+                               char-code ~x0 that CLTL displays as ~s1 is not ~
+                               the same as the character that is the value of ~
+                               ~x2."
+                              (list (cons #\0 code)
+                                    (cons #\1 (coerce (list ch)
+                                                      'string))
+                                    (cons #\2 `(code-char
+                                                ,code)))))))))))))))
+)
 
-; All of our ACL2 code other than this routine assumes that we are manipulating
-; non-bad objects, except for symbols in the invisible package, e.g. state and
-; the invisible array mark.  We make these restrictions for portability's sake.
-; If a Lisp expression is a theorem on a Symbolics machine we want it to be a
-; theorem on a Sun.  Thus, we can't permit such constants as #\Circle-Plus.  We
-; also assume (and check in chk-suitability-of-this-common-lisp) that all of
-; the characters mentioned above are distinct.
+#-acl2-loop-only
+(defun-one-output bad-lisp-atomp (x)
 
-  (cond ((consp x)
-         (or (bad-lisp-objectp (car x))
-             (bad-lisp-objectp (cdr x))))
-        ((integerp x)
+; At one time LispWorks printed a warning for this function:
+
+;   Eliminating a test of a variable with a declared type : ACL2::X [type ATOM]
+
+; We were told in December 2016 that this compiler bug would be fixed in the
+; next LispWorks release, and that the bug is only in printing of the warning,
+; not in the code generated by the compiler.  The warning is indeed gone in
+; LispWorks 7.1.
+
+  (declare (type atom x))
+  (cond ((typep x 'integer)
 
 ; CLTL2 says, p. 39, ``X3J13 voted in January 1989 <76> to specify that the
 ; types of fixnum and bignum do in fact form an exhaustive partition of the
@@ -19982,14 +21547,14 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 ; (typep (logcount x) 'fixnum)
 
-; Note that  nonstandard integers integeres (like (H)) are not an issue
+; Note that  nonstandard integers integers (like (H)) are not an issue
 ; because all Common Lisp integers are "real" integers, hence standard.
 
          nil)
-        ((symbolp x)
+        ((typep x 'symbol)
          (cond
           ((eq x nil) nil) ; seems like useful special case for true lists
-          ((bad-lisp-objectp (symbol-name x)))
+          ((bad-lisp-stringp (symbol-name x)))
           (t (let ((pkg (symbol-package x)))
                (cond
                 ((null pkg)
@@ -20067,53 +21632,9 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                                      (f-get-global 'system-books-dir
                                                    *the-live-state*))))))))))))
                 (t nil))))))
-        ((stringp x)
-         (cond
-          ((not (simple-string-p x))
-           (cons "The strings of ACL2 must be simple strings, but ~x0 is not ~
-                  simple."
-                 (list (cons #\0 x))))
-          (t
-           (do ((i 0 (1+ i)))
-               ((= i (length x)))
-               (declare (type fixnum i))
-               (let ((ch (char (the string x) i)))
-                 (cond
-                  ((legal-acl2-character-p ch) nil)
-                  (t (let ((code (char-code ch)))
-                       (cond ((not (< code 256))
-                              (return
-                               (cons "The strings of ACL2 may contain only ~
-                                      characters whose char-code does not ~
-                                      exceed 255.  The object CLTL displays ~
-                                      as ~s0 has char-code ~x1 and hence is ~
-                                      not one of those."
-                                     (list (cons #\0 (coerce (list ch)
-                                                             'string))
-                                           (cons #\1 (char-code ch))))))
-                             ((eql (the character ch)
-                                   (the character (code-char code)))
-
-; We allow the canonical character with code less than 256 in a string, even
-; the character #\Null (for example) or any such character that may not be a
-; legal-acl2-character-p, because in a string (unlike as a character object)
-; the character will be printed in a way that can be read back in, not using a
-; print name that may not be standard across all Lisps.
-
-                              nil)
-                             (t
-                              (return
-                               (cons "ACL2 strings may contain only ~
-                                      characters without attributes.  The ~
-                                      character with char-code ~x0 that CLTL ~
-                                      displays as ~s1 is not the same as the ~
-                                      character that is the value of ~x2."
-                                     (list (cons #\0 code)
-                                           (cons #\1 (coerce (list ch)
-                                                             'string))
-                                           (cons #\2 `(code-char
-                                                       ,code)))))))))))))))
-        ((characterp x)
+        ((typep x 'string)
+         (bad-lisp-stringp x))
+        ((typep x 'character)
          (cond ((legal-acl2-character-p x) nil)
                (t
 
@@ -20127,11 +21648,11 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                             (cons #\1 (char-code x))
                             (cons #\2 (coerce (list x) 'string)))))))
         ((typep x 'ratio)
-         (or (bad-lisp-objectp (numerator x))
-             (bad-lisp-objectp (denominator x))))
+         (or (bad-lisp-atomp (numerator x))
+             (bad-lisp-atomp (denominator x))))
         ((typep x '(complex rational))
-         (or (bad-lisp-objectp (realpart x))
-             (bad-lisp-objectp (imagpart x))))
+         (or (bad-lisp-atomp (realpart x))
+             (bad-lisp-atomp (imagpart x))))
         (t (cons
             "ACL2 permits only objects constructed from rationals, complex ~
              rationals, legal ACL2 characters, simple strings of these ~
@@ -20139,6 +21660,40 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
              the ACL2 packages, and cons trees of such objects.  The object ~
              CLTL displays as ~s0 is thus illegal in ACL2."
             (list (cons #\0 (format nil "~s" x)))))))
+
+#-acl2-loop-only
+(declaim (inline bad-lisp-objectp))
+#-acl2-loop-only
+(defun-one-output bad-lisp-objectp (x)
+
+; This routine does a root and branch exploration of x and guarantees that x is
+; composed entirely of complex rationals, rationals, 8-bit characters that are
+; "canonical" in the sense that they are the result of applying code-char to
+; their character code, strings of such characters, symbols made from such
+; strings (and "interned" in a package known to ACL2) and conses of the
+; foregoing.
+
+; We return nil or non-nil.  If nil, then x is a legal ACL2 object.  If we
+; return non-nil, then x is a bad object and the answer is a message, msg, such
+; that (fmt "~@0" (list (cons #\0 msg)) ...)  will explain why.
+
+; All of our ACL2 code other than this routine assumes that we are manipulating
+; non-bad objects, except for symbols in the invisible package, e.g. state and
+; the invisible array mark.  We make these restrictions for portability's sake.
+; If a Lisp expression is a theorem on a Symbolics machine we want it to be a
+; theorem on a Sun.  Thus, we can't permit such constants as #\Circle-Plus.  We
+; also assume (and check in chk-suitability-of-this-common-lisp) that all of
+; the characters mentioned above are distinct.
+
+  (cond ((typep x 'cons) (bad-lisp-consp x))
+        (t (bad-lisp-atomp x))))
+
+#-acl2-loop-only
+(save-def
+(defun-one-output bad-lisp-consp (x)
+  (declare (type cons x))
+  (or (bad-lisp-objectp (car x))
+      (bad-lisp-objectp (cdr x))))
 )
 
 #-acl2-loop-only
@@ -20530,27 +22085,22 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 #+acl2-loop-only
 (defmacro set-enforce-redundancy (x)
-  `(state-global-let*
-    ((inhibit-output-lst (list* 'event 'summary (@ inhibit-output-lst))))
-    (progn (table acl2-defaults-table :enforce-redundancy ,x)
-           (table acl2-defaults-table :enforce-redundancy))))
+  `(with-output
+     :off (event summary)
+     (progn (table acl2-defaults-table :enforce-redundancy ,x)
+            (table acl2-defaults-table :enforce-redundancy))))
 
 #-acl2-loop-only
 (defmacro set-enforce-redundancy (x)
   (declare (ignore x))
   nil)
 
-#+(and acl2-legacy-doc acl2-loop-only)
-(defmacro set-ignore-doc-string-error (x)
-  `(state-global-let*
-    ((inhibit-output-lst (list* 'event 'summary (@ inhibit-output-lst))))
-    (progn (table acl2-defaults-table :ignore-doc-string-error ,x)
-           (table acl2-defaults-table :ignore-doc-string-error))))
-
-#+(and acl2-legacy-doc (not acl2-loop-only))
-(defmacro set-ignore-doc-string-error (x)
-  (declare (ignore x))
-  nil)
+(defun get-enforce-redundancy (wrld)
+  (declare (xargs :guard (and (plist-worldp wrld)
+                              (alistp (table-alist 'acl2-defaults-table
+                                                   wrld)))))
+  (cdr (assoc-eq :enforce-redundancy
+                 (table-alist 'acl2-defaults-table wrld))))
 
 (defmacro default-verify-guards-eagerness-from-table (alist)
   `(or (cdr (assoc-eq :verify-guards-eagerness ,alist))
@@ -20565,10 +22115,10 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 #+acl2-loop-only
 (defmacro set-verify-guards-eagerness (x)
-  `(state-global-let*
-    ((inhibit-output-lst (list* 'event 'summary (@ inhibit-output-lst))))
-    (progn (table acl2-defaults-table :verify-guards-eagerness ,x)
-           (table acl2-defaults-table :verify-guards-eagerness))))
+  `(with-output
+     :off (event summary)
+     (progn (table acl2-defaults-table :verify-guards-eagerness ,x)
+            (table acl2-defaults-table :verify-guards-eagerness))))
 
 #-acl2-loop-only
 (defmacro set-verify-guards-eagerness (x)
@@ -20582,8 +22132,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 #+acl2-loop-only
 (defmacro set-compile-fns (x)
-  `(state-global-let*
-    ((inhibit-output-lst (list* 'event 'summary (@ inhibit-output-lst))))
+  `(with-output
+     :off (event summary)
      (progn (table acl2-defaults-table :compile-fns ,x)
             (table acl2-defaults-table :compile-fns))))
 
@@ -20599,7 +22149,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
          (f-put-global 'compiler-enabled val state))
         (t (prog2$ (hard-error 'set-compiler-enabled
                                "Illegal value for set-compiler-enabled: ~x0"
-                               val)
+                               (list (cons #\0 val)))
                    state))))
 
 (defun set-port-file-enabled (val state)
@@ -20609,7 +22159,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
          (f-put-global 'port-file-enabled val state))
         (t (prog2$ (hard-error 'set-port-file-enabled
                                "Illegal value for set-port-file-enabled: ~x0"
-                               val)
+                               (list (cons #\0 val)))
                    state))))
 
 (defun default-measure-function (wrld)
@@ -20620,8 +22170,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 #+acl2-loop-only
 (defmacro set-measure-function (name)
-  `(state-global-let*
-    ((inhibit-output-lst (list* 'event 'summary (@ inhibit-output-lst))))
+  `(with-output
+     :off (event summary)
      (progn (table acl2-defaults-table :measure-function ',name)
             (table acl2-defaults-table :measure-function))))
 
@@ -20638,8 +22188,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 #+acl2-loop-only
 (defmacro set-well-founded-relation (rel)
-  `(state-global-let*
-    ((inhibit-output-lst (list* 'event 'summary (@ inhibit-output-lst))))
+  `(with-output
+     :off (event summary)
      (progn (table acl2-defaults-table :well-founded-relation ',rel)
             (table acl2-defaults-table :well-founded-relation))))
 
@@ -20725,8 +22275,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; guard verification process at this point.
 
 ; (= (length formals) 1)...
-                (let ((formals (getprop (car lst) 'formals nil
-                                        'current-acl2-world wrld)))
+                (let ((formals (getpropc (car lst) 'formals nil wrld)))
                   (and (consp formals)
                        (null (cdr formals))))
                 (unary-function-symbol-listp (cdr lst) wrld)))))
@@ -20744,6 +22293,11 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 (set-invisible-fns-table t)
 
 (defmacro add-invisible-fns (top-fn &rest unary-fns)
+
+; See call of (set-guard-msg add-invisible-fns ...) later in the sources.
+
+  (declare (xargs :guard (and (symbolp top-fn)
+                              (symbol-listp unary-fns))))
   `(table invisible-fns-table nil
           (let* ((tbl (table-alist 'invisible-fns-table world))
                  (macro-aliases (macro-aliases world))
@@ -20754,13 +22308,15 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                 (put-assoc-eq top-fn
                               (union-eq unary-fns (cdr old-entry))
                               tbl)
-              (prog2$ (cw "~%NOTE:  Add-invisible-fns did not change the ~
-                           invisible-fns-table.  Consider using :u or :ubt to ~
-                           undo this event.~%")
-                      tbl)))
+              tbl))
           :clear))
 
 (defmacro remove-invisible-fns (top-fn &rest unary-fns)
+
+; See call of (set-guard-msg remove-invisible-fns ...) later in the sources.
+
+  (declare (xargs :guard (and (symbolp top-fn)
+                              (symbol-listp unary-fns))))
   `(table invisible-fns-table nil
           (let* ((tbl (table-alist 'invisible-fns-table world))
                  (macro-aliases (macro-aliases world))
@@ -20771,11 +22327,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                 (let ((diff (set-difference-eq (cdr old-entry) unary-fns)))
                   (if diff
                       (put-assoc-eq top-fn diff tbl)
-                    (delete-assoc-eq top-fn tbl)))
-              (prog2$ (cw "~%NOTE:  Remove-invisible-fns did not change the ~
-                           invisible-fns-table.  Consider using :u or :ubt to ~
-                           undo this event.~%")
-                      tbl)))
+                    (remove1-assoc-eq top-fn tbl)))
+              tbl))
           :clear))
 
 ; The following two definitions are included to help users transition from
@@ -20797,10 +22350,18 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 #+acl2-loop-only
 (defmacro set-bogus-defun-hints-ok (x)
-  `(state-global-let*
-    ((inhibit-output-lst (list* 'event 'summary (@ inhibit-output-lst))))
+  `(with-output
+     :off (event summary)
      (progn (table acl2-defaults-table :bogus-defun-hints-ok ,x)
             (table acl2-defaults-table :bogus-defun-hints-ok))))
+
+(defmacro set-bogus-measure-ok (x)
+
+; After Version_7.2 we are extending the capability offered by
+; set-bogus-defun-hints-ok, since Version_3.4, so that it applies to bogus
+; measures as well.
+
+  `(set-bogus-defun-hints-ok ,x))
 
 #-acl2-loop-only
 (defmacro set-bogus-defun-hints-ok (x)
@@ -20809,8 +22370,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 #+acl2-loop-only
 (defmacro set-bogus-mutual-recursion-ok (x)
-  `(state-global-let*
-    ((inhibit-output-lst (list* 'event 'summary (@ inhibit-output-lst))))
+  `(with-output
+     :off (event summary)
      (progn (table acl2-defaults-table :bogus-mutual-recursion-ok ,x)
             (table acl2-defaults-table :bogus-mutual-recursion-ok))))
 
@@ -20819,40 +22380,13 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   (declare (ignore x))
   nil)
 
-#+acl2-loop-only
-(defmacro set-ruler-extenders (x)
-
-; It seems a bit sad to evaluate x twice, but that seems kind of unavoidable if
-; we are to use a table event to set the acl2-defaults-table, since WORLD is
-; not available for the expression of that event.
-
-  `(state-global-let*
-    ((inhibit-output-lst (list* 'event 'summary (@ inhibit-output-lst))))
-    (er-progn
-     (chk-ruler-extenders ,x soft 'set-ruler-extenders (w state))
-     (progn
-       (table acl2-defaults-table :ruler-extenders
-              (let ((x0 ,x))
-                (case x0
-
-; If keywords other than :ALL, :BASIC, and :LAMBDAS are supported, then also
-; change get-ruler-extenders1.
-
-                  (:all :all)
-                  (:lambdas (cons :lambdas *basic-ruler-extenders*))
-                  (:basic *basic-ruler-extenders*)
-                  (otherwise x0))))
-       (table acl2-defaults-table :ruler-extenders)))))
-
-#-acl2-loop-only
-(defmacro set-ruler-extenders (x)
-  (declare (ignore x))
-  nil)
+; Set-ruler-extenders has been moved from here to simplify.lisp, so that
+; sort-symbol-listp is defined first.
 
 #+acl2-loop-only
 (defmacro set-irrelevant-formals-ok (x)
-  `(state-global-let*
-    ((inhibit-output-lst (list* 'event 'summary (@ inhibit-output-lst))))
+  `(with-output
+     :off (event summary)
      (progn (table acl2-defaults-table :irrelevant-formals-ok ,x)
             (table acl2-defaults-table :irrelevant-formals-ok))))
 
@@ -20863,8 +22397,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 #+acl2-loop-only
 (defmacro set-ignore-ok (x)
-  `(state-global-let*
-    ((inhibit-output-lst (list* 'event 'summary (@ inhibit-output-lst))))
+  `(with-output
+     :off (event summary)
      (progn (table acl2-defaults-table :ignore-ok ,x)
             (table acl2-defaults-table :ignore-ok))))
 
@@ -20885,10 +22419,10 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 #+acl2-loop-only
 (defmacro set-inhibit-warnings! (&rest lst)
   (declare (xargs :guard (string-listp lst)))
-  `(state-global-let*
-    ((inhibit-output-lst (list* 'event 'summary (@ inhibit-output-lst))))
-    (progn (table inhibit-warnings-table nil ',(pairlis$ lst nil) :clear)
-           (value-triple ',lst))))
+  `(with-output
+     :off (event summary)
+     (progn (table inhibit-warnings-table nil ',(pairlis$ lst nil) :clear)
+            (value-triple ',lst))))
 
 (defmacro set-inhibit-warnings (&rest lst)
   `(local (set-inhibit-warnings! ,@lst)))
@@ -20928,10 +22462,10 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 #+acl2-loop-only
 (defmacro set-state-ok (x)
-  `(state-global-let*
-    ((inhibit-output-lst (list* 'event 'summary (@ inhibit-output-lst))))
-    (progn (table acl2-defaults-table :state-ok ,x)
-           (table acl2-defaults-table :state-ok))))
+  `(with-output
+     :off (event summary)
+     (progn (table acl2-defaults-table :state-ok ,x)
+            (table acl2-defaults-table :state-ok))))
 
 #-acl2-loop-only
 (defmacro set-state-ok (x)
@@ -20944,10 +22478,10 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 #+acl2-loop-only
 (defmacro set-let*-abstractionp (x)
-  `(state-global-let*
-    ((inhibit-output-lst (list* 'event 'summary (@ inhibit-output-lst))))
-    (progn (table acl2-defaults-table :let*-abstractionp ,x)
-           (table acl2-defaults-table :let*-abstractionp))))
+  `(with-output
+     :off (event summary)
+     (progn (table acl2-defaults-table :let*-abstractionp ,x)
+            (table acl2-defaults-table :let*-abstractionp))))
 
 #-acl2-loop-only
 (defmacro set-let*-abstractionp (x)
@@ -20982,14 +22516,14 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 #+acl2-loop-only
 (defmacro set-backchain-limit (limit)
-  `(state-global-let*
-    ((inhibit-output-lst (list* 'event 'summary (@ inhibit-output-lst))))
-    (progn (table acl2-defaults-table :backchain-limit
-                  (let ((limit ,limit))
-                    (if (atom limit)
-                        (list limit limit)
-                      limit)))
-           (table acl2-defaults-table :backchain-limit))))
+  `(with-output
+     :off (event summary)
+     (progn (table acl2-defaults-table :backchain-limit
+                   (let ((limit ,limit))
+                     (if (atom limit)
+                         (list limit limit)
+                       limit)))
+            (table acl2-defaults-table :backchain-limit))))
 
 #-acl2-loop-only
 (defmacro set-backchain-limit (limit)
@@ -21013,14 +22547,14 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 #+acl2-loop-only
 (defmacro set-default-backchain-limit (limit)
-  `(state-global-let*
-    ((inhibit-output-lst (list* 'event 'summary (@ inhibit-output-lst))))
-    (progn (table acl2-defaults-table :default-backchain-limit
-                  (let ((limit ,limit))
-                    (if (atom limit)
-                        (list limit limit)
-                      limit)))
-           (table acl2-defaults-table :default-backchain-limit))))
+  `(with-output
+     :off (event summary)
+     (progn (table acl2-defaults-table :default-backchain-limit
+                   (let ((limit ,limit))
+                     (if (atom limit)
+                         (list limit limit)
+                       limit)))
+            (table acl2-defaults-table :default-backchain-limit))))
 
 #-acl2-loop-only
 (defmacro set-default-backchain-limit (limit)
@@ -21162,10 +22696,10 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; the rewrite nest, while at the same time turning off the rewrite-stack depth
 ; limit check.
 
-; When we do a make certify-books or make regression after compiling with
-; acl2-rewrite-meter in *features*, we will create a file foo.rstats for every
-; book foo being certified.  We can then collect all those stats into a single
-; file by executing the following Unix command, where DIR is the acl2-sources
+; When we do a regression after compiling with acl2-rewrite-meter in
+; *features*, we will create a file foo.rstats for every book foo being
+; certified.  We can then collect all those stats into a single file by
+; executing the following Unix command, where DIR is the acl2-sources
 ; directory:
 
 ; find DIR/books -name '*.rstats' -exec cat {} \; > rewrite-depth-stats.lisp
@@ -21234,13 +22768,13 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 #+acl2-loop-only
 (defmacro set-rewrite-stack-limit (limit)
-  `(state-global-let*
-    ((inhibit-output-lst (list* 'event 'summary (@ inhibit-output-lst))))
-    (progn (table acl2-defaults-table :rewrite-stack-limit
-                  ,(if (or (null limit) (equal limit (kwote nil)))
-                       (1- (expt 2 28))
-                     limit))
-           (table acl2-defaults-table :rewrite-stack-limit))))
+  `(with-output
+     :off (event summary)
+     (progn (table acl2-defaults-table :rewrite-stack-limit
+                   ,(if (or (null limit) (equal limit (kwote nil)))
+                        (1- (expt 2 28))
+                      limit))
+            (table acl2-defaults-table :rewrite-stack-limit))))
 
 #-acl2-loop-only
 (defmacro set-rewrite-stack-limit (limit)
@@ -21286,14 +22820,14 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 #+acl2-loop-only
 (defmacro set-case-split-limitations (lst)
-  `(state-global-let*
-    ((inhibit-output-lst (list* 'event 'summary (@ inhibit-output-lst))))
-    (progn (table acl2-defaults-table :case-split-limitations
-                  (let ((lst ,lst))
-                    (cond ((eq lst nil)
-                           '(nil nil))
-                          (t lst))))
-           (table acl2-defaults-table :case-split-limitations))))
+  `(with-output
+     :off (event summary)
+     (progn (table acl2-defaults-table :case-split-limitations
+                   (let ((lst ,lst))
+                     (cond ((eq lst nil)
+                            '(nil nil))
+                           (t lst))))
+            (table acl2-defaults-table :case-split-limitations))))
 
 #-acl2-loop-only
 (defmacro set-case-split-limitations (lst)
@@ -21342,7 +22876,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   `(table untrans-table nil
           (let ((tbl (table-alist 'untrans-table world)))
             (if (assoc-eq ',macro-fn tbl)
-                (delete-assoc-eq-exec ',macro-fn tbl)
+                (remove1-assoc-eq-exec ',macro-fn tbl)
               (prog2$ (cw "~%NOTE:  the name ~x0 did not appear as a key in ~
                            untrans-table.  Consider using :u or :ubt to ~
                            undo this event, which is harmless but does not ~
@@ -21366,8 +22900,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 #+acl2-loop-only
 (defmacro set-match-free-default (x)
-  `(state-global-let*
-    ((inhibit-output-lst (list* 'event 'summary (@ inhibit-output-lst))))
+  `(with-output
+     :off (event summary)
      (progn (table acl2-defaults-table :match-free-default ,x)
             (table acl2-defaults-table :match-free-default))))
 
@@ -21590,8 +23124,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 #+acl2-loop-only
 (defmacro set-non-linearp (toggle)
-  `(state-global-let*
-    ((inhibit-output-lst (list* 'event 'summary (@ inhibit-output-lst))))
+  `(with-output
+     :off (event summary)
      (progn (table acl2-defaults-table :non-linearp ,toggle)
             (table acl2-defaults-table :non-linearp))))
 
@@ -21647,8 +23181,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 #+acl2-loop-only
 (defmacro set-tau-auto-mode (toggle)
-  `(state-global-let*
-    ((inhibit-output-lst (list* 'event 'summary (@ inhibit-output-lst))))
+  `(with-output
+     :off (event summary)
      (progn (table acl2-defaults-table :tau-auto-modep ,toggle)
             (table acl2-defaults-table :tau-auto-modep))))
 
@@ -21657,32 +23191,31 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   (declare (ignore toggle))
   nil)
 
+(defun get-in-theory-redundant-okp (state)
+  (declare (xargs :stobjs state
+                  :guard
+                  (alistp (table-alist 'acl2-defaults-table (w state)))))
+  (let ((pair (assoc-eq :in-theory-redundant-okp
+                        (table-alist 'acl2-defaults-table (w state)))))
+    (cond (pair (cdr pair))
+          (t ; default
+           nil))))
+
 #+acl2-loop-only
-(defmacro defttag (tag-name &key doc)
+(defmacro defttag (tag-name)
   (declare (xargs :guard (symbolp tag-name)))
-  `(state-global-let*
-    ((inhibit-output-lst (list* 'event 'summary (@ inhibit-output-lst))))
-    (progn (table acl2-defaults-table
-                  :ttag
-                  ',(and tag-name
-                         (intern (symbol-name tag-name) "KEYWORD")))
-           ,@(cond (doc `((defdoc ,tag-name ,doc)))
-                   (t nil))
-           (table acl2-defaults-table :ttag))))
+  `(with-output
+     :off (event summary)
+     (progn (table acl2-defaults-table
+                   :ttag
+                   ',(and tag-name
+                          (intern (symbol-name tag-name) "KEYWORD")))
+            (table acl2-defaults-table :ttag))))
 
 #-acl2-loop-only
 (defmacro defttag (&rest args)
   (declare (ignore args))
   nil)
-
-(defun ttag (wrld)
-
-; This function returns nil if there is no active ttag.
-
-  (declare (xargs :guard
-                  (and (plist-worldp wrld)
-                       (alistp (table-alist 'acl2-defaults-table wrld)))))
-  (cdr (assoc-eq :ttag (table-alist 'acl2-defaults-table wrld))))
 
 ; We here document some Common Lisp functions.  The primitives are near
 ; the end of this file.
@@ -21758,7 +23291,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 (table macro-aliases-table nil nil
        :guard
        (and (symbolp key)
-            (not (eq (getprop key 'macro-args t 'current-acl2-world world) t))
+            (not (eq (getpropc key 'macro-args t world) t))
             (symbolp val)
 
 ; We no longer (as of August 2012) require that val be a function symbol, so
@@ -21846,18 +23379,33 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 (add-macro-alias put-assoc-eq put-assoc-equal)
 (add-macro-alias put-assoc-eql put-assoc-equal) ; for pre-v4-3 compatibility
 (add-macro-alias put-assoc put-assoc-equal)
-(add-macro-alias delete-assoc-eq delete-assoc-equal)
-(add-macro-alias delete-assoc delete-assoc-equal)
+(add-macro-alias remove1-assoc-eq remove1-assoc-equal)
+(add-macro-alias remove1-assoc remove1-assoc-equal)
 (add-macro-alias union-eq union-equal)
 (add-macro-alias union$ union-equal)
 (add-macro-alias intersection-eq intersection-equal)
 (add-macro-alias intersection$ intersection-equal)
 
+; The following, pertaining to delete-assoc, may be deprecated:
+(defmacro delete-assoc-eq-exec (key alist)
+  `(remove1-assoc-eq-exec ,key ,alist))
+(add-macro-alias delete-assoc-eq-exec remove1-assoc-eq-exec)
+(defmacro delete-assoc-eql-exec (key alist)
+  `(remove1-assoc-eql-exec ,key ,alist))
+(add-macro-alias delete-assoc-eql-exec remove1-assoc-eql-exec)
+(defmacro delete-assoc-equal (key alist)
+  `(remove1-assoc-equal ,key ,alist))
+(add-macro-alias delete-assoc-equal remove1-assoc-equal)
+(defmacro delete-assoc-eq (key alist)
+  `(remove1-assoc-eq ,key ,alist))
+(defmacro delete-assoc (key alist)
+  `(remove1-assoc ,key ,alist))
+
 (defmacro remove-macro-alias (macro-name)
   `(table macro-aliases-table nil
           (let ((tbl (table-alist 'macro-aliases-table world)))
             (if (assoc-eq ',macro-name tbl)
-                (delete-assoc-eq-exec ',macro-name tbl)
+                (remove1-assoc-eq-exec ',macro-name tbl)
               (prog2$ (cw "~%NOTE:  the name ~x0 did not appear as a key in ~
                            macro-aliases-table.  Consider using :u or :ubt to ~
                            undo this event, which is harmless but does not ~
@@ -21874,8 +23422,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
        :guard
        (and (symbolp key)
             (not (eq key 'state))
-            (eq (getprop key 'accessor-names t
-                         'current-acl2-world world)
+            (eq (getpropc key 'accessor-names t world)
                 t)
             (symbolp val)
             (not (eq val 'state))))
@@ -21893,7 +23440,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   `(table nth-aliases-table nil
           (let ((tbl (table-alist 'nth-aliases-table world)))
             (if (assoc-eq ',alias-name tbl)
-                (delete-assoc-eq-exec ',alias-name tbl)
+                (remove1-assoc-eq-exec ',alias-name tbl)
               (prog2$ (cw "~%NOTE:  the name ~x0 did not appear as a key in ~
                            nth-aliases-table.  Consider using :u or :ubt to ~
                            undo this event, which is harmless but does not ~
@@ -21920,10 +23467,10 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 #+acl2-loop-only
 (defmacro set-default-hints! (lst)
-  `(state-global-let*
-    ((inhibit-output-lst (list* 'event 'summary (@ inhibit-output-lst))))
-    (progn (table default-hints-table t ,lst)
-           (table default-hints-table t))))
+  `(with-output
+     :off (event summary)
+     (progn (table default-hints-table t ,lst)
+            (table default-hints-table t))))
 
 #-acl2-loop-only
 (defmacro set-default-hints! (lst)
@@ -21935,17 +23482,17 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 #+acl2-loop-only
 (defmacro add-default-hints! (lst &key at-end)
-  `(state-global-let*
-    ((inhibit-output-lst (list* 'event 'summary (@ inhibit-output-lst))))
-    (progn (table default-hints-table t
-                  (if ,at-end
-                      (append (default-hints world) ,lst)
-                    (append ,lst (default-hints world))))
-           (table default-hints-table t))))
+  `(with-output
+     :off (event summary)
+     (progn (table default-hints-table t
+                   (if ,at-end
+                       (append (default-hints world) ,lst)
+                     (append ,lst (default-hints world))))
+            (table default-hints-table t))))
 
 #-acl2-loop-only
-(defmacro add-default-hints! (lst)
-  (declare (ignore lst))
+(defmacro add-default-hints! (lst &key at-end)
+  (declare (ignore lst at-end))
   nil)
 
 (defmacro remove-default-hints (lst)
@@ -21953,11 +23500,11 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 #+acl2-loop-only
 (defmacro remove-default-hints! (lst)
-  `(state-global-let*
-    ((inhibit-output-lst (list* 'event 'summary (@ inhibit-output-lst))))
-    (progn (table default-hints-table t
-                  (set-difference-equal (default-hints world) ,lst))
-           (table default-hints-table t))))
+  `(with-output
+     :off (event summary)
+     (progn (table default-hints-table t
+                   (set-difference-equal (default-hints world) ,lst))
+            (table default-hints-table t))))
 
 #-acl2-loop-only
 (defmacro remove-default-hints! (lst)
@@ -22214,10 +23761,10 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 #+acl2-loop-only
 (defmacro set-rw-cache-state! (val)
-  `(state-global-let*
-    ((inhibit-output-lst (list* 'event 'summary (@ inhibit-output-lst))))
-    (progn (table rw-cache-state-table t ,val)
-           (table rw-cache-state-table t))))
+  `(with-output
+     :off (event summary)
+     (progn (table rw-cache-state-table t ,val)
+            (table rw-cache-state-table t))))
 
 #-acl2-loop-only
 (defmacro set-rw-cache-state! (val)
@@ -22233,15 +23780,86 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
          ((t) (member-eq val *legal-rw-cache-states*))
          (t nil)))
 
-(defun fix-true-list (x)
-  (declare (xargs :guard t))
+(table induction-depth-limit-table nil nil
+       :guard
+       (and (eq key t)
+            (or (null val) ; no limit
+                (natp val))))
+
+(defconst *induction-depth-limit-default*
+
+; By default, abort if we attempt to induction past 9 levels.  If this constant
+; is changed, then change :doc induction-depth-limit.
+
+  9)
+
+(table induction-depth-limit-table t *induction-depth-limit-default*)
+
+#-acl2-loop-only
+(defmacro set-induction-depth-limit! (x)
+  (declare (ignore x))
+  nil)
+
+#+acl2-loop-only
+(defmacro set-induction-depth-limit! (val)
+  `(with-output
+     :off (event summary)
+     (progn (table induction-depth-limit-table t ,val)
+            (table induction-depth-limit-table t))))
+
+(defmacro set-induction-depth-limit (val)
+  `(local (set-induction-depth-limit! ,val)))
+
+; We thank Jared Davis for permission to adapt his function true-list-fix (and
+; supporting function true-list-fix-exec), below.  See :DOC note-8-2 for
+; further credits and explanation.
+
+(defun true-list-fix-exec (x)
+  (declare (xargs :guard t :mode :logic))
   (if (consp x)
       (cons (car x)
-            (fix-true-list (cdr x)))
+            (true-list-fix-exec (cdr x)))
     nil))
 
-(defthm pairlis$-fix-true-list
-  (equal (pairlis$ x (fix-true-list y))
+(defun true-list-fix (x)
+  (declare (xargs :guard t
+                  :mode :logic
+                  :verify-guards nil))
+  (mbe :logic
+       (if (consp x)
+           (cons (car x)
+                 (true-list-fix (cdr x)))
+         nil)
+       :exec
+       (if (true-listp x)
+           x
+         (true-list-fix-exec x))))
+
+(encapsulate
+  ()
+
+  (local (defthm true-list-fix-true-listp
+           (implies (true-listp x)
+                    (equal (true-list-fix x) x))
+           :hints (("Goal" :expand ((true-list-fix x))))))
+
+  (local (defthm true-list-fix-exec-removal
+           (equal (true-list-fix-exec x)
+                  (true-list-fix x))
+           :hints(("Goal" :in-theory (enable true-list-fix)))))
+
+  (verify-guards true-list-fix
+    :hints (("Goal" :expand ((true-list-fix x)))))
+  )
+
+(in-theory (disable true-list-fix-exec))
+
+(defmacro fix-true-list (x) `(true-list-fix ,x))
+
+(table macro-aliases-table 'fix-true-list 'true-list-fix)
+
+(defthm pairlis$-true-list-fix
+  (equal (pairlis$ x (true-list-fix y))
          (pairlis$ x y)))
 
 (defun boolean-listp (lst)
@@ -22354,7 +23972,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                (equal x 0))
            (equal (/ x) 0)))
 
-;; RAG - This axiom was strengthened to include the reals.
+;; Historical Comment from Ruben Gamboa:
+;; This axiom was strengthened to include the reals.
 
 (defaxiom completion-of-<
   (equal (< x y)
@@ -22437,17 +24056,17 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
            (code-char 0)))
   :rule-classes nil)
 
-; Omitted for now; maybe slows down the rewriter too much.
-;
-; (defthm default-code-char
-;   (implies (not (and (integerp x)
-;                      (>= x 0)
-;                      (< x 256)))
-;            (equal (code-char x)
-;                   (code-char 0)))
-;   :hints (("Goal" :use completion-of-code-char)))
+(defthm default-code-char
+  (implies (and (syntaxp (not (equal x ''0))) ; for efficiency
+                (not (and (integerp x)
+                          (>= x 0)
+                          (< x 256))))
+           (equal (code-char x)
+                  (code-char 0)))
+  :hints (("Goal" :use completion-of-code-char)))
 
-;; RAG - This axiom was strengthened to include the reals.
+;; Historical Comment from Ruben Gamboa:
+;; This axiom was strengthened to include the reals.
 
 (defaxiom completion-of-complex
   (equal (complex x y)
@@ -22455,7 +24074,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                   (if (real/rationalp y) y 0)))
   :rule-classes nil)
 
-;; RAG - This axiom was weakened to include the reals.
+;; Historical Comment from Ruben Gamboa:
+;; This axiom was weakened to include the reals.
 
 (defthm default-complex-1
   (implies (not (real/rationalp x))
@@ -22463,7 +24083,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                   (complex 0 y)))
   :hints (("Goal" :use completion-of-complex)))
 
-;; RAG - This axiom was weakened to include the reals.
+;; Historical Comment from Ruben Gamboa:
+;; This axiom was weakened to include the reals.
 
 (defthm default-complex-2
   (implies (not (real/rationalp y))
@@ -22472,14 +24093,12 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   :hints (("Goal" :use ((:instance completion-of-complex)
                         (:instance complex-definition (y 0))))))
 
-;; RAG - This axiom was modified to include the reals.
+;; Historical Comment from Ruben Gamboa:
+;; This axiom was modified to include the reals.
 
 (defthm complex-0
   (equal (complex x 0)
-         #+:non-standard-analysis
-         (realfix x)
-         #-:non-standard-analysis
-         (rfix x))
+         (realfix x))
   :hints (("Goal" :use ((:instance complex-definition (y 0))))))
 
 (defthm add-def-complex
@@ -22561,7 +24180,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                   1))
   :hints (("Goal" :use completion-of-denominator)))
 
-;; RAG - The following axioms give the rules for working with the
+;; Historical Comment from Ruben Gamboa:
+;; The following axioms give the rules for working with the
 ;; undefined predicate floor1.  We start with the completion axiom,
 ;; which says floor1 is only useful for real numbers.
 
@@ -22573,7 +24193,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
            0))
   :rule-classes nil)
 
-;; RAG - The second axiom about floor1 is that it returns 0 for any
+;; Historical Comment from Ruben Gamboa:
+;; The second axiom about floor1 is that it returns 0 for any
 ;; invalid argument.
 
 #+:non-standard-analysis
@@ -22582,14 +24203,16 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
            (equal (floor1 x)
                   0)))
 
-;; RAG - We also know that floor1 is the identity function for the integers.
+;; Historical Comment from Ruben Gamboa:
+;; We also know that floor1 is the identity function for the integers.
 
 #+:non-standard-analysis
 (defaxiom floor1-integer-x
   (implies (integerp x)
            (equal (floor1 x) x)))
 
-;; RAG - And, we know that the floor1 of x is no larger than x itself.
+;; Historical Comment from Ruben Gamboa:
+;; And, we know that the floor1 of x is no larger than x itself.
 
 #+:non-standard-analysis
 (defaxiom floor1-x-<=-x
@@ -22597,7 +24220,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
            (<= (floor1 x) x))
   :rule-classes :linear)
 
-;; RAG - Finally, we know that the floor1 of x is larger than x-1.
+;; Historical Comment from Ruben Gamboa:
+;; Finally, we know that the floor1 of x is larger than x-1.
 
 #+:non-standard-analysis
 (defaxiom x-<-add1-floor1-x
@@ -22605,7 +24229,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
            (< x (1+ (floor1 x))))
   :rule-classes :linear)
 
-;; RAG - This theorem is useful for proving the value of floor1 is a
+;; Historical Comment from Ruben Gamboa:
+;; This theorem is useful for proving the value of floor1 is a
 ;; specific value.  It is probably only useful when instantiated
 ;; manually, so we do not make it a rewrite rule.
 
@@ -22642,12 +24267,12 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
            nil))
   :rule-classes nil)
 
-; (defthm default-intern-in-package-of-symbol
-;   (implies (not (and (stringp x)
-;                      (symbolp y)))
-;            (equal (intern-in-package-of-symbol x y)
-;                   nil))
-;   :hints (("Goal" :use completion-of-intern-in-package-of-symbol)))
+(defthm default-intern-in-package-of-symbol
+  (implies (not (and (stringp x)
+                     (symbolp y)))
+           (equal (intern-in-package-of-symbol x y)
+                  nil))
+  :hints (("Goal" :use completion-of-intern-in-package-of-symbol)))
 
 (defaxiom completion-of-numerator
   (equal (numerator x)
@@ -22699,7 +24324,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                   ""))
   :hints (("Goal" :use completion-of-symbol-package-name)))
 
-;; RAG - Here, I put in the basic theory that we will use for
+;; Historical Comment from Ruben Gamboa:
+;; Here, I put in the basic theory that we will use for
 ;; non-standard analysis.
 
 #+:non-standard-analysis
@@ -22734,7 +24360,8 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 
 ; Now, we have some axioms about standardp.  Standardp
 ; behaves reasonably with respect to the arithmetic operators.
-; RAGTODO: Some of these are theorems now, and should be introduced
+; Historical Comment from Ruben Gamboa:
+; TODO: Some of these are theorems now, and should be introduced
 ; as theorems instead of axioms.
 
 (defaxiom standardp-plus
@@ -22980,6 +24607,9 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
                     (cond (temp (mv step-limit temp nil nil nil nil))
                           (t (mv step-limit nil x1 x2 x3 x4)))))))
 
+(defconst *interrupt-string*
+  "Aborting due to an interrupt.")
+
 (defun time-limit5-reached-p (msg)
 
 ; Where should we call this function?  We want to strike a balance between
@@ -23017,7 +24647,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
              (< *acl2-time-limit* (get-internal-time)))
     (setq *next-acl2-oracle-value*
           (if (eql *acl2-time-limit* 0)
-              "Aborting due to an interrupt."
+              *interrupt-string*
             msg))
     (throw 'time-limit5-tag
            (mv (f-get-global 'last-step-limit *the-live-state*)
@@ -23074,18 +24704,76 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; However, with-guard-checking lays down a call of chk-with-guard-checking-arg,
 ; which is called before return-last passes control to the present macro.
 
-  (let ((v (global-symbol 'guard-checking-on)))
-    `(let ((,v ,val))
-       (declare (special ,v))
-       ,form)))
+; We could probably let-bind the global-symbol of 'guard-checking-on rather
+; than using state-free-global-let*, and that might be slightly more efficient.
+; But this way is more robust in case state is accessed in form using
+; with-local-state or raw Lisp.
 
-(defmacro with-guard-checking1 (val form)
-  `(return-last 'with-guard-checking1-raw ,val ,form))
+  `(state-free-global-let*
+    ((guard-checking-on ,val))
+    ,form))
+
+(defmacro with-guard-checking1 (val gated-form)
+  `(return-last 'with-guard-checking1-raw ,val ,gated-form))
+
+(defun with-guard-checking-gate (form)
+
+; This is a custom version of check-vars-not-free, used by with-guard-checking.
+
+  (declare (xargs :guard t))
+  `(lambda (term)
+     (or (not (member-eq 'state (all-vars term)))
+         (msg "It is forbidden to use ~x0 in the scope of a call of ~x1, but ~
+               ~x0 occurs in the [translation of] the form ~x2.  Consider ~
+               using ~x3 instead."
+              'state
+              'with-guard-checking
+              ',form
+              'with-guard-checking-error-triple))))
 
 (defmacro with-guard-checking (val form)
   (declare (xargs :guard t))
-  `(with-guard-checking1 (chk-with-guard-checking-arg ,val)
-                         ,form))
+  `(with-guard-checking1
+    (chk-with-guard-checking-arg ,val)
+    (translate-and-test
+     ,(with-guard-checking-gate form)
+
+; Through Version_7.1, the following events all succeeded, which could be
+; viewed as a soundness bug.  The problem is clear from this example: we are
+; binding the state global 'guard-checking-on in raw Lisp but not in the logic.
+; We now solve this problem by insisting that state is not free in the form.
+; Otherwise, one should consider using state-global-let* to bind
+; 'guard-checking-on, as with any state global.  If that proves to be a
+; hardship, we might consider a new construct that allows binding state globals
+; without returning state, trusting that the effects of those bindings will be
+; undone when exiting the scope of that construct.
+
+;   (defun foo (state)
+;     (declare (xargs :stobjs state
+;                      :guard (f-boundp-global 'guard-checking-on state)))
+;     (with-guard-checking :all (f-get-global 'guard-checking-on state)))
+;
+;   (thm (equal (foo state)
+;               (f-get-global 'guard-checking-on state)))
+;
+;   (assert-event (not (equal (foo state)
+;                             (f-get-global 'guard-checking-on state))))
+
+     ,form)))
+
+(defmacro with-guard-checking-error-triple (val form)
+  `(prog2$ (chk-with-guard-checking-arg ,val)
+           (state-global-let* ((guard-checking-on ,val))
+                              ,form)))
+
+#+acl2-loop-only
+(defmacro with-guard-checking-event (val form)
+  `(with-guard-checking-error-triple ,val ,form))
+
+#-acl2-loop-only
+(defmacro with-guard-checking-event (val form)
+  (declare (ignore val))
+  form)
 
 (defun abort! ()
   (declare (xargs :guard t))
@@ -23179,6 +24867,61 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   #+acl2-loop-only
   form)
 
+(defmacro our-with-terminal-input (x)
+
+; The comments below were developed with David Rager.
+
+; This identity macro was intended to have the side effect of permitting a
+; thread to read from the terminal when another thread already has the lock on
+; that.  However, that didn't work out, so it is now truly the identity macro,
+; without side effect.
+
+; Consider this CCL page:
+
+; https://ccl.clozure.com/manual/chapter7.5.html#Background-Terminal-Input
+
+; That page notes in particular:
+
+;   This scheme is certainly not bulletproof: imaginative use of
+;   PROCESS-INTERRUPT and similar functions might be able to defeat it and
+;   deadlock the lisp, and any scenario where several background processes are
+;   clamoring for access to the shared terminal input stream at the same time
+;   is likely to be confusing and chaotic.
+
+; Perhaps our use of PROCESS-INTERRUPT and THROW to abort subgoal proofs
+; qualifies as "imaginative use"; if not, then we may have exposed a heretofore
+; unknown CCL bug.  Specifically, if we define this macro to call
+; ccl::with-terminal-input, then we reliably see a hang when attempting to
+; certify community book books/std/osets/under-set-equiv.lisp.  When we look at
+; backtraces, we see that the main thread is waiting either for a future to
+; finish or for the wormhole lock, while the worker thread (which we have seen
+; can be holding the wormhole lock) is waiting on *terminal-io*.  Rager
+; believes that wormhole locks are managed correctly, and the problem is likely
+; that some other worker thread is still holding onto the *terminal-io*
+; resource.  Consider this recursive lock wait for the worker thread.
+
+; (7FA42D62C318) : 8 (%ACQUIRE-SHARED-RESOURCE #S(CCL::SHARED-RESOURCE :NAME
+; "Shared Terminal Input" :LOCK #<RECURSIVE-LOCK [ptr @ #x18FB2C0]
+; #x30200437983D> ...) T) 1421
+
+; Rager believes that the underlying CCL issue is present even without the use
+; of ccl::with-terminal-input; its use simply slows down execution sufficiently
+; to make a hang much more likely.
+
+; If we ever restore the use of ccl::with-terminal-input, then beware that
+; other threads that need the *terminal-io* resource will be blocked until the
+; caller of our-with-terminal-input completes.
+
+; But for now, we simply make this the identity macro, in case clearer thinking
+; on our part or CCL improvements provide a suitable way to invoke
+; ccl::with-terminal-input.
+
+; #+(and ccl acl2-par (not acl2-loop-only))
+; `(ccl::with-terminal-input ,x)
+; #-(and ccl acl2-par (not acl2-loop-only))
+
+  x)
+
 (defun wormhole1 (name input form ld-specials)
 
 ; Here is the world's fanciest no-op.
@@ -23194,37 +24937,38 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   nil
 
   #-acl2-loop-only
-  (cond
-   (*inhibit-wormhole-activityp* nil)
-   ((let ((temp (cdr (assoc-equal name *wormhole-status-alist*))))
+  (our-with-terminal-input
+   (cond
+    (*inhibit-wormhole-activityp* nil)
+    ((let ((temp (cdr (assoc-equal name *wormhole-status-alist*))))
 
 ; Note:  Below we inline wormhole-entry-code, to be defined later.
 
-      (and (consp temp)
-           (eq (car temp) :SKIP)))
-    nil)
-   (t
-    (let ((*wormholep* t)
-          (state *the-live-state*)
-          (*wormhole-cleanup-form*
+       (and (consp temp)
+            (eq (car temp) :SKIP)))
+     nil)
+    (t
+     (let ((*wormholep* t)
+           (state *the-live-state*)
+           (*wormhole-cleanup-form*
 
 ; WARNING:  The own-cons and the progn form constructed below must be NEW!
 ; See note below.
 
-           (let ((own-cons (cons nil nil)))
-             (list 'progn
-                   `(cond ((car (quote ,own-cons))
-                           (error "Attempt to execute *wormhole-cleanup-form* ~
+            (let ((own-cons (cons nil nil)))
+              (list 'progn
+                    `(cond ((car (quote ,own-cons))
+                            (error "Attempt to execute *wormhole-cleanup-form* ~
                                    twice!"))
-                          (t (setq *wormhole-status-alist*
-                                   (put-assoc-equal
-                                    ',name
-                                    (f-get-global 'wormhole-status
-                                                  *the-live-state*)
-                                    *wormhole-status-alist*))))
-                   `(fix-trace ',(f-get-global 'trace-specs *the-live-state*))
-                   `(setf (car (quote ,own-cons)) t)
-                   'state))))
+                           (t (setq *wormhole-status-alist*
+                                    (put-assoc-equal
+                                     ',name
+                                     (f-get-global 'wormhole-status
+                                                   *the-live-state*)
+                                     *wormhole-status-alist*))))
+                    `(fix-trace ',(f-get-global 'trace-specs *the-live-state*))
+                    `(setf (car (quote ,own-cons)) t)
+                    'state))))
 
 ; Note: What's going on above? The cleanup form's spine is new conses because
 ; we smash them, inserting new formi's between the cond and the setf.  When
@@ -23243,43 +24987,43 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; got executed once by Lisp's unwind-protect and later by our acl2-unwind or
 ; the eval below.
 
-      (cond ((null name) (return-from wormhole1 nil)))
-      (push-car (cons "Post-hoc unwind-protect for wormhole"
+       (cond ((null name) (return-from wormhole1 nil)))
+       (push-car (cons "Post-hoc unwind-protect for wormhole"
 
 ; Robert Krug tells us that CCL complained before we introduced function
 ; below.  We use a non-special lexical variable to capture the current value of
 ; *wormhole-cleanup-form* (as we formerly did) as we push the function onto the
 ; stack.
 
-                      (let ((acl-non-special-var *wormhole-cleanup-form*))
-                        (function
-                         (lambda nil (eval acl-non-special-var)))))
-                *acl2-unwind-protect-stack*
-                'wormhole1)
+                       (let ((acl-non-special-var *wormhole-cleanup-form*))
+                         (function
+                          (lambda nil (eval acl-non-special-var)))))
+                 *acl2-unwind-protect-stack*
+                 'wormhole1)
 
 ; The f-put-globals about to be performed will be done undoably.
 
-      (f-put-global 'wormhole-name name state)
-      (f-put-global 'wormhole-input input state)
-      (f-put-global 'wormhole-status
-                    (cdr (assoc-equal name *wormhole-status-alist*))
-                    state)
-      (bind-acl2-time-limit
+       (f-put-global 'wormhole-name name state)
+       (f-put-global 'wormhole-input input state)
+       (f-put-global 'wormhole-status
+                     (cdr (assoc-equal name *wormhole-status-alist*))
+                     state)
+       (bind-acl2-time-limit
 
 ; See the comments in bind-acl2-time-limit to understand why we are using it
 ; here.
 
-       (ld-fn (append
-               `((standard-oi . (,form . ,*standard-oi*))
-                 (standard-co . ,*standard-co*)
-                 (proofs-co . ,*standard-co*))
-               ld-specials)
-              state
-              t)
-       nil)
-      (eval *wormhole-cleanup-form*)
-      (pop (car *acl2-unwind-protect-stack*))
-      nil))))
+        (ld-fn (append
+                `((standard-oi . (,form . ,*standard-oi*))
+                  (standard-co . ,*standard-co*)
+                  (proofs-co . ,*standard-co*))
+                ld-specials)
+               state
+               t)
+        nil)
+       (eval *wormhole-cleanup-form*)
+       (pop (car *acl2-unwind-protect-stack*))
+       nil)))))
 
 (defun wormhole-p (state)
   (declare (xargs :guard (state-p state)))
@@ -23355,9 +25099,9 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ;    because they are what they seem.  Such functions are defined here in
 ;    axioms.lisp.
 
-; 3. Functions of the second type are introduced with unknown constraints from
-;    a define-trusted-clause-processor event, and are defined in raw
-;    Lisp using the defun-overrides mechanism.
+; 3. Functions of the second type are introduced with unknown-constraints using
+;    a partial-encapsulate, and are defined in raw Lisp using the
+;    defun-overrides mechanism.
 
 ; In the next four paragraphs, we typically refer only to metafunctions, but
 ; most of the below applies to meta-level functions generally.
@@ -23566,7 +25310,7 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
         '(CDR (CAR (CDR (CDR (CDR (CDR CURRENT-CLAUSE))))))))
 
 (defun record-error (name rec)
-  (declare (xargs :guard t))
+  (declare (xargs :guard t :mode :logic))
   (er hard? 'record-error
       "An attempt was made to treat ~x0 as a record of type ~x1."
       rec name))
@@ -23647,10 +25391,10 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
 ; We check that (cadr x) is between *min-type-set* and *max-type-set*, which
 ; are checked by check-built-in-constants.
 
-       (<= #-:non-standard-analysis -8192 #+:non-standard-analysis -65536
+       (<= #-:non-standard-analysis -16384 #+:non-standard-analysis -131072
            (cadr x))
        (<= (cadr x)
-           #-:non-standard-analysis 8191 #+:non-standard-analysis 65535)))
+           #-:non-standard-analysis 16383 #+:non-standard-analysis 131071)))
 
 (defun type-alistp (x)
   (declare (xargs :guard t))
@@ -24053,17 +25797,38 @@ Lisp definition."
   (declare (xargs :mode :logic :verify-guards t))
   (if x y z))
 
+(defun resize-list-exec (lst n default-value acc)
+  (declare (xargs :guard (true-listp acc)))
+  (if (and (integerp n) (> n 0))
+      (resize-list-exec (if (atom lst) lst (cdr lst))
+                        (1- n)
+                        default-value
+                        (cons (if (atom lst) default-value (car lst))
+                              acc))
+    (reverse acc)))
+
 (defun resize-list (lst n default-value)
 
 ; This function supports stobjs.
 
-  (declare (xargs :guard t))
-  (if (and (integerp n) (> n 0))
-      (cons (if (atom lst) default-value (car lst))
-            (resize-list (if (atom lst) lst (cdr lst))
-                         (1- n)
-                         default-value))
-    nil))
+  (declare (xargs :guard t :verify-guards nil))
+  (mbe :logic
+       (if (and (integerp n) (> n 0))
+           (cons (if (atom lst) default-value (car lst))
+                 (resize-list (if (atom lst) lst (cdr lst))
+                              (1- n)
+                              default-value))
+         nil)
+       :exec ; tail-recursive
+       (resize-list-exec lst n default-value nil)))
+
+(defthm resize-list-exec-is-resize-list
+  (implies (true-listp acc)
+           (equal (resize-list-exec lst n default-value acc)
+                  (revappend acc
+                             (resize-list lst n default-value)))))
+
+(verify-guards resize-list)
 
 ; Define e/d, adapted with only minor changes from Bishop Brock's community
 ; book books/ihs/ihs-init.lisp.
@@ -24093,6 +25858,11 @@ Lisp definition."
 ; the comment in the encapsulate that follows.  Note that preceding in-theory
 ; events are skipped during pass 1 of the boot-strap, since we are only just
 ; now entering :logic mode and in-theory events are skipped in :program mode.
+; Added 2/21/2016: The build succeeds for CCL and SBCL even when the next form
+; is commented out, but on a Mac at least, rather little time is saved:
+; 0m51.160s down to 0m48.163s for CCL, and 1m9.987s down to 1m8.409s for SBCL.
+; And even though those builds succeeded, we didn't check that the resulting
+; saved image is correct by running a regression.
 
 #+acl2-loop-only
 (f-put-global 'ld-skip-proofsp nil state) ; (set-ld-skip-proofsp nil state)
@@ -24130,6 +25900,16 @@ Lisp definition."
 ; string-append.
  (verify-termination-boot-strap string-append)
 
+; The following must be in :logic mode for badged-fns-of-world.
+ (verify-termination-boot-strap plist-worldp)
+ (verify-termination-boot-strap fgetprop)
+ (verify-termination-boot-strap sgetprop)
+ (verify-termination-boot-strap function-symbolp)
+ (verify-termination-boot-strap strip-cars)
+ (verify-termination-boot-strap assoc-eq-exec$guard-check)
+ (verify-termination-boot-strap assoc-eq-exec)
+ (verify-termination-boot-strap table-alist)
+
  )
 
 (defun mod-expt (base exp mod)
@@ -24154,95 +25934,6 @@ Lisp definition."
 
     (return-from mod-expt (si::powm base exp mod)))
   (mod (expt base exp) mod))
-
-(defmacro fcons-term* (&rest x)
-
-; ; Start experimental code mod, to check that calls of fcons-term are legitimate
-; ; shortcuts in place of the corresponding known-correct calls of cons-term.
-;   #-acl2-loop-only
-;   `(let* ((fn-used-only-in-fcons-term* ,(car x))
-;           (args-used-only-in-fcons-term* (list ,@(cdr x)))
-;           (result (cons fn-used-only-in-fcons-term*
-;                         args-used-only-in-fcons-term*)))
-;      (assert$ (equal result (cons-term fn-used-only-in-fcons-term*
-;                                        args-used-only-in-fcons-term*))
-;               result))
-;   #+acl2-loop-only
-; ; End experimental code mod.
-
-  (cons 'list x))
-
-(defun conjoin2 (t1 t2)
-
-; This function returns a term representing the logical conjunction of
-; t1 and t2.  The term is IFF-equiv to (AND t1 t2).  But, the term is
-; not EQUAL to (AND t1 t2) because if t2 is *t* we return t1's value,
-; while (AND t1 t2) would return *t* if t1's value were non-NIL.
-
-  (declare (xargs :guard t))
-  (cond ((equal t1 *nil*) *nil*)
-        ((equal t2 *nil*) *nil*)
-        ((equal t1 *t*) t2)
-        ((equal t2 *t*) t1)
-        (t (fcons-term* 'if t1 t2 *nil*))))
-
-(defun conjoin (l)
-  (declare (xargs :guard (true-listp l)))
-  (cond ((endp l) *t*)
-        ((endp (cdr l)) (car l))
-        (t (conjoin2 (car l) (conjoin (cdr l))))))
-
-(defun conjoin2-untranslated-terms (t1 t2)
-
-; See conjoin2.  This function has the analogous spec, but where t1 and t2 need
-; not be translated.
-
-  (declare (xargs :guard t))
-  (cond ((or (equal t1 *nil*) (eq t1 nil))
-         *nil*)
-        ((or (equal t2 *nil*) (eq t2 nil))
-         *nil*)
-        ((or (equal t1 *t*) (eq t1 t))
-         t2)
-        ((or (equal t2 *t*) (eq t2 t))
-         t1)
-        (t (fcons-term* 'if t1 t2 *nil*))))
-
-(defun conjoin-untranslated-terms (l)
-
-; This function is analogous to conjoin, but where t1 and t2 need not be
-; translated.
-
-  (declare (xargs :guard (true-listp l)))
-  (cond ((endp l) *t*)
-        ((endp (cdr l)) (car l))
-        (t (conjoin2-untranslated-terms
-            (car l)
-            (conjoin-untranslated-terms (cdr l))))))
-
-(defun disjoin2 (t1 t2)
-
-; We return a term IFF-equiv (but not EQUAL) to (OR t1 t2).  For example,
-; if t1 is 'A and t2 is 'T, then we return 'T but (OR t1 t2) is 'A.
-
-  (declare (xargs :guard t))
-  (cond ((equal t1 *t*) *t*)
-        ((equal t2 *t*) *t*)
-        ((equal t1 *nil*) t2)
-        ((equal t2 *nil*) t1)
-        (t (fcons-term* 'if t1 *t* t2))))
-
-(defun disjoin (lst)
-  (declare (xargs :guard (true-listp lst)))
-  (cond ((endp lst) *nil*)
-        ((endp (cdr lst)) (car lst))
-        (t (disjoin2 (car lst) (disjoin (cdr lst))))))
-
-(defun disjoin-lst (clause-list)
-  (declare (xargs :guard (true-list-listp clause-list)))
-  (cond ((endp clause-list) nil)
-        (t (cons (disjoin (car clause-list))
-                 (disjoin-lst (cdr clause-list))))))
 
 (defun conjoin-clauses (clause-list)
   (declare (xargs :guard (true-list-listp clause-list)))
@@ -24387,10 +26078,10 @@ Lisp definition."
 (defconst *hint-keywords*
 
 ; This constant contains all the legal hint keywords as well as
-; :computed-hints-replacement.
+; :computed-hint-replacement.
 
   (append *top-hint-keywords*
-          '(:computed-hints-replacement
+          '(:computed-hint-replacement
             :error
             :no-op
             :no-thanks
@@ -24441,7 +26132,7 @@ Lisp definition."
   `(table custom-keywords-table nil
           (let ((tbl (table-alist 'custom-keywords-table world)))
             (if (assoc-eq ',keyword tbl)
-                (delete-assoc-eq-exec ',keyword tbl)
+                (remove1-assoc-eq-exec ',keyword tbl)
               (prog2$ (cw "~%NOTE:  the name ~x0 did not appear as a key in ~
                            custom-keywords-table.  Consider using :u or :ubt to ~
                            undo this event, which is harmless but does not ~
@@ -24593,19 +26284,17 @@ Lisp definition."
     :hints (("Goal" :in-theory (enable standard-char-listp)))))
 
  (local
-  (defthm standard-char-listp-first-n-ac
+  (defthm standard-char-listp-of-take
     (implies (and (standard-char-listp x)
-                  (standard-char-listp ac)
                   (<= n (len x)))
-             (standard-char-listp (first-n-ac n x ac)))
+             (standard-char-listp (take n x)))
     :hints (("Goal" :in-theory (enable standard-char-listp)))))
 
  (local
-  (defthm character-listp-first-n-ac
+  (defthm character-listp-of-take
     (implies (and (character-listp x)
-                  (character-listp ac)
                   (<= n (len x)))
-             (character-listp (first-n-ac n x ac)))))
+             (character-listp (take n x)))))
 
  (local
   (defthm character-listp-nthcdr
@@ -24639,12 +26328,6 @@ Lisp definition."
            (true-listp y))))
 
  (local
-  (defthm true-listp-first-n-ac
-    (implies (and (true-listp acc)
-                  (true-listp lst))
-             (true-listp (first-n-ac n lst acc)))))
-
- (local
   (defthm true-listp-nthcdr
     (implies (true-listp x)
              (true-listp (nthcdr n x)))))
@@ -24661,10 +26344,9 @@ Lisp definition."
            (+ (len x) (len y)))))
 
  (local
-  (defthm len-first-n-ac
-    (implies (true-listp ac)
-             (equal (len (first-n-ac n lst ac))
-                    (+ (nfix n) (len ac))))))
+  (defthm len-of-take
+    (equal (len (take n lst))
+           (nfix n))))
 
  (local
   (defthm len-subseq
@@ -24786,8 +26468,10 @@ Lisp definition."
 (defmacro count (item sequence &key (start '0) end)
   `(count-fn ,item ,sequence ,start ,end))
 
-; Skipped on first (:program mode) pass:
+; Skipped on first pass of the build:
 (verify-termination-boot-strap cpu-core-count)
+(verify-termination-boot-strap get-in-theory-redundant-okp)
+(verify-termination-boot-strap dumb-occur-var)
 
 ; We need for sharp-atsign-alist to be compiled before it is called in
 ; *sharp-atsign-ar*, file basis.lisp.  So we put its definition here, along
@@ -24935,6 +26619,9 @@ Lisp definition."
                    (mintime '0 mintime-p)
                    (real-mintime 'nil real-mintime-p)
                    run-mintime minalloc msg args)
+
+; Warning: Keep this in sync with the generation of time$ calls by untranslate1.
+
   (declare (xargs :guard t))
   (cond
    ((and real-mintime-p mintime-p)
@@ -24948,89 +26635,11 @@ Lisp definition."
                ,x)))))
 
 #-acl2-loop-only
-(progn
-
-(defmacro our-multiple-value-prog1 (form &rest other-forms)
-
-; WARNING: If other-forms causes any calls to mv, then use protect-mv so that
-; when #-acl2-mv-as-values, the multiple values returned by evaluation of form
-; are those returned by the call of our-multiple-value-prog1.
-
-  `(#+acl2-mv-as-values
-    multiple-value-prog1
-    #-acl2-mv-as-values
-    prog1
-    ,form
-    ,@other-forms))
-
-(eval `(mv ,@(make-list *number-of-return-values* :initial-element 0)))
-
-#-acl2-mv-as-values
-(defconst *mv-vars*
-  (let ((ans nil))
-    (dotimes (i (1- *number-of-return-values*))
-      (push (gensym) ans))
-    ans))
-
-#-acl2-mv-as-values
-(defconst *mv-var-values*
-  (mv-refs-fn (1- *number-of-return-values*)))
-
-#-acl2-mv-as-values
-(defconst *mv-extra-var* (gensym))
-
-(defun protect-mv (form &optional multiplicity)
-
-; We assume here that form is evaluated only for side effect and that we don't
-; care what is returned by protect-mv.  All we care about is that form is
-; evaluated and that all values stored by mv will be restored after the
-; evaluation of form.
-
-  #+acl2-mv-as-values
-  (declare (ignore multiplicity))
-  #-acl2-mv-as-values
-  (when (and multiplicity
-             (not (and (integerp multiplicity)
-                       (< 0 multiplicity))))
-    (error "PROTECT-MV must be called with an explicit multiplicity, when ~
-            supplied, unlike ~s"
-           multiplicity))
-  `(progn
-     #+acl2-mv-as-values
-     ,form
-     #-acl2-mv-as-values
-     ,(cond
-       ((eql multiplicity 1)
-        form)
-       ((eql multiplicity 2)
-        `(let ((,(car *mv-vars*)
-                ,(car *mv-var-values*)))
-           ,form
-           (mv 0 ,(car *mv-vars*))))
-       (t (mv-let (mv-vars mv-var-values)
-                  (cond (multiplicity
-                         (mv (nreverse
-                              (let ((ans nil)
-                                    (tail *mv-vars*))
-                                (dotimes (i (1- multiplicity))
-                                  (push (car tail) ans)
-                                  (setq tail (cdr tail)))
-                                ans))
-                             (mv-refs-fn (1- multiplicity))))
-                        (t (mv *mv-vars* *mv-var-values*)))
-                  `(mv-let ,(cons *mv-extra-var* mv-vars)
-                           (mv 0 ,@mv-var-values)
-                           (declare (ignore ,*mv-extra-var*))
-                           (progn ,form
-                                  (mv 0 ,@mv-vars))))))
-     nil))
-)
-
-#-acl2-loop-only
 (defmacro heap-bytes-allocated ()
   '(the-mfixnum #+ccl (ccl::total-bytes-allocated)
                 #+sbcl (sb-ext:get-bytes-consed)
-                #-(or ccl sbcl)
+                #+lispworks (hcl:total-allocation)
+                #-(or ccl sbcl lispworks)
                 (error "Heap-bytes-allocated is unknown for this host Lisp.")))
 
 #-acl2-loop-only
@@ -25042,7 +26651,7 @@ Lisp definition."
         (g-args (gensym))
         (g-start-real-time (gensym))
         (g-start-run-time (gensym))
-        #+(or ccl sbcl)
+        #+(or ccl sbcl lispworks)
         (g-start-alloc (gensym)))
     `(let ((,g-real-mintime ,real-mintime)
            (,g-run-mintime ,run-mintime)
@@ -25093,7 +26702,7 @@ Lisp definition."
                 (,g-start-run-time
                  #-gcl (get-internal-run-time)
                  #+gcl (multiple-value-list (get-internal-run-time)))
-                #+(or ccl sbcl)
+                #+(or ccl sbcl lispworks)
                 (,g-start-alloc (heap-bytes-allocated)))
            (our-multiple-value-prog1
             ,x
@@ -25102,7 +26711,7 @@ Lisp definition."
                        #-gcl (get-internal-run-time)
                        #+gcl (multiple-value-list (get-internal-run-time)))
                       (end-real-time (get-internal-real-time))
-                      #+(or ccl sbcl) ; evaluate before computations below:
+                      #+(or ccl sbcl lispworks) ; before computations below:
                       (allocated (- (heap-bytes-allocated)
                                     ,g-start-alloc))
                       (float-units-sec (float internal-time-units-per-second))
@@ -25131,7 +26740,7 @@ Lisp definition."
                                    (< real-elapsed (float ,g-real-mintime)))
                               (and ,g-run-mintime
                                    (< run-elapsed (float ,g-run-mintime)))
-                              #+(or ccl sbcl)
+                              #+(or ccl sbcl lispworks)
                               (and ,g-minalloc
                                    (< allocated ,g-minalloc))))
                    (let* ((alist (list* (cons #\t (format nil "~,2F"
@@ -25151,9 +26760,9 @@ Lisp definition."
                                                         nil "~,2F"
                                                         child-sys-elapsed)))
                                         (cons #\a
-                                              #+(or ccl sbcl)
+                                              #+(or ccl sbcl lispworks)
                                               (format nil "~:D" allocated)
-                                              #-(or ccl sbcl)
+                                              #-(or ccl sbcl lispworks)
                                               "[unknown]")
                                         (cons #\f ',x)
                                         (cons #\e (evisc-tuple
@@ -25166,7 +26775,7 @@ Lisp definition."
                                                          #\5 #\6 #\7 #\8 #\9)
                                                        ,g-args))))
                           (,g-msg (or ,g-msg
-                                      #+(or ccl sbcl)
+                                      #+(or ccl sbcl lispworks)
                                       "; ~Xfe took ~|; ~st seconds realtime, ~
                                        ~sc seconds runtime~|; (~sa bytes ~
                                        allocated).~%"
@@ -25182,7 +26791,7 @@ Lisp definition."
                                         "; ~Xfe took ~|; ~st sec ~
                                          realtime, ~sc sec runtime, ~sC ~
                                          sec child runtime.~%"))
-                                      #-(or ccl gcl)
+                                      #-(or ccl sbcl lispworks gcl)
                                       "; ~Xfe took~|; ~st seconds realtime, ~
                                        ~sc seconds runtime.~%")))
                      (state-free-global-let*
@@ -25190,7 +26799,8 @@ Lisp definition."
                        (fmt-soft-right-margin 100000))
                       (fmt-to-comment-window
                        ,g-msg alist 0
-                       (abbrev-evisc-tuple *the-live-state*))))))))))))))
+                       (abbrev-evisc-tuple *the-live-state*)
+                       nil)))))))))))))
 
 (encapsulate
  ()
@@ -25200,13 +26810,8 @@ Lisp definition."
     (equal (true-listp (revappend x y))
            (true-listp y))))
 
- (local
-  (defthm true-listp-first-n-ac
-    (implies (and (true-listp acc)
-                  (true-listp lst))
-             (true-listp (first-n-ac n lst acc)))))
-
  (verify-guards throw-nonexec-error)
+ (verify-guards defun-nx-form)
  (verify-guards defun-nx-fn)
  (verify-guards update-mutual-recursion-for-defun-nx-1)
  (verify-guards update-mutual-recursion-for-defun-nx)
@@ -25292,18 +26897,84 @@ Lisp definition."
    (read-acl2-oracle state))
 
 (defun file-write-date$ (file state)
+
+; File is an ACL2 filename; see the Essay on Pathnames.
+
   (declare (xargs :guard (stringp file)
-                  :stobjs state))
-  #+acl2-loop-only
-  (declare (ignore file))
+                  :stobjs state)
+           (ignorable file))
   #+(not acl2-loop-only)
   (when (live-state-p state)
-    (return-from file-write-date$
-                 (mv (our-ignore-errors (file-write-date file)) state)))
+    (return-from
+     file-write-date$
+     (mv (our-ignore-errors
+          (file-write-date (pathname-unix-to-os file state)))
+         state)))
   (mv-let (erp val state)
           (read-acl2-oracle state)
           (mv (and (null erp)
                    (posp val)
+                   val)
+              state)))
+
+(defun delete-file$ (file state)
+
+; File is an ACL2 pathname; see the Essay on Pathnames.
+
+; It may seem a bit surprising that this function does not update the
+; file-clock of the state.  To see why that isn't necessary, let us review the
+; role of the file-clock (also see :DOC state).  When open-input-channel opens
+; a channel, it logically associates that channel in the open-input-channels
+; field of the state with (among other things) "header" information that
+; includes an incremented file-clock; similarly for close-input-channel and the
+; read-files field of the state.  Updates using an incremented file-clock also
+; take place for open-output-channel and close-output-channel for fields
+; writeable-files and written-files, respectively.  Moreover: logically, when
+; we open an input channel we magically grab the full contents of the file that
+; we will ultimately read associate them with the channel, and these are popped
+; by functions that read, such as read-char$; rather dually, we push values on
+; the open-output-channels entries when we call functions that write, such as
+; print-object$, and then deposit all those values in written-files when we
+; close the channel.
+
+; We would get into trouble logically if we could get different answers when
+; obtaining two different values from two reads of the same file when the two
+; states agree on their state fields that pertain to contents of channels and
+; files.  But this can't happen, because the file-clock is incremented
+; immediately before we create a channel.  In particular, when we open an input
+; channel we access a readable-files entry based on a file-clock that we
+; haven't yet seen, since the file-clock is incremented first.  So we can never
+; see what we already wrote!  This avoids the problem of seeing contents in a
+; file that we didn't put there because an external agent wrote to that file.
+; It also avoids the problem of opening a channel to a non-existent file that
+; used to exist: all file-related entries in various state fields are
+; associated with earlier file-clocks than the one associated with the new
+; channel.
+
+; So in particular, if we open or close a channel at file-clock fc1 and then
+; run delete-file$, a subsequent open or close will involve entries whose
+; file-clock is greater than fc1.  Thus, there will be no way to detect
+; logically any effect of delete-file$ on the four state fields above, since
+; nothing was known about fields for file-clock exceeding fc1 before running
+; delete-file$.  The special case of read-file-into-string is also handled,
+; because of reliance on the file-write-date when the file-clock hasn't
+; changed; see *read-file-alist*.
+
+  (declare (xargs :guard (stringp file)
+                  :stobjs state))
+  #+acl2-loop-only
+  (declare (ignore file))
+  #-acl2-loop-only
+  (when (live-state-p state)
+    (return-from
+     delete-file$
+     (mv (our-ignore-errors
+          (delete-file (pathname-unix-to-os file state)))
+         state)))
+  (mv-let (erp val state)
+          (read-acl2-oracle state)
+          (mv (and (null erp)
+                   (natp val)
                    val)
               state)))
 
@@ -25361,6 +27032,7 @@ Lisp definition."
 
   10000)
 
+#-acl2-loop-only
 (defun print-call-history ()
 
 ; We welcome suggestions from users or Lisp-specific experts for how to improve
@@ -25368,7 +27040,6 @@ Lisp definition."
 ; stack.
 
   (declare (xargs :guard t))
-  #-acl2-loop-only
   (when (f-get-global 'boot-strap-flg *the-live-state*)
 
 ; We don't know why SBCL 1.0.37 hung during guard verification of
@@ -25376,7 +27047,21 @@ Lisp definition."
 ; here.
 
     (return-from print-call-history nil))
-  #+(and ccl (not acl2-loop-only))
+  (when (f-get-global 'certify-book-info *the-live-state*)
+
+; The additional "Book under certification" message is helpful when the
+; backtrace output goes to the terminal instead of a .out file, which could
+; happen in SBCL before Feb. 2016.  That problem now seems to be solved for
+; SBCL, but we retain this printing in case it is helpful some day for some
+; Lisp.
+
+    (eval ; using eval because the certify-book-info record is not yet defined
+     '(format *debug-io*
+              "~%; Book under certification: ~s~%"
+              (access certify-book-info
+                      (f-get-global 'certify-book-info *the-live-state*)
+                      :full-book-name))))
+  #+ccl
   (when (fboundp 'ccl::print-call-history)
 ; See CCL file lib/backtrace.lisp for more options
     (eval '(ccl::print-call-history :detailed-p nil
@@ -25392,24 +27077,38 @@ Lisp definition."
 ; (when (fboundp 'system::ihs-backtrace)
 ;    (eval '(system::ihs-backtrace)))
 
-  #+(and allegro (not acl2-loop-only))
+  #+allegro
   (when (fboundp 'tpl::do-command)
     (eval '(tpl:do-command "zoom"
                            :from-read-eval-print-loop nil
                            :count t :all t)))
-  #+(and sbcl (not acl2-loop-only))
-  (when (fboundp 'sb-debug::backtrace)
-    (eval '(sb-debug::backtrace)))
-  #+(and cmucl (not acl2-loop-only))
+  #+sbcl
+  (cond ((fboundp 'sb-debug::print-backtrace)
+         (eval '(sb-debug::print-backtrace :stream *debug-io*)))
+        ((fboundp 'sb-debug::backtrace)
+         (eval '(sb-debug::backtrace nil *debug-io*))))
+  #+cmucl
   (when (fboundp 'debug::backtrace)
-    (eval '(debug::backtrace)))
-  #+(and clisp (not acl2-loop-only))
+    (eval '(debug::backtrace 1000 ; default for sbcl
+                             *debug-io*)))
+  #+clisp
   (when (fboundp 'system::print-backtrace)
     (eval '(catch 'system::debug
              (system::print-backtrace))))
-  #+(and lispworks (not acl2-loop-only))
+  #+lispworks
   (when (fboundp 'dbg::output-backtrace)
     (eval '(dbg::output-backtrace :verbose)))
+
+; Return nil, for compatibility with the #+acl2-loop-only definition.
+
+  nil)
+
+#+acl2-loop-only
+(defun print-call-history ()
+
+; Keep the return value in sync with the #-acl2-loop-only definition.
+
+  (declare (xargs :guard t))
   nil)
 
 (defmacro debugger-enabledp-val (val)
@@ -25879,14 +27578,14 @@ Lisp definition."
 
 (defmacro state-mac ()
 
-; Keep in sync with state-mac@par.
+; Keep in sync with state-mac@par.  The "mac" suffix is for "macro".
 
   'state)
 
 #+acl2-par
 (defmacro state-mac@par ()
 
-; Keep in sync with state-mac.
+; Keep in sync with state-mac.  The "mac" suffix is for "macro".
 
   nil)
 
@@ -25927,7 +27626,7 @@ Lisp definition."
          the parallelized evaluation of the waterfall.  See :doc ~
          set-waterfall-parallelism for how to disable such parallel ~
          evaluation.  Please let the ACL2 authors know if you see this ~
-         message, as our intent is that its occurence should be rare.  The ~
+         message, as our intent is that its occurrence should be rare.  The ~
          offending form is: ~x0"
         ',form)
     ,return-value))
@@ -25938,18 +27637,12 @@ Lisp definition."
            (ignore name state))
   (state-mac@par))
 
-; These constants are needed both in parallel.lisp and boot-strap-pass-2.lisp,
-; so we define them here.
-
 (defconst *waterfall-printing-values*
   '(:full :limited :very-limited))
 
 (defconst *waterfall-parallelism-values*
   '(nil t :full :top-level :resource-based :resource-and-timing-based
         :pseudo-parallel))
-
-; This is needed in both boot-strap-pass-2.lisp and parallel.lisp, so we put it
-; here.
 
 (defun symbol-constant-fn (prefix sym)
   (declare (xargs :guard (and (symbolp prefix)
@@ -25959,8 +27652,6 @@ Lisp definition."
                        "-"
                        (symbol-name sym))
           "ACL2"))
-
-; Oracle-funcall, oracle-apply, and oracle-apply-ttag:
 
 (defun stobjs-in (fn w)
 
@@ -25975,10 +27666,7 @@ Lisp definition."
 
       '(nil nil)
 
-    (getprop fn 'stobjs-in nil 'current-acl2-world w)))
-
-(defmacro oracle-funcall (fn &rest args)
-  `(oracle-apply ,fn (list ,@args) state))
+    (getpropc fn 'stobjs-in nil w)))
 
 (defun all-nils (lst)
   (declare (xargs :guard (true-listp lst)))
@@ -25986,14 +27674,15 @@ Lisp definition."
         (t (and (eq (car lst) nil)
                 (all-nils (cdr lst))))))
 
-(defconst *ttag-fns-and-macros*
+(defconst *ttag-fns*
 
-; Each cdr is either nil or a msg.
+; Each cdr is either nil or a msg.  These should all be function symbols in any
+; ACL2 world (after the boot-strap is complete).  The macro progn! is
+; "spiritually" in this list but is handled separately in translate11.
 
   `((hons-wash!)
     (hons-clear!)
     (open-output-channel!)
-    (progn!) ; protected because it is legal in books; it's OK to omit progn-fn
     (remove-untouchable-fn
      .
      ,(msg "  Note that the same restriction applies to the macro ~x0, whose ~
@@ -26008,123 +27697,201 @@ Lisp definition."
     (set-temp-touchable-fns)
     (set-temp-touchable-vars)
     (sys-call)
+    (sys-call*)
     (sys-call+)
     ))
+
+#-acl2-loop-only
+(progn
+
+; We implement a very simple cache for ev-fncall-w-guard, in support of
+; ev-fncall-w and magic-ev-fncall.
+
+(defconstant *ev-fncall-w-guard1-cache-size*
+
+; This size is rather arbitrary.  We avoid making it too large, to avoid having
+; a cache that takes up a lot of memory, as it holds a world in each entry.
+
+  10)
+
+(defconstant *ev-fncall-w-guard1-cache-init*
+  (cons 0 (make-list *ev-fncall-w-guard1-cache-size*)))
+
+(defvar *ev-fncall-w-guard1-cache*
+  *ev-fncall-w-guard1-cache-init*)
+
+(defun ev-fncall-w-guard1-cache-clear ()
+  (let ((cache *ev-fncall-w-guard1-cache*))
+    (setf (car cache) 0)
+    (loop for tail on (cdr cache)
+          do
+          (setf (car tail) nil))))
+
+(defun ev-fncall-w-guard1-cache-lookup (fn wrld temp-touchable-fns)
+  (let ((tuple (assoc-eq fn (cdr *ev-fncall-w-guard1-cache*))))
+    (and (consp tuple)
+         (or (and (eq (cadr tuple) wrld)
+                  (eq (caddr tuple) temp-touchable-fns)
+                  (cdddr tuple))
+
+; Otherwise eliminate the tuple's key, so that this tuple doesn't get found
+; next time we look up fn in the cache.
+
+             (setf (car tuple) nil)))))
+
+(defun ev-fncall-w-guard1-cache-update (fn wrld temp-touchable-fns data)
+
+; This function is thread-safe, in the sense that it will always result in a
+; valid update.
+
+  (let* ((cache *ev-fncall-w-guard1-cache*)
+         (index (car cache))
+         (alist (cdr cache)))
+    (when (>= (incf index) *ev-fncall-w-guard1-cache-size*)
+; Avoid using (= index *ev-fncall-w-guard1-cache-size*), for thread safety
+      (setq index 0))
+    (let ((tail (nthcdr index alist)))
+      (setf (car tail)
+            (list* fn wrld temp-touchable-fns data)))))
+
+; It is a bit tempting to add
+; (declaim (inline ev-fncall-w-guard1))
+; but a bit of experimentation suggests that this doesn't help.
+)
+
+(defun logicp (fn wrld)
+
+; We assume that fn is not the name of a theorem (presumably it's a function
+; symbol), in order to avoid the use of symbol-class, which can check the
+; 'theorem property of fn.
+
+  (declare (xargs :guard (and (plist-worldp wrld)
+
+; We deliberately avoid adding the conjunct (function-symbolp fn), even though
+; we expect it to be true when we call logicp.  Otherwise we would incur more
+; proof obligations; indeed, guard verification would fail for arities-okp.
+
+                              (symbolp fn))))
+  (or (eq fn 'cons) ; optimization
+      (not (eq (getpropc fn 'symbol-class nil wrld)
+               :program))))
+
+(defmacro logicalp (fn wrld)
+; DEPRECATED in favor of logicp!
+  `(logicp ,fn ,wrld))
+
+(defmacro programp (fn wrld)
+
+; We assume that fn is not the name of a theorem (presumably it's a function
+; symbol), in order to avoid the use of symbol-class, which can check the
+; 'theorem property of fn.
+
+  `(not (logicp ,fn ,wrld)))
+
+(defconst *stobjs-out-invalid*
+
+; Warning: keep this in sync with the comment about illegal functions to
+; memoize in :doc memoize.
+
+  '(if return-last))
+
+(defun stobjs-out (fn w)
+
+; Warning: keep this in sync with get-stobjs-out-for-declare-form.
+
+; See the Essay on STOBJS-IN and STOBJS-OUT.
+
+; Note that even though the guard implies (not (member-eq fn
+; *stobjs-out-invalid*)), we keep the member-eq test in the code in case
+; stobjs-out is called from a :program-mode function, since in that case the
+; guard may not hold.
+
+  (declare (xargs :guard (and (symbolp fn)
+                              (plist-worldp w)
+                              (not (member-eq fn *stobjs-out-invalid*)))))
+  (cond ((eq fn 'cons)
+; We call this function on cons so often we optimize it.
+         '(nil))
+        ((member-eq fn *stobjs-out-invalid*)
+         (er hard! 'stobjs-out
+             "Implementation error: Attempted to find stobjs-out for ~x0."
+             fn))
+        (t (getpropc fn 'stobjs-out '(nil) w))))
+
+(defun ev-fncall-w-guard1 (fn wrld temp-touchable-fns)
+
+; See ev-fncall-w-guard.  Here we use a cache to avoid most of that computation
+; in some cases.  We return the length of the formals of fn if all the expected
+; conditions hold, else nil.
+
+  (declare (xargs :guard t))
+  #-acl2-loop-only
+  (let ((data (ev-fncall-w-guard1-cache-lookup fn wrld
+                                               temp-touchable-fns)))
+    (when data
+      (return-from ev-fncall-w-guard1 data)))
+  (and (plist-worldp wrld)
+       (symbolp fn)
+
+; We avoid potential problems obtaining the stobjs-out of 'if.  (We give
+; special handling to 'return-last in ev-fncall-w-guard1, so we don't need to
+; avoid it here.)
+
+       (not (eq fn 'if))
+       (not (assoc-eq fn *ttag-fns*))
+       (let* ((formals (getpropc fn 'formals t wrld))
+              (stobjs-in (stobjs-in fn wrld))
+              (untouchable-fns (global-val 'untouchable-fns wrld)))
+
+; It is tempting to call untouchable-fn-p, but it seems inconvenient to fold
+; the necessary true-listp tests into that macro.  So we open-code here.
+
+         (and (not (eq formals t))
+              (true-listp untouchable-fns)
+              (or (not (member-eq fn untouchable-fns))
+                  (eq t temp-touchable-fns)
+                  (and (true-listp temp-touchable-fns)
+                       (member-eq fn temp-touchable-fns)))
+
+; Perhaps we could skip the next check.  It is equivalent to (not
+; (stobj-creatorp fn wrld)), but stobj-creatorp is defined later.
+
+              (not (and (null formals)
+                        (getpropc fn 'stobj-function nil wrld)))
+              (true-listp stobjs-in) ; needed for guard of all-nils
+              (all-nils stobjs-in)
+              (let ((data (list* (len formals)
+                                 (programp fn wrld)
+                                 (if (eq fn 'return-last)
+
+; We handle return-last in raw-ev-fncall-simple as we do in raw-ev-fncall.
+
+                                     '(nil)
+                                   (stobjs-out fn wrld)))))
+                #-acl2-loop-only
+                (progn
+                  (ev-fncall-w-guard1-cache-update fn wrld temp-touchable-fns
+                                                   data)
+                  data)
+                #+acl2-loop-only
+                data)))))
 
 (defun ev-fncall-w-guard (fn args wrld temp-touchable-fns)
 
 ; This function should return nil if the term (cons fn (kwote-lst args)) can
 ; not be translated for execution.  See translate11.
 
-; Note that this function is described in :doc oracle-apply.  If this function
-; is updated, then update that :doc topic as well.
-
 ; Warning: If this function is changed, then consider changing the table guard
 ; for dive-into-macros-table.
 
   (declare (xargs :guard t))
-  (and (plist-worldp wrld)
-       (symbolp fn)
-
-; The function ev-fncall-rec-logical disallows calling the function IF,
-; presumably because one should evaluate that call lazily.  We make the same
-; restriction here.  At one time we also considered disallowing
-; return-last, synp, and mv-list, but these are truly function symbols whose
-; calls can reasonably be evaluated in the logic.
-
-       (not (eq fn 'if))
-       (not (assoc-eq fn *ttag-fns-and-macros*))
-       (true-listp args)
-       (let* ((formals (getprop fn 'formals t 'current-acl2-world wrld))
-              (stobjs-in (stobjs-in fn wrld))
-              (untouchable-fns (global-val 'untouchable-fns wrld)))
-         (and (not (eq formals t))
-              (eql (len formals) (len args))
-              (true-listp untouchable-fns)
-              (or (not (member-eq fn untouchable-fns))
-                  (and temp-touchable-fns
-                       (or (eq t temp-touchable-fns)
-                           (and (true-listp temp-touchable-fns)
-                                (member-eq fn temp-touchable-fns)))))
-
-; Perhaps we could skip the next check.  It is equivalent to (not
-; (stobj-creatorp fn wrld)), but stobj-creatorp is defined later.
-
-              (not (and (null formals)
-                        (getprop fn 'stobj-function nil 'current-acl2-world
-                                 wrld)))
-              (true-listp stobjs-in) ; needed for guard of all-nils
-              (all-nils stobjs-in)))))
-
-(defun oracle-apply-guard (fn args state)
-
-; This function should return nil if the term (cons fn (kwote-lst args)) can
-; not be translated for execution.  See translate11.
-
-; Note that this function is described in :doc oracle-apply.  If this function
-; is updated, then update that :doc topic as well.
-
-  (declare (xargs :stobjs state))
-  (and (f-boundp-global 'temp-touchable-fns state)
-       (ev-fncall-w-guard fn
-                          args
-                          (w state)
-                          (f-get-global 'temp-touchable-fns state))))
-
-(defun oracle-apply (fn args state)
-
-; The use of an oracle is important for the logical story.  For example, we can
-; imagine the following sort of situation without an oracle.
-
-;   (encapsulate
-;    ()
-;    (local (defun f (x)
-;             1))
-;    (defthm prop-1
-;      (equal (oracle-funcall 'f) 1)
-;      :rule-classes nil))
-;
-;   (encapsulate
-;    ()
-;    (local (defun f ()
-;             2))
-;    (defthm prop-2
-;      (equal (oracle-funcall 'f) 2)
-;      :rule-classes nil))
-;
-;   (defthm contradiction
-;     nil
-;     :hints (("Goal" :use (prop-1 prop-2))))
-
-  (declare (xargs :stobjs state
-                  :guard (oracle-apply-guard fn args state)))
-  #-acl2-loop-only
-  (when (live-state-p state)
-    (return-from oracle-apply
-                 (mv (state-free-global-let* ((safe-mode t))
-                                             (apply (*1*-symbol fn) args))
-                     state)))
-  (mv-let (erp val state)
-          (read-acl2-oracle state)
-          (declare (ignore erp))
-
-; We arrange for the result to depend logically on fn and args.  This is
-; probably not important to do, but it seems potentially weird for the result
-; ot have nothing to do with fn or with args.
-
-          (mv (and (true-listp val)
-                   (eq (car val) fn)
-                   (equal (cadr val) args)
-                   (caddr val))
-              state)))
-
-(defun oracle-apply-raw (fn args state)
-  (declare (xargs :stobjs state :guard t))
-  #-acl2-loop-only
-  (when (live-state-p state)
-    (return-from oracle-apply-raw
-                 (mv (apply fn args) state)))
-  (ec-call (oracle-apply fn args state)))
+  (let ((len-formals/programp/stobjs-out
+         (ev-fncall-w-guard1 fn wrld temp-touchable-fns)))
+    (and len-formals/programp/stobjs-out
+         (true-listp args)
+         (eql (car len-formals/programp/stobjs-out)
+              (length args))
+         (cdr len-formals/programp/stobjs-out))))
 
 (defun time-tracker-fn (tag kwd kwdp times interval min-time msg)
 
@@ -26152,7 +27919,8 @@ Lisp definition."
     (er hard? 'time-tracker
         "Illegal first argument for ~x0 (should be a symbol): ~x1.  See :DOC ~
          time-tracker."
-        'time-tracker))
+        'time-tracker
+        tag))
    ((and (not (booleanp tag))
          (not (member-eq kwd
                          '(:init :end :print? :stop :start :start!))))
@@ -26214,7 +27982,13 @@ Lisp definition."
   (declare (ignore always))
   #-acl2-loop-only
   (let ((temp (svref *inside-absstobj-update* 0)))
-    (cond ((or (null temp)
+    (cond ((or (and (eq val :ignore)
+                    (or (ttag (w *the-live-state*))
+                        (er hard 'set-absstobj-debug
+                            "It is illegal to supply the value :ignore to ~
+                             set-absstobj-debug unless there is an active ~
+                             trust tag.")))
+               (null temp)
                (eql temp 0)
                (and always
                     (or (ttag (w *the-live-state*))
@@ -26225,14 +27999,17 @@ Lisp definition."
            (setf (aref *inside-absstobj-update* 0)
                  (cond ((eq val :reset)
                         (if (natp temp) 0 nil))
+                       ((eq val :ignore)
+                        :ignore)
                        (val nil)
                        (t 0))))
           (t (er hard 'set-absstobj-debug
-                 "It is illegal to call set-absstobj-debug in a context where ~
-                  an abstract stobj invariance violation has already occurred ~
-                  but not yet been processed.  You can overcome this ~
-                  restriction either by waiting for the top-level prompt, or ~
-                  by evaluating the following form: ~x0."
+                 "It is illegal to call set-absstobj-debug with value other ~
+                  than :ignore in a context where an abstract stobj ~
+                  invariance violation has already occurred but not yet been ~
+                  processed.  You can overcome this restriction either by ~
+                  waiting for the top-level prompt, or by evaluating the ~
+                  following form: ~x0."
                  `(set-abbstobj-debug ,(if (member-eq val '(nil :reset))
                                            nil
                                          t)
@@ -26590,25 +28367,30 @@ Lisp definition."
   '((:egc   . set-gc-strategy-builtin-egc)
     (:delay . set-gc-strategy-builtin-delay)))
 
-(defun set-gc-strategy (op)
+(defun set-gc-strategy-fn (op threshold)
 
 ; The first call of this function cannot be made with op = :current, since
 ; *gc-strategy* will not yet be bound.
 
-  (declare (xargs :guard (assoc-eq op *gc-strategy-alist*))
+  (declare (xargs :guard (or (eq op :current)
+                             (assoc-eq op *gc-strategy-alist*)))
            #+(and ccl (not acl2-loop-only))
-           (special *gc-strategy*))
-  #-acl2-loop-only
-  #+ccl
+           (special *gc-strategy*)
+           (ignorable threshold))
+  #+(and ccl (not acl2-loop-only))
   (let* ((op (if (eq op :current) *gc-strategy* op))
          (fn (cdr (assoc-eq op *gc-strategy-alist*))))
+    (ccl-initialize-gc-strategy threshold)
     (assert (and (symbolp fn)
                  (fboundp fn)))
-    (funcall fn op)
-    (setq *gc-strategy* op))
-  #-ccl
+    (setq *gc-strategy* op)
+    (funcall fn))
+  #+(and (not ccl) (not acl2-loop-only))
   (cw "; Note: Set-gc-strategy is a no-op in this host Lisp.~|")
   op)
+
+(defmacro set-gc-strategy (op &optional threshold)
+  `(set-gc-strategy-fn ,op ,threshold))
 
 (defun gc-strategy (state)
   (declare (xargs :stobjs state)
@@ -26623,3 +28405,440 @@ Lisp definition."
             #-ccl
             (cw "; Note: Set-gc-strategy is a no-op in this host Lisp.~|"))))
   (read-acl2-oracle state))
+
+(defconst *expandable-boot-strap-non-rec-fns*
+  '(not
+    implies eq atom eql = /= null endp zerop
+
+; If we ever make 1+ and 1- functions again, they should go back on this list.
+
+    synp plusp minusp listp return-last mv-list cons-with-hint
+
+; We added the-error for Version_4.0 (replaced by the-check after Version_6.1).
+; Before that change, but after changing constraint-info to avoid calling
+; remove-guard-holders on a definition body (a change in support of
+; canonical-ancestors, for use of the Attachment Restriction Lemma in
+; justifying attachment to metafunctions and clause-processors,
+; cf. chk-evaluator-use-in-rule), the event (defsort :compare< << :prefix <<)
+; failed from community book defsort/uniquep.lisp.
+
+    the-check wormhole-eval force case-split double-rewrite))
+
+(defconst *definition-minimal-theory*
+
+; We include mv-nth because of the call of simplifiable-mv-nthp in the
+; definition of call-stack, which (as noted there) results in a use of the
+; definition of mv-nth without tracking it in a ttree.
+
+  (list* 'mv-nth 'iff *expandable-boot-strap-non-rec-fns*))
+
+(defconst *definition-minimal-theory-alist*
+
+; This alist associates each function in *definition-minimal-theory* with its
+; normalized body.  It is built as follows.  The equality of this constant to
+; that expression is checked at the end of the boot-strap.
+
+;   (merge-sort-lexorder
+;    (loop for f in *definition-minimal-theory* collect
+;          (cons f (body f t (w *the-live-state*)))))
+
+  '((/= if (equal x y) 'nil 't)
+    (= equal x y)
+    (atom if (consp x) 'nil 't)
+    (case-split . x)
+    (cons-with-hint cons x y)
+    (double-rewrite . x)
+    (endp if (consp x) 'nil 't)
+    (eq equal x y)
+    (eql equal x y)
+    (force . x)
+    (iff if p (if q 't 'nil) (if q 'nil 't))
+    (implies if p (if q 't 'nil) 't)
+    (listp if (consp x) 't (equal x 'nil))
+    (minusp < x '0)
+    (mv-list . x)
+    (mv-nth if (consp l)
+            (if (zp n)
+                (car l)
+              (mv-nth (binary-+ '-1 n) (cdr l)))
+            'nil)
+    (not if p 'nil 't)
+    (null equal x 'nil)
+    (plusp < '0 x)
+    (return-last . last-arg)
+    (synp quote t)
+    (the-check . y)
+    (wormhole-eval quote nil)
+    (zerop equal x '0)))
+
+(defun bbody-fn (fn)
+
+; This is just (body fn t wrld), where wrld is the boot-strap world, except
+; that currently it may only be applied to functions in
+; *definition-minimal-theory*.
+
+  (declare (xargs :guard (member-eq fn *definition-minimal-theory*)))
+  (let ((pair (assoc-eq fn *definition-minimal-theory-alist*)))
+    (cond (pair (cdr pair))
+          (t (er hard! 'bbody
+                 "Implementation error: Illegal call of bbody: the symbol ~x0 ~
+                  is not in ~x1."
+                 *definition-minimal-theory-alist*)))))
+
+(defmacro bbody (fn)
+  (cond ((and (consp fn)
+              (consp (cdr fn))
+              (eq (car fn) 'quote))
+         (kwote (bbody-fn (cadr fn))))
+        (t `(bbody-fn ,fn))))
+
+(defun file-length$ (file state)
+  (declare (xargs :guard (stringp file)
+                  :stobjs state))
+  #+acl2-loop-only
+  (declare (ignore file))
+  #-acl2-loop-only
+  (when (live-state-p state)
+    (return-from file-length$
+                 (mv (our-ignore-errors
+                      (with-open-file
+                        (str file
+                             :direction :input
+                             :element-type '(unsigned-byte 8)
+                             :if-does-not-exist nil)
+                        (and str (file-length str))))
+                     state)))
+  (mv-let (erp val state)
+          (read-acl2-oracle state)
+          (mv (and (null erp)
+                   (natp val)
+                   val)
+              state)))
+
+(defun constant-t-function-arity-0 ()
+  (declare (xargs :mode :logic :guard t))
+  t)
+
+(defun constant-nil-function-arity-0 ()
+  (declare (xargs :mode :logic :guard t))
+  nil)
+
+(encapsulate
+  ()
+
+; The following function symbols are used (ancestrally) in the constraints on
+; doppelganger-badge-userfn and doppelganger-apply$-userfn.  They must be in
+; logic mode.  We use encapsulate so that verify-termination-boot-strap will do
+; its intended job in the first pass of the build.
+
+  (logic)
+  (verify-termination-boot-strap booleanp)
+  (verify-termination-boot-strap all-nils)
+  (verify-termination-boot-strap member-eql-exec)
+  (verify-termination-boot-strap member-eql-exec$guard-check)
+  (verify-termination-boot-strap member-equal)
+  (verify-termination-boot-strap subsetp-eql-exec)
+  (verify-termination-boot-strap subsetp-eql-exec$guard-check)
+  (verify-termination-boot-strap subsetp-equal)
+  (verify-termination-boot-strap revappend)
+  (verify-termination-boot-strap first-n-ac)
+  (verify-termination-boot-strap take))
+
+; Start code for read-file-into-string.
+
+(defconst *read-file-into-string-bound*
+
+; We rather arbitrarily set this value to the largest 64-bit CCL fixnum.  It is
+; a strict upper bound on the size of a string we are willing to return from
+; read-file-into-string, and it serves as a termination bound for our call of
+; read-file-into-string1 inside read-file-into-string.
+
+  (1- (ash 1 60)))
+
+#-acl2-loop-only
+(defvar *read-file-into-string-alist*
+
+; Associates filenames (in the native OS) with streams and positions.  The pair
+; ("fname" str . pos) means that the next time we call read-file-into-string to
+; read the next chunk from a file whose filename is "fname", we will be read
+; from the stream, str, at position pos.  When pos reaches end of file we
+; delete that entry.
+
+  nil)
+
+#-acl2-loop-only
+(defun read-file-into-string2-raw (os-filename stream posn bytes)
+  (let* ((file-len (file-length stream))
+         (max-bytes (if (<= posn file-len)
+                        (- file-len posn)
+                      (error "The :start position, ~s, specified for a call ~%~
+                              of read-file-into-string, exceeds the length ~%~
+                              of file ~s, which is ~s."
+                             posn os-filename file-len)))
+         (finish-p (or (null bytes)
+                       (< max-bytes bytes)))
+         (bytes (if bytes
+                    (min bytes max-bytes)
+                  max-bytes)))
+    (and (<= bytes *read-file-into-string-bound*)
+         (let ((fwd (file-write-date os-filename)))
+           (or (check-against-read-file-alist os-filename fwd)
+               (push (cons os-filename fwd)
+                     *read-file-alist*))
+           (when (not (eql fwd (file-write-date os-filename)))
+             (error "Illegal attempt to call ~s concurrently with some write ~
+                     to that file!~%See :DOC read-file-into-string."
+                    'read-file-into-string))
+
+; The following #-acl2-loop-only code, minus the WHEN clause, is based on code
+; found at http://www.ymeme.com/slurping-a-file-common-lisp-83.html and was
+; authored by @sabetts, who is apparently Shawn Betts.  The URL above presents
+; five implementations of file slurping and I found the discussion truly
+; excellent.  Thank you @sabetts!
+
+; The URL above says ``You can do anything you like with the code.''
+
+           (let ((seq (make-string bytes)))
+             (declare (type string seq))
+             (read-sequence seq stream)
+             (let ((temp (remove1-assoc-equal os-filename
+                                              *read-file-into-string-alist*)))
+               (cond
+                (finish-p
+                 (close stream)
+                 (setq *read-file-into-string-alist* temp))
+                (t
+                 (setq *read-file-into-string-alist*
+                       (cons (list* os-filename stream (+ posn bytes))
+                             temp)))))
+             seq)))))
+
+(defun read-file-into-string1 (channel state ans bound)
+
+; Channel is an open input character channel.  We read all the characters in
+; the file and return the list of them.
+
+  (declare (xargs :stobjs state
+                  :guard (and (symbolp channel)
+                              (open-input-channel-p channel :character state)
+                              (character-listp ans)
+                              (natp bound))
+                  :measure (acl2-count bound)))
+  (cond ((zp bound) ; file is too large
+         (mv nil state))
+        (t (mv-let
+            (val state)
+            (read-char$ channel state)
+            (cond ((not (characterp val)) ; end of file
+                   (mv (coerce (reverse ans) 'string)
+                       state))
+                  (t (read-file-into-string1 channel state (cons val ans)
+                                             (1- bound))))))))
+
+; At one time the following local lemma seemed to be helpful, but it is not
+; currently necessary.
+
+;(local
+; (defthm stringp-read-file-into-string1
+;   (implies (car (read-file-into-string1 channel state ans bound))
+;            (stringp (car (read-file-into-string1 channel state ans
+;                                                  bound))))))
+
+(defun read-file-into-string2-logical (filename start bytes state)
+
+; This function logically specifies read-file-into-string2.
+
+  (declare (xargs :stobjs state :guard (and (stringp filename)
+                                            (natp start)
+                                            (or (null bytes)
+                                                (natp bytes)))))
+  (non-exec
+   (mv-let (erp val state)
+     (mv-let (chan state)
+       (open-input-channel filename :character state)
+       (cond
+        ((or (null chan)
+; The following is to simplify guard verification.
+             (not (state-p state)))
+         (mv nil nil state))
+        (t (mv-let (val state)
+             (read-file-into-string1 chan state nil
+                                     *read-file-into-string-bound*)
+             (pprogn
+              (ec-call ; guard verification here seems unimportant
+               (close-input-channel chan state))
+              (mv nil val state))))))
+     (declare (ignore erp state))
+     (and (stringp val)
+
+; If the following conjunct is false, then raw Lisp would cause an error; so
+; there is no harm in adding it (and, it helps with guard verification).
+
+          (<= start (length val))
+          (subseq val
+                  start
+                  (if bytes
+                      (min (+ start bytes)
+                           (length val))
+                    (length val)))))))
+
+(defun read-file-into-string2 (filename start bytes state)
+
+; Filename is an ACL2 pathname; see the Essay on Pathnames.
+
+; Parallelism wart: avoid potential illegal behavior caused by this function.
+; A simple but expensive solution is probably to add a lock.  But with some
+; thought one might provide for correct parallel evaluations of this function.
+; Perhaps that's already the case!
+
+  (declare (xargs :stobjs state :guard (and (stringp filename)
+                                            (natp start)
+                                            (or (null bytes)
+                                                (natp bytes)))))
+  #-acl2-loop-only
+  (let* ((os-filename (pathname-unix-to-os filename state))
+         (triple (assoc-equal os-filename
+                              *read-file-into-string-alist*)))
+    (cond
+     ((eql start 0)
+      (when triple
+        (close (cadr triple)) ; close the stream
+        (setq *read-file-into-string-alist*
+              (remove1-assoc-equal os-filename
+                                   *read-file-into-string-alist*)))
+      (let ((stream
+             (open os-filename :direction :input :if-does-not-exist nil)))
+        (cond
+         (stream
+          (push (list* os-filename stream 0)
+                *read-file-into-string-alist*)
+          (read-file-into-string2-raw os-filename stream 0 bytes))
+         (t nil))))
+     ((null triple) ; and start > 0
+      (error "It is illegal to call read-file-into-string with a non-zero ~%~
+              :start value, in this case ~s, when there is no suitable ~%~
+              preceding call of read-file-into-string on the same file,~%~
+              ~s.  See :DOC read-file-into-string."
+             start os-filename))
+     ((not (eql (cddr triple) ; position
+                start))
+      (error "It is illegal to call read-file-into-string with a ~%~
+              non-zero :start value, in this case ~s, that is not the ~%~
+              position of the first byte unread by the preceding call ~%~
+              of read-file-into-string on the same file, in this case, ~%~
+              position ~s of file ~s.~%~
+              See :DOC read-file-into-string."
+             start (cddr triple) os-filename))
+     (t ; start = (cddr triple) > 0
+      (read-file-into-string2-raw os-filename
+                                  (cadr triple) ; stream
+                                  start         ; (cddr triple)
+                                  bytes))))
+  #+acl2-loop-only
+  (read-file-into-string2-logical filename start bytes state))
+
+(defmacro read-file-into-string (filename &key (start '0) bytes)
+  `(read-file-into-string2 ,filename ,start ,bytes state))
+
+(defmacro-untouchable when-pass-2 (&rest x)
+
+; This alternative to when-logic is useful in apply.lisp and related files,
+; where we want to avoid compilation because of the use of make-event, and we
+; also want to avoid evaluation during pass 1 of initialization, because we are
+; waiting for a suitable function-theory.  We cannot simply define when-logic
+; to be nil in raw Lisp, becase its use is not limited to the definition of
+; local.
+
+  #-acl2-loop-only
+  (declare (ignore x))
+  #-acl2-loop-only
+  nil
+  #+acl2-loop-only
+  (list 'if
+        '(eq (default-defun-mode-from-state state)
+             :program)
+        (list 'skip-when-logic (list 'quote "WHEN-PASS-2") 'state)
+        `(progn!
+          :state-global-bindings
+          ((ld-skip-proofsp t))
+
+; Since when-pass-2 avoids raw Lisp compilation, we instruct ACL2 to compile
+; on-the-fly.  This is unnecessary for Lisps that always compile, but it seems
+; harmless for us to avoid making an exception for those Lisps, for which
+; set-compile-fns is a no-op.
+
+          (set-compile-fns t)
+          ,@x
+          (set-compile-fns nil))))
+
+#+acl2-loop-only
+(defun print-cl-cache-fn (i j)
+
+; -----------------------------------------------------------------
+; Reminders about print-cl-cache:
+
+; See the defrec of cl-cache-line for an explanation of the fields.
+
+; The :status of a line is valid ONLY for the current world and its retractions
+; represented by the :absolute-event-number in the line.
+
+; To re-validate line i for the current world use
+
+; (PING-CL-CACHE-LINE i)
+
+; in raw Lisp.  That will update the :status but also move the line to the
+; front of the cache and increase its :hit count.
+
+; We don't display the world, just its max-absolute-event-number.  To see the
+; number of wrld, do (MAX-ABSOLUTE-EVENT-NUMBER wrld).  But remember:
+; different worlds can have the same number!
+
+; To access field :x of cache line i use
+; (ACCESS CL-CACHE-LINE (NTH i (ACCESS CL-CACHE *CL-CACHE* :ALIST)) :x)
+
+; The cache involves a circular structure containing many worlds.  Do not print
+; it directly.
+
+; When (consp *cl-cache*), then the size of the ring is
+; (access cl-cache *cl-cache* :size).
+
+; To clear a cache, set it to some natural number greater than 2, e.g.,
+
+; (setq *cl-cache* 5)
+
+; -----------------------------------------------------------------
+
+; We want the user to be able to see the *cl-cache*, which is actually in raw
+; Lisp.  So we stub out a constant nil function and will define it in raw Lisp
+; in apply-raw.lisp to print the cache.
+
+; Warning: Keep the return values in sync for the logic and raw Lisp.
+
+  (declare (xargs :guard t)
+           (ignore i j))
+  nil)
+
+(defmacro print-cl-cache (&optional i j)
+  `(print-cl-cache-fn ,i ,j))
+
+; We include definitions here of count-keys (from Sol Swords) and thus also
+; hons-remove-assoc (from community book
+; books/std/alists/hons-remove-assoc.lisp) in support of hash-table fields of
+; stobjs.
+
+(defun hons-remove-assoc (k x)
+  (declare (xargs :guard t))
+  (if (atom x)
+      nil
+    (if (and (consp (car x))
+             (not (equal k (caar x))))
+        (cons (car x) (hons-remove-assoc k (cdr x)))
+      (hons-remove-assoc k (cdr x)))))
+
+(defun count-keys (al)
+  (declare (xargs :guard t))
+  (if (atom al)
+      0
+    (if (consp (car al))
+        (+ 1 (count-keys (hons-remove-assoc (caar al) (cdr al))))
+      (count-keys (cdr al)))))

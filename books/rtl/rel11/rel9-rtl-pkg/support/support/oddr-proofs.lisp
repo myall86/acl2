@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -56,18 +44,34 @@
 	((< x 1) (cons 1 (fl (/ x))))
 	(t (fl x))))
 
-(defund expo (x)
-  (declare (xargs :guard t
-                  :measure (expo-measure x)))
-  (cond ((or (not (rationalp x)) (equal x 0)) 0)
-	((< x 0) (expo (- x)))
-	((< x 1) (1- (expo (* 2 x))))
-	((< x 2) 0)
-	(t (1+ (expo (/ x 2))))))
+(defnd expo (x)
+  (declare (xargs :measure (expo-measure x)
+                  :verify-guards nil))
+  (mbe
+   :logic
+   (cond ((or (not (rationalp x)) (equal x 0)) 0)
+         ((< x 0) (expo (- x)))
+         ((< x 1) (1- (expo (* 2 x))))
+         ((< x 2) 0)
+         (t (1+ (expo (/ x 2)))))
+   :exec
+   (if (rationalp x)
+       (let* ((n (abs (numerator x)))
+              (d (denominator x))
+              (ln (integer-length n))
+              (ld (integer-length d))
+              (l (- ln ld)))
+         (if (>= ln ld)
+             (if (>= (ash n (- l)) d) l (1- l))
+           (if (> ln 1)
+               (if (> n (ash d l)) l (1- l))
+             (- (integer-length (1- d))))))
+     0)))
 
 ;could redefine to divide by the power of 2 (instead of making it a negative power of 2)...
 (defund sig (x)
-  (declare (xargs :guard t))
+  (declare (xargs :guard t
+                  :verify-guards nil))
   (if (rationalp x)
       (if (< x 0)
           (- (* x (expt 2 (- (expo x)))))
@@ -88,7 +92,8 @@
   (integerp (* (sig x) (expt 2 (1- n)))))
 
 (defund trunc (x n)
-  (declare (xargs :guard (integerp n)))
+  (declare (xargs :guard (integerp n)
+                  :verify-guards nil))
   (* (sgn x) (fl (* (expt 2 (1- n)) (sig x))) (expt 2 (- (1+ (expo x)) n))))
 
 (defund away (x n)
@@ -154,7 +159,7 @@
 			(* z (expt 2 (- (1+ (expo x)) n)))))))
   :hints (("Goal" :in-theory (enable sig sgn oddr expt-split))))
 
-(local 
+(local
  (defthm hack2
     (implies (and (integerp n)
 		  (rationalp x))
@@ -173,7 +178,7 @@
 		(* (fl (/ (* (expt 2 (- (1- n) (expo x))) x) 2))
 		   (expt 2 (- (+ 2 (expo x)) n)))))
   :rule-classes ()
-  :hints (("Goal" :in-theory (enable trunc-pos-rewrite)		  
+  :hints (("Goal" :in-theory (enable trunc-pos-rewrite)
 		  :use ((:instance hack2 (n (- (1- n) (expo x)))))))))
 
 (local
@@ -204,7 +209,7 @@
  (defthm oddr-other-3
     (implies (and (rationalp x)
 		  (> x 0)
-		  (integerp n) 
+		  (integerp n)
 		  (> n 1)
 		  (= z (fl (* (expt 2 (- (1- n) (expo x))) x)))
 		  (evenp z))
@@ -219,7 +224,7 @@
  (defthm oddr-other-4
     (implies (and (rationalp x)
 		  (> x 0)
-		  (integerp n) 
+		  (integerp n)
 		  (> n 1)
 		  (= z (fl (* (expt 2 (- (1- n) (expo x))) x)))
 		  (not (evenp z)))
@@ -232,7 +237,7 @@
  (defthm oddr-other-5
     (implies (and (rationalp x)
 		  (> x 0)
-		  (integerp n) 
+		  (integerp n)
 		  (> n 1)
 		  (= z (fl (* (expt 2 (- (1- n) (expo x))) x)))
 		  (not (evenp z)))
@@ -242,7 +247,7 @@
   :hints (("Goal" :use ((:instance oddr-other-2)
 			(:instance oddr-other-4))))))
 
-(local 
+(local
  (defthm hack3
     (implies (and (rationalp x)
 		  (rationalp y)
@@ -287,7 +292,7 @@
 (defthm oddr-other
     (implies (and (rationalp x)
 		  (> x 0)
-		  (integerp n) 
+		  (integerp n)
 		  (> n 1))
 	     (= (oddr x n)
 		(+ (trunc x (1- n))
@@ -484,7 +489,7 @@
 		  (integerp n)
 		  (> n 1))
 	     (= (trunc (oddr x n) (1- n))
-		(* (fl (* (expt 2 (- (- n 2) (expo x))) 
+		(* (fl (* (expt 2 (- (- n 2) (expo x)))
 			  (+ (* (fl (* (expt 2 (- (- n 2) (expo x)))
 				       x))
 				(expt 2 (- (+ (expo x) 2) n)))
@@ -673,8 +678,8 @@
 			(:instance trunc-upper-pos (x y) (n (1- m)))
 			(:instance expo-trunc (x y) (n (1- m)))
 			(:instance oddr-other (x y) (n m))
-			(:instance expt-strong-monotone 
-				   (n (- (1+ (expo y)) m)) 
+			(:instance expt-strong-monotone
+				   (n (- (1+ (expo y)) m))
 				   (m (- (+ 2 (expo y)) m)))
 			(:instance near-near
 				   (n (- m 2))

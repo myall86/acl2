@@ -35,15 +35,25 @@
 (defconst *pretty-defs*
   '(raise
     std::tuplep
-    std::da-alist-name
-    std::da-make-maker-fn-aux
-    std::da-changer-args-to-alist
     std::extract-keywords
+    std::da-honsed-constructor-name
+    std::da-constructor-name
+    std::da-remake-name
+    std::da-changer-args-to-alist
+    std::da-changer-let-bindings-and-args
+    std::change-aggregate
+    std::da-maker-fill-in-fields
+    std::make-aggregate
     std::da-patbind-make-field-acc-alist
     std::da-patbind-find-used-vars
     std::da-patbind-alist-to-bindings
     std::da-patbind-fn
     fty::patbind-flexsum
+    fty::prod-consp
+    fty::prod-car
+    fty::prod-cdr
+    fty::prod-cons
+    fty::prod-hons
     fty::flexsum-p
     fty::flexsum->kind
     fty::flexsum->case
@@ -56,9 +66,6 @@
     fty::flexprod->ctor-name
     fty::nice-cond
     fty::find-prod-by-kind
-    fty::flexsum-case-macro-kinds
-    fty::flexsum-case-macro-conds
-    fty::flexsum-case-macro-fn
     print-base-fix
     print-base-equiv
     acl2::pos-fix
@@ -72,9 +79,7 @@
     printconfig->print-radix
     printconfig->home-package
     printconfig->print-lowercase
-    make-printconfig-fn
     make-printconfig
-    change-printconfig-fn
     change-printconfig
     patbind-printconfig
     *default-printconfig*
@@ -108,9 +113,7 @@
     pflat-fix
     pflat->width
     pflat->what
-    make-pflat-fn
     make-pflat
-    change-pflat-fn
     change-pflat
     patbind-pflat
 
@@ -122,20 +125,17 @@
 
     pinst-flat
     pinst-flat->guts
-    make-pinst-flat-fn
     make-pinst-flat
     patbind-pinst-flat
 
     pinst-dot
     pinst-dot->width
-    make-pinst-dot-fn
     make-pinst-dot
     patbind-pinst-dot
 
     pinst-quote
     pinst-quote->width
     pinst-quote->guts
-    make-pinst-quote-fn
     make-pinst-quote
     patbind-pinst-quote
 
@@ -143,13 +143,11 @@
     pinst-wide->width
     pinst-wide->first
     pinst-wide->rest
-    make-pinst-wide-fn
     make-pinst-wide
     patbind-pinst-wide
 
     pinst-keyline
     pinst-keyline->guts
-    make-pinst-keyline-fn
     make-pinst-keyline
     patbind-pinst-keyline
 
@@ -157,7 +155,6 @@
     pinst-keypair->width
     pinst-keypair->kwd
     pinst-keypair->value
-    make-pinst-keypair-fn
     make-pinst-keypair
     patbind-pinst-keypair
 
@@ -166,7 +163,6 @@
     pinst-indent->width
     pinst-indent->first
     pinst-indent->rest
-    make-pinst-indent-fn
     make-pinst-indent
     patbind-pinst-indent
 
@@ -188,4 +184,23 @@
     ppr
     pretty
     revappend-pretty
-    pretty-list))
+    pretty-list
+
+    acl2::maybe-natp-fix
+
+    eviscconfig-p
+    eviscconfig
+    eviscconfig->print-level
+    eviscconfig->print-length
+    eviscconfig->replacement-alist
+    eviscconfig->hiding-cars
+    patbind-eviscconfig
+    make-eviscconfig
+
+    evisceration-hash-mark
+    list-of-evisceration-ellipsis-mark
+    anti-evisceration-mark
+    evisceration-hiding-mark
+    eviscerate1
+    eviscerate1p
+    eviscerate))

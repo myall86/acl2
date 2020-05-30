@@ -44,7 +44,8 @@
 (include-book "centaur/misc/beta-reduce-full" :dir :system)
 (include-book "glcp-geval")
 (include-book "constraint-db-deps")
-
+(include-book "prof")
+(include-book "rewrite-tables")
 (verify-termination acl2::evisc-tuple)
 (verify-guards acl2::evisc-tuple)
 
@@ -52,6 +53,72 @@
   (declare (xargs :guard t)
            (ignore test then else))
   nil)
+
+(set-state-ok t)
+
+(defun glcp-error-fn (msg interp-st state)
+  (declare (xargs :guard t :stobjs (state interp-st)))
+  (mv msg nil interp-st state))
+
+(defmacro glcp-error (msg)
+  `(glcp-error-fn ,msg interp-st state))
+
+(add-macro-alias glcp-error glcp-error-fn)
+
+(defun preferred-defs-to-overrides (alist state)
+  (declare (xargs :stobjs state :guard t))
+  (if (atom alist)
+      (value nil)
+    (b* (((when (atom (car alist)))
+          (preferred-defs-to-overrides (cdr alist) state))
+         ((cons fn defname) (car alist))
+         ((unless (and (symbolp fn) (symbolp defname) (not (eq fn 'quote))))
+          (mv
+           (acl2::msg "~
+The GL preferred-defs table contains an invalid entry ~x0.
+The key and value of each entry should both be function symbols."
+                      (car alist))
+           nil state))
+         (rule (ec-call (fgetprop defname 'theorem nil (w state))))
+         ((unless rule)
+          (mv
+           (acl2::msg "~
+The preferred-defs table contains an invalid entry ~x0.
+The :definition rule ~x1 was not found in the ACL2 world."
+                      (car alist) defname)
+           nil state))
+         ((unless (case-match rule
+                    (('equal (rulefn . &) &) (equal fn rulefn))))
+          (mv
+           (acl2::msg "~
+The preferred-defs table contains an invalid entry ~x0.
+The :definition rule ~x1 is not suitable as a GL override.
+Either it is a conditional definition rule, it uses a non-EQUAL
+equivalence relation, or its format is unexpected.  The rule
+found is ~x2." (car alist) defname rule)
+           nil state))
+         (formals (cdadr rule))
+         (body (caddr rule))
+         ((unless (and (nonnil-symbol-listp formals)
+                       (acl2::no-duplicatesp formals)))
+          (mv
+           (acl2::msg "~
+The preferred-defs table contains an invalid entry ~x0.
+The formals used in :definition rule ~x1 either are not all
+variable symbols or have duplicates, making this an unsuitable
+definition for use in a GL override.  The formals listed are
+~x2." (car alist) defname formals)
+           nil state))
+         ((unless (pseudo-termp body))
+          (mv
+           (acl2::msg "~
+The preferred-defs table contains an invalid entry ~x0.
+The definition body, ~x1, is not a pseudo-term."
+                      (car alist) body)
+           nil state))
+         ((er rest) (preferred-defs-to-overrides (cdr alist) state)))
+      (value (hons-acons fn (list* formals body defname)
+                         rest)))))
 
 
 (acl2::def-meta-extract glcp-generic-geval-ev glcp-generic-geval-ev-lst)
@@ -102,7 +169,7 @@
   ;;          (gl-error x))
   ;;         :namedp t))
 
-  
+
 
   (defthm glcp-generic-run-gified-correct
     (implies (and (bfr-hyp-eval hyp (car env))
@@ -245,8 +312,9 @@
  (defun gl-term-to-apply-obj (x alist)
    (declare (xargs :guard (pseudo-termp x)
                    :verify-guards nil))
-   (b* (((when (not x)) nil)
-        ((when (atom x)) (cdr (hons-assoc-equal x alist)))
+   (b* (((when (atom x))
+         (and x (mbt (symbolp x))
+              (cdr (hons-assoc-equal x alist))))
         ((when (eq (car x) 'quote)) (g-concrete-quote (cadr x)))
         (args (gl-termlist-to-apply-obj-list (cdr x) alist))
         (fn (car x))
@@ -868,12 +936,12 @@
        ;; The rest is just a heuristic determination of which should rewrite to
        ;; the other.
        (a-goodp (or (atom a)
-                    (member (tag a) '(:g-number :g-boolean))
+                    (member (tag a) '(:g-integer :g-boolean))
                     (general-concretep a)))
        ((when a-goodp)
         (add-term-equiv b bvar bvar-db))
        (b-goodp (or (atom b)
-                    (member (tag b) '(:g-number :g-boolean))
+                    (member (tag b) '(:g-integer :g-boolean))
                     (general-concretep b)))
        ((when b-goodp)
         (add-term-equiv a bvar bvar-db)))
@@ -1088,15 +1156,39 @@
     :rule-classes :linear))
 
 
+(define glcp-vacuity-check (hyp-bfr (config glcp-config-p))
+  :returns (mv (err)
+               (unsat-p))
+  (b* (((unless (glcp-config->check-vacuous config))
+        (mv nil nil)) ;; no error, not unsat
+       ((mv vac-check-sat vac-check-succeeded &)
+        (bfr-vacuity-check hyp-bfr))
+       ((when (and (glcp-config->abort-vacuous config)
+                   (or (not vac-check-sat)
+                       (not vac-check-succeeded))))
+        (mv (if vac-check-succeeded
+                "Hypothesis is not satisfiable"
+              "Error in vacuity check")
+            vac-check-succeeded)))
+    (mv nil
+        (and vac-check-succeeded
+             (not vac-check-sat))))
+  ///
+  (std::defretd glcp-vacuity-check-unsat-implies
+    (implies unsat-p
+             (not (bfr-eval hyp-bfr env)))
+    :hints(("Goal" :in-theory (enable bfr-vacuity-check-unsat)))))
+
+
+
 (defconst *glcp-generic-template-subst*
-  (let ((names (cons 'run-gified
-                     (remove 'clause-proc *glcp-fnnames*))))
-    (cons '(clause-proc . glcp-generic)
-          (pairlis$ names (glcp-put-name-each 'glcp-generic names)))))
+  (glcp-name-subst 'glcp-generic))
 
 (make-event ;; glcp-generic-interp
  (sublis *glcp-generic-template-subst*
          *glcp-interp-template*))
+
+
 
 
 

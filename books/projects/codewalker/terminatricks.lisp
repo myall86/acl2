@@ -73,10 +73,10 @@
 
 ; A ``virtual formal,'' or ``vformal,'' is a component of a formal, given by an
 ; expression in that formal.  For example, (nth 7 st) is a virtual formal that
-; is changed in a recursion in which st is replaced (update-nth 7 new-val st).
-; An important property of virtual formals is that they're orthogonal
+; is changed in a recursion in which st is replaced by (update-nth 7 new-val
+; st).  An important property of virtual formals is that they're orthogonal
 ; (independent): changing one does not change another.  Thus, if (nth 7 (locals
-; st)) and (nth 8 (locals st)) are virtual formals, then (locals s) should not
+; st)) and (nth 8 (locals st)) are virtual formals, then (locals st) should not
 ; be so considered.
 
 ; Two tables drive the identification of virtual formals:
@@ -558,7 +558,7 @@
 ;  '(((cons a b) (car :base) (cdr :base))))
 ; ==>
 ; ((:SLOT (NTH '1 (LOCALS ST)) ONE)
-;  (:SLOT (NTH '2 (LOCALS ST)) TWO)    
+;  (:SLOT (NTH '2 (LOCALS ST)) TWO)
 ;  (:SLOT (NTH '5 (LOCALS ST)) FIVE))
 
 (mutual-recursion
@@ -985,7 +985,7 @@
   (cond ((endp pdmach) nil)
         (t (union-equal
             (range-of-flag-from-tests vformal (car (car pdmach)))
-            (let ((slot (assoc-equal-cadr vformal (cdr (car pdmach))))) 
+            (let ((slot (assoc-equal-cadr vformal (cdr (car pdmach)))))
 
 ; If there is no slot setting the flag, then it would have been of the
 ; form (:SLOT flag flag) and we ignored it.  So we don't add a new flag
@@ -2046,7 +2046,7 @@
          (mv-let (erp val state)
                  (with-prover-step-limit!
                   step-limit
-                  (thm-fn conjecture state hints otf-flg nil))
+                  (thm-fn conjecture state hints otf-flg))
                  (declare (ignore val))
                  (value (if (eq memo-alist t)
                             (not erp)
@@ -3647,10 +3647,11 @@
 ; Use new measure patterns in subsequent analysis and save for event
 ; generation so we don't have to recompute them.
          (er-progn
+          (set-bogus-measure-ok t) ; added by Matt K. 2/20/2016
           (assign new-measure-patterns
                   new-measure-patterns)
 ; ``Admit'' the defun with a bogus measure just to grab the tmach.  Then
-; undo this so it doesn't confuse future proofs. 
+; undo this so it doesn't confuse future proofs.
           (do-and-undo
            (er-progn
             (skip-proofs
@@ -3659,7 +3660,9 @@
                ,@rest))
             (let* ((name ',name)
                    (tbody (body name t (w state)))
-                   (tmach (termination-machine (list name) ; fns
+                   (tmach (termination-machine nil nil
+                                               (list name) ; fns
+                                               nil
                                                tbody nil nil :all)))
               (er-progn
                (assign defunm-tbody tbody)
@@ -3727,7 +3730,7 @@
                         pattern."
                          name))
                     (t
-; We lay down a PROGN (as necessary) followed by an update-measure-patterns, the 
+; We lay down a PROGN (as necessary) followed by an update-measure-patterns, the
 ; new DEFUN, and the optional-lemmas.
                      (value
                       (progn-for-defunm-if-necessary

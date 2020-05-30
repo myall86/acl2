@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 8.3 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2020, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -48,23 +48,50 @@
 
 (mutual-recursion
 
-(defun remove-lambdas (term)
-  (if (or (variablep term)
-          (fquotep term))
-      term
-    (let ((args (remove-lambdas-lst (fargs term)))
-          (fn (ffn-symb term)))
-      (if (flambdap fn)
-          (subcor-var (lambda-formals fn) args (remove-lambdas (lambda-body fn)))
-        (cons-term fn args)))))
+(defun remove-lambdas1 (term)
+  (declare (xargs :guard (pseudo-termp term)
+                  :verify-guards nil))
+  (cond ((or (variablep term)
+             (fquotep term))
+         (mv nil term))
+        (t (mv-let (changedp args)
+             (remove-lambdas-lst (fargs term))
+             (let ((fn (ffn-symb term)))
+               (cond ((flambdap fn)
+                      (mv-let (changedp body)
+                        (remove-lambdas1 (lambda-body fn))
+                        (declare (ignore changedp))
+                        (mv t
+                            (subcor-var (lambda-formals fn)
+                                        args
+                                        body))))
+                     (changedp (mv t (cons-term fn args)))
+                     (t (mv nil term))))))))
 
 (defun remove-lambdas-lst (termlist)
-  (if termlist
-      (cons (remove-lambdas (car termlist))
-            (remove-lambdas-lst (cdr termlist)))
-    nil))
-
+  (declare (xargs :guard (pseudo-term-listp termlist)))
+  (cond ((consp termlist)
+         (mv-let (changedp1 term)
+           (remove-lambdas1 (car termlist))
+           (mv-let (changedp2 rest)
+             (remove-lambdas-lst (cdr termlist))
+             (mv (or changedp1 changedp2)
+                 (cons term rest)))))
+        (t (mv nil nil))))
 )
+
+(defun remove-lambdas (term)
+
+; Remove-lambdas returns the result of applying beta-reductions in term.  This
+; function preserves quote-normal form: if term is in quote-normal form, then
+; so is the result.
+
+  (declare (xargs :guard (pseudo-termp term)
+                  :verify-guards nil))
+  (mv-let (changedp ans)
+    (remove-lambdas1 term)
+    (declare (ignore changedp))
+    ans))
 
 ; We use the following functions to determine the sense of the conclusion
 ; as a :REWRITE rule.
@@ -76,16 +103,15 @@
      "A :REWRITE rule generated from ~x0 is illegal because it rewrites the ~
       term ~x1 to itself!  This can happen even when you submit a rule whose ~
       left and right sides appear to be different, in the case that those two ~
-      sides represent the same term (in particular, after macroexpansion).  ~
-      For general information about rewrite rules in ACL2, see :DOC rewrite. ~
-      ~ You may wish to consider submitting a DEFTHM event ending with ~
+      sides represent the same term (for example, after macroexpansion).  For ~
+      general information about rewrite rules in ACL2, see :DOC rewrite.  You ~
+      may wish to consider submitting a DEFTHM event ending with ~
       :RULE-CLASSES NIL."
      name
      lhs))
    ((or (variablep lhs)
         (fquotep lhs)
-        (flambda-applicationp lhs)
-        (eq (ffn-symb lhs) 'if))
+        (flambda-applicationp lhs))
     (msg
      "A :REWRITE rule generated from ~x0 is illegal because it rewrites the ~
       ~@1 ~x2.  For general information about rewrite rules in ACL2, see :DOC ~
@@ -94,7 +120,8 @@
      (cond ((variablep lhs) "variable symbol")
            ((fquotep lhs) "quoted constant")
            ((flambda-applicationp lhs) "LET-expression")
-           (t "IF-expression"))
+           (t (er hard 'interpret-term-as-rewrite-rule2
+                  "Implementation error: forgot a case.  LHS:~|~x0.")))
      lhs))
    (t (let ((bad-synp-hyp-msg (bad-synp-hyp-msg
                                hyps (all-vars lhs) nil wrld)))
@@ -115,35 +142,46 @@
   (cond ((variablep term) (mv 'iff term *t* nil))
         ((fquotep term) (mv 'iff term *t* nil))
         ((member-eq (ffn-symb term) *equality-aliases*)
-         (mv 'equal (fargn term 1) (fargn term 2) nil))
+         (mv 'equal (remove-lambdas (fargn term 1)) (fargn term 2) nil))
+        ((flambdap (ffn-symb term))
+         (interpret-term-as-rewrite-rule1
+          (subcor-var (lambda-formals (ffn-symb term))
+                      (fargs term)
+                      (lambda-body (ffn-symb term)))
+          equiv-okp ens wrld))
         ((if equiv-okp
              (equivalence-relationp (ffn-symb term) wrld)
            (member-eq (ffn-symb term) '(equal iff)))
-         (mv-let (equiv ttree)
-                 (cond ((eq (ffn-symb term) 'iff)
-                        (mv-let
-                         (ts ttree)
-                         (type-set (fargn term 1) nil nil nil ens wrld nil
-                                   nil nil)
-                         (cond ((ts-subsetp ts *ts-boolean*)
-                                (mv-let
-                                 (ts ttree)
-                                 (type-set (fargn term 2) nil nil nil ens
-                                           wrld ttree nil nil)
-                                 (cond ((ts-subsetp ts *ts-boolean*)
-                                        (mv 'equal ttree))
-                                       (t (mv 'iff nil)))))
-                               (t (mv 'iff nil)))))
-                       (t (mv (ffn-symb term) nil)))
-                 (mv equiv (fargn term 1) (fargn term 2) ttree)))
-        ((eq (ffn-symb term) 'not) (mv 'equal (fargn term 1) *nil* nil))
+         (let ((lhs (remove-lambdas (fargn term 1))))
+           (mv-let (equiv ttree)
+             (cond ((eq (ffn-symb term) 'iff)
+                    (mv-let
+                      (ts ttree)
+                      (type-set lhs nil nil nil ens wrld nil
+                                nil nil)
+                      (cond ((ts-subsetp ts *ts-boolean*)
+                             (mv-let
+                               (ts ttree)
+                               (type-set (fargn term 2) nil nil nil ens
+                                         wrld ttree nil nil)
+                               (cond ((ts-subsetp ts *ts-boolean*)
+                                      (mv 'equal ttree))
+                                     (t (mv 'iff nil)))))
+                            (t (mv 'iff nil)))))
+                   (t (mv (ffn-symb term) nil)))
+             (mv equiv lhs (fargn term 2) ttree))))
+        ((eq (ffn-symb term) 'not)
+         (mv 'equal (remove-lambdas (fargn term 1)) *nil* nil))
         (t (mv-let (ts ttree)
-                   (type-set term nil nil nil ens wrld nil nil nil)
-                   (cond ((ts-subsetp ts *ts-boolean*)
-                          (mv 'equal term *t* ttree))
-                         (t (mv 'iff term *t* nil)))))))
+             (type-set term nil nil nil ens wrld nil nil nil)
+             (cond ((ts-subsetp ts *ts-boolean*)
+                    (mv 'equal (remove-lambdas term) *t* ttree))
+                   (t (mv 'iff (remove-lambdas term) *t* nil)))))))
 
 (defun interpret-term-as-rewrite-rule (name hyps term ens wrld)
+
+; NOTE: Term is assumed to have had remove-guard-holders applied, which in
+; particular implies that term is in quote-normal form.
 
 ; This function returns five values.  The first can be a msg for printing an
 ; error message.  Otherwise the first is nil, in which case the second is an
@@ -151,13 +189,12 @@
 ; (eqv lhs rhs) is propositionally equivalent to term; and the last is an
 ; 'assumption-free ttree justifying the claim.
 
-  (let ((term (remove-lambdas term)))
-    (mv-let
-     (eqv lhs rhs ttree)
-     (interpret-term-as-rewrite-rule1 term t ens wrld)
-     (let ((msg (interpret-term-as-rewrite-rule2 name hyps lhs rhs wrld)))
-       (cond
-        (msg
+  (mv-let
+    (eqv lhs rhs ttree)
+    (interpret-term-as-rewrite-rule1 term t ens wrld)
+    (let ((msg (interpret-term-as-rewrite-rule2 name hyps lhs rhs wrld)))
+      (cond
+       (msg
 
 ; We try again, this time with equiv-okp = nil to avoid errors for a form such
 ; as the following.  Its evaluation caused a hard Lisp error in Version_4.3
@@ -175,44 +212,89 @@
 ;    (defthm my-equivp-reflexive
 ;      (my-equivp x x)))
 
-         (mv-let
+        (mv-let
           (eqv2 lhs2 rhs2 ttree2)
           (interpret-term-as-rewrite-rule1 term nil ens wrld)
           (cond
            ((interpret-term-as-rewrite-rule2 name hyps lhs2 rhs2 wrld)
             (mv msg eqv lhs rhs ttree))
            (t (mv nil eqv2 lhs2 rhs2 ttree2)))))
-        (t (mv nil eqv lhs rhs ttree)))))))
+       (t (mv nil eqv lhs rhs ttree))))))
 
-; We inspect the lhs and some hypotheses with the following function
-; to determine if non-recursive defuns will present a problem to the
-; user.
+; We inspect the lhs and some hypotheses with the following functions to
+; determine if non-recursive defuns will present a problem to the user.
 
 (mutual-recursion
 
-(defun non-recursive-fnnames (term ens wrld)
-  (cond ((variablep term) nil)
-        ((fquotep term) nil)
-        ((flambda-applicationp term)
-         (add-to-set-equal (ffn-symb term)
-                           (non-recursive-fnnames-lst (fargs term) ens wrld)))
-        ((let ((def-body (def-body (ffn-symb term) wrld)))
-           (and def-body
-                (enabled-numep (access def-body def-body :nume)
-                               ens)
-                (not (access def-body def-body :recursivep))))
-         (add-to-set-eq (ffn-symb term)
-                        (non-recursive-fnnames-lst (fargs term) ens wrld)))
-        (t (non-recursive-fnnames-lst (fargs term) ens wrld))))
+(defun non-recursive-fnnames-alist-rec (term ens wrld acc)
 
-(defun non-recursive-fnnames-lst (lst ens wrld)
-  (cond ((null lst) nil)
-        (t (union-equal (non-recursive-fnnames (car lst) ens wrld)
-                        (non-recursive-fnnames-lst (cdr lst) ens wrld)))))
+; Accumulate, into acc, an alist that associates each enabled non-recursive
+; function symbol fn of term either with the base-symbol of its most recent
+; definition rune or with nil.  Our meaning of "enabled" and "non-recursive" is
+; with respect to that rune (which exists except for lambdas).  We associate to
+; a value of nil for two cases of the key: a lambda, and when that rune is the
+; rune of the original definition.  We do not dive into lambda bodies.
 
+  (declare (xargs :guard (and (pseudo-termp term)
+                              (enabled-structure-p ens)
+                              (plist-worldp wrld)
+                              (alistp acc))))
+  (cond
+   ((variablep term) acc)
+   ((fquotep term) acc)
+   ((flambda-applicationp term)
+    (non-recursive-fnnames-alist-rec-lst
+     (fargs term) ens wrld
+     (if (assoc-equal (ffn-symb term) acc)
+         acc
+       (acons (ffn-symb term) nil acc))))
+   (t (non-recursive-fnnames-alist-rec-lst
+       (fargs term) ens wrld
+       (cond
+        ((assoc-eq (ffn-symb term) acc)
+         acc)
+        (t (let ((def-body (def-body (ffn-symb term) wrld)))
+             (cond
+              ((and def-body
+                    (enabled-numep (access def-body def-body :nume)
+                                   ens)
+                    (not (access def-body def-body :recursivep)))
+               (let ((sym (base-symbol (access def-body def-body :rune))))
+                 (acons (ffn-symb term)
+                        (if (eq sym (ffn-symb term))
+                            nil
+                          sym)
+                        acc)))
+              (t acc)))))))))
+
+(defun non-recursive-fnnames-alist-rec-lst (lst ens wrld acc)
+  (declare (xargs :guard (and (pseudo-term-listp lst)
+                              (enabled-structure-p ens)
+                              (plist-worldp wrld)
+                              (alistp acc))))
+  (cond ((endp lst) acc)
+        (t (non-recursive-fnnames-alist-rec-lst
+            (cdr lst) ens wrld
+            (non-recursive-fnnames-alist-rec (car lst) ens wrld acc)))))
 )
 
-; The list just constructed is odd because it may contain some lambda
+(defun non-recursive-fnnames-alist (term ens wrld)
+
+; See non-recursive-fnnames-alist-rec.  (The present function reverses the
+; result, to respect the original order of appearance of function symbols.)
+
+  (reverse (non-recursive-fnnames-alist-rec term ens wrld nil)))
+
+
+(defun non-recursive-fnnames-alist-lst (lst ens wrld)
+
+; See non-recursive-fnnames-alist-rec.  (The present function takes a list of
+; terms; it also reverses the result, to respect the original order of
+; appearance of function symbols.)
+
+  (reverse (non-recursive-fnnames-alist-rec-lst lst ens wrld nil)))
+
+; The alist just constructed is odd because it may contain some lambda
 ; expressions posing as function symbols.  We use the following function
 ; to transform those into let's just for printing purposes...
 
@@ -328,34 +410,37 @@
 
 (defun loop-stopper (lhs rhs)
 
-; If lhs and rhs are variants, we return the "expansion" (see next
-; paragraph) of the subset of the unifying substitution containing
-; those pairs (x . y) in which a variable symbol (y) is being moved
-; forward (to the position of x) in the print representation of the
-; term.  For example, suppose lhs is (foo x y z) and rhs is (foo y z
-; x).  Then both y and z are moved forward, so the loop-stopper is the
-; "expansion" of '((y . z) (x . y)).  This function exploits the fact
-; that all-vars returns the set of variables listed in reverse
-; print-order.
+; If lhs and rhs are variants (possibly after expanding lambdas in rhs; see
+; below), we return the "expansion" (see next paragraph) of the subset of the
+; unifying substitution containing those pairs (x . y) in which a variable
+; symbol (y) is being moved forward (to the position of x) in the print
+; representation of the term.  For example, suppose lhs is (foo x y z) and rhs
+; is (foo y z x).  Then both y and z are moved forward, so the loop-stopper is
+; the "expansion" of '((y . z) (x . y)).  This function exploits the fact that
+; all-vars returns the set of variables listed in reverse print-order.
 
-; In the paragraph above, the "expansion" of a substitution ((x1 .
-; y1) ... (xn . yn)) is the list ((x1 y1 . fns-1) ... (xn yn .
-; fns-n)), where fns-i is the list of function symbols of subterms of
-; lhs that contain xi or yi (or both) as a top-level argument.
-; Exception: If any such "function symbol" is a LAMBDA, then fns-i is
-; nil.
+; In the paragraph above, the "expansion" of a substitution ((x1 .  y1) ... (xn
+; . yn)) is the list ((x1 y1 . fns-1) ... (xn yn .  fns-n)), where fns-i is the
+; list of function symbols of subterms of lhs that contain xi or yi (or both)
+; as a top-level argument.  Exception: If any such "function symbol" is a
+; LAMBDA, then fns-i is nil.
 
-; Note: John Cowles first suggested the idea that led to the idea of
-; invisible function symbols as implemented here.  Cowles observation
-; was that it would be very useful if x and (- x) were moved into
-; adjacency by permutative rules.  His idea was to redefine term-order
-; so that those two terms were of virtually equal weight.  Our notion
-; of invisible function symbols and the handling of loop-stopper is
-; meant to address Cowles original concern without complicating
+; Note: John Cowles first suggested the idea that led to the idea of invisible
+; function symbols as implemented here.  Cowles observation was that it would
+; be very useful if x and (- x) were moved into adjacency by permutative rules.
+; His idea was to redefine term-order so that those two terms were of virtually
+; equal weight.  Our notion of invisible function symbols and the handling of
+; loop-stopper is meant to address Cowles original concern without complicating
 ; term-order, which is used in places besides permutative rewriting.
 
   (mv-let (ans unify-subst)
-    (variantp lhs rhs)
+    (variantp lhs
+
+; We expect lhs and rhs to be the left- and right-hand sides of rewrite rules.
+; Thus lhs was created by expanding lambdas, but not rhs.  We thus expand
+; lambdas here.
+
+              (remove-lambdas rhs))
     (cond (ans (loop-stopper1 unify-subst (all-vars lhs) lhs))
           (t nil))))
 
@@ -419,7 +504,7 @@
 ; The odd pairlis$ above just manufactures a substitution with bound-vars as
 ; bound vars so we can use free-varsp to answer the question, "does
 ; the rhs of the equality contain any free variables?"  The range of
-; the subsitution is irrelevant.  If the conjunction above is true, then
+; the substitution is irrelevant.  If the conjunction above is true, then
 ; the current hyp is of the form (equiv v term) and v will be chosen
 ; by rewriting term.  V is not a "free variable".
 
@@ -486,7 +571,7 @@
 ; The odd pairlis$ above just manufactures a substitution with bound-vars as
 ; bound vars so we can use free-varsp to answer the question, "does
 ; the rhs of the equality contain any free variables?"  The range of
-; the subsitution is irrelevant.  If the conjunction above is true, then
+; the substitution is irrelevant.  If the conjunction above is true, then
 ; the current hyp is of the form (equiv v term) and v will be chosen
 ; by rewriting term.  V is not a "free variable".
 
@@ -496,9 +581,7 @@
                (cdr hyps)
                (cons (fargn (car hyps) 1) bound-vars)
                wrld))
-             ((and (nvariablep (car hyps))
-                   (not (fquotep (car hyps)))
-                   (eq (ffn-symb (car hyps)) 'synp)
+             ((and (ffn-symb-p (car hyps) 'synp)
                    (not (equal (fargn (car hyps) 1) *nil*))) ; not syntaxp hyp
               (cond
                ((equal (fargn (car hyps) 1) *t*)
@@ -596,7 +679,7 @@
 ; 'abbreviation from the basic ingredients, preprocessing the hyps and
 ; computing the loop-stopper.  Equiv is an equivalence relation name.
 
-  (let ((hyps (preprocess-hyps hyps))
+  (let ((hyps (preprocess-hyps hyps wrld))
         (loop-stopper (if loop-stopper-lst
                           (remove-irrelevant-loop-stopper-pairs
                            (cadr loop-stopper-lst)
@@ -795,7 +878,7 @@
 (defun forced-hyps (lst)
   (cond ((null lst) nil)
         ((and (nvariablep (car lst))
-              (not (fquotep (car lst)))
+;             (not (fquotep (car lst)))
               (or (eq (ffn-symb (car lst)) 'force)
                   (eq (ffn-symb (car lst)) 'case-split)))
          (cons (car lst) (forced-hyps (cdr lst))))
@@ -807,7 +890,7 @@
     nil)
    (t (mv-let (not-flg atm)
               (strip-not (if (and (nvariablep (car hyps))
-                                  (not (fquotep (car hyps)))
+;                                 (not (fquotep (car hyps)))
                                   (or (eq (ffn-symb (car hyps)) 'force)
                                       (eq (ffn-symb (car hyps)) 'case-split)))
                              (fargn (car hyps) 1)
@@ -846,38 +929,100 @@
 
 (mutual-recursion
 
-(defun covered-geneqv-alist (term geneqv alist wrld)
+(defun covered-geneqv-alist (term geneqv pequiv-info alist ens wrld)
 
-; Extends alist, an accumulator, as follows.  The result associates, with each
-; variable bound in term, a geneqv representing the list of all equivalence
-; relations that are sufficient to preserve at one or more free occurrences of
-; that variable in term, in order to preserve the given geneqv at term.  This
-; function creates the initial bound-vars-alist for
-; double-rewrite-opportunities; see also the comment there.
+; Alist is an accumulator with entries of the form (v . geneqv-v), where v is a
+; variable and geneqv-v is a generated equivalence relation.  We return an
+; extension of alist by associating, with each variable bound in term, a list
+; of all equivalence relations that are sufficient to preserve at one or more
+; free occurrences of that variable in term, in order to preserve the given
+; geneqv at term.
 
-; Alist is an accumulator with entries of the form (variable . geneqv).
+; This function creates the initial var-geneqv-alist for
+; double-rewrite-opportunities; see also the comment there.  The idea is that
+; for any variable occurrence, if rewriting of the actual term at that position
+; took place under a given list of equivalence relations (a geneqv), then
+; additional rewriting is unlikely to simplify the term further when done under
+; any of those equivalence relations; but when we see that rewriting may be
+; done under some equivalence relation that isn't "covered by" that geneqv --
+; i.e., doesn't refine that geneqv (see also double-rewrite-opportunities) --
+; then a double-rewrite warning is called for.
 
   (cond ((variablep term)
          (extend-geneqv-alist term geneqv alist wrld))
         ((fquotep term)
          alist)
-        (t
-         (covered-geneqv-alist-lst (fargs term)
-                                   (geneqv-lst (ffn-symb term) geneqv nil wrld)
-                                   alist
-                                   wrld))))
+        ((flambda-applicationp term)
 
-(defun covered-geneqv-alist-lst (termlist geneqv-lst alist wrld)
-  (cond ((endp termlist)
+; With more effort maybe we could pay more attention to patterned congruences
+; in this case; but that seems like overkill for producing a warning.
+
+         (covered-geneqv-alist-lst (fargs term)
+                                   nil
+                                   1
+                                   (geneqv-lst (ffn-symb term) geneqv nil wrld)
+                                   (ffn-symb term) ; irrelevant?
+                                   geneqv
+                                   nil nil alist ens wrld))
+        (t
+         (mv-let
+           (deep-pequiv-lst shallow-pequiv-lst)
+           (pequivs-for-rewrite-args (ffn-symb term)
+                                     geneqv pequiv-info wrld ens)
+           (covered-geneqv-alist-lst (fargs term)
+                                     nil ; already-processed args
+                                     1   ; bkptr
+                                     (geneqv-lst (ffn-symb term)
+                                                 geneqv nil wrld)
+                                     (ffn-symb term) ; parent-fn
+                                     geneqv ; parent-geneqv
+                                     deep-pequiv-lst
+                                     shallow-pequiv-lst
+                                     alist ens wrld)))))
+
+(defun covered-geneqv-alist-lst (args args-rev bkptr geneqv-lst
+                                      parent-fn parent-geneqv
+                                      deep-pequiv-lst shallow-pequiv-lst
+                                      alist
+                                      ens wrld)
+  (cond ((endp args)
          alist)
-        (t (covered-geneqv-alist-lst (cdr termlist)
-                                     (cdr geneqv-lst)
-                                     (covered-geneqv-alist (car termlist) (car geneqv-lst)
-                                                           alist wrld)
-                                     wrld))))
+        (t (mv-let
+             (child-geneqv child-pequiv-info)
+             (geneqv-and-pequiv-info-for-rewrite
+              parent-fn bkptr args-rev args
+              nil ; alist
+              parent-geneqv
+              (car geneqv-lst) ; child-geneqv
+              deep-pequiv-lst
+              shallow-pequiv-lst
+              wrld)
+             (covered-geneqv-alist-lst
+              (cdr args)
+              (cons (car args) args-rev)
+              (1+ bkptr)
+              (cdr geneqv-lst)
+              parent-fn
+              parent-geneqv
+              deep-pequiv-lst shallow-pequiv-lst
+              (covered-geneqv-alist (car args)
+                                    child-geneqv
+                                    child-pequiv-info
+                                    alist ens wrld)
+              ens wrld)))))
 )
 
 (defun uncovered-equivs (geneqv covered-geneqv wrld)
+
+; Geneqv and covered-geneqv are generated equivalence relations, i.e., lists of
+; equivalence relations.  We return all equivalence relations E in geneqv that
+; are "uncovered" with respect to covered-geneqv, i.e., such that E does not
+; refine covered-geneqv.  See uncovered-equivs-alist for motivation; briefly
+; put, rewriting with respect to an uncovered equiv may be possible that was
+; not possible with respect to covered-geneqv, and we want to warn with a
+; suggestion to use double-rewrite to take advantage of that uncovered equiv
+; when rewriting.
+
   (cond ((endp geneqv) nil)
         (t (let ((equiv (access congruence-rule (car geneqv) :equiv))
                  (rst (uncovered-equivs (cdr geneqv) covered-geneqv wrld)))
@@ -887,33 +1032,51 @@
 
 (mutual-recursion
 
-(defun uncovered-equivs-alist (term geneqv var-geneqv-alist var-geneqv-alist0
-                                    obj-not-? acc-equivs acc-counts wrld)
+(defun uncovered-equivs-alist (term geneqv pequiv-info
+                                    var-geneqv-alist var-geneqv-alist0
+                                    obj-not-? acc-equivs acc-counts ens wrld)
 
-; Accumulator acc-equiv is an alist that associates variables with lists of
+; Accumulator acc-equivs is an alist that associates variables with lists of
 ; equivalence relations, and accumulator acc-counts associates variables with
 ; natural numbers.  We are given a term whose value is to be maintained with
 ; respect to the given geneqv, along with var-geneqv-alist, which associates
-; variables with ilsts of equivalence relations.  We return extensions of
+; variables with lists of equivalence relations.  We return extensions of
 ; acc-equivs, acc-counts, and var-geneqv-alist as follows.
 
 ; Consider a bound (by var-geneqv-alist) variable occurrence in term.  Its
 ; context is known to preserve certain equivalence relations; but some of these
-; may be "uncovered", i.e., not among the ones associated with this variable in
-; var-geneqv-alist.  If that is the case, then add those "uncovered"
-; equivalence relations to the list associated with this variable in
-; acc-equivs, and increment the value of this variable in acc-counts by 1.
+; may be "uncovered", i.e., it does not refine any of those associated with
+; this variable in var-geneqv-alist.  If that is the case, then we add those
+; "uncovered" equivalence relations to the list associated with this variable
+; in acc-equivs, and increment the value of this variable in acc-counts by 1.
 
 ; However, we skip the above analysis for the case that geneqv is *geneqv-iff*
-; and we are at the top level of the IF-structure of the top-level term (not
-; including the tests).  This function is used for creating warnings that
-; suggest the use of double-rewrite, which however is generally not necessary
-; in such situations; see rewrite-solidify-plus.
+; and the variable occurs as a branch of the IF-structure of a hypothesis.
+; This function is used for creating warnings that suggest the use of
+; double-rewrite, which however is generally not necessary in such situations;
+; see rewrite-solidify-plus.
 
 ; For a free variable occurrence in term, we leave acc-equivs and acc-counts
 ; unchanged, and instead extend var-geneqv-alist by associating this variable
 ; with the geneqv for its context.  Var-geneqv-alist0 is left unchanged by this
 ; process, for purposes of checking free-ness.
+
+; Here is a little test, showing that patterned congruences are used to uncover
+; double-rewrite opportunities in hypotheses.
+
+;   (defun foo (x y)
+;     (mv x y))
+
+;   (defthm my-cong
+;     (implies (iff y1 y2)
+;              (iff (mv-nth 1 (foo x y1))
+;                   (mv-nth 1 (foo x y2))))
+;     :rule-classes :congruence)
+
+;   ; We get a warning here for the occurrence of y in the hypothesis:
+;   (defthm bar
+;     (implies (mv-nth 1 (foo x y))
+;              (equal (car (cons x y)) x)))
 
   (cond
    ((variablep term)
@@ -948,62 +1111,86 @@
    ((or (fquotep term)
         (eq (ffn-symb term) 'double-rewrite))
     (mv acc-equivs acc-counts var-geneqv-alist))
-   ((and obj-not-?
-         (eq (ffn-symb term) 'if))
-    (mv-let (acc-equivs acc-counts var-geneqv-alist)
-            (uncovered-equivs-alist
-             (fargn term 3)
-             geneqv
-             var-geneqv-alist
-             var-geneqv-alist0
-             t
-             acc-equivs acc-counts
-             wrld)
-            (mv-let (acc-equivs acc-counts var-geneqv-alist)
-                    (uncovered-equivs-alist
-                     (fargn term 2)
-                     geneqv
-                     var-geneqv-alist
-                     var-geneqv-alist0
-                     t
-                     acc-equivs acc-counts
-                     wrld)
-                    (uncovered-equivs-alist
-                     (fargn term 1)
-                     *geneqv-iff*
-                     var-geneqv-alist
-                     var-geneqv-alist0
-                     nil
-                     acc-equivs acc-counts
-                     wrld))))
-   (t (uncovered-equivs-alist-lst
-       (fargs term)
-       (geneqv-lst (ffn-symb term) geneqv nil wrld)
-       var-geneqv-alist var-geneqv-alist0 acc-equivs acc-counts wrld))))
+   ((flambda-applicationp term)
 
-(defun uncovered-equivs-alist-lst (termlist geneqv-lst var-geneqv-alist
-                                            var-geneqv-alist0 acc-equivs
-                                            acc-counts wrld)
-  (cond ((endp termlist)
+; With more effort maybe we could pay more attention to patterned congruences
+; in this case; but that seems like overkill for producing a warning.
+
+    (uncovered-equivs-alist-lst
+     (fargs term)
+     nil
+     1 ; bkptr
+     (geneqv-lst (ffn-symb term) geneqv nil wrld)
+     (ffn-symb term) ; irrelevant?
+     geneqv nil nil
+     var-geneqv-alist var-geneqv-alist0
+     (if (and obj-not-?
+              (eq (ffn-symb term) 'if))
+         (list nil t t)
+       nil)
+     acc-equivs acc-counts ens wrld))
+   (t (mv-let
+        (deep-pequiv-lst shallow-pequiv-lst)
+        (pequivs-for-rewrite-args (ffn-symb term) geneqv pequiv-info wrld ens)
+        (uncovered-equivs-alist-lst
+         (fargs term)
+         nil
+         1 ; bkptr
+         (geneqv-lst (ffn-symb term) geneqv nil wrld)
+         (ffn-symb term) ; parent-fn
+         geneqv
+         deep-pequiv-lst shallow-pequiv-lst
+         var-geneqv-alist var-geneqv-alist0
+         (if (and obj-not-?
+                  (eq (ffn-symb term) 'if))
+             (list nil t t)
+           nil)
+         acc-equivs acc-counts ens wrld)))))
+
+(defun uncovered-equivs-alist-lst (args args-rev bkptr geneqv-lst
+                                        parent-fn parent-geneqv
+                                        deep-pequiv-lst shallow-pequiv-lst
+                                        var-geneqv-alist
+                                        var-geneqv-alist0
+                                        obj-not-?-lst
+                                        acc-equivs acc-counts ens wrld)
+  (cond ((endp args)
          (mv acc-equivs acc-counts var-geneqv-alist))
-        (t (mv-let (acc-equivs acc-counts var-geneqv-alist)
-             (uncovered-equivs-alist (car termlist)
-                                     (car geneqv-lst)
-                                     var-geneqv-alist
-                                     var-geneqv-alist0
-                                     nil
-                                     acc-equivs acc-counts
-                                     wrld)
-             (uncovered-equivs-alist-lst (cdr termlist) (cdr geneqv-lst)
-                                         var-geneqv-alist
-                                         var-geneqv-alist0
-                                         acc-equivs acc-counts
-                                         wrld)))))
+        (t (mv-let
+             (child-geneqv child-pequiv-info)
+             (geneqv-and-pequiv-info-for-rewrite
+              parent-fn bkptr args-rev args
+              nil ; alist
+              parent-geneqv
+              (car geneqv-lst) ; child-geneqv
+              deep-pequiv-lst
+              shallow-pequiv-lst
+              wrld)
+             (mv-let (acc-equivs acc-counts var-geneqv-alist)
+               (uncovered-equivs-alist (car args)
+                                       child-geneqv
+                                       child-pequiv-info
+                                       var-geneqv-alist
+                                       var-geneqv-alist0
+                                       (car obj-not-?-lst)
+                                       acc-equivs acc-counts
+                                       ens wrld)
+               (uncovered-equivs-alist-lst (cdr args)
+                                           (cons (car args) args-rev)
+                                           (1+ bkptr)
+                                           (cdr geneqv-lst)
+                                           parent-fn parent-geneqv
+                                           deep-pequiv-lst shallow-pequiv-lst
+                                           var-geneqv-alist
+                                           var-geneqv-alist0
+                                           (cdr obj-not-?-lst)
+                                           acc-equivs acc-counts
+                                           ens wrld))))))
 )
 
 (defun double-rewrite-opportunities (hyp-index hyps var-geneqv-alist
                                      final-term final-location final-geneqv
-                                     wrld)
+                                     ens wrld)
 
 ; We return an alist having entries (location var-equiv-alist
 ; . var-count-alist), where location is a string identifying a term (either the
@@ -1024,16 +1211,16 @@
 ; that variable in that hyp.
 
 ; We give similar treatment for the right-hand side of a rewrite rule and
-; conclusion of a linear rule, using the parameters final-xxx.
+; conclusion of a linear rule, using the formal parameters final-xxx.
 
 ; Var-geneqv-alist is an alist that binds variables to geneqvs.  Initially, the
 ; keys are exactly the bound variables of the unifying substitution.  Each key
 ; is associated with a geneqv that represents the equivalence relation
 ; generated by all equivalence relations known to be preserved for at least one
 ; variable occurrence in the pattern that was matched to give the unifying
-; substitution (the left left-hand side of a rewrite rule or max-term of a
-; linear rule).  As we move through hyps, we may encounter a hypothesis (equal
-; var term) or (equiv var (double-rewrite term)) that binds a variable, var, in
+; substitution (the left-hand side of a rewrite rule or max-term of a linear
+; rule).  As we move through hyps, we may encounter a hypothesis (equal var
+; term) or (equiv var (double-rewrite term)) that binds a variable, var, in
 ; which case we will extend var-geneqv-alist for var at that point.  Note that
 ; we do not extend var-geneqv-alist for other free variables in hypotheses,
 ; because we do not know the equivalence relations that were maintained when
@@ -1041,9 +1228,9 @@
 
   (cond ((endp hyps)
          (mv-let (var-equivs-alist var-counts var-geneqv-alist)
-                 (uncovered-equivs-alist final-term final-geneqv
+                 (uncovered-equivs-alist final-term final-geneqv nil
                                          var-geneqv-alist var-geneqv-alist
-                                         nil nil nil wrld)
+                                         nil nil nil ens wrld)
                  (declare (ignore var-geneqv-alist))
                  (if var-equivs-alist
                      (list (list* final-location var-equivs-alist var-counts))
@@ -1057,10 +1244,7 @@
                     (let* ((equiv (ffn-symb hyp))
                            (var (fargn hyp 1))
                            (term0 (fargn hyp 2))
-                           (term (if (and (nvariablep term0)
-                                          (not (fquotep term0))
-                                          (eq (ffn-symb term0)
-                                              'double-rewrite))
+                           (term (if (ffn-symb-p term0 'double-rewrite)
                                      (fargn term0 1)
                                    term0))
                            (new-geneqv (cadr (geneqv-lst equiv
@@ -1072,21 +1256,23 @@
                        (cdr hyps)
                        (covered-geneqv-alist term
                                              new-geneqv
+                                             nil
                                              (assert$ (variablep var)
                                                       (extend-geneqv-alist
                                                        var new-geneqv
                                                        var-geneqv-alist wrld))
-                                             wrld)
+                                             ens wrld)
                        final-term final-location final-geneqv
-                       wrld)))
+                       ens wrld)))
                    (t (mv-let (var-equivs-alist var-counts var-geneqv-alist)
                               (uncovered-equivs-alist (car hyps)
                                                       *geneqv-iff*
+                                                      nil
                                                       var-geneqv-alist
                                                       var-geneqv-alist
                                                       t
                                                       nil nil
-                                                      wrld)
+                                                      ens wrld)
                         (let ((cdr-result
                                (double-rewrite-opportunities (1+ hyp-index)
                                                              (cdr hyps)
@@ -1094,7 +1280,7 @@
                                                              final-term
                                                              final-location
                                                              final-geneqv
-                                                             wrld)))
+                                                             ens wrld)))
                           (if var-equivs-alist
                               (cons (list* (msg "the ~n0 hypothesis"
                                                 (list hyp-index))
@@ -1116,15 +1302,25 @@
                           (count (let ((pair (assoc-eq var var-count-alist)))
                                    (assert$ pair (cdr pair)))))
                      (warning$ ctx ("Double-rewrite")
-                               "In a ~x0 rule generated from ~x1~@2, ~
-                                equivalence relation~#3~[ ~&3~ is~/s ~&3 ~
-                                are~] maintained at ~n4 problematic ~
-                                occurrence~#5~[~/s~] of variable ~x6 in ~@7, ~
-                                but not at any binding occurrence of ~x6.  ~
-                                Consider replacing ~#5~[that ~
-                                occurrence~/those ~n4 occurrences~] of ~x6 in ~
-                                ~@7 with ~x8.  See :doc double-rewrite for ~
-                                more information on this issue."
+                               `("In a ~x0 rule generated from ~x1~@2, ~
+                                  equivalence relation~#3~[ ~&3~ is~/s ~&3 ~
+                                  are~] maintained at ~n4 problematic ~
+                                  occurrence~#5~[~/s~] of variable ~x6 in ~
+                                  ~@7, but not at any binding occurrence of ~
+                                  ~x6.  Consider replacing ~#5~[that ~
+                                  occurrence~/those ~n4 occurrences~] of ~x6 ~
+                                  in ~@7 with ~x8.  See :doc double-rewrite ~
+                                  for more information on this issue."
+                                 (:doc double-rewrite)
+                                 (:equivalence-relations
+                                  ,(cdar var-equivs-alist))
+                                 (:location ,location)
+                                 ,@(and (not (equal max-term-msg ""))
+                                        `((:max-term-msg ,max-term-msg)))
+                                 (:new-rule ,name)
+                                 (:number-of-problematic-occurrences ,count)
+                                 (:rule-class ,token)
+                                 (:variable ,var))
                                token name
                                max-term-msg
                                (cdar var-equivs-alist)
@@ -1171,6 +1367,27 @@
               (irrelevant-loop-stopper-pairs (cdr pairs) vars)))
     nil))
 
+(defun non-rec-def-rules-msg-1 (alist)
+  (cond ((endp alist) nil)
+        ((null (cdar alist))
+         (non-rec-def-rules-msg-1 (cdr alist)))
+        (t (cons (msg "~x0 is defined with ~x1"
+                      (caar alist)
+                      (cdar alist))
+                 (non-rec-def-rules-msg-1 (cdr alist))))))
+
+(defun non-rec-def-rules-msg (alist)
+  (let ((lst (non-rec-def-rules-msg-1 alist)))
+    (cond
+     ((null lst) "")
+     (t (msg "  (Note that ~*0"
+             (list
+              "impossible" ; unreachable case (when there's nothing to print)
+              "~@*.)"       ; how to print the last element
+              "~@* and "   ; how to print the 2nd to last element
+              "~@*, "      ; how to print all other elements
+              lst))))))
+
 (defun chk-rewrite-rule-warnings (name match-free loop-stopper rule ctx ens
                                        wrld state)
   (let* ((token (if (eq (access rewrite-rule rule :subclass)
@@ -1179,7 +1396,10 @@
                   :rewrite))
          (hyps (access rewrite-rule rule :hyps))
          (lhs (access rewrite-rule rule :lhs))
-         (non-rec-fns-lhs (non-recursive-fnnames lhs ens wrld))
+         (warn-non-rec (not (warning-disabled-p "Non-rec")))
+         (non-rec-fns-lhs-alist
+          (and warn-non-rec
+               (non-recursive-fnnames-alist lhs ens wrld)))
          (lhs-vars (all-vars lhs))
          (rhs-vars (all-vars (access rewrite-rule rule :rhs)))
          (free-vars (free-vars-in-hyps-considering-bind-free
@@ -1187,61 +1407,73 @@
                      lhs-vars
                      wrld))
          (inst-hyps (hyps-that-instantiate-free-vars free-vars hyps))
-         (non-rec-fns-inst-hyps
-          (non-recursive-fnnames-lst
-           (strip-top-level-nots-and-forces inst-hyps) ens wrld))
+         (non-rec-fns-inst-hyps-alist
+          (and warn-non-rec
+               (non-recursive-fnnames-alist-lst
+                (strip-top-level-nots-and-forces inst-hyps) ens wrld)))
          (subsume-check-enabled (not (warning-disabled-p "Subsume")))
          (subsumed-rule-names
           (and subsume-check-enabled
-               (find-subsumed-rule-names (getprop (ffn-symb lhs) 'lemmas nil
-                                                  'current-acl2-world wrld)
+               (find-subsumed-rule-names (getpropc (ffn-symb lhs) 'lemmas nil
+                                                   wrld)
                                          rule ens wrld)))
          (subsuming-rule-names
           (and subsume-check-enabled
-               (find-subsuming-rule-names (getprop (ffn-symb lhs) 'lemmas nil
-                                                   'current-acl2-world wrld)
+               (find-subsuming-rule-names (getpropc (ffn-symb lhs) 'lemmas nil
+                                                    wrld)
                                           rule ens wrld)))
          (equiv (access rewrite-rule rule :equiv))
+         (geneqv (cadr (geneqv-lst equiv nil nil wrld)))
          (double-rewrite-opportunities
           (and (not (warning-disabled-p "Double-rewrite"))
                (double-rewrite-opportunities
                 1
                 hyps
-                (covered-geneqv-alist
-                 lhs
-                 (cadr (geneqv-lst equiv nil nil wrld)) ; geneqv
-                 nil wrld)
+                (covered-geneqv-alist lhs geneqv nil nil ens wrld)
                 (access rewrite-rule rule :rhs)
                 "the right-hand side"
-                (cadr (geneqv-lst (access rewrite-rule rule :equiv) nil nil wrld))
-                wrld))))
+                geneqv
+                ens wrld))))
     (pprogn
      (cond (double-rewrite-opportunities
             (show-double-rewrite-opportunities double-rewrite-opportunities
                                                token name "" ctx state))
            (t state))
      (cond
-      (non-rec-fns-lhs
+      (non-rec-fns-lhs-alist
        (warning$ ctx "Non-rec"
-                 "A ~x0 rule generated from ~x1 will be ~
-                 triggered only by terms containing the non-recursive ~
-                 function symbol~#2~[ ~&2.  Unless this function ~
-                 is~/s ~&2.  Unless these functions are~] disabled, ~
-                 this rule is unlikely ever to be used."
-                 token name (hide-lambdas non-rec-fns-lhs)))
+                 `("A ~x0 rule generated from ~x1 will be triggered only by ~
+                    terms containing the function symbol~#2~[ ~&2, which has ~
+                    a non-recursive definition.~@3  Unless this definition ~
+                    is~/s ~&2, which have non-recursive definitions.~@3  ~
+                    Unless these definitions are~] disabled, this rule is ~
+                    unlikely ever to be used."
+                   (:non-recursive-fns-lhs
+                    ,(hide-lambdas (strip-cars non-rec-fns-lhs-alist)))
+                   (:name ,name)
+                   (:rule-class ,token))
+                 token
+                 name
+                 (hide-lambdas (strip-cars non-rec-fns-lhs-alist))
+                 (non-rec-def-rules-msg non-rec-fns-lhs-alist)))
       (t state))
      (er-progn
       (cond
        ((and free-vars (null match-free))
         (pprogn
          (warning$ ctx "Free"
-                   "A ~x0 rule generated from ~x1 contains the free ~
+                   `("A ~x0 rule generated from ~x1 contains the free ~
                     variable~#2~[ ~&2.  This variable~/s ~&2.  These ~
                     variables~] will be chosen by searching for ~#3~[an ~
                     instance~/instances~] of ~*4 in the context of the term ~
                     being rewritten.  This is generally a severe restriction ~
                     on the applicability of a ~x0 rule.  See :DOC ~
                     free-variables."
+                     (:doc free-variables)
+                     (:free-variables ,free-vars)
+                     (:instantiated-hyps ,(untranslate-lst inst-hyps t wrld))
+                     (:name ,name)
+                     (:rule-class ,token))
                    token name free-vars
                    inst-hyps
                    (tilde-*-untranslate-lst-phrase inst-hyps t wrld))
@@ -1299,40 +1531,56 @@
           (t state)))
         (t state))
        (cond
-        (non-rec-fns-inst-hyps
+        (non-rec-fns-inst-hyps-alist
          (warning$ ctx "Non-rec"
-                   "As noted, we will instantiate the free ~
-                    variable~#0~[~/s~], ~&0, of a ~x1 rule generated from ~
-                    ~x2, by searching for the ~#3~[hypothesis~/set of ~
-                    hypotheses~] shown above.  However, ~#3~[this hypothesis ~
-                    mentions~/these hypotheses mention~] the function ~
-                    symbol~#4~[ ~&4, which is~/s ~&4, which are~] defun'd ~
-                    non-recursively.  Unless disabled, ~#4~[this function ~
-                    symbol is~/these function symbols are~] unlikely to occur ~
-                    in the conjecture being proved and hence the search for ~
-                    the required ~#3~[hypothesis~/hypotheses~] will likely ~
-                    fail."
+                   `("As noted, we will instantiate the free ~
+                      variable~#0~[~/s~], ~&0, of a ~x1 rule generated from ~
+                      ~x2, by searching for the ~#3~[hypothesis~/set of ~
+                      hypotheses~] shown above.  However, ~#3~[this ~
+                      hypothesis mentions~/these hypotheses mention~] the ~
+                      function symbol~#4~[ ~&4, which has a non-recursive ~
+                      definition.~@5  Unless this definition is disabled, ~
+                      that function symbol is~/s ~&4, which have ~
+                      non-recursive definitions.~@5  Unless these definitions ~
+                      are disabled, those function symbols are~] unlikely to ~
+                      occur in the conjecture being proved and hence the ~
+                      search for the required ~#3~[hypothesis~/hypotheses~] ~
+                      will likely fail."
+                     (:free-variables ,free-vars)
+                     (:instantiated-hyps ,inst-hyps)
+                     (:non-rec-fns-inst-hyps
+                      ,(hide-lambdas (strip-cars non-rec-fns-inst-hyps-alist)))
+                     (:name ,name)
+                     (:rule-class ,token))
                    free-vars token name inst-hyps
-                   (hide-lambdas non-rec-fns-inst-hyps)))
+                   (hide-lambdas (strip-cars non-rec-fns-inst-hyps-alist))
+                   (non-rec-def-rules-msg non-rec-fns-inst-hyps-alist)))
         (t state))
        (cond
         (subsumed-rule-names
          (warning$ ctx ("Subsume")
-                   "A newly proposed ~x0 rule generated from ~x1 probably ~
-                    subsumes the previously added :REWRITE rule~#2~[~/s~] ~
-                    ~&2, in the sense that the new rule will now probably be ~
-                    applied whenever the old rule~#2~[~/s~] would have been."
+                   `("A newly proposed ~x0 rule generated from ~x1 probably ~
+                     subsumes the previously added :REWRITE rule~#2~[~/s~] ~
+                     ~&2, in the sense that the new rule will now probably be ~
+                     applied whenever the old rule~#2~[~/s~] would have been."
+                     (:new-rule ,name)
+                     (:rule-class-new ,token)
+                     (:rule-class-old :rewrite)
+                     (:subsumed-rules ,subsumed-rule-names))
                    token name subsumed-rule-names))
         (t state))
        (cond
         (subsuming-rule-names
          (warning$ ctx ("Subsume")
-                   "The previously added rule~#1~[~/s~] ~&1 subsume~#1~[s~/~] ~
-                    a newly proposed ~x0 rule generated from ~x2, in the ~
-                    sense that the old rule~#1~[ rewrites a more general ~
-                    target~/s rewrite more general targets~].  Because the ~
-                    new rule will be tried first, it may nonetheless find ~
-                    application."
+                   `("The previously added rule~#1~[~/s~] ~&1 ~
+                     subsume~#1~[s~/~] a newly proposed ~x0 rule generated ~
+                     from ~x2, in the sense that the old rule~#1~[ rewrites a ~
+                     more general target~/s rewrite more general targets~].  ~
+                     Because the new rule will be tried first, it may ~
+                     nonetheless find application."
+                     (:new-rule ,name)
+                     (:rule-class ,token)
+                     (:subsuming-rules ,subsuming-rule-names))
                    token
                    subsuming-rule-names
                    name))
@@ -1418,7 +1666,7 @@
 ; is a ttree that justifies the storage of all the :REWRITE rules.
 
   (chk-acceptable-rewrite-rule1 name match-free loop-stopper
-                                (unprettyify (remove-guard-holders term))
+                                (unprettyify (remove-guard-holders term wrld))
                                 ctx ens wrld state))
 
 ; So now we work on actually generating and adding the rules.
@@ -1491,8 +1739,7 @@
             (wrld1 (putprop (ffn-symb lhs)
                             'lemmas
                             (cons rewrite-rule
-                                  (getprop (ffn-symb lhs) 'lemmas nil
-                                           'current-acl2-world wrld))
+                                  (getpropc (ffn-symb lhs) 'lemmas nil wrld))
                             wrld)))
        (put-match-free-value match-free-value rune wrld1))))))
 
@@ -1525,7 +1772,7 @@
 ; convention.  "Consistency is the hobgoblin of small minds."  Emerson?
 
   (add-rewrite-rule1 rune nume
-                     (unprettyify (remove-guard-holders term))
+                     (unprettyify (remove-guard-holders term wrld))
                      loop-stopper-lst backchain-limit-lst match-free ens wrld))
 
 ;---------------------------------------------------------------------------
@@ -1559,7 +1806,7 @@
 (defun expand-inequality-fncall (term)
 
 ; If term is a (possibly negated) call of a primitive arithmetic
-; relation, <, = and /=, we reexpress it in terms of
+; relation, <, = and /=, we re-express it in terms of
 ; not, equal, and < so that it can be linearized successfully.
 ; Otherwise, we return term.
 
@@ -1792,28 +2039,29 @@
         (bad-synp-hyp-msg-for-linear (cdr max-terms) hyps wrld)))))
 
 (defun show-double-rewrite-opportunities-linear (hyps max-terms final-term name
-                                                      ctx wrld state)
+                                                      ctx ens wrld state)
   (cond ((endp max-terms)
          state)
         (t (pprogn (show-double-rewrite-opportunities
                     (double-rewrite-opportunities
                      1
                      hyps
-                     (covered-geneqv-alist (car max-terms) nil nil wrld)
+                     (covered-geneqv-alist (car max-terms) nil nil nil ens
+                                           wrld)
                      final-term
                      "the conclusion"
                      *geneqv-iff* ; final-geneqv
-                     wrld)
+                     ens wrld)
                     :linear name
                     (msg " for trigger term ~x0"
                          (untranslate (car max-terms) nil wrld))
                     ctx state)
                    (show-double-rewrite-opportunities-linear
-                    hyps (cdr max-terms) final-term name ctx wrld
+                    hyps (cdr max-terms) final-term name ctx ens wrld
                     state)))))
 
-(defun chk-acceptable-linear-rule2
-  (name match-free trigger-terms hyps concl ctx ens wrld state)
+(defun chk-acceptable-linear-rule2 (name match-free trigger-terms hyps concl
+                                         ctx ens wrld state)
 
 ; This is the basic function for checking that (implies (AND . hyps)
 ; concl) generates a useful :LINEAR rule.  If it does not, we cause an
@@ -1841,125 +2089,140 @@
                 linear."
                name
                (untranslate xconcl t wrld)))
-          (t (let* ((all-vars-hyps (all-vars-in-hyps hyps))
-                    (potential-free-vars
-                     (free-vars-in-hyps-considering-bind-free hyps nil wrld))
-                    (all-vars-in-poly-lst
-                     (all-vars-in-poly-lst (car lst)))
-                    (max-terms
-                     (or trigger-terms
-                         (maximal-terms all-vars-in-poly-lst
-                                        all-vars-hyps
-                                        (all-vars concl))))
-                    (non-rec-fns (non-recursive-fnnames-lst
-                                  max-terms ens wrld))
-                    (bad-max-terms (collect-when-ffnnamesp
-                                    non-rec-fns
-                                    max-terms))
-                    (free-max-terms-msg
-                     (make-free-max-terms-msg name
-                                              max-terms
-                                              potential-free-vars
-                                              hyps)))
+          (t
+           (let* ((all-vars-hyps (all-vars-in-hyps hyps))
+                  (potential-free-vars
+                   (free-vars-in-hyps-considering-bind-free hyps nil wrld))
+                  (all-vars-in-poly-lst
+                   (all-vars-in-poly-lst (car lst)))
+                  (max-terms
+                   (or trigger-terms
+                       (maximal-terms all-vars-in-poly-lst
+                                      all-vars-hyps
+                                      (all-vars concl))))
+                  (warn-non-rec (not (warning-disabled-p "Non-rec")))
+                  (non-rec-fns-alist
+                   (and warn-non-rec
+                        (non-recursive-fnnames-alist-lst max-terms ens wrld)))
+                  (non-rec-fns (strip-cars non-rec-fns-alist))
+                  (bad-max-terms (collect-when-ffnnamesp
+                                  non-rec-fns
+                                  max-terms))
+                  (free-max-terms-msg
+                   (make-free-max-terms-msg name
+                                            max-terms
+                                            potential-free-vars
+                                            hyps)))
+             (cond
+              ((null max-terms)
                (cond
-                ((null max-terms)
-                 (cond
-                  ((null all-vars-in-poly-lst)
-                   (er soft ctx
-                       "No :LINEAR rule can be generated from ~x0 because ~
-                        there are no ``maximal terms'' in the inequality ~
-                        produced from its conclusion.  In fact, the inequality ~
-                        has simplified to one that has no variables."
-                       name))
-                  (t
-                   (er soft ctx
-                       "No :LINEAR rule can be generated from ~x0 because ~
-                        there are no ``maximal terms'' in the inequality ~
-                        produced from its conclusion.  The inequality produced ~
-                        from its conclusion involves a linear polynomial in ~
-                        the unknown~#1~[~/s~] ~&1.  No unknown above has the ~
-                        three properties of a maximal term (see :DOC linear).  ~
-                        What can you do?  The most direct solution is to make ~
-                        this a :REWRITE rule rather than a :LINEAR rule.  Of ~
-                        course, you then have to make sure your intended ~
-                        application can suffer it being a :REWRITE rule!  A ~
-                        more challenging (and sometimes more rewarding) ~
-                        alternative is to package up some of your functions ~
-                        into a new non-recursive function (either in the ~
-                        unknowns or the hypotheses) so as to create a maximal ~
-                        term.  Of course, if you do that, you have to arrange ~
-                        to use that non-recursive function in the intended ~
-                        applications of this rule."
-                       name all-vars-in-poly-lst))))
+                ((null all-vars-in-poly-lst)
+                 (er soft ctx
+                     "No :LINEAR rule can be generated from ~x0 because there ~
+                      are no ``maximal terms'' in the inequality produced ~
+                      from its conclusion.  In fact, the inequality has ~
+                      simplified to one that has no variables."
+                     name))
                 (t
-                 (mv-let (bad-synp-hyp-msg bad-max-term)
-                   (bad-synp-hyp-msg-for-linear max-terms hyps wrld)
-                   (cond
-                    (bad-synp-hyp-msg
-                     (er soft ctx
-                         "While checking the hypotheses of ~x0 and using ~
-                          the trigger term ~x1, the following error message ~
-                          was generated: ~% ~%~
-                          ~@2"
-                         name
-                         bad-max-term
-                         bad-synp-hyp-msg))
-                    (t
-                     (pprogn
-                      (if (warning-disabled-p "Double-rewrite")
-                          state
-                        (show-double-rewrite-opportunities-linear
-                         hyps max-terms concl name ctx wrld state))
-                      (cond
-                       ((equal max-terms bad-max-terms)
-                        (warning$ ctx "Non-rec"
-                                  "A :LINEAR rule generated from ~x0 will be ~
+                 (er soft ctx
+                     "No :LINEAR rule can be generated from ~x0 because there ~
+                      are no ``maximal terms'' in the inequality produced ~
+                      from its conclusion.  The inequality produced from its ~
+                      conclusion involves a linear polynomial in the ~
+                      unknown~#1~[~/s~] ~&1.  No unknown above has the three ~
+                      properties of a maximal term (see :DOC linear).  What ~
+                      can you do?  The most direct solution is to make this a ~
+                      :REWRITE rule rather than a :LINEAR rule.  Of course, ~
+                      you then have to make sure your intended application ~
+                      can suffer it being a :REWRITE rule!  A more ~
+                      challenging (and sometimes more rewarding) alternative ~
+                      is to package up some of your functions into a new ~
+                      non-recursive function (either in the unknowns or the ~
+                      hypotheses) so as to create a maximal term.  Of course, ~
+                      if you do that, you have to arrange to use that ~
+                      non-recursive function in the intended applications of ~
+                      this rule."
+                     name all-vars-in-poly-lst))))
+              (t
+               (mv-let (bad-synp-hyp-msg bad-max-term)
+                 (bad-synp-hyp-msg-for-linear max-terms hyps wrld)
+                 (cond
+                  (bad-synp-hyp-msg
+                   (er soft ctx
+                       "While checking the hypotheses of ~x0 and using the ~
+                        trigger term ~x1, the following error message was ~
+                        generated:~%~%~@2"
+                       name
+                       bad-max-term
+                       bad-synp-hyp-msg))
+                  (t
+                   (pprogn
+                    (if (warning-disabled-p "Double-rewrite")
+                        state
+                      (show-double-rewrite-opportunities-linear
+                       hyps max-terms concl name ctx ens wrld state))
+                    (cond
+                     ((equal max-terms bad-max-terms)
+                      (warning$ ctx "Non-rec"
+                                `("A :LINEAR rule generated from ~x0 will be ~
                                    triggered only by terms containing the ~
-                                   non-recursive function symbol~#1~[ ~&1.  Unless ~
-                                   this function is~/s ~&1.  Unless these functions ~
-                                   are~] disabled, such triggering terms are ~
-                                   unlikely to arise and so ~x0 is unlikely to ever ~
-                                   be used."
-                                  name (hide-lambdas non-rec-fns)))
-                       (bad-max-terms
-                        (warning$ ctx "Non-rec"
-                                  "A :LINEAR rule generated from ~x0 will be ~
-                                   triggered by the terms ~&1. ~N2 of these terms, ~
-                                   namely ~&3, contain~#3~[s~/~] the non-recursive ~
-                                   function symbol~#4~[ ~&4.  Unless this function ~
-                                   is~/s ~&4.  Unless these functions are~] ~
-                                   disabled, ~x0 is unlikely to be triggered via ~
-                                   ~#3~[this term~/these terms~]."
-                                  name
-                                  max-terms
-                                  (length bad-max-terms)
-                                  bad-max-terms
-                                  (hide-lambdas non-rec-fns)))
-                       (t state))
-                      (cond
-                       ((and (nth 4 free-max-terms-msg)
-                             (null match-free))
-                        (pprogn
-                         (warning$ ctx "Free"
-                                   "A :LINEAR rule generated from ~x0 will be ~
-                                    triggered by the term~#1~[~/s~] ~&1.  ~*2This is ~
-                                    generally a severe restriction on the ~
-                                    applicability of the :LINEAR rule~@3."
-                                   name
-                                   max-terms
-                                   free-max-terms-msg
-                                   (let ((len-max-terms (length max-terms))
-                                         (len-bad-max-terms
-                                          (length (nth 4 free-max-terms-msg))))
-                                     (cond ((eql len-bad-max-terms
-                                                 len-max-terms)
-                                            "")
-                                           ((eql len-bad-max-terms 1)
-                                            " for this trigger")
-                                           (t (msg " for these ~n0 triggers"
-                                                   len-bad-max-terms)))))
-                         (free-variable-error? :linear name ctx wrld state)))
-                       (t (value nil))))))))))))))
+                                   function symbol~#1~[ ~&1, which has a ~
+                                   non-recursive definition.~@2  Unless this ~
+                                   definition is~/s ~&1, which have ~
+                                   non-recursive definitions.~@2  Unless ~
+                                   these definitions are~] disabled, such ~
+                                   triggering terms are unlikely to arise and ~
+                                   so ~x0 is unlikely to ever be used."
+                                  (:name ,name)
+                                  (:non-recursive-fns
+                                   ,(hide-lambdas non-rec-fns))
+                                  (:rule-class :linear))
+                                name
+                                (hide-lambdas non-rec-fns)
+                                (non-rec-def-rules-msg non-rec-fns-alist)))
+                     (bad-max-terms
+                      (warning$ ctx "Non-rec"
+                                "A :LINEAR rule generated from ~x0 will be ~
+                                 triggered by the terms ~&1. ~N2 of these ~
+                                 terms, namely ~&3, contain~#3~[s~/~] the ~
+                                 function symbol~#4~[ ~&4, which has a ~
+                                 non-recursive definition.~@5  Unless this ~
+                                 definition is~/s ~&4, which have ~
+                                 non-recursive definitions.~@5  Unless these ~
+                                 definitions are~] disabled, ~x0 is unlikely ~
+                                 to be triggered via ~#3~[this term~/these ~
+                                 terms~]."
+                                name
+                                max-terms
+                                (length bad-max-terms)
+                                bad-max-terms
+                                (hide-lambdas non-rec-fns)
+                                (non-rec-def-rules-msg non-rec-fns-alist)))
+                     (t state))
+                    (cond
+                     ((and (nth 4 free-max-terms-msg)
+                           (null match-free))
+                      (pprogn
+                       (warning$ ctx "Free"
+                                 "A :LINEAR rule generated from ~x0 will be ~
+                                  triggered by the term~#1~[~/s~] ~&1.  ~
+                                  ~*2This is generally a severe restriction ~
+                                  on the applicability of the :LINEAR rule~@3."
+                                 name
+                                 max-terms
+                                 free-max-terms-msg
+                                 (let ((len-max-terms (length max-terms))
+                                       (len-bad-max-terms
+                                        (length (nth 4 free-max-terms-msg))))
+                                   (cond ((eql len-bad-max-terms
+                                               len-max-terms)
+                                          "")
+                                         ((eql len-bad-max-terms 1)
+                                          " for this trigger")
+                                         (t (msg " for these ~n0 triggers"
+                                                 len-bad-max-terms)))))
+                       (free-variable-error? :linear name ctx wrld state)))
+                     (t (value nil))))))))))))))
 
 (defun chk-acceptable-linear-rule1 (name match-free trigger-terms lst ctx ens
                                          wrld state)
@@ -1990,7 +2253,7 @@
 ; messages without causing an error.
 
   (chk-acceptable-linear-rule1 name match-free trigger-terms
-                               (unprettyify (remove-guard-holders term))
+                               (unprettyify (remove-guard-holders term wrld))
                                ctx ens wrld state))
 
 ; And now, to adding :LINEAR rules...
@@ -2017,12 +2280,10 @@
                                                :max-term))
                              'linear-lemmas
                              (cons linear-rule
-                                   (getprop (ffn-symb
-                                             (access linear-lemma linear-rule
-                                                     :max-term))
-                                            'linear-lemmas nil
-                                            'current-acl2-world
-                                            wrld))
+                                   (getpropc (ffn-symb
+                                              (access linear-lemma linear-rule
+                                                      :max-term))
+                                             'linear-lemmas nil wrld))
                              wrld)))
         (add-linear-rule3 rune nume hyps concl (cdr max-terms)
                           backchain-limit-lst
@@ -2039,10 +2300,10 @@
 
 (defun add-linear-rule2 (rune nume trigger-terms hyps concl
                               backchain-limit-lst match-free ens wrld state)
-  (let* ((concl (remove-guard-holders concl))
+  (let* ((concl (remove-guard-holders concl wrld))
          (xconcl (expand-inequality-fncall concl))
          (lst (external-linearize xconcl ens wrld state))
-         (hyps (preprocess-hyps hyps))
+         (hyps (preprocess-hyps hyps wrld))
          (all-vars-hyps (all-vars-in-hyps hyps))
          (max-terms
           (or trigger-terms
@@ -2104,7 +2365,7 @@
 ;                (recur-over-break-cons cdr)))))
 
   (add-linear-rule1 rune nume trigger-terms
-                    (unprettyify (remove-guard-holders term))
+                    (unprettyify (remove-guard-holders term wrld))
                     backchain-limit-lst match-free ens wrld state))
 
 ;---------------------------------------------------------------------------
@@ -2409,7 +2670,7 @@
 ; But it is possible, perhaps, for a user-supplied built-in clause to contain
 ; no function symbols of the kind returned by all-fnnames-subsumer.  For
 ; example, the user might prove 7 as a built-in clause.  Perhaps a
-; nonpathological example arises, but I haven't bothered to think of one.
+; non-pathological example arises, but I haven't bothered to think of one.
 ; Instead, this is handled soundly, as follows.  If the :all-fnnames is nil we
 ; act like it hasn't been computed yet (as above) and compute it.  Then we
 ; consider the discriminator function symbol to the car of the resulting list,
@@ -2616,37 +2877,32 @@
 
   (cond
    ((null recognizer-alist) (value nil))
-   ((eq (access recognizer-tuple new-recog-tuple :fn)
-        (access recognizer-tuple (car recognizer-alist) :fn))
-    (cond
-     ((and
-       (ts-subsetp (access recognizer-tuple new-recog-tuple :true-ts)
-                   (access recognizer-tuple (car recognizer-alist) :true-ts))
-       (ts-subsetp (access recognizer-tuple new-recog-tuple :false-ts)
-                   (access recognizer-tuple (car recognizer-alist) :false-ts))
-       (or (access recognizer-tuple new-recog-tuple :strongp)
-           (null (access recognizer-tuple (car recognizer-alist) :strongp)))
-       (or
-        (not (ts= (access recognizer-tuple new-recog-tuple :false-ts)
-                  (access recognizer-tuple (car recognizer-alist) :false-ts)))
-        (not (ts= (access recognizer-tuple new-recog-tuple :true-ts)
-                  (access recognizer-tuple (car recognizer-alist) :true-ts)))
-        (not (eq (access recognizer-tuple new-recog-tuple :strongp)
-                 (access recognizer-tuple (car recognizer-alist) :strongp)))))
-      (comment-on-new-recog-tuple1 new-recog-tuple (cdr recognizer-alist)
-                                   ctx state))
-     (t (pprogn
-         (warning$ ctx ("Compound-rec")
-                  "The newly proposed compound recognizer rule ~x0 is not as ~
-                   restrictive as the old rule ~x1.  See :DOC ~
-                   compound-recognizer."
-                  (base-symbol (access recognizer-tuple new-recog-tuple :rune))
-                  (base-symbol (access recognizer-tuple (car recognizer-alist)
-                                       :rune)))
-         (comment-on-new-recog-tuple1 new-recog-tuple (cdr recognizer-alist)
-                                      ctx state)))))
-   (t (comment-on-new-recog-tuple1 new-recog-tuple (cdr recognizer-alist)
-                                   ctx state))))
+   ((and
+     (ts-subsetp (access recognizer-tuple new-recog-tuple :true-ts)
+                 (access recognizer-tuple (car recognizer-alist) :true-ts))
+     (ts-subsetp (access recognizer-tuple new-recog-tuple :false-ts)
+                 (access recognizer-tuple (car recognizer-alist) :false-ts))
+     (or (access recognizer-tuple new-recog-tuple :strongp)
+         (null (access recognizer-tuple (car recognizer-alist) :strongp)))
+     (or
+      (not (ts= (access recognizer-tuple new-recog-tuple :false-ts)
+                (access recognizer-tuple (car recognizer-alist) :false-ts)))
+      (not (ts= (access recognizer-tuple new-recog-tuple :true-ts)
+                (access recognizer-tuple (car recognizer-alist) :true-ts)))
+      (not (eq (access recognizer-tuple new-recog-tuple :strongp)
+               (access recognizer-tuple (car recognizer-alist) :strongp)))))
+    (comment-on-new-recog-tuple1 new-recog-tuple (cdr recognizer-alist)
+                                 ctx state))
+   (t (pprogn
+       (warning$ ctx ("Compound-rec")
+                 "The newly proposed compound recognizer rule ~x0 is not as ~
+                  restrictive as the old rule ~x1.  See :DOC ~
+                  compound-recognizer."
+                 (base-symbol (access recognizer-tuple new-recog-tuple :rune))
+                 (base-symbol (access recognizer-tuple (car recognizer-alist)
+                                      :rune)))
+       (comment-on-new-recog-tuple1 new-recog-tuple (cdr recognizer-alist)
+                                    ctx state)))))
 
 (defun comment-on-new-recog-tuple (new-recog-tuple ctx ens wrld state)
 
@@ -2662,7 +2918,8 @@
 ; handled.  (Without more experience with compound recognizers we do
 ; not know what sort of checks would be most helpful.)
 
-  (let ((pred (fcons-term* (access recognizer-tuple new-recog-tuple :fn) 'x)))
+  (let* ((fn (access recognizer-tuple new-recog-tuple :fn))
+         (pred (fcons-term* fn 'x)))
     (mv-let
      (tts-term ttree)
      (convert-type-set-to-term
@@ -2708,7 +2965,8 @@
           (if (warning-disabled-p "Compound-rec")
               (value nil)
             (comment-on-new-recog-tuple1 new-recog-tuple
-                                         (global-val 'recognizer-alist wrld)
+                                         (getpropc fn 'recognizer-alist nil
+                                                   wrld)
                                          ctx state)))))))))
 
 (defun chk-acceptable-compound-recognizer-rule (name term ctx ens wrld state)
@@ -2770,13 +3028,13 @@
 
 (defun add-compound-recognizer-rule (rune nume term ens wrld)
 
-; We construct the recongizer-tuple corresponding to term and just add
-; it onto the front of the current recognizer-alist.  We used to merge
-; it into the existing tuple for the same :fn, if one existed, but
-; that makes disabling these rules complicated.  When we retrieve
-; tuples from the alist we look for the first enabled tuple about the
-; :fn in question.  So it is necessary to leave old tuples for :fn in
-; place.
+; We construct the recognizer-tuple corresponding to term and just add it onto
+; the front of the current recognizer-alist for the function symbol of term.
+; We used to merge it into the existing tuple for that function symbol, if one
+; existed, but that makes disabling these rules complicated.  When we retrieve
+; tuples from the alist we look for the first enabled tuple for the function
+; symbol in question.  So it is necessary to leave old tuples for that function
+; symbol in place.
 
   (mv-let (parity fn var term1)
           (destructure-compound-recognizer term)
@@ -2784,9 +3042,10 @@
                   (make-recognizer-tuple rune nume parity fn var term1 ens
                                          wrld)
                   (declare (ignore ttree))
-                  (global-set 'recognizer-alist
-                              (cons recog-tuple (global-val 'recognizer-alist wrld))
-                              wrld))))
+                  (putprop fn 'recognizer-alist
+                           (cons recog-tuple
+                                 (getpropc fn 'recognizer-alist nil wrld))
+                           wrld))))
 
 ;---------------------------------------------------------------------------
 ; Section:  :FORWARD-CHAINING Rules
@@ -2829,25 +3088,34 @@
                 (free-vars (free-vars-in-hyps hyps (all-vars (car terms)) wrld))
                 (inst-hyps (hyps-that-instantiate-free-vars free-vars hyps))
                 (forced-hyps (forced-hyps inst-hyps))
-                (non-rec-fns (and warn-non-rec
-                                  (non-recursive-fnnames (car terms) ens wrld)))
-                (non-rec-fns-inst-hyps
+                (non-rec-fns-alist
                  (and warn-non-rec
-                      (non-recursive-fnnames-lst
-                       (strip-top-level-nots-and-forces inst-hyps) ens wrld))))
+                      (non-recursive-fnnames-alist (car terms) ens wrld)))
+                (non-rec-fns (strip-cars non-rec-fns-alist))
+                (non-rec-fns-inst-hyps-alist
+                 (and warn-non-rec
+                      (non-recursive-fnnames-alist-lst
+                       (strip-top-level-nots-and-forces inst-hyps) ens wrld)))
+                (non-rec-fns-inst-hyps
+                 (strip-cars non-rec-fns-inst-hyps-alist)))
            (er-progn
             (cond
              ((and free-vars (null match-free))
               (pprogn
                (warning$ ctx "Free"
-                         "When the :FORWARD-CHAINING rule generated from ~x0 ~
-                          is triggered by ~x1 it contains the free ~
-                          variable~#2~[ ~&2.  This variable~/s ~&2.  These ~
-                          variables~] will be chosen by searching for ~#3~[an ~
-                          instance~/instances~] of ~&3 among the hypotheses of ~
-                          the conjecture being rewritten.  This is generally a ~
-                          severe restriction on the applicability of the ~
-                          forward chaining rule."
+                         `("When the :FORWARD-CHAINING rule generated from ~
+                            ~x0 is triggered by ~x1 it contains the free ~
+                            variable~#2~[ ~&2.  This variable~/s ~&2.  These ~
+                            variables~] will be chosen by searching for ~
+                            ~#3~[an instance~/instances~] of ~&3 among the ~
+                            hypotheses of the conjecture being rewritten.  ~
+                            This is generally a severe restriction on the ~
+                            applicability of the forward chaining rule."
+                           (:free-variables ,free-vars)
+                           (:instantiated-hyps ,inst-hyps)
+                           (:name ,name)
+                           (:rule-class :forward-chaining)
+                           (:trigger ,(car terms)))
                          name (car terms) free-vars inst-hyps)
                (free-variable-error? :forward-chaining name ctx wrld state)))
              (t (value nil)))
@@ -2889,42 +3157,58 @@
              (cond
               (non-rec-fns
                (warning$ ctx ("Non-rec")
-                         "The term ~x0 contains the non-recursive function ~
-                          symbol~#1~[ ~&1.  Unless this function is~/s ~&1.  ~
-                          Unless these functions are~] disabled, ~x0 is ~
-                          unlikely ever to occur as a trigger for ~x2."
+                         `("The term ~x0 contains the function symbol~#1~[ ~
+                            ~&1, which has a non-recursive definition.~@2  ~
+                            Unless this definition is~/s ~&1, which have ~
+                            non-recursive definitions.~@2  Unless these ~
+                            definitions are~] disabled, ~x0 is unlikely ever ~
+                            to occur as a trigger for ~x3."
+                           (:name ,name)
+                           (:non-recursive-fns ,(hide-lambdas non-rec-fns))
+                           (:trigger-term ,(car terms)))
                          (car terms)
                          (hide-lambdas non-rec-fns)
+                         (non-rec-def-rules-msg non-rec-fns-alist)
                          name))
               (t state))
              (cond
               (non-rec-fns-inst-hyps
                (warning$ ctx ("Non-rec")
-                         "As noted, when triggered by ~x0, we will instantiate ~
-                          the free variable~#1~[~/s~], ~&1, of the rule ~x2, ~
-                          by searching for the ~#3~[hypothesis~/set of ~
-                          hypotheses~] shown above.  However, ~#3~[this ~
-                          hypothesis mentions~/these hypotheses mention~] the ~
-                          function symbol~#4~[ ~&4, which is~/s ~&4, which ~
-                          are~] defun'd non-recursively. Unless disabled, ~
-                          ~#4~[this function symbol is~/these function symbols ~
-                          are~] unlikely to occur in the conjecture being ~
-                          proved and hence the search for the required ~
-                          ~#3~[hypothesis~/hypotheses~] will likely fail."
+                         `("As noted, when triggered by ~x0, we will ~
+                            instantiate the free variable~#1~[~/s~], ~&1, of ~
+                            the rule ~x2, by searching for the ~
+                            ~#3~[hypothesis~/set of hypotheses~] shown above. ~
+                            ~ However, ~#3~[this hypothesis mentions~/these ~
+                            hypotheses mention~] the function symbol~#4~[ ~
+                            ~&4, which has a non-recursive definition.~@5  ~
+                            Unless this definition is disabled, that function ~
+                            symbol is~/s ~&4, which have non-recursive ~
+                            definitions.~@5  Unless these definitions are ~
+                            disabled, those function symbols are~] unlikely ~
+                            to occur in the conjecture being proved and hence ~
+                            the search for the required ~
+                            ~#3~[hypothesis~/hypotheses~] will likely fail."
+                           (:free-variables ,free-vars)
+                           (:instantiated-hyps ,inst-hyps)
+                           (:name ,name)
+                           (:non-recursive-fns-inst-hyps
+                            ,(hide-lambdas non-rec-fns-inst-hyps))
+                           (:trigger-term ,(car terms)))
                          (car terms) free-vars name inst-hyps
-                         (hide-lambdas non-rec-fns-inst-hyps)))
+                         (hide-lambdas non-rec-fns-inst-hyps)
+                         (non-rec-def-rules-msg non-rec-fns-inst-hyps-alist)))
               (t state))
              (chk-triggers match-free name hyps (cdr terms)
                            hyps-vars concls-vars ctx ens wrld state)))))))
 
-(defun destructure-forward-chaining-term (term)
+(defun destructure-forward-chaining-term (term wrld)
 
 ; We return two lists, hyps and concls, such that term is equivalent to
 ; (implies (and . hyps) (and . concls)).
 
 ; We have considered treating (IMPLIES a (IMPLIES b c)) as (IMPLIES (and a b)
 ; c) when we parse :forward-chaining rules.  At the moment we do not, and hence
-; such a :forward-chaing rule might put (IMPLIES b c) on the type-alist.  The
+; such a :forward-chaining rule might put (IMPLIES b c) on the type-alist.  The
 ; code for the ``improved'' parsing is in the comment just below.  This would
 ; bring the parsing of :forward-chaining rules more into line with what we do
 ; for :rewrite rules.  But an email from Dave Greve gave us the impression that
@@ -2950,7 +3234,7 @@
 ;                                hyps)
 ;                        concls)))))
 
-  (let ((term (remove-lambdas (remove-guard-holders term))))
+  (let ((term (remove-lambdas (remove-guard-holders term wrld))))
     (cond ((or (variablep term)
                (fquotep term)
                (not (eq (ffn-symb term) 'implies)))
@@ -2972,7 +3256,7 @@
 
   (mv-let
    (hyps concls)
-   (destructure-forward-chaining-term term)
+   (destructure-forward-chaining-term term wrld)
    (let ((hyps-vars (all-vars1-lst hyps nil))
          (concls-vars (all-vars1-lst concls nil)))
      (chk-triggers name match-free hyps trigger-terms
@@ -2996,15 +3280,14 @@
                                  :hyps hyps
                                  :concls concls
                                  :match-free match-free)
-                           (getprop (ffn-symb (car triggers))
-                                    'forward-chaining-rules nil
-                                    'current-acl2-world wrld))
+                           (getpropc (ffn-symb (car triggers))
+                                     'forward-chaining-rules nil wrld))
                      wrld)))))
 
 (defun add-forward-chaining-rule (rune nume trigger-terms term match-free wrld)
   (mv-let
    (hyps concls)
-   (destructure-forward-chaining-term term)
+   (destructure-forward-chaining-term term wrld)
    (putprop-forward-chaining-rules-lst rune nume
                                        trigger-terms
                                        hyps concls
@@ -3013,6 +3296,8 @@
                                                             trigger-terms
                                                             wrld)
                                        wrld)))
+
+
 
 ;---------------------------------------------------------------------------
 ; Section:  :META Rules
@@ -3071,6 +3356,11 @@
 ; mutually recursive function that evaluates a list of such terms is
 ; named evfn-lst.
 
+; This function serves two purposes: it is used to generate the constraints
+; produced by the defevaluator event and it is used to check that the
+; constraints on an alleged evaluator are in fact those required.  (Remember:
+; the user need not have introduced an evaluator via defevaluator.)
+
 ; The clauses that describe an evaluator include an evaluator-clause
 ; (q.v.)  for each fn in fn-args-lst plus clauses describing evfn when
 ; x is a variable symbol, a quoted object, and a lambda application,
@@ -3080,7 +3370,8 @@
 ; an evaluator, then the constraint on it will contain at least 4
 ; clauses.  (One of the five fixed clauses below is about only
 ; evfn-lst and not about evfn and hence wouldn't be among the
-; constraints of evfn.)  If this changes, change chk-evaluatorp.
+; constraints of evfn.)  If this changes, change chk-evaluator.
+; (Note there are now at least 7 constraints about each evaluator.)
 
 ; The functions guess-fn-args-lst-for-evfn and guess-evfn-lst-for-evfn take the
 ; known constraints on an evfn and guess the evfn-lst and list of fns for which
@@ -3089,8 +3380,11 @@
 ; evfn-lst on a cons and the structure of the evaluator-clause for a given fn.
 ; If these structures change, change these two functions.
 
-; WARNING: Don't change the clauses below without reading the Notes
-; above!
+; WARNING: Don't change the clauses below without reading the Notes above!  In
+; particular, the functions chk-evaluator and defevaluator-form/defthms both
+; call this function.  Furthermore, at least the following functions know about
+; the number, order, and shape of the clauses generated:
+; defevaluator-form/defthm-name and defevaluator-form/defthm-hints.
 
   (append (sublis (list (cons 'evfn evfn)
                         (cons 'evfn-lst evfn-lst))
@@ -3150,7 +3444,14 @@
                     ((not (consp x-lst))
                      (equal (evfn-lst x-lst a)
                             (cons (evfn (car x-lst) a)
-                                  (evfn-lst (cdr x-lst) a))))))
+                                  (evfn-lst (cdr x-lst) a))))
+                    ((consp x)
+                     (symbolp x)
+                     (equal (evfn x a) 'nil))
+                    ((not (consp x))
+                     (consp (car x))
+                     (symbolp (car x))
+                     (equal (evfn x a) 'nil))))
           (evaluator-clauses1 evfn fn-args-lst)))
 
 ; The function above describes the constraints on an evaluator
@@ -3274,7 +3575,7 @@
 ; function evfn.  The idea is to convert the user's constraint to a
 ; set of clauses and compare that set to the canonical evaluator
 ; clauses.  Why not just use clausify?  If one of the functions
-; interpretted by evfn is 'if then our full-blown clausify will break
+; interpreted by evfn is 'if then our full-blown clausify will break
 ; that clause apart into two unrecognizable pieces.
 
   (shallow-clausify1 (unprettyify term)))
@@ -3359,7 +3660,7 @@
    (shallow-clausify
     (mv-let (sym x)
             (constraint-info ev wrld)
-            (assert$ (not (eq x *unknown-constraints*))
+            (assert$ (not (unknown-constraints-p x))
                      (cond
                       (sym (conjoin x))
                       (t x)))))))
@@ -3417,7 +3718,8 @@
                        (normalized-evaluator-cl-set evfn-lst wrld)))
                      (cl-set2
                       (remove-guard-holders-lst-lst
-                       (evaluator-clauses evfn evfn-lst fn-args-lst))))
+                       (evaluator-clauses evfn evfn-lst fn-args-lst)
+                       wrld)))
                 (cond
                  ((not (and (clause-set-subsumes nil cl-set1 cl-set2)
                             (clause-set-subsumes nil cl-set2 cl-set1)))
@@ -3445,23 +3747,150 @@
 ; To make it easier to introduce an evaluator, we define the following
 ; macro.
 
-(defun defevaluator-form/defthms (evfn prefix i clauses)
-  (cond ((null clauses) nil)
-        (t (cons (list* (if (eql i 0) 'defthmd 'defthm)
-                        (genvar evfn prefix i nil)
-                        (prettyify-clause (car clauses) nil nil)
-                        (and (eql i 0)
-                             `(:hints
-                               (("Goal"
-                                 :expand ((:free (x) (hide x))
-                                          (,evfn x a))
-                                 :in-theory (disable (:executable-counterpart
-                                                      ,evfn)))))))
-                 (defevaluator-form/defthms evfn prefix (1+ i)
-                   (cdr clauses))))))
+(defun namedp-prefix (evfn namedp)
 
-(defun defevaluator-form/fns-clauses (evfn fn-args-lst)
+; We generate the prefix used in naming the constraints for evaluator evfn.
+; Namedp is t or nil and indicates whether we generate a name like
+; evfn-OF-fn-CALL or like evfn-CONSTRAINT-i.  We return either "evfn-OF-" or
+; "evfn-CONSTRAINT-".
 
+  (if namedp
+      (concatenate 'string (symbol-name evfn) "-OF-")
+      (concatenate 'string (symbol-name evfn) "-CONSTRAINT-")))
+
+(defun defevaluator-form/defthm-name (evfn evfn-lst namedp prefix i clause)
+
+; This function generates the name of constraint i for evaluator function
+; evfn.  Namedp is t or nil and indicates whether we generate a name like
+; evfn-OF-fn-CALL or like evfn-CONSTRAINT-i.  Prefix is a string and is either
+; of the form "evfn-OF-" or "evfn-CONSTRAINT-"; see namedp-prefix. I is the
+; 0-based number of the constraint and clause is the clausal form of the
+; constraint.  But when namedp is non-nil we have to solve two problems: (a)
+; give special names to the first few constraints (which do not concern one of
+; the function symbols to be interpreted) and (b) figure out the function
+; symbol fn.
+
+; We solve (a) by coding in our knowledge of the order of the clauses generated
+; by evaluator-clauses and we solve (b) by looking into those clauses
+; corresponding to calls of functions to be interpreted.
+
+; i             name of defthm when namedp         name when not namedp
+
+; 0             evfn-OF-FNCALL-ARGS                evfn-constraint-0
+; 1             evfn-OF-VARIABLE                   evfn-constraint-1
+; 2             evfn-of-QUOTE                      evfn-constraint-2
+; 3             evfn-of-LAMBDA                     ...
+; 4             evfn-lst-OF-ATOM
+; 5             evfn-lst-OF-CONS
+; 6             evfn-of-nonsymbol-atom
+; 7             evfn-of-bad-fncall
+; 8 ...         evfn-OF-fn-CALL, ... for each interpreted fn
+
+; When i>7, clause is always of the form:
+; ((NOT (CONSP X)) (NOT (EQUAL (CAR X) 'fn)) (EQUAL (evfn X A) (fn ...)))
+; and we recover fn from the second literal as shown in the binding of
+; fn below.
+
+  (cond
+   (namedp
+    (let ((fn (car (fargn (caddr clause) 2))))
+      (case i
+        (0 (genvar evfn (concatenate 'string prefix "FNCALL-ARGS") nil nil))
+        (1 (genvar evfn (concatenate 'string prefix "VARIABLE") nil nil))
+        (2 (genvar evfn (concatenate 'string prefix "QUOTE") nil nil))
+        (3 (genvar evfn (concatenate 'string prefix "LAMBDA") nil nil))
+        (4 (genvar evfn
+                   (concatenate 'string (symbol-name evfn-lst) "-OF-ATOM")
+                   nil nil))
+        (5 (genvar evfn
+                   (concatenate 'string (symbol-name evfn-lst) "-OF-CONS")
+                   nil nil))
+        (6 (genvar evfn
+
+; Perhaps "NON-SYMBOL-ATOM" is more aesthetic.  But its meaning is perhaps less
+; clear than "NONSYMBOL-ATOM": a non-symbol that is an atom, rather than, say,
+; something that is not a symbol or an atom.
+
+                   (concatenate 'string prefix "NONSYMBOL-ATOM")
+                   nil nil))
+        (7 (genvar evfn (concatenate 'string prefix "BAD-FNCALL") nil nil))
+        (otherwise
+         (genvar evfn
+                 (concatenate 'string prefix (symbol-name fn) "-CALL")
+                 nil nil)))))
+   (t (genvar evfn prefix i nil))))
+
+(defun defevaluator-form/defthm-hints (evfn evfn-lst i)
+
+; See the comment in defevaluator-form/defthm-name about the knowledge of
+; evaluator-clauses encoded in this function.  We generate the :hints for the
+; ith constraint, i.e., for the formula (prettyify-clause clause nil nil),
+; where clause is (nth i (evaluator-clauses evfn evfn-lst fn-args-lst).  A
+; representative value of fn-args-lst would be ((CAR X) (CONS X Y) (IF X Y Z)),
+; for which suitable i would be 0, 1, ..., 8.
+
+  (cond
+   ((> i 7)
+    `(("Goal" :expand
+       ((,evfn X A)
+        (:free (x) (HIDE x))
+        (:free (fn args)
+               (APPLY-FOR-DEFEVALUATOR fn args))))))
+   (t
+    (case i
+      (0 `(("Goal" :expand
+            ((:free (x) (HIDE x))
+             (,evfn X A)
+             (:free (args)
+                    (,evfn (CONS (CAR X) ARGS) NIL)))
+            :in-theory '(eval-list-kwote-lst
+                         true-list-fix-ev-lst
+                         car-cons cdr-cons))))
+      ((1 2 3 6 7) `(("Goal" :expand ((,evfn X A)))))
+      (otherwise
+       `(("Goal" :expand ((,evfn-lst X-LST A)))))))))
+
+(defun defevaluator-form/defthm (evfn evfn-lst namedp prefix i clause)
+
+; We generate the defthm event for the ith constraint, given the clause
+; expressing that constraint.  Constraints 0, 6, and 7 are disabled; the
+; others are only locally disabled.
+
+  (let* ((defthm (if (or (eql i 0) (eql i 6) (eql i 7)) 'defthmd 'defthm))
+         (name (defevaluator-form/defthm-name
+                 evfn evfn-lst namedp prefix i clause))
+         (formula
+
+; Notice that we pass nil to the world argument of prettyify-clause below, so
+; that the user cannot affect the formula generated here, for example by
+; setting the 'untranslate or 'untranslate-preprocess entry in the
+; user-defined-functions-table.  We do not rely on this for soundness, however,
+; since ultimately the defthm returned below would be rejected if the formula
+; is unsuitable.
+
+          (prettyify-clause clause nil nil))
+         (hints (defevaluator-form/defthm-hints evfn evfn-lst i)))
+    `((,defthm ,name
+        ,formula
+        :hints ,hints)
+      (local (in-theory (disable ,name))))))
+
+(defun defevaluator-form/defthms (evfn evfn-lst namedp prefix i clauses)
+  (declare (xargs :mode :program))
+  (if (endp clauses)
+      nil
+    (append
+     (defevaluator-form/defthm evfn evfn-lst namedp prefix i (car clauses))
+     (defevaluator-form/defthms evfn evfn-lst namedp prefix (+ 1 i) (cdr clauses)))))
+
+(defun car-cadr-caddr-etc (formals x)
+  (if (endp formals)
+      nil
+      (cons `(CAR ,x)
+            (car-cadr-caddr-etc (cdr formals) `(CDR ,x)))))
+
+(defun defevaluator-form/fns-clauses (fn-args-lst)
+  (declare (xargs :mode :program))
 ; We return a list of cond clauses,
 ; (
 ;  ((equal (car x) 'fn1)
@@ -3475,73 +3904,107 @@
 
   (cond ((null fn-args-lst) '((t nil)))
         (t (cons
-            (list (list 'equal '(car x) (kwote (caar fn-args-lst)))
+            (list (list 'equal 'fn (kwote (caar fn-args-lst)))
                   (cons (caar fn-args-lst)
-                        (evaluator-clause/arglist evfn
-                                                  (cdar fn-args-lst)
-                                                  '(cdr x))))
-            (defevaluator-form/fns-clauses evfn (cdr fn-args-lst))))))
+                        (car-cadr-caddr-etc (cdar fn-args-lst)
+                                                       'args)))
+            (defevaluator-form/fns-clauses (cdr fn-args-lst))))))
 
 (defconst *defevaluator-form-base-theory*
   (append *definition-minimal-theory*
           '(car-cdr-elim
             car-cons cdr-cons
             o< o-finp o-first-expt o-first-coeff o-rst natp posp
-            acl2-count alistp
-            fix-true-list kwote kwote-lst pairlis$-fix-true-list
-            (:type-prescription acl2-count))))
+            acl2-count
+            alistp
+            true-list-fix kwote kwote-lst pairlis$-true-list-fix
+            )))
 
-(defun defevaluator-form (evfn evfn-lst fn-args-lst)
-  (let* ((clauses (evaluator-clauses evfn evfn-lst fn-args-lst))
-         (fns-clauses (defevaluator-form/fns-clauses evfn fn-args-lst))
-         (defthms (defevaluator-form/defthms
-                    evfn
-                    (symbol-name (pack2 evfn '-constraint-))
+(defun defevaluator-form (evfn evfn-lst namedp fn-args-lst)
+  (declare (xargs :mode :program))
+  (let* ((fns-clauses (defevaluator-form/fns-clauses fn-args-lst))
+         (defthms (defevaluator-form/defthms evfn evfn-lst namedp
+                    (namedp-prefix evfn namedp)
                     0
-                    clauses)))
+                    (evaluator-clauses evfn evfn-lst fn-args-lst))))
     `(encapsulate
       (((,evfn * *) => *)
        ((,evfn-lst * *) => *))
       (set-inhibit-warnings "theory")
       (local (in-theory *defevaluator-form-base-theory*))
-      ,@(sublis
-         (list (cons 'evfn evfn)
-               (cons 'evfn-lst evfn-lst)
-               (cons 'fns-clauses fns-clauses)
-               (cons 'defthms defthms))
-         '((local
-            (mutual-recursion
-             (defun-nx evfn (x a)
-               (declare (xargs :verify-guards nil
-                               :measure (acl2-count x)
-                               :well-founded-relation o<
-                               :mode :logic))
-               (cond
-                ((symbolp x)
-
-; Before removing the conjunct of x below, see the long comment in
-; evaluator-clauses about "without making a special case for x = nil".
-
-                 (and x (cdr (assoc-eq x a))))
-                ((atom x) nil)
-                ((eq (car x) 'quote) (car (cdr x)))
-                ((consp (car x))
-                 (evfn (car (cdr (cdr (car x))))
-                       (pairlis$ (car (cdr (car x)))
-                                 (evfn-lst (cdr x) a))))
-                .
-                fns-clauses))
-             (defun-nx evfn-lst (x-lst a)
-               (declare (xargs :measure (acl2-count x-lst)
-                               :well-founded-relation o<))
-               (cond ((endp x-lst) nil)
-                     (t (cons (evfn (car x-lst) a)
-                              (evfn-lst (cdr x-lst) a)))))))
-           (local
-            (defthm eval-list-kwote-lst
-              (equal (evfn-lst (kwote-lst args) a)
-                     (fix-true-list args))))
-           . defthms)))))
+      . ,(sublis
+          (list (cons 'evfn evfn)
+                (cons 'evfn-lst evfn-lst)
+                (cons 'fns-clauses fns-clauses)
+                (cons 'defthms defthms))
+          '((local (defun-nx apply-for-defevaluator (fn args)
+                     (declare (xargs :verify-guards nil
+                                     :normalize nil))
+                     (cond . fns-clauses)))
+            (local
+             (mutual-recursion
+              (defun-nx evfn (x a)
+                (declare
+                 (xargs :verify-guards nil
+                        :measure (acl2-count x)
+                        :well-founded-relation o<
+                        :normalize nil
+                        :hints (("goal" :in-theory
+                                 (enable (:type-prescription
+                                          acl2-count))))
+                        :mode :logic))
+                (cond
+                 ((symbolp x) (and x (cdr (assoc-eq x a))))
+                 ((atom x) nil)
+                 ((eq (car x) 'quote) (car (cdr x)))
+                 (t (let ((args (evfn-lst (cdr x) a)))
+                      (cond
+                       ((consp (car x))
+                        (evfn (car (cdr (cdr (car x))))
+                              (pairlis$ (car (cdr (car x)))
+                                        args)))
+                       ((not (symbolp (car x))) nil)
+                       (t (apply-for-defevaluator (car x) args)))))))
+                (defun-nx evfn-lst (x-lst a)
+                  (declare (xargs :measure (acl2-count x-lst)
+                                  :well-founded-relation o<))
+                  (cond ((endp x-lst) nil)
+                        (t (cons (evfn (car x-lst) a)
+                                 (evfn-lst (cdr x-lst) a)))))))
+            (local (in-theory (disable evfn evfn-lst apply-for-defevaluator)))
+            (local
+             (defthm eval-list-kwote-lst
+               (equal (evfn-lst (kwote-lst args) a)
+                      (true-list-fix args))
+               :hints (("goal"
+                        :expand ((:free (x y) (evfn-lst (cons x y) a))
+                                 (evfn-lst nil a)
+                                 (:free (x)
+                                        (evfn (list 'quote x) a)))
+                        :induct (true-list-fix args)))))
+            (local
+             (defthm true-list-fix-ev-lst
+               (equal (true-list-fix (evfn-lst x a))
+                      (evfn-lst x a))
+               :hints (("goal" :induct (len x)
+                        :in-theory (e/d ((:induction len)))
+                        :expand ((evfn-lst x a)
+                                 (evfn-lst nil a))))))
+            (local
+             (defthm ev-commutes-car
+               (equal (car (evfn-lst x a))
+                      (evfn (car x) a))
+               :hints (("goal" :expand ((evfn-lst x a)
+                                        (evfn nil a))
+                        :in-theory (enable default-car)))))
+            (local
+             (defthm ev-lst-commutes-cdr
+               (equal (cdr (evfn-lst x a))
+                      (evfn-lst (cdr x) a))
+               :hints (("Goal" :expand ((evfn-lst x a)
+                                        (evfn-lst nil a))
+                        :in-theory (enable default-cdr)))))
+            . defthms)))))
 
 (defun pairs-to-macro-alias-msgs (alist)
   (declare (xargs :guard (symbol-alistp alist)))
@@ -3601,8 +4064,9 @@
          (er soft ctx
              "The form of a defevaluator event is (defevaluator evfn evfn-lst ~
               fn-args-lst), where evfn and evfn-lst are symbols and ~
-              fn-args-lst is a true list of lists of symbols.  However, ~x0 ~
-              does not have this form."
+              fn-args-lst is a true list of lists of symbols.  Optionally, ~
+              one may supply the final keyword argument :namedp with value t ~
+              or nil (default).  However, ~x0 does not have this form."
              x))
         (t (let* ((wrld (w state))
                   (msg (defevaluator-check-msg
@@ -3626,7 +4090,8 @@
          state))
       (value '(value-triple nil))))))
 
-(defmacro defevaluator (&whole x evfn evfn-lst fn-args-lst &key skip-checks)
+(defmacro defevaluator (&whole x evfn evfn-lst fn-args-lst
+                               &key skip-checks namedp)
 
 ; Note: It might be nice to allow defevaluator to take a :DOC string, but that
 ; would require allowing encapsulate to take such a string!
@@ -3635,7 +4100,15 @@
 ; evfn (with mutually recursive counterpart evfn-lst for lists of
 ; terms) that recognizes the functions in fns.
 
-  (let ((form (defevaluator-form evfn evfn-lst fn-args-lst)))
+; Note: This version of defevaluator was adapted, with permission, from ACL2
+; Community Book tools/defevaluator-fast.lisp which was authored by Sol Swords
+; and Jared Davis.  The defevaluator-fast defun-nx for evfn and evfn-lst,
+; together with the preliminary lemmas and hints for the constraints were
+; ripped from that book.  The code for generating those forms was refactored to
+; make it clear that the :namedp option only affects the names of the
+; constraint theorems.
+
+  (let ((form (defevaluator-form evfn evfn-lst namedp fn-args-lst)))
     (cond (skip-checks form)
           (t `(progn ,(defevaluator-check-form x evfn evfn-lst fn-args-lst)
                      ,form)))))
@@ -3670,7 +4143,7 @@
 ; regardless of the state argument.  This belief allows us to loosen the
 ; restriction that the state is 'state, and instead allow an arbitrary state
 ; here.  But we keep the restriction that state is 'state; we may more
-; carefullly consider relaxing it upon request.
+; carefully consider relaxing it upon request.
 
                                                 'state)
                  !a)
@@ -3703,8 +4176,8 @@
 ; there is none).  We want to identify the hypothesis metafunction
 ; (see :DOC meta) of that rule.  We return nil if the hyp is
 ; unacceptable, t if there is no extra hypothesis, and otherwise the
-; hypothesis function.  Note that we allow, but do not require, the
-; hypotheses (pseudo-termp x) and (alistp a) to be among the
+; hypothesis function symbol.  Note that we allow, but do not require,
+; the hypotheses (pseudo-termp x) and (alistp a) to be among the
 ; hypotheses, in which case we delete them before returning the
 ; result.
 
@@ -3734,7 +4207,9 @@
              (t (and (null (cdr hyps))
                      (case-match hyp3
                        ((!ev (fn !x . !extended-args) !a)
-                        fn)
+                        (if (symbolp fn)
+                            fn
+                          nil))
                        (& nil)))))
             (append (and flg1 '(meta-extract-contextual-fact))
                     (and flg2 '(meta-extract-global-fact+)))))))))
@@ -3839,14 +4314,14 @@
                             (attached-fns (cdr fns) wrld))))))))
 
 (defun siblings (f wrld)
-  (or (getprop f 'siblings nil 'current-acl2-world wrld)
-      (getprop f 'recursivep nil 'current-acl2-world wrld)
+  (or (getpropc f 'siblings nil wrld)
+      (getpropc f 'recursivep nil wrld)
       (list f)))
 
 (defun canonical-sibling (f wrld)
-  (let ((sibs (getprop f 'siblings nil 'current-acl2-world wrld)))
+  (let ((sibs (getpropc f 'siblings nil wrld)))
     (cond (sibs (car sibs))
-          (t (let ((sibs (getprop f 'recursivep nil 'current-acl2-world wrld)))
+          (t (let ((sibs (getpropc f 'recursivep nil wrld)))
                (cond (sibs (car sibs))
                      (t f)))))))
 
@@ -3902,6 +4377,34 @@
                     (t (cons fn ans))))
             ignore-fns))))
 
+(defun constraints-list (fns wrld acc seen)
+  (cond ((endp fns) acc)
+        (t (mv-let
+            (name x)
+            (constraint-info (car fns) wrld)
+            (cond ((unknown-constraints-p x)
+                   x)
+                  (name (cond ((member-eq name seen)
+                               (constraints-list (cdr fns) wrld acc seen))
+                              (t (constraints-list (cdr fns)
+                                                   wrld
+                                                   (union-equal x acc)
+                                                   (cons name seen)))))
+                  (t (constraints-list (cdr fns) wrld (cons x acc) seen)))))))
+
+(defun constraint-info+ (fn wrld)
+
+; This function normally agrees with constraint-info, but
+; extends that function's result in the case that fn is defined by
+; mutual-recursion.  In that case, we return (mv t lst) where lst is the list
+; of constraints of the siblings of fn.
+
+  (let ((fns (getpropc fn 'recursivep nil wrld)))
+    (cond ((and (consp fns)
+                (consp (cdr fns)))
+           (mv t (constraints-list fns wrld nil nil)))
+          (t (constraint-info fn wrld)))))
+
 (defun immediate-canonical-ancestors (fn wrld ignore-fns rlp)
 
 ; This function is analogous to immediate-instantiable-ancestors, but it
@@ -3912,20 +4415,13 @@
 
   (let ((guard-anc
          (canonical-ffn-symbs (guard fn nil wrld) wrld nil ignore-fns rlp)))
-    (mv-let (name x)
-            (constraint-info fn wrld)
+    (mv-let (name x) ; name could be t
+            (constraint-info+ fn wrld)
             (cond
-             ((eq x *unknown-constraints*)
-              (let* ((cl-proc
-                      (getprop name 'constrainedp
-                               '(:error
-                                 "See immediate-canonical-ancestors:  ~
-                                  expected to find a 'constrainedp property ~
-                                  where we did not.")
-                               'current-acl2-world wrld))
-                     (supporters (unknown-constraint-supporters cl-proc wrld)))
-                (collect-canonical-siblings supporters wrld guard-anc
-                                            ignore-fns)))
+             ((unknown-constraints-p x)
+              (collect-canonical-siblings (unknown-constraints-supporters x)
+                                          wrld guard-anc
+                                          ignore-fns))
              (name (canonical-ffn-symbs-lst x wrld guard-anc ignore-fns rlp))
              (t (canonical-ffn-symbs x wrld guard-anc ignore-fns rlp))))))
 
@@ -4004,25 +4500,18 @@
     (constraint-info ev wrld)
     (declare (ignore fn))
     (cond
-     ((eq constraint *unknown-constraints*)
+     ((unknown-constraints-p constraint)
       (er soft ctx ; see comment in defaxiom-supporters
           "The proposed ~x0 rule, ~x1, is illegal because its evaluator ~
-           function symbol, ~x2, is constrained by the (unknown) theory of a ~
-           dependent clause-processor, ~x3.  See :DOC clause-processor."
+           function symbol, ~x2, has unknown-constraints.  See :DOC ~
+           partial-encapsulate."
           rule-type
           name
-          ev
-          (getprop ev 'constrainedp
-                   '(:error "See chk-evaluator-use-in-rule:  expected to find ~
-                             a 'constrainedp property where we did not.")
-                   'current-acl2-world wrld)))
+          ev))
      (t
       (let* ((ev-lst (ev-lst-from-ev ev wrld))
-             (ev-prop (getprop ev 'defaxiom-supporter nil
-                               'current-acl2-world wrld))
-             (ev-lst-prop (getprop ev-lst 'defaxiom-supporter nil
-                                   'current-acl2-world wrld))
-             (ev-fns (list ev ev-lst))
+             (ev-prop (getpropc ev 'defaxiom-supporter nil wrld))
+             (ev-lst-prop (getpropc ev-lst 'defaxiom-supporter nil wrld))
              (meta-fn-lst (if hyp-fn
                               (list meta-fn hyp-fn)
                             (list meta-fn)))
@@ -4031,18 +4520,18 @@
              (ev-anc (canonical-ancestors-lst (list ev) wrld)))
         (cond
          ((and extra-fns
-               (or (getprop ev 'predefined nil 'current-acl2-world wrld)
-                   (getprop ev-lst 'predefined nil 'current-acl2-world wrld)))
+               (or (getpropc ev 'predefined nil wrld)
+                   (getpropc ev-lst 'predefined nil wrld)))
 
-; See the comment below about this case in the comment in a case below, where
-; we point out that extra-fns are defined in the boot-strap world.
+; Note that since extra-fns are defined in the boot-strap world, this check
+; guarantees that ev is not ancestral in extra-fns.
 
           (er soft ctx
               "The proposed evaluator function, ~x0, was defined in the ~
-               boot-strap world.  This is illegal when meta-extract hyotheses ~
+               boot-strap world.  This is illegal when meta-extract hypotheses ~
                are present, because for logical reasons our implementation ~
                assumes that the evaluator is not ancestral in ~v1."
-              (if (getprop ev 'predefined nil 'current-acl2-world wrld)
+              (if (getpropc ev 'predefined nil wrld)
                   ev
                 ev-lst)
               '(meta-extract-contextual-fact meta-extract-global-fact+)))
@@ -4055,26 +4544,6 @@
               name
               (if ev-prop ev ev-lst)
               (or ev-prop ev-lst-prop)))
-         ((intersectp-eq ev-fns meta-anc)
-
-; As explained in defaxiom-supporters, we might expect also to check here that
-; ev and ev-lst are not ancestral in extra-fns.  But extra-fns are defined in
-; the boot-strap world while ev and ev-lst, as we check above, are not.
-
-; It would be nice to improve the following error message by finding the
-; particular function symbol in the meta or clause-processor rule for which ev
-; is ancestral.
-
-          (er soft ctx ; see comment in defaxiom-supporters
-              "The proposed ~x0 rule, ~x1, is illegal because its ~
-               evaluator~#2~[~/ (list)~] function symbol, ~x3, supports the ~
-               definition of the rule's metafunction~#4~[~/s~], ~&4.  See ~
-               :DOC evaluator-restrictions."
-              rule-type
-              name
-              (if (member-eq ev meta-anc) 0 1)
-              (if (member-eq ev meta-anc) ev ev-lst)
-              meta-fn-lst))
          (t
 
 ; We would like to be able to use attachments where possible.  However, the
@@ -4161,6 +4630,110 @@
                            chk-rule-fn-guard.  Please contact the ACL2 ~
                            implementors."))))))))
 
+; Essay on never-untouchable-fns
+
+; The global-val of 'never-untouchable-fns is an alist pairing function symbols
+; with lists of well-formedness-guarantees.  A well-formedness-guarantee is a
+; structure of the form ((name fn thm-name1 hyp-fn thm-name2) . arity-alist),
+; where hyp-fn and thm-name2 may be omitted.  It denotes the fact that the
+; metatheorem named name justifies the metafunction fn (with hypothesis
+; metafunction hyp-fn if present), and that the two metafunctions are
+; guaranteed to return LOGIC-TERMPs by the theorems named thm-name1 and
+; thm-name2 respectively, provided the world satisfies arity-alist.  The
+; function symbols listed in arity-alist are the symbols that may be introduced
+; by the metafunction or the hypothesis metafunction.  When a metatheorem with
+; LOGIC-TERMP guarantees is added, we make sure that none of the introduced
+; symbols are on (forbidden-fns wrld state).  See
+; translate-well-formedness-guarantee.  We also record the fact that those
+; introduced symbols should never be made untouchable, by adding the
+; well-formedness-guarantee to the symbol's entry on never-untouchable-fns.
+; Thereafter, we prevent any of those function symbols from being added to
+; untouchable-fns.  This is done in push-untouchable, by comparing any
+; about-to-be-made-untouchable function with never-untouchable-fns.
+
+(defun add-new-never-untouchable-fns (fns well-formedness-guarantee
+                                          never-untouchable-fns)
+
+; Well-formedness-guarantee is a structure of the form ((name fn thm-name1
+; hyp-fn thm-name2) . arity-alist), where hyp-fn and thm-name2 may be omitted.
+; It denotes the fact that the metatheorem named name justifies the
+; metafunction fn (with hypothesis metafunction hyp-fn if present), and that
+; the two metafunctions are guaranteed to return LOGIC-TERMPs by the theorems
+; named thm-name1 and thm-name2 respectively, provided the world satisfies
+; arity-alist.  Fns, above, is a list of function symbols possibly introduced
+; by the metatheorem described by well-formedness-guarantee.  (In fact, it is
+; initially just the keys of the arity-alist.)  Never-untouchable-fns is an
+; alist pairing function symbols to well-formedness-guarantees that may
+; introduce that symbol.  We add this new well-formedness-guarantee to the
+; entries for fns.
+
+  (cond ((endp fns) never-untouchable-fns)
+        (t (add-new-never-untouchable-fns
+            (cdr fns)
+            well-formedness-guarantee
+            (put-assoc-eq
+             (car fns)
+             (add-to-set-equal well-formedness-guarantee
+                               (cdr (assoc-eq (car fns) never-untouchable-fns)))
+             never-untouchable-fns)))))
+
+(defun collect-never-untouchable-fns-entries (fns never-untouchable-fns)
+
+; Suppose the list of function symbols fns is to be pushed onto
+; untouchable-fns.  We use this function to collect those g in fns (and
+; information from their well-formedness-guarantees) which are not supposed to be
+; made untouchable.  The result of this function is thus nil if there are no
+; never-untouchable-fns names in fns and otherwise, for each name gi that is
+; not to be made untouchable we will have an entry in the result of the form
+; (gi relevant-names1 relevant-names2 ...), where each relevant-namesi is the
+; car of a well-formedness-guarantee, i.e., a list of 5 (or 3) names (name fn
+; thm-name1 hyp-fn thm-name2) with the last two possibly omitted.  This data
+; structure is only shown to the user to help him or her figure out why we're
+; rejecting a proposed untouchable function.
+
+  (cond
+   ((endp fns) nil)
+   (t (let ((entry (assoc-eq (car fns) never-untouchable-fns)))
+        (cond
+         (entry
+          (cons entry
+                (collect-never-untouchable-fns-entries (cdr fns)
+                                                       never-untouchable-fns)))
+         (t (collect-never-untouchable-fns-entries (cdr fns)
+                                                   never-untouchable-fns)))))))
+
+(defun interpret-term-as-meta-rule (term)
+
+; We match term against the acceptable forms of metafunction correctness
+; theorems and return the pieces: (mv hyp eqv ev x a fn mfc-symbol), where hyp
+; is the hypothesis term or *t*, eqv is the equivalence relation, ev is the
+; evaluator, etc.  We do absolutely no well-formedness checks here, just
+; deconstruct the term!  For example, eqv, ev, or fn may be (unacceptable)
+; LAMBDA expressions, x may not be a variable symbol, etc.  But since term is
+; known to be a term, eqv, for example, cannot be nil unless we fail to match
+; any of the acceptable forms.  Our convention is to test eqv to see if the
+; term was deconstructed.  If mfc-symbol is nil, fn is a vanilla flavored
+; metafunction taking one argument, else it is an extended metafunction.  But,
+; despite its name, we don't know that mfc-symbol is a symbol, it could be any
+; term.
+
+  (case-match term
+    (('IMPLIES hyp
+               (eqv (ev x a) (ev (fn x) a)))
+     (mv hyp eqv ev x a fn nil))
+    ((eqv (ev x a) (ev (fn x) a))
+     (mv *t* eqv ev x a fn nil))
+    (('IMPLIES hyp
+               (eqv (ev x a)
+                    (ev (fn x mfc-symbol 'STATE)
+                        a)))
+     (mv hyp eqv ev x a fn mfc-symbol))
+    ((eqv (ev x a)
+          (ev (fn x mfc-symbol 'STATE)
+              a))
+     (mv *t* eqv ev x a fn mfc-symbol))
+    (& (mv *t* nil nil nil nil nil nil))))
+
 (defun chk-acceptable-meta-rule (name trigger-fns term ctx ens wrld state)
   (if (member-eq 'IF trigger-fns)
       (er soft ctx
@@ -4171,22 +4744,7 @@
                 have the form of a metatheorem.  See :DOC meta."))
       (mv-let
        (hyp eqv ev x a fn mfc-symbol)
-       (case-match term
-         (('implies hyp
-                    (eqv (ev x a) (ev (fn x) a)))
-          (mv hyp eqv ev x a fn nil))
-         ((eqv (ev x a) (ev (fn x) a))
-          (mv *t* eqv ev x a fn nil))
-         (('implies hyp
-                    (eqv (ev x a)
-                         (ev (fn x mfc-symbol 'STATE)
-                             a)))
-          (mv hyp eqv ev x a fn mfc-symbol))
-         ((eqv (ev x a)
-               (ev (fn x mfc-symbol 'STATE)
-                   a))
-          (mv *t* eqv ev x a fn mfc-symbol))
-         (& (mv *t* nil nil nil nil nil nil)))
+       (interpret-term-as-meta-rule term)
        (cond ((null eqv)
               (er soft ctx str name (untranslate term t wrld)))
              ((eq fn 'return-last)
@@ -4280,14 +4838,13 @@
 ; Fn is a function symbol, not a lambda expression.
 
   (cond ((null lst) wrld)
-        (t (add-meta-rule1 (cdr lst) rule
-                           (putprop (car lst)
-                                    'lemmas
-                                    (cons rule
-                                          (getprop (car lst)
-                                                   'lemmas nil
-                                                   'current-acl2-world wrld))
-                                    wrld)))))
+        (t
+         (add-meta-rule1 (cdr lst) rule
+                         (putprop (car lst)
+                                  'lemmas
+                                  (cons rule
+                                        (getpropc (car lst) 'lemmas nil wrld))
+                                  wrld)))))
 
 (defun maybe-putprop-lst (symb-lst key val wrld)
   (cond ((endp symb-lst)
@@ -4295,7 +4852,7 @@
         (t (let ((symb (car symb-lst)))
              (maybe-putprop-lst
               (cdr symb-lst) key val
-              (cond ((getprop symb key nil 'current-acl2-world wrld)
+              (cond ((getpropc symb key nil wrld)
                      wrld)
                     (t (putprop symb key val wrld))))))))
 
@@ -4311,11 +4868,7 @@
         (t (mark-attachment-disallowed2
             (cdr fns)
             msg
-            (let ((old-prop (getprop (car fns)
-                                     'attachment
-                                     nil
-                                     'current-acl2-world
-                                     wrld)))
+            (let ((old-prop (getpropc (car fns) 'attachment nil wrld)))
               (cond ((and (consp old-prop)
                           (eq (car old-prop)
                               :attachment-disallowed))
@@ -4347,25 +4900,11 @@
    msg
    wrld))
 
-(defun add-meta-rule (rune nume trigger-fns term backchain-limit wrld)
+(defun add-meta-rule (rune nume trigger-fns well-formedness-guarantee
+                           term backchain-limit wrld)
   (mv-let
    (hyp eqv ev x a fn mfc-symbol)
-   (case-match term
-     (('implies hyp
-                (eqv (ev x a) (ev (fn x) a)))
-      (mv hyp eqv ev x a fn nil))
-     ((eqv (ev x a) (ev (fn x) a))
-      (mv *t* eqv ev x a fn nil))
-     (('implies hyp
-                (eqv (ev x a)
-                     (ev (fn x mfc-symbol 'STATE)
-                         a)))
-      (mv hyp eqv ev x a fn mfc-symbol))
-     ((eqv (ev x a)
-           (ev (fn x mfc-symbol 'STATE)
-               a))
-      (mv *t* eqv ev x a fn mfc-symbol))
-     (& (mv *t* nil nil nil nil nil nil)))
+   (interpret-term-as-meta-rule term)
    (mv-let
     (hyp-fn extra-fns)
     (meta-rule-hypothesis-functions hyp ev x a mfc-symbol)
@@ -4377,32 +4916,49 @@
            chk-acceptable-meta-rule."
           (list rune nume trigger-fns term)))
      (t
-      (add-meta-rule1 trigger-fns
-                      (make rewrite-rule
-                            :rune rune
-                            :nume nume
-                            :hyps (if (eq hyp-fn t) nil hyp-fn)
-                            :equiv eqv
-                            :lhs fn
-                            :var-info nil ; unused
-                            :rhs (if mfc-symbol 'extended nil)
-                            :subclass 'meta
-                            :heuristic-info nil
-                            :backchain-limit-lst
-                            (rule-backchain-limit-lst
-                             backchain-limit
-                             nil ; hyps (ignored for :meta)
-                             wrld
-                             :meta))
-                      (mark-attachment-disallowed
-                       (if (eq hyp-fn t)
-                           (list fn)
-                         (list hyp-fn fn))
-                       ev
-                       (msg "it supports both evaluator and meta functions ~
+
+; Note: If a :meta rule has a :WELL-FORMEDNESS-GUARANTEE spec, then
+; well-formedness-guarantee is (name fn thm-name1 hyp-fn thm-name2)
+; . combined-arities-alist), where the hyp-fn and thm-name2 entries are omitted
+; if there is no hyp-fn.  If no :WELL-FORMEDNESS-GUARANTEE was specified, the
+; well-formedness-guarantee is nil.  The :heuristic-info field of the resulting
+; rule contains the well-formedness-guarantee.
+
+      (let* ((arity-alist (cdr well-formedness-guarantee))
+             (wrld1
+              (add-meta-rule1 trigger-fns
+                              (make rewrite-rule
+                                    :rune rune
+                                    :nume nume
+                                    :hyps (if (eq hyp-fn t) nil hyp-fn)
+                                    :equiv eqv
+                                    :lhs fn
+                                    :var-info nil ; unused
+                                    :rhs (if mfc-symbol 'extended nil)
+                                    :subclass 'meta
+                                    :heuristic-info well-formedness-guarantee
+                                    :backchain-limit-lst
+                                    (rule-backchain-limit-lst
+                                     backchain-limit
+                                     nil ; hyps (ignored for :meta)
+                                     wrld
+                                     :meta))
+                              (mark-attachment-disallowed
+                               (if (eq hyp-fn t)
+                                   (list fn)
+                                   (list hyp-fn fn))
+                               ev
+                               (msg "it supports both evaluator and meta functions ~
                              used in :META rule ~x0"
-                            (base-symbol rune))
-                       wrld)))))))
+                                    (base-symbol rune))
+                               wrld)))
+             (wrld2 (global-set 'never-untouchable-fns
+                                (add-new-never-untouchable-fns
+                                 (strip-cars arity-alist)
+                                 well-formedness-guarantee
+                                 (global-val 'never-untouchable-fns wrld1))
+                                wrld1)))
+        wrld2))))))
 
 ;---------------------------------------------------------------------------
 ; Section:  Destructor :ELIM Rules
@@ -4447,17 +5003,18 @@
         name
         (car dests)
         (set-difference-eq vars (fargs (car dests)))))
-   ((getprop (ffn-symb (car dests)) 'eliminate-destructors-rule nil
-             'current-acl2-world wrld)
+   ((getpropc (ffn-symb (car dests)) 'eliminate-destructors-rule nil wrld)
     (er soft ctx
-        "~x0 is an unacceptable destructor elimination rule because ~
-         we already have a destructor elimination rule for ~x1, ~
-         namely ~x2, and we do not support more than one elimination rule ~
-         for the same function symbol."
+        "~x0 is an unacceptable destructor elimination rule because we ~
+         already have a destructor elimination rule for ~x1, namely ~x2, and ~
+         we do not support more than one elimination rule for the same ~
+         function symbol."
         name
         (ffn-symb (car dests))
-        (getprop (ffn-symb (car dests)) 'eliminate-destructors-rule nil
-                 'current-acl2-world wrld)))
+        (base-symbol (access elim-rule
+                             (getpropc (ffn-symb (car dests))
+                                       'eliminate-destructors-rule nil wrld)
+                             :rune))))
    (t (chk-acceptable-elim-rule1 name vars (cdr dests) ctx wrld state))))
 
 (defun chk-acceptable-elim-rule (name term ctx wrld state)
@@ -4608,10 +5165,7 @@
                 (fargn term 1))
                (t nil)))
         ((let ((recog-tuple
-                (most-recent-enabled-recog-tuple (ffn-symb term)
-                                                 (global-val 'recognizer-alist
-                                                             wrld)
-                                                 ens)))
+                (most-recent-enabled-recog-tuple (ffn-symb term) wrld ens)))
            (and recog-tuple
 
 ; An ACL2(h) "everything" regression in August 2014 failed to certify community
@@ -4757,7 +5311,7 @@
 
 (defun unprettyify-tp (term)
 
-; This variant of unprettyify avoids giviing special treatment to conjunctions,
+; This variant of unprettyify avoids giving special treatment to conjunctions,
 ; and hence is suitable for parsing terms into type-prescription rules.  Unlike
 ; unprettyify, it returns (mv hyps concl).
 
@@ -4808,7 +5362,7 @@
 ; type-set lemmas in wrld.  The ttree returned contains no 'assumption
 ; tags.
 
-  (let ((term (remove-guard-holders term)))
+  (let ((term (remove-guard-holders term wrld)))
     (mv-let
      (hyps concl)
      (unprettyify-tp term)
@@ -4843,7 +5397,8 @@
                      conclusion.  See :DOC type-prescription."
                     name
                     typed-term
-                    (set-difference-eq all-vars-concl all-vars-typed-term))
+                    (reverse
+                     (set-difference-eq all-vars-concl all-vars-typed-term)))
                nil nil nil nil nil))
           (t (let* ((new-var (genvar (find-pkg-witness typed-term)
                                      "TYPED-TERM" nil all-vars-typed-term))
@@ -4965,7 +5520,7 @@
 ; ; In v2-7 and presumably earlier, the above leads us to a type-prescription
 ; ; rule with a NIL :basic-ts field:
 ;
-;   ACL2 !>(car (getprop 'my-equal 'type-prescriptions t 'current-acl2-world (w state)))
+;   ACL2 !>(car (getpropc 'my-equal 'type-prescriptions t))
 ;   (NIL (1685 MY-EQUAL X Y)
 ;        NIL
 ;        (NIL :EQUIVALENCE MY-EQUAL-IS-AN-EQUIVALENCE)
@@ -4973,21 +5528,21 @@
 ;   ACL2 !>
 
             (prog2$ (cw "~%NOTE:  ACL2 is unable to create a proposed ~
-                          type-prescription rule from the term ~x0 for ~
-                          :typed-term ~x1, so this proposed rule is not being ~
-                          added.~|"
+                         type-prescription rule from the term ~x0 for ~
+                         :typed-term ~x1, so this proposed rule is not being ~
+                         added.~|"
                         term typed-term)
                     wrld))
            (t
             (er hard 'add-type-prescription-rule
                 "Unable to process this :TYPE-PRESCRIPTION rule.  A possible ~
-                  explanation is that we are in the second pass of an ~
-                  include-book or encapsulate, and although this rule was ~
-                  legal in the first pass, it is not legal in the second pass. ~
-                   For example, the rule may depend on a preceding ~
-                  :COMPOUND-RECOGNIZER rule local to this encapsulate or ~
-                  include-book.  The usual error message for ~
-                  :TYPE-PRESCRIPTION rules now follows.~|~%~@0"
+                 explanation is that we are in the second pass of an ~
+                 include-book or encapsulate, and although this rule was ~
+                 legal in the first pass, it is not legal in the second pass. ~
+                 For example, the rule may depend on a preceding ~
+                 :COMPOUND-RECOGNIZER rule local to this encapsulate or ~
+                 include-book.  The usual error message for ~
+                 :TYPE-PRESCRIPTION rules now follows.~|~%~@0"
                 erp))))
     (t
      (putprop (ffn-symb typed-term)
@@ -5003,76 +5558,76 @@
                           :basic-ts ts
                           :vars vars
                           :corollary term)
-                    (getprop (ffn-symb typed-term)
-                             'type-prescriptions
-                             nil
-                             'current-acl2-world
-                             wrld))
+                    (getpropc (ffn-symb typed-term) 'type-prescriptions nil
+                              wrld))
               wrld)))))
 
-(defun strong-compound-recognizer-p (fn recognizer-alist ens)
+(defun strong-compound-recognizer-p1 (recognizer-alist ens)
   (cond ((endp recognizer-alist) nil)
         ((let ((recog-tuple (car recognizer-alist)))
-           (and (eq fn (access recognizer-tuple recog-tuple :fn))
-                (access recognizer-tuple recog-tuple :strongp)
+           (and (access recognizer-tuple recog-tuple :strongp)
                 (enabled-numep (access recognizer-tuple recog-tuple :nume)
                                ens)))
          t)
-        (t (strong-compound-recognizer-p fn (cdr recognizer-alist) ens))))
+        (t (strong-compound-recognizer-p1 (cdr recognizer-alist) ens))))
 
-(defun warned-non-rec-fns-for-tp (term recognizer-alist ens wrld)
+(defun strong-compound-recognizer-p (fn ens wrld)
+  (let ((alist (getpropc fn 'recognizer-alist nil wrld)))
+    (and alist ; optimization
+         (strong-compound-recognizer-p1 alist ens))))
+
+(defun warned-non-rec-fns-alist-for-tp (term ens wrld)
   (cond ((or (variablep term)
              (fquotep term))
          nil)
         ((flambdap (ffn-symb term))
-         (cons (ffn-symb term)
-               (non-recursive-fnnames-lst (fargs term) ens wrld)))
+         (put-assoc-equal
+          (ffn-symb term)
+          nil
+          (non-recursive-fnnames-alist-lst (fargs term) ens wrld)))
         ((eq (ffn-symb term) 'if)
 
 ; Type-set and assume-true-false explore the top-level IF structure in such a
 ; way that NOT and strong compound recognizers aren't problems.
 
          (union-equal
-          (warned-non-rec-fns-for-tp
-           (fargn term 1) recognizer-alist ens wrld)
+          (warned-non-rec-fns-alist-for-tp
+           (fargn term 1) ens wrld)
           (union-equal
-           (warned-non-rec-fns-for-tp
-            (fargn term 2) recognizer-alist ens wrld)
-           (warned-non-rec-fns-for-tp
-            (fargn term 3) recognizer-alist ens wrld))))
+           (warned-non-rec-fns-alist-for-tp
+            (fargn term 2) ens wrld)
+           (warned-non-rec-fns-alist-for-tp
+            (fargn term 3) ens wrld))))
         ((eq (ffn-symb term) 'not)
-         (warned-non-rec-fns-for-tp (fargn term 1) recognizer-alist ens wrld))
-        ((strong-compound-recognizer-p (ffn-symb term) recognizer-alist ens)
+         (warned-non-rec-fns-alist-for-tp (fargn term 1) ens wrld))
+        ((strong-compound-recognizer-p (ffn-symb term) ens wrld)
 
 ; We noticed in August 2014 that only the most-recent-enabled-recog-tuple is
 ; relevant here; see assume-true-false-rec.  But this code has been in place
 ; for a long time, and it's not terribly unreasonable, since enabled status can
 ; change.
 
-         (non-recursive-fnnames-lst (fargs term) ens wrld))
-        (t (non-recursive-fnnames term ens wrld))))
+         (non-recursive-fnnames-alist-lst (fargs term) ens wrld))
+        (t (non-recursive-fnnames-alist term ens wrld))))
 
-(defun warned-non-rec-fns-tp-hyps1 (hyps recognizer-alist ens wrld acc)
-  (cond ((endp hyps) acc)
-        (t (warned-non-rec-fns-tp-hyps1
-            (cdr hyps)
-            recognizer-alist ens wrld
-            (let ((hyp (if (and (nvariablep (car hyps))
+(defun warned-non-rec-fns-alist-tp-hyps1 (hyps ens wrld acc)
+  (cond
+   ((endp hyps) acc)
+   (t (warned-non-rec-fns-alist-tp-hyps1
+       (cdr hyps) ens wrld
+       (let ((hyp (if (and (nvariablep (car hyps))
 ;                               (not (fquotep (car hyps))) ; implied by:
-                                (member-eq (ffn-symb (car hyps))
-                                           '(force case-split)))
-                           (fargn (car hyps) 1)
-                         (car hyps))))
-              (cond (acc (union-equal (warned-non-rec-fns-for-tp
-                                       hyp recognizer-alist ens wrld)
-                                      acc))
-                    (t (warned-non-rec-fns-for-tp
-                        hyp recognizer-alist ens wrld))))))))
+                           (member-eq (ffn-symb (car hyps))
+                                      '(force case-split)))
+                      (fargn (car hyps) 1)
+                    (car hyps))))
+         (cond
+          (acc (union-equal (warned-non-rec-fns-alist-for-tp hyp ens wrld)
+                            acc))
+          (t (warned-non-rec-fns-alist-for-tp hyp ens wrld))))))))
 
-(defun warned-non-rec-fns-tp-hyps (hyps ens wrld)
-  (warned-non-rec-fns-tp-hyps1 hyps
-                               (global-val 'recognizer-alist wrld)
-                               ens wrld nil))
+(defun warned-non-rec-fns-alist-tp-hyps (hyps ens wrld)
+  (warned-non-rec-fns-alist-tp-hyps1 hyps ens wrld nil))
 
 (defun chk-acceptable-type-prescription-rule (name typed-term term
                                                    backchain-limit-lst
@@ -5081,132 +5636,137 @@
 ; Like all individual rule checkers, we either cause an error or
 ; return a ttree that records our dependencies on lemmas.
 
+  (declare (ignore backchain-limit-lst))
   (mv-let
    (erp hyps concl ts vars ttree)
    (destructure-type-prescription name typed-term term ens wrld)
-   (declare (ignore ts))
+   (declare (ignore ts concl vars))
    (cond
     (erp (er soft ctx "~@0" erp))
-    (t (let* ((weakp
-
-; We avoid calling weak-type-prescription-rulep if we are going to ignore the
-; warning anyhow.  Otherwise, we construct a temporary world.
-
-; We check (null vars) because otherwise, the warning can be needlessly harsh.
-; For example, try submitting these events in a fresh ACL2 session after
-; removing the (null vars) check from this function.
-
-; (defstub foo (x) x)
-; (defaxiom foo-type-prescription
-;           (or (integerp (foo y))
-;               (equal (foo y) y))
-;           :rule-classes :type-prescription)
-
-; Then the warning will be printed without the (null vars) check, even though
-; the rule above is a perfectly good one.
-
-               (and (null vars)
-                    (not (warning-disabled-p "Type prescription"))
-                    (let* ((nume (get-next-nume wrld))
-                           (rune (list :type-prescription name))
-                           (wrld2 (add-type-prescription-rule
-                                   rune nume typed-term term
-                                   backchain-limit-lst
-                                   ens wrld nil)))
-                      (mv-let
-                       (ts ttree)
-                       (type-set term nil t nil ens wrld2 nil nil nil)
-                       (or (not (assumption-free-ttreep ttree))
-                           (ts-intersectp ts *ts-nil*)))))))
+    (t (let* ((warned-non-rec-fns-alist
+               (and (not (warning-disabled-p "Non-rec"))
+                    (warned-non-rec-fns-alist-tp-hyps hyps ens wrld)))
+              (warned-non-rec-fns (strip-cars warned-non-rec-fns-alist))
+              (warned-free-vars
+               (and (not (warning-disabled-p "Free"))
+                    (free-vars-in-hyps hyps
+                                       (all-vars typed-term)
+                                       wrld)))
+              (inst-hyps (and warned-free-vars ; optimization
+                              (hyps-that-instantiate-free-vars
+                               warned-free-vars hyps))))
          (pprogn
           (cond
-           (weakp
-            (warning$ ctx ("Type prescription")
-                      "The :type-prescription rule generated for ~x0 may be ~
-                       weaker than you expect.  Note that the conclusion of a ~
-                       :type-prescription rule is stored as a numeric type ~
-                       rather than a term.  It so happens that~|  ~p1~|is not ~
-                       provable using type-set reasoning in the extension of ~
-                       the current world by that rule.  Because information ~
-                       has been lost, this rule probably does not have the ~
-                       strength that it appears to have.~@2"
+           (warned-non-rec-fns-alist
+            (warning$ ctx ("Non-rec")
+                      `("The hypothesis of the :type-prescription rule ~
+                         generated from ~x0 contains the function symbol~#1~[ ~
+                         ~&1, which has a non-recursive definition~/s ~&1, ~
+                         which have non-recursive definitions~].~@2  Since ~
+                         the hypotheses of :type-prescription rules are ~
+                         relieved by type reasoning alone (and not rewriting) ~
+                         ~#1~[this function is~/these functions are~] liable ~
+                         to make the rule inapplicable.  See :DOC ~
+                         type-prescription."
+                        (:doc type-prescription)
+                        (:name ,name)
+                        (:non-recursive-fns
+                         ,(hide-lambdas warned-non-rec-fns))
+                        (:rule-class :type-prescription))
                       name
-                      (untranslate term t wrld)
-                      (if (ffnnamep '< concl)
-                          "  The conclusion of this rule contains a call of ~
-                           function symbol < (or a macro <=, >, or >=), so it ~
-                           may be worth considering making a :linear rule; ~
-                           see :DOC linear."
-                        "")))
+                      (hide-lambdas warned-non-rec-fns)
+                      (non-rec-def-rules-msg warned-non-rec-fns-alist)))
            (t state))
-          (let* ((warned-non-rec-fns
-                  (and (not (warning-disabled-p "Non-rec"))
-                       (warned-non-rec-fns-tp-hyps hyps ens wrld)))
-                 (warned-free-vars
-                  (and (not (warning-disabled-p "Free"))
-                       (free-vars-in-hyps hyps
-                                          (all-vars typed-term)
-                                          wrld)))
-                 (inst-hyps (and warned-free-vars ; optimization
-                                 (hyps-that-instantiate-free-vars
-                                  warned-free-vars hyps))))
-            (pprogn
-             (cond
-              (warned-non-rec-fns
-               (warning$ ctx ("Non-rec")
-                         "The hypothesis of the :type-prescription rule ~
-                          generated from ~x0 contains the non-recursive ~
-                          function symbol~#1~[~/s~] ~&1.  Since the ~
-                          hypotheses of :type-prescription rules are relieved ~
-                          by type reasoning alone (and not rewriting) ~
-                          ~#1~[this function is~/these functions are~] liable ~
-                          to make the rule inapplicable.  See :DOC ~
-                          type-prescription."
-                         name (hide-lambdas warned-non-rec-fns)))
-              (t state))
-             (cond
-              (warned-free-vars
-               (warning$ ctx ("Free")
-                         "The :type-prescription rule generated from ~x0 ~
-                          contains the free variable~#1~[ ~&1.  This ~
-                          variable~/s ~&1.  These variables~] will be chosen ~
-                          by searching for instances of ~&2 among the ~
-                          hypotheses of conjectures being rewritten.  This is ~
-                          generally a severe restriction on the applicability ~
-                          of the :type-prescription rule."
-                         name warned-free-vars inst-hyps))
-              (t state))
-             (cond
-              ((and warned-free-vars
-                    (forced-hyps inst-hyps))
-               (warning$ ctx ("Free")
-                         "For the forced ~#0~[hypothesis~/hypotheses~], ~&1, ~
-                          used to instantiate free variables we will search ~
-                          for ~#0~[an instance of the argument~/instances of ~
-                          the arguments~] rather than ~#0~[an ~
-                          instance~/instances~] of the FORCE or CASE-SPLIT ~
-                          ~#0~[term itself~/terms themselves~].  If a search ~
-                          fails for such a hypothesis, we will cause a case ~
-                          split on the partially instantiated hypothesis.  ~
-                          Note that this case split will introduce a ``free ~
-                          variable'' into the conjecture.  While sound, this ~
-                          will establish a goal almost certain to fail since ~
-                          the restriction described by this apparently ~
-                          necessary hypothesis constrains a variable not ~
-                          involved in the problem.  To highlight this oddity, ~
-                          we will rename the free variables in such forced ~
-                          hypotheses by prefixing them with ~
-                          ``UNBOUND-FREE-''.  This is not guaranteed to ~
-                          generate a new variable but at least it generates ~
-                          an unusual one.  If you see such a variable in a ~
-                          subsequent proof (and did not introduce them ~
-                          yourself) you should consider the possibility that ~
-                          the free variables of this type-prescription rule ~
-                          were forced into the conjecture."
-                         (if (null (cdr (forced-hyps inst-hyps))) 0 1)
-                         (forced-hyps inst-hyps)))
-              (t state))
-             (value ttree)))))))))
+          (cond
+           (warned-free-vars
+            (warning$ ctx ("Free")
+                      `("The :type-prescription rule generated from ~x0 ~
+                         contains the free variable~#1~[ ~&1.  This ~
+                         variable~/s ~&1.  These variables~] will be chosen ~
+                         by searching for instances of ~&2 among the ~
+                         hypotheses of conjectures being rewritten.  This is ~
+                         generally a severe restriction on the applicability ~
+                         of the :type-prescription rule."
+                        (:free-variables ,warned-free-vars)
+                        (:instantiated-hyps ,inst-hyps)
+                        (:name ,name)
+                        (:rule-class :type-prescription))
+                      name warned-free-vars inst-hyps))
+           (t state))
+          (cond
+           ((and warned-free-vars
+                 (forced-hyps inst-hyps))
+            (warning$ ctx ("Free")
+                      "For the forced ~#0~[hypothesis~/hypotheses~], ~&1, ~
+                       used to instantiate free variables we will search for ~
+                       ~#0~[an instance of the argument~/instances of the ~
+                       arguments~] rather than ~#0~[an instance~/instances~] ~
+                       of the FORCE or CASE-SPLIT ~#0~[term itself~/terms ~
+                       themselves~].  If a search fails for such a ~
+                       hypothesis, we will cause a case split on the ~
+                       partially instantiated hypothesis.  Note that this ~
+                       case split will introduce a ``free variable'' into the ~
+                       conjecture.  While sound, this will establish a goal ~
+                       almost certain to fail since the restriction described ~
+                       by this apparently necessary hypothesis constrains a ~
+                       variable not involved in the problem.  To highlight ~
+                       this oddity, we will rename the free variables in such ~
+                       forced hypotheses by prefixing them with ~
+                       ``UNBOUND-FREE-''.  This is not guaranteed to generate ~
+                       a new variable but at least it generates an unusual ~
+                       one.  If you see such a variable in a subsequent proof ~
+                       (and did not introduce them yourself) you should ~
+                       consider the possibility that the free variables of ~
+                       this type-prescription rule were forced into the ~
+                       conjecture."
+                      (if (null (cdr (forced-hyps inst-hyps))) 0 1)
+                      (forced-hyps inst-hyps)))
+           (t state))
+          (value ttree)))))))
+
+;---------------------------------------------------------------------------
+; Section:  Symbol generation utilities
+
+; The following functions, macros and theorems are used to generate symbols.  A
+; general principle for symbol generation is that generated symbols should be
+; in the current package.  Doing that in ACL2 requires using make-event in a
+; top level form to determine the current package from state and then passing
+; this package to functions that generate symbols.  The code below was adapted
+; from similar code in ACL2s.  See books/acl2s/utilities.lisp for more
+; utilities for generating symbols.  See books/acl2s/defunc.lisp for an example
+; of a utility that generates symbols in the current package.  Other examples
+; include defequiv, defrefinement and defcong, in this file.
+
+(defun fix-pkg (pkg)
+  (declare (xargs :guard (and (or (null pkg) (stringp pkg))
+                              (not (equal pkg "")))))
+  (if (and pkg (not (equal pkg *main-lisp-package-name*)))
+      pkg
+    "ACL2"))
+
+(defmacro fix-intern$ (name pkg)
+  `(intern$ ,name (fix-pkg ,pkg)))
+
+(defmacro fix-intern-in-pkg-of-sym (string sym)
+  `(intern-in-package-of-symbol
+    ,string
+    (let ((sym ,sym))
+      (if (equal (symbol-package-name sym) *main-lisp-package-name*)
+          (pkg-witness "ACL2")
+        sym))))
+
+(defun pack-to-string (l)
+  (declare (xargs :guard (good-atom-listp l)))
+  (coerce (packn1 l) 'string))
+
+(defun gen-sym-sym (l sym)
+
+; This is a version of packn-pos that fixes the package (so that it's not
+; *main-lisp-package-name*).
+
+  (declare (xargs :guard (and (good-atom-listp l)
+                              (symbolp sym))))
+  (fix-intern-in-pkg-of-sym (pack-to-string l) sym))
 
 ;---------------------------------------------------------------------------
 ; Section:  :EQUIVALENCE Rules
@@ -5218,7 +5778,7 @@
 ; simple macro that generates a suitable defthm event (rather than
 ; have to produce a new event type with all the prove-level hint
 ; passing mechanism).  To check that the formula is suitable we
-; generate a cannonical formula and check that the given one subsumes
+; generate a canonical formula and check that the given one subsumes
 ; it.  To add an :EQUIVALENCE rule we add a 'coarsenings property to
 ; the function symbol and also set up an initial 'congruences property
 ; for it.
@@ -5227,36 +5787,44 @@
 ; equivalences (n>2) but don't be fooled into thinking we allow it
 ; today!
 
-(defun boolean-fn (fn)
+(defun boolean-fn (fn sym)
 
 ; The name boolean is not usable for definitions in Allegro, because
 ; it's in the COMMON-LISP package.  So, we'd better not use that name
 ; here.
 
-  `(booleanp (,fn x y)))
+  (let ((x (fix-intern-in-pkg-of-sym "X" sym))
+        (y (fix-intern-in-pkg-of-sym "Y" sym)))
+  `(booleanp (,fn ,x ,y))))
 
-(defun reflexivity (fn)
+(defun reflexivity (fn sym)
 
 ; In this function we expect fn to have arity 2.
 
-  `(,fn x x))
+  (let ((x (fix-intern-in-pkg-of-sym "X" sym)))
+    `(,fn ,x ,x)))
 
-(defun symmetry (fn)
-
-; This function expects fn to have arity 2.
-
-  `(implies (,fn x y)
-            (,fn y x)))
-
-(defun transitivity (fn)
+(defun symmetry (fn sym)
 
 ; This function expects fn to have arity 2.
 
-  `(implies (and (,fn x y)
-                 (,fn y z))
-            (,fn x z)))
+  (let ((x (fix-intern-in-pkg-of-sym "X" sym))
+        (y (fix-intern-in-pkg-of-sym "Y" sym)))
+    `(implies (,fn ,x ,y)
+              (,fn ,y ,x))))
 
-(defun equivalence-relation-condition (fn)
+(defun transitivity (fn sym)
+
+; This function expects fn to have arity 2.
+
+  (let ((x (fix-intern-in-pkg-of-sym "X" sym))
+        (y (fix-intern-in-pkg-of-sym "Y" sym))
+        (z (fix-intern-in-pkg-of-sym "Z" sym)))
+    `(implies (and (,fn ,x ,y)
+                   (,fn ,y ,z))
+              (,fn ,x ,z))))
+
+(defun equivalence-relation-condition (fn sym)
 
 ; This function expects fn to have arity 2.  We generate a formula that states
 ; that fn is Boolean, reflexive, symmetric, and transitive.
@@ -5269,10 +5837,10 @@
 ; the Boolean condition we would have to be more careful about, say,
 ; commutative unification.
 
-  `(and ,(boolean-fn fn)
-        ,(reflexivity fn)
-        ,(symmetry fn)
-        ,(transitivity fn)))
+  `(and ,(boolean-fn fn sym)
+        ,(reflexivity fn sym)
+        ,(symmetry fn sym)
+        ,(transitivity fn sym)))
 
 (defun find-candidate-equivalence-relation (clauses)
 
@@ -5345,7 +5913,7 @@
            for n>2.  Sorry."
           name))
      (t (er-let*
-         ((eqv-cond (translate (equivalence-relation-condition fn)
+         ((eqv-cond (translate (equivalence-relation-condition fn name)
                                t t t ctx wrld state)))
 ; known-stobjs = t (stobjs-out = t)
 
@@ -5358,7 +5926,7 @@
            (cond
             ((or (eq fn 'equal)
                  (and (not (flambdap fn))
-                      (getprop fn 'coarsenings nil 'current-acl2-world wrld)))
+                      (getpropc fn 'coarsenings nil wrld)))
              (er soft ctx
                  "~x0 is already known to be an equivalence relation."
                  fn))
@@ -5375,7 +5943,7 @@
                    (let ((lst
                           (scrunch-eq
                            (collect-problematic-pre-equivalence-rule-names
-                            (getprop fn 'lemmas nil 'current-acl2-world wrld)))))
+                            (getpropc fn 'lemmas nil wrld)))))
                      (cond
                       (lst
                        (pprogn
@@ -5414,7 +5982,7 @@
 
                            "This low-level implementation error is a complete ~
                             surprise, as the subsumption check returned '? ~
-                            for the :EQUIVALENCE lemma ~x0 for funcction ~
+                            for the :EQUIVALENCE lemma ~x0 for function ~
                             symbol ~x1.  This failure occurred when it was ~
                             checked that the equivalence-relation formula ~
                             subsumes the following canonical form: ~X23.  ~
@@ -5532,8 +6100,7 @@
      (list fn)
      (putprop 'equal
               'coarsenings
-              (append (getprop 'equal 'coarsenings nil
-                               'current-acl2-world wrld)
+              (append (getpropc 'equal 'coarsenings nil wrld)
                       (list fn))
               (putprop fn
                        'congruences
@@ -5546,9 +6113,7 @@
                                                :rune rune
                                                :nume nume
                                                :equiv fn)))
-                             (getprop fn 'congruences nil
-                                      'current-acl2-world
-                                      wrld))
+                             (getpropc fn 'congruences nil wrld))
                        (cond
                         ((mv-let
                           (ts ttree)
@@ -5614,8 +6179,7 @@
 ; Return an alist that pairs each equivalence relation in wrld with
 ; its current coarsenings.
 
-  (let ((all-equivs (getprop 'equal 'coarsenings nil
-                             'current-acl2-world wrld)))
+  (let ((all-equivs (getpropc 'equal 'coarsenings nil wrld)))
     (pairlis$ all-equivs
               (getprop-x-lst all-equivs 'coarsenings wrld))))
 
@@ -5626,8 +6190,7 @@
 ; in wrld.
 
   (cond ((null alist) wrld)
-        ((equal (getprop (caar alist) 'coarsenings nil
-                         'current-acl2-world wrld)
+        ((equal (getpropc (caar alist) 'coarsenings nil wrld)
                 (cdar alist))
          (putprop-coarsenings (cdr alist) wrld))
         (t (putprop (caar alist) 'coarsenings (cdar alist)
@@ -5705,8 +6268,7 @@
     (putprop-coarsenings
      (close-value-sets
       (put-assoc-eq equiv1
-                    (append (getprop equiv1 'coarsenings nil
-                                     'current-acl2-world wrld)
+                    (append (getpropc equiv1 'coarsenings nil wrld)
                             (list equiv2))
                     (collect-coarsenings wrld)))
      wrld)))
@@ -5892,7 +6454,7 @@
 ; are so intermingled that it seemed dubious to separate them into two
 ; functions.
 
-  (let ((pairs (unprettyify (remove-guard-holders term)))
+  (let ((pairs (unprettyify (remove-guard-holders term wrld)))
         (hyp-msg   "~x0 is an unacceptable :CONGRUENCE rule.  The ~
                     single hypothesis of a :CONGRUENCE rule must be a ~
                     term of the form (equiv x y), where equiv has ~
@@ -5914,7 +6476,7 @@
 ; quote-normal form, both to facilitate matching when the rule is subsequently
 ; applied and to make the test robust below where we use subst-var-lst.
 
-             (sublis-var nil (cdar pairs))))
+             (quote-normal-form (cdar pairs))))
         (case-match
          hyp
          ((equiv1 xk yk)
@@ -6207,8 +6769,7 @@
           (let* ((k addr)
                  (temp (nth k
                             (assoc-eq equiv2
-                                      (getprop fn 'congruences nil
-                                               'current-acl2-world wrld)))))
+                                      (getpropc fn 'congruences nil wrld)))))
             (cond
              ((some-congruence-rule-same equiv1 temp)
               (warning$ ctx "Equiv"
@@ -6305,16 +6866,14 @@
       ((eq flg :classic)
        (let* ((k addr)
               (temp (assoc-eq equiv2
-                              (getprop fn 'congruences nil
-                                       'current-acl2-world wrld)))
+                              (getpropc fn 'congruences nil wrld)))
               (equiv2-congruence
                (or temp
                    (cons equiv2 (make-list-ac (arity fn wrld) nil nil))))
               (rst (if temp
                        (remove1-equal temp
-                                      (getprop fn 'congruences nil
-                                               'current-acl2-world wrld))
-                     (getprop fn 'congruences nil 'current-acl2-world wrld))))
+                                      (getpropc fn 'congruences nil wrld))
+                     (getpropc fn 'congruences nil wrld))))
          (putprop fn
                   'congruences
                   (cons (add-congruence-rule-to-congruence
@@ -6327,6 +6886,10 @@
                         rst)
                   wrld)))
       ((null flg)
+
+; This case is unexpected, given the check on :congruence rules in
+; chk-acceptable-rules; see the comment there.
+
        (er hard! 'add-congruence-rule
            "Implementation error: ~x0 returned failure when attempting to ~
             apply ~x1.  Please contact the ACL2 implementors."
@@ -6349,7 +6912,7 @@
                                   (fquotep arg)
                                   (lambda-applicationp arg)))
                          (ffn-symb arg)))))
-               (prop (getprop sym 'pequivs nil 'current-acl2-world wrld))
+               (prop (getpropc sym 'pequivs nil wrld))
                (new-prop
                 (let ((prop (or prop
                                 *empty-pequivs-property*)))
@@ -6369,7 +6932,7 @@
                                                  prop :deep)))))))
                (parent-prop
                 (and (eq flg :deep) ; optimization
-                     (getprop fn 'pequivs nil 'current-acl2-world wrld))))
+                     (getpropc fn 'pequivs nil wrld))))
           (putprop sym 'pequivs new-prop
                    (cond ((eq flg :shallow) wrld)
                          ((null parent-prop) ; and flg is :deep
@@ -6406,6 +6969,11 @@
                                                   install-body
                                                   install-body-supplied-p
                                                   ctx state)
+
+; This function should be called even during include-book, since we check for
+; an equivalence relation that might not be a known equivalence relation during
+; the first pass of certification or encapsulate.
+
   (let ((install-body (if install-body-supplied-p
                           install-body
                         :NORMALIZE))
@@ -6423,21 +6991,14 @@
     (cond
      ((null install-body)
       (value nil))
-     ((member-eq fn *definition-minimal-theory*)
 
-; This restriction is to allow us to assume that calls of (body fn t wrld),
-; which occur in several places in the source code, refer to the original
-; normalized body of fn, which excuses us from tracking the corresponding rune.
+; We formerly disallowed the case here of (member-eq fn
+; *definition-minimal-theory*), with non-nil install-body, so that we could
+; assume that calls of (body fn t wrld), which occurred in several places in
+; the source code, refer to the original normalized body of fn, which excuses
+; us from tracking the corresponding rune.  Now we avoid such calls of body in
+; our source code.
 
-      (er soft ctx
-          "~@0 the function symbol being called on the left-hand side, ~x1, ~
-           must not be among the following built-in functions:  ~&2.~@3  ~
-           Please contact the implementors if you feel that this is an ~
-           encumbrance to you."
-          er-preamble
-          fn
-          *definition-minimal-theory*
-          install-body-msg))
      ((not (arglistp args))
       (er soft ctx
           "~@0 the arguments on the left-hand side of the rule must be a list ~
@@ -6445,12 +7006,11 @@
           er-preamble
           args
           install-body-msg))
-     ((not (eq equiv 'equal))
+     ((not (equivalence-relationp equiv (w state)))
       (er soft ctx
-          "~@0 the equivalence relation on the left-hand side of the rule ~
-           must be ~x1, unlike ~x2.~@3  See :DOC definition."
+          "~@0 the function symbol at the top of the conclusion must be an ~
+           equivalence relation, unlike ~x1.~@2  See :DOC definition."
           er-preamble
-          'equal
           equiv
           install-body-msg))
      ((free-varsp-member-lst hyps args)
@@ -6460,7 +7020,7 @@
            violates~/variables ~&1 violate~] this requirement.~@2  See :DOC ~
            definition."
           er-preamble
-          (set-difference-eq (all-vars1-lst hyps nil) args)
+          (reverse (set-difference-eq (all-vars1-lst hyps nil) args))
           install-body-msg))
      ((free-varsp-member body args)
       (er soft ctx
@@ -6469,9 +7029,28 @@
            The ~#1~[variable ~&1 violates~/variables ~&1 violate~] this ~
            requirement.~@2  See :DOC definition."
           er-preamble
-          (set-difference-eq (all-vars body) args)
+          (reverse (set-difference-eq (all-vars body) args))
           install-body-msg))
-     (t (value nil)))))
+     (t (pprogn (cond ((member-eq fn *definition-minimal-theory*)
+
+; This restriction is to allow us to assume that calls of (body fn t wrld),
+; which occur in several places in the source code, refer to the original
+; normalized body of fn, which excuses us from tracking the corresponding rune.
+
+                       (warning$ ctx "Definition"
+                                 "The proposed :DEFINITION rule might not ~
+                                  always be the one applied when expanding ~
+                                  calls of ~x0 during proofs.  Instead, these ~
+                                  calls and, more generally, calls of any ~
+                                  function symbol that is in the list ~x1, ~
+                                  will often be expanded using the original ~
+                                  definition of the function symbol.  Add ~
+                                  :INSTALL-BODY ~x2 to the proposed ~
+                                  :DEFINITION rule class to avoid this ~
+                                  warning."
+                                 fn '*definition-minimal-theory* nil))
+                      (t state))
+                (value nil))))))
 
 (defun chk-acceptable-definition-rule
   (name clique controller-alist install-body-tail term ctx ens wrld state)
@@ -6499,7 +7078,7 @@
             (make rewrite-rule
                   :rune *fake-rune-for-anonymous-enabled-rule*
                   :nume nil
-                  :hyps (preprocess-hyps hyps)
+                  :hyps (preprocess-hyps hyps wrld)
                   :equiv equiv
                   :lhs (mcons-term fn args)
                   :var-info (var-counts args body)
@@ -6540,8 +7119,7 @@
                          :pattern pat-term
                          :condition cond-term
                          :scheme scheme-term)
-                   (getprop fn 'induction-rules nil
-                            'current-acl2-world wrld))
+                   (getpropc fn 'induction-rules nil wrld))
              wrld)))
 
 ;---------------------------------------------------------------------------
@@ -6550,9 +7128,7 @@
 (defun chk-acceptable-type-set-inverter-rule (name ts term ctx ens wrld state)
   (let* ((vars (all-vars term)))
     (cond
-     ((not (and (nvariablep term)
-                (not (fquotep term))
-                (eq (ffn-symb term) 'equal)
+     ((not (and (ffn-symb-p term 'equal)
                 (equal vars '(X))
                 (equal (all-vars (fargn term 1))
                        (all-vars (fargn term 2)))))
@@ -6652,6 +7228,8 @@
 ; (cl-proc cl hint) => cl-list
 ; or
 ; (cl-proc cl hint st_1 ... st_k) => (erp cl-list st_i1 ... st_in)
+; or
+; (cl-proc cl hint st_1 ... st_k) => (erp cl-list st_i1 ... st_in d)
 
   (cond
    ((null (cdr stobjs-out)) ; first two signatures
@@ -6664,25 +7242,50 @@
           (t (msg "~x0 returns a single argument, but doesn't take exactly one ~
                    or two arguments, both not stobjs"
                   cl-proc))))
-   ((and ; the final (third) class of signatures above
-     (null (car stobjs-in))
-     (cdr stobjs-in)
-     (null (cadr stobjs-in))
-     (not (member-eq nil (cddr stobjs-in)))
-     (null (car stobjs-out))
-     (cdr stobjs-out)
-     (null (cadr stobjs-out))
-     (not (member-eq nil (cddr stobjs-out))))
+   ((and (null (car stobjs-in))
+         (cdr stobjs-in)
+         (null (cadr stobjs-in))
+         (not (member-eq nil (cddr stobjs-in)))
+         (null (car stobjs-out))
+         (cdr stobjs-out)
+         (null (cadr stobjs-out))
+         (member-equal (member-eq nil (cddr stobjs-out))
+                       '(nil (nil))))
     nil)
    (t
     (msg "both the arguments and results of ~x0 in this case are expected to ~
-          contain stobjs in exactly all positions other than the first two"
+          contain stobjs in exactly all positions other than the first two ~
+          and possibly the last"
          cl-proc))))
 
 (defun destructure-clause-processor-rule (term)
+
+; We destructure the translated term term in the form of a :clause-processor
+; correctness theorem.  We return
+; (mv flg fn cl alist rest-args ev call xflg)
+; where
+; flg:   :error, if term is not the right shape
+;        t, if the clause processor function returns (mv erp clauses ...)
+;           and is thus to be accessed with CLAUSES-RESULT
+;        nil, if the clause processor returns a set of clauses.
+; fn:    the clause processor function (presumably a function symbol)
+; cl:    the first argument to fn (presumably a variable symbol denoting the
+;        input clause)
+; alist: the evaluator's alist (presumably a variable symbol)
+; rest-args: the arguments of fn after the first (presumably a hint possibly
+;        followed by a list of stobj names)
+; ev:    the evaluator function (presumably a function symbol)
+; call:  the actual call of fn
+; flg:   a boolean indicating whether meta-extract-global-fact+ hyps were found
+; We also may presume that all the variables above are distinct.
+
+; This function does not check the presumptions above but
+; chk-acceptable-clause-processor-rule does and causes an error if they are not
+; true.
+
   (case-match term
-    (('implies hyp
-               (ev ('disjoin clause) alist))
+    (('IMPLIES hyp
+               (ev ('DISJOIN clause) alist))
      (mv-let
       (hyps meta-extract-flg)
       (remove-meta-extract-global-hyps
@@ -6691,10 +7294,10 @@
                                      (flatten-ands-in-lit hyp)))
        ev)
       (case-match hyps
-        (((ev ('conjoin-clauses cl-result)
+        (((ev ('CONJOIN-CLAUSES cl-result)
               &))
          (case-match cl-result
-           (('clauses-result (cl-proc !clause . rest-args))
+           (('CLAUSES-RESULT (cl-proc !clause . rest-args))
             (mv t cl-proc clause alist rest-args ev (cadr cl-result)
                 meta-extract-flg))
            ((cl-proc !clause . rest-args)
@@ -6812,7 +7415,7 @@
                                  ctx wrld state)
               (chk-evaluator ev wrld ctx state))))))))))))
 
-(defun add-clause-processor-rule (name term wrld)
+(defun add-clause-processor-rule (name well-formedness-guarantee term wrld)
 
 ; Warning: Keep this in sync with chk-acceptable-clause-processor-rule.
 
@@ -6834,7 +7437,8 @@
          (function-symbolp cl-proc wrld))
     (putprop
      cl-proc 'clause-processor
-     t
+     (or well-formedness-guarantee
+         t)
 
 ; We keep a global list of clause-processor-rules, simply in order to be
 ; able to print them.  But someone may find other uses for this list, in
@@ -6857,7 +7461,7 @@
 ; do with defthm, but it seems reasonable to place it immediately below code
 ; for verified clause-processors.
 
-(defun trusted-clause-processor-table-guard (key val wrld)
+(defun trusted-cl-proc-table-guard (key val wrld)
 
 ; There is not much point in checking whether the key is already designated as
 ; a clause-processor, because a redundant table event won't even result in such
@@ -6879,7 +7483,7 @@
   (let ((er-msg "The proposed designation of a trusted clause-processor is ~
                  illegal because ~@0.  See :DOC ~
                  define-trusted-clause-processor.")
-        (ctx 'trusted-clause-processor-table-guard))
+        (ctx 'trusted-cl-proc-table-guard))
     (cond
      ((not (or (ttag wrld)
                (global-val 'boot-strap-flg wrld)))
@@ -6893,36 +7497,15 @@
       (er hard ctx er-msg
           (msg "the clause-processor must be a function symbol, unlike ~x0"
                key)))
-     ((not (and (consp val)
-                (all-function-symbolps (car val) wrld)))
-      (cond ((not (symbol-listp (car val)))
+     ((not (all-function-symbolps val wrld))
+      (cond ((not (symbol-listp val))
              (er hard ctx er-msg
                  "the indicated supporters list is not a true list of symbols"))
             (t (er hard ctx er-msg
                    (msg "the indicated supporter~#0~[ ~&0 is not a function ~
                          symbol~/s ~&0 are not function symbols~] in the ~
                          current ACL2 world"
-                        (non-function-symbols (car val) wrld))))))
-     ((and (cdr val)
-           (not (eql (length (non-trivial-encapsulate-ee-entries
-                              (global-val 'embedded-event-lst wrld)))
-                     1)))
-      (let  ((ee-entries (non-trivial-encapsulate-ee-entries
-                          (global-val 'embedded-event-lst wrld))))
-        (cond
-         ((null ee-entries)
-          (er hard ctx er-msg
-              "there is no promised encapsulate to associate with this ~
-               dependent clause-processor"))
-         (t
-          (er hard ctx er-msg
-              (msg "there is not a unique encapsulate for the promised ~
-                    encapsulate to associate with this dependent ~
-                    clause-processor.  In particular, an enclosing ~
-                    encapsulate introduces function ~x0, while an encapsulate ~
-                    superior to that introduces function ~x1"
-                   (caar (cadr (car ee-entries)))
-                   (caar (cadr (cadr ee-entries)))))))))
+                        (non-function-symbols val wrld))))))
      (t
       (let ((failure-msg (tilde-@-illegal-clause-processor-sig-msg
                           key
@@ -6930,28 +7513,20 @@
                           (stobjs-out key wrld))))
         (cond
          (failure-msg
-          (er hard ctx er-msg
-              (msg failure-msg key)))
+          (er hard ctx er-msg failure-msg))
          (t t)))))))
 
-(table trusted-clause-processor-table nil nil
+(table trusted-cl-proc-table nil nil
        :guard
-       (trusted-clause-processor-table-guard key val world))
+       (trusted-cl-proc-table-guard key val world))
 
 (defmacro define-trusted-clause-processor
   (clause-processor supporters
                     &key
-                    label          ;;; optional, but required if doc is non-nil
-                    doc            ;;; optional
-                    partial-theory ;;; optional
-                    ttag           ;;; optional; nil is same as missing
+                    (label 'nil label-p) ;;; default is clause-processor$label
+                    partial-theory       ;;; optional
+                    ttag                 ;;; optional; nil is same as missing
                     )
-
-; We could mention that unlike trusted clause-processors, no supporters need to
-; be specified for a verified clause-processor, as such a rule is guaranteed to
-; be a theorem even in if local events have been removed.  But that probably
-; would distract more than it would enlighten.
-
   (let* ((ctx 'define-trusted-clause-processor)
          (er-msg "The proposed use of define-trusted-clause-processor is ~
                   illegal because ~@0.  See :DOC ~
@@ -6959,18 +7534,26 @@
          (assert-check
           `(assert-event
             (not (assoc-eq ',clause-processor
-                           (table-alist 'trusted-clause-processor-table
+                           (table-alist 'trusted-cl-proc-table
                                         (w state))))
             :msg (msg "The function ~x0 is already indicated as a trusted ~
                        clause-processor."
                       ',clause-processor)
             :on-skip-proofs t))
          (ttag-extra (and ttag `((defttag ,ttag))))
+         (label (if label-p
+                    label
+
+; A label is needed for supporting redundancy in the case that :partial-theory
+; is nil; else, the event will not be redundant.  For uniformity we generate a
+; deflabel by default even if :partial-theory is not nil.  The user may supply
+; nil explicitly to defeat generation of a deflabel form.
+
+                  (and (symbolp clause-processor) ; else cause error below
+                       (add-suffix clause-processor
+                                   "$LABEL"))))
          (label-extra (and label
-                           (cond (doc
-                                  `((deflabel ,label
-                                      :doc ,doc)))
-                                 (t `((deflabel ,label))))))
+                           `((deflabel ,label))))
          (extra (append ttag-extra label-extra)))
     (cond
      ((not (symbol-listp supporters))
@@ -6980,19 +7563,14 @@
       (er hard ctx er-msg
           "the first argument must be a symbol (in fact, must be a defined ~
            function symbol in the current ACL2 world)"))
-     ((and doc (not label))
-      (er hard ctx er-msg
-          "a non-nil :label argument is required when a non-nil :doc argument ~
-           is supplied"))
      (t
       (case-match partial-theory
         (nil
          `(encapsulate
-           ()
-           ,assert-check
-           ,@extra
-           (table trusted-clause-processor-table ',clause-processor
-                  '(,supporters))))
+            ()
+            ,assert-check
+            ,@extra
+            (table trusted-cl-proc-table ',clause-processor ',supporters)))
         (('encapsulate sigs . events)
          (cond
           ((atom sigs)
@@ -7008,13 +7586,14 @@
                "the encapsulate event associated with :partial-theory has a ~
                 list of sub-events that is not a true-listp"))
           (t `(encapsulate
-               ,sigs
-               ,assert-check
-               (logic) ; to avoid skipping local events
-               ,@events
-               ,@extra
-               (table trusted-clause-processor-table ',clause-processor
-                      '(,supporters . t))))))
+                ,sigs
+                ,assert-check
+                (logic) ; to avoid skipping local events
+                ,@events
+                ,@extra
+                (set-unknown-constraints-supporters ,@supporters)
+                (table trusted-cl-proc-table ',clause-processor
+                       ',supporters)))))
         (& (er hard ctx er-msg
                "a supplied :partial-theory argument must be a call of ~
                 encapsulate")))))))
@@ -7126,7 +7705,7 @@
 ; ; Thus ends the dead code devoted to disambiguation.
 ;
 
-; Now we stub out the proof checker's sense of "instructions."
+; Now we stub out the proof-builder's sense of "instructions."
 
 (defun primitive-instructionp (instr state)
   (let* ((cmd (car (make-official-pc-instr instr)))
@@ -7255,7 +7834,7 @@
 ; for a :definition rule with the indicated formals and body.  We guess a
 ; :controller-alist or cause an error.
 
-  (let ((t-machine (termination-machine names body nil nil
+  (let ((t-machine (termination-machine nil nil names formals body nil nil
                                         (default-ruler-extenders wrld))))
     (er-let*
      ((m (guess-measure (car names) nil formals 0 t-machine ctx wrld state)))
@@ -7287,9 +7866,9 @@
 (defun chk-legal-linear-trigger-terms (terms lst name ctx state)
 
 ; When the user supplies some :TRIGGER-TERMS for a :LINEAR rule, we must check
-; that each trigger is legal for every rule generated from the unprettified
+; that each trigger is legal for every rule generated from the unprettyified
 ; corollary.  Here, terms is a true-list of terms proposed as triggers and lst
-; is the unprettification of the corollary, i.e., a list of pairs of the form
+; is the unprettyification of the corollary, i.e., a list of pairs of the form
 ; ((hyps1 . concl1) ... (hypsk . conclk)).  To be legal, each term must be a
 ; non-variable, non-quote, non-lambda application, non-IF and must, for each
 ; (hypsi . concli) pair, contain sufficient variables so that the vars in hypsi
@@ -7325,6 +7904,523 @@
         (t
          nil)))
 
+(defun recover-metafunction-or-clause-processor-signatures (token term)
+
+; Term is supposed to be either a metafunction correctness theorem or a
+; clause-processor correctness theorem, depending on token being :meta or
+; :clause-processor.  (But it may not be of the correct form.)  We return (mv
+; triple-flg fn hyp-fn rest-args), where hyp-fn is nil if no hypothesis fn is
+; involved.  Rest-args are all the arguments of fn after the first.  Triple-flg
+; is :error if term cannot be parsed according to token, is t if the identified
+; metafunction or clause processor, fn, returns an error triple (and thus must
+; actually be a clause-processor whose result is to be accessed with
+; CLAUSES-RESULT), or nil if fn returns a simple value (term or set of
+; clauses).
+
+; In the case of a :meta fn, triple-flg is :error or nil and rest-args may be
+; nil or something like (mfc state).  In the case of a :clause-processor,
+; triple-flg may be :error, t, or nil and rest-args may be nil or (hint) or
+; (hint stobj1 stobj2 ...).  When hyp-fn is present, we know that it can take
+; the same arguments as fn.
+
+; If triple-flg is :error then we know chk-acceptable-x-rule will cause an
+; error.  Otherwise, we guarantee that fn is a function symbol, hyp-fn is nil
+; or a function symbol of the same arity as fn, that the arity of both
+; functions is (+ 1 (len rest-args)), and that rest-args is a list of distinct
+; variable symbols, and that result of fn is either a triple (whose value is to
+; be accessed with CLAUSES-RESULT) or a single value according to triple-flg.
+
+  (cond
+   ((eq token :meta)
+    (mv-let
+     (hyp eqv ev x a fn mfc-symbol)
+     (interpret-term-as-meta-rule term)
+     (mv-let
+      (hyp-fn extra-fns)
+      (meta-rule-hypothesis-functions hyp ev x a mfc-symbol)
+      (declare (ignore extra-fns))
+      (cond
+
+; If hyp-fn is nil, it means the hyp didn't parse.  If hyp-fn is t it means the
+; hyp parsed but there is no hyp-fn.
+
+; Note that to insure that fn, for example, is a function symbol of the correct
+; signature, we only need to check that it is a symbol, since term is a
+; translated term.
+
+       ((or (null eqv)
+            (not (symbolp fn))
+            (null hyp-fn)
+            (not (symbolp hyp-fn))
+            (not (symbolp mfc-symbol)))
+        (mv :error nil nil nil))
+       (t (mv nil
+              fn
+              (if (eq hyp-fn t) nil hyp-fn)
+              (if mfc-symbol
+                  (list mfc-symbol 'STATE)
+                  nil)))))))
+   (t
+    (mv-let
+     (flg fn cl alist rest-args ev call xflg)
+     (destructure-clause-processor-rule term)
+     (declare (ignore call xflg))
+     (cond
+      ((or (eq flg :error)
+           (not (symbolp fn))
+           (not (symbolp cl))
+           (not (symbolp alist))
+           (not (symbol-listp rest-args))
+           (not (symbolp ev))
+           (not (no-duplicatesp (list* cl alist rest-args))))
+       (mv :error nil nil nil))
+      (t (mv flg fn nil rest-args)))))))
+
+(defun equal-except-on-non-stobjs (arglist1 arglist2 w)
+
+; Given two lists of symbols, we check that when corresponding elements are
+; different they are not stobjs.  That is, the two lists are equal except on
+; the non-stobj elements.  This is implied by (equal arglist1 arglist2) and
+; implies (equal (len arglist1) (len arglist2)).
+
+  (cond ((atom arglist1)
+         (and (equal nil arglist1)
+              (equal nil arglist2)))
+        ((atom arglist2) nil)
+        ((equal (car arglist1) (car arglist2))
+         (equal-except-on-non-stobjs (cdr arglist1) (cdr arglist2) w))
+        ((or (stobjp (car arglist1) t w)
+             (stobjp (car arglist2) t w))
+         nil)
+        (t (equal-except-on-non-stobjs (cdr arglist1) (cdr arglist2) w))))
+
+(defun arity-alistp (alist)
+; We check that alist binds symbols to naturals and that no symbol is bound
+; twice.
+  (cond
+   ((atom alist) (eq alist nil))
+   ((and (consp (car alist))
+         (symbolp (car (car alist)))
+         (natp (cdr (car alist)))
+         (arity-alistp (cdr alist))
+         (not (assoc-eq (car (car alist)) (cdr alist))))
+    t)
+   (t nil)))
+
+(defun compatible-arity-alistsp (alist1 alist2)
+
+; Both arguments are arity-alists.  We want to know if their union is also.  We
+; do this in the most brute-force way imaginable except that we recognize the
+; special cases where the two alists are identical.
+
+  (cond ((equal alist1 alist2) t)
+        (t (arity-alistp (union-equal alist1 alist2)))))
+
+(defun collect-disagreeing-arity-assumptions (alist1 alist2)
+  (cond ((endp alist1) nil)
+        ((and (assoc (car (car alist1)) alist2)
+              (not (equal (cdr (car alist1))
+                          (cdr (assoc (car (car alist1)) alist2)))))
+         (cons (car (car alist1))
+               (collect-disagreeing-arity-assumptions (cdr alist1) alist2)))
+        (t (collect-disagreeing-arity-assumptions (cdr alist1) alist2))))
+
+(defun interpret-term-as-well-formedness-guarantee-thm (token fn thm)
+
+; Token must be :META or :CLAUSE-PROCESSOR.  In the former case,
+; thm is a term (actually a theorem) and we interpret it as
+
+; (IMPLIES (AND (LOGIC-TERMP tvar wvar)
+;               (ARITIES-OKP '((fn1 . k1) ...) wvar))
+;          (LOGIC-TERMP (fn tvar) wvar))
+
+; In the latter case, we interpret thm as
+
+; (IMPLIES (AND (LOGIC-TERM-LISTP tvar wvar)
+;               (ARITIES-OKP '((fn1 . k1) ...) wvar))
+;          (LOGIC-TERM-LIST-LISTP (fn tvar) wvar))
+
+; or
+
+; (IMPLIES (AND (LOGIC-TERM-LISTP tvar wvar)
+;               (ARITIES-OKP '((fn1 . k1) ...) wvar))
+;          (LOGIC-TERM-LIST-LISTP (CLAUSES-RESULT (fn tvar)) wvar))
+
+; But we recognize certain equivalent or stronger variants, including allowing
+; fewer or rearranged hypotheses and allowing for fn to have additional
+; arguments as permitted for metafunctions and clause-processors.  We return
+; (mv tvar wvar alist triple-flg rest-args), where alist is the evg of the quoted
+; arities alist found and rest-args is the list of arguments to fn after tvar.
+; and triple-flg is :error, t, or nil with :error meaning we couldn't parse
+; thm appropriately, t meaning that fn returns a triple whose value is accessed
+; by CLAUSES-RESULT, and nil meaning fn returns a single value.
+
+; If triple-flg is :error, thm is not of the appropriate form; otherwise it is.
+; But we do not check anything about the components returned!  For example,
+; tvar, which is guaranteed to be a term may not actually be a variable symbol,
+; etc.  These constraints must be checked by the caller.
+
+; We actually accept the thm (LOGIC-TERMP (fn tvar) wvar) and
+; (LOGIC-TERM-LIST-LISTP (fn tvar) wvar) without any hypotheses, though the
+; only functions we can think of for which this is provable are those that
+; return constants and hence can't be correct metafunctions or clause
+; processor.
+
+; We could code this more efficiently but we don't expect well-formedness
+; guarantees to be very common.
+
+  (let ((pre (if (eq token :META) 'LOGIC-TERMP 'LOGIC-TERM-LISTP))
+        (post (if (eq token :META) 'LOGIC-TERMP 'LOGIC-TERM-LIST-LISTP)))
+    (case-match thm
+      (('IMPLIES ('IF (!pre tvar wvar)
+                      ('ARITIES-OKP ('QUOTE alist) wvar)
+                      ''NIL)
+                 (!post (!fn tvar . rest-args) wvar))
+       (mv tvar wvar alist nil rest-args))
+      (('IMPLIES ('IF ('ARITIES-OKP ('QUOTE alist) wvar)
+                      (!pre tvar wvar)
+                      ''NIL)
+                 (!post (!fn tvar . rest-args) wvar))
+       (mv tvar wvar alist nil rest-args))
+      (('IMPLIES (!pre tvar wvar)
+                 (!post (!fn tvar . rest-args) wvar))
+       (mv tvar wvar nil nil rest-args))
+      (('IMPLIES ('ARITIES-OKP ('QUOTE alist) wvar)
+                 (!post (!fn tvar . rest-args) wvar))
+       (mv tvar wvar alist nil rest-args))
+      ((!post (!fn tvar . rest-args) wvar)
+       (mv tvar wvar nil nil rest-args))
+
+; Now we repeat the same patterns except this time allow for CLAUSES-RESULT
+; around the fn call:
+
+      (('IMPLIES ('IF (!pre tvar wvar)
+                      ('ARITIES-OKP ('QUOTE alist) wvar)
+                      ''NIL)
+                 (!post ('CLAUSES-RESULT (!fn tvar . rest-args)) wvar))
+       (mv tvar wvar alist t rest-args))
+      (('IMPLIES ('IF ('ARITIES-OKP ('QUOTE alist) wvar)
+                      (!pre tvar wvar)
+                      ''NIL)
+                 (!post ('CLAUSES-RESULT (!fn tvar . rest-args)) wvar))
+       (mv tvar wvar alist t rest-args))
+      (('IMPLIES (!pre tvar wvar)
+                 (!post ('CLAUSES-RESULT (!fn tvar . rest-args)) wvar))
+       (mv tvar wvar nil t rest-args))
+      (('IMPLIES ('ARITIES-OKP ('QUOTE alist) wvar)
+                 (!post ('CLAUSES-RESULT (!fn tvar . rest-args)) wvar))
+       (mv tvar wvar alist t rest-args))
+      ((!post ('CLAUSES-RESULT (!fn tvar . rest-args)) wvar)
+       (mv tvar wvar nil t rest-args))
+      (& (mv nil nil nil :error nil)))))
+
+(defun translate-well-formedness-guarantee (token x name corollary ctx wrld
+                                                  state)
+
+; Token is either :META or :CLAUSE-PROCESSOR and indicates what class of rule
+; we're creating.  X is the value supplied for the :WELL-FORMEDNESS-GUARANTEE
+; component of the rule class.  Name is the name of the correctness theorem for
+; a metafunction (perhaps with a hypothesis metafunction) or clause-processor
+; and corollary is the statement of that correctness theorem.  X must be one
+; of:
+
+; [1] thm-name1               token = :META or :CLAUSE-PROCESSOR
+; [2] (thm-name1)             token = :META
+; [3] (thm-name1 thm-name2)   token = :META
+
+; If token is :CLAUSE-PROCESSOR, token must be of form [1].  If token is :META
+; and the metatheorem named by name has a hypothesis metafunction, token must
+; be of form [3].  In all cases, thm-name1 and thm-name2 (when relevant) must
+; be symbols that name theorems that guarantee that the metafunction or clause
+; processor together with the hypothesis metafunction, as appropriate, return
+; well-formed results.  In the case of token :META ``well-formed'' means the
+; output is a LOGIC-TERMP if the input is; in the case of token
+; :CLAUSE-PROCESSOR, ``well-formed'' means the output is a
+; LOGIC-TERM-LIST-LISTP if the input is a LOGIC-TERM-LISTP..  In both
+; cases, the well-formedness theorems also involve assumptions about the
+; arities of certain logic-mode functions.
+
+; The result of this function either an error or a ``well-formedness
+; guarantee'' of the form:
+
+; (cons (list name fn thm-name1 hyp-fn thm-name2)
+;       combined-arity-alist)
+
+; where the list of length 5 above is shortened to 3 if there no hyp-fn is
+; involved, and combined-arity-alist is the union of the two arity-alists.  We
+; keep all this information to make error reporting easier.  The list of length
+; 5 (or 3) is displayed to the user when he or she tries to make one of the
+; functions on the combined-arity-alist untouchable.  The combined-arity-alist
+; is checked against the current world when the metatheorem or clause processor
+; is applied.  The value of this function is stored in the :heuristic-info
+; field of the :rewrite-rule created for this metatheorem and on the property
+; list of the metafunction under the WELL-FORMEDNESS-GUARANTEE property.
+
+; So much for the spec and use of this function.  Now for the operational
+; details.   To allow some code sharing we often act like a
+; clause-processor is just a metafunction (e.g., we use the same name, fn, for
+; both) without a hyp-fn; of course, we must interpret ``well-formedness''
+; appropriately.
+
+; But we must recover the metafunction or clause-processor function name, fn,
+; (and, possibly, the hypothesis metafunction name, hyp-fn) from the translated
+; corollary formula, which means we must parse corollary as a formula of the
+; appropriate shape.  But rule classes are translated -- resulting in this
+; function being called -- before the translated rule class (always now
+; containing a translated :corollary term) is checked for well-formedness.  So
+; here we're in the odd position of wanting to know whether x names theorems
+; about certain functions, fn and hyp-fn, proved sound by corollary, without
+; knowing that corollary establishes soundness for anything!  So what do we do
+; if corollary has the wrong shape and we cannot recover fn and hyp-fn from it?
+; Answer: we ``approve'' x (by causing no error and acting as though there were
+; well-formedness guarantee)!  We know that corollary will be checked later and
+; will cause the whole rule to fail if it's not of the right shape.
+
+  (cond
+   ((not (or (and (symbolp x)
+                  (formula x nil wrld))
+             (and (eq token :META)
+                  (consp x)
+                  (symbolp (car x))
+                  (null (cdr x))
+                  (formula (car x) nil wrld))
+             (and (eq token :META)
+                  (consp x)
+                  (symbolp (car x))
+                  (consp (cdr x))
+                  (symbolp (cadr x))
+                  (null (cddr x))
+                  (formula (car x) nil wrld)
+                  (formula (cadr x) nil wrld))))
+    (if (eq token :META)
+        (er soft ctx
+            "The :WELL-FORMEDNESS-GUARANTEE of :META rule ~x0 is ill-formed.  ~
+             In general, a :WELL-FORMEDNESS-GUARANTEE must be of one of the ~
+             following forms:~%[1]  thm-name1~%[2]  (thm-name1)~%[3]  ~
+             (thm-name1 thm-name2)~%where thm-name1 names a previously proved ~
+             theorem guaranteeing that the relevant metafunction returns a ~
+             LOGIC-TERMP when given a LOGIC-TERMP.  See :DOC logic-termp.  ~
+             Form [3] is only permitted (and is required!) when the ~
+             metatheorem has a hypothesis metafunction, in which case ~
+             thm-name2 names a previously proved theorem guaranteeing that ~
+             the hypothesis metafunction also returns a LOGIC-TERMP when ~
+             given one.  ~x1 is of none of the expected forms.  See :DOC ~
+             well-formedness-guarantee for details."
+            name x)
+        (er soft ctx
+            "The :WELL-FORMEDNESS-GUARANTEE of :CLAUSE-PROCESSOR rule ~x0 ~
+             must be the name of a theorem guaranteeing that the clause ~
+             processor returns a LOGIC-TERM-LIST-LISTP when given a ~
+             LOGIC-TERM-LISTP.  ~x1 is not such a name.  See :DOC ~
+             logic-term-listp, :DOC logic-term-list-listp, and :DOC ~
+             well-formedness-guarantee for details."
+             name x)))
+   (t (let* ((thm-name1 (cond ((symbolp x) x)
+                              (t (car x))))
+             (thm-name2 (cond ((symbolp x) nil) ; might be nil
+                              (t (cadr x))))
+             (thm1 (formula thm-name1 nil wrld))
+             (thm2 (if (null thm-name2)         ; might be nil
+                       nil
+                       (formula thm-name2 nil wrld))))
+
+        (mv-let
+         (triple-flg fn hyp-fn rest-args)
+         (recover-metafunction-or-clause-processor-signatures token corollary)
+         (let ((expected-fn-form
+                `(IMPLIES
+                  (AND (,(if (eq token :meta)
+                             'LOGIC-TERMP
+                           'LOGIC-TERM-LISTP)
+                        X W)
+                       (ARITY-ALISTP '<alist> W))
+                  (,(if (eq token :meta)
+                        'LOGIC-TERMP
+                      'LOGIC-TERM-LIST-LISTP)
+                   ,(if triple-flg
+                        `(CLAUSES-RESULT (,fn X ,@rest-args))
+                        `(,fn X ,@rest-args))
+                   W)))
+               (expected-hyp-fn-form
+                (if hyp-fn
+                    `(IMPLIES
+                      (AND (LOGIC-TERMP X W)
+                           (ARITY-ALISTP '<alist> W))
+                      (LOGIC-TERMP (,hyp-fn X ,@rest-args)
+                             W))
+                    nil))
+               (evisc (evisc-tuple nil nil
+                                   '((<alist> . "((fn1 . n1) ... (fnk . nk))"))
+                                   nil)))
+         (cond
+          ((eq triple-flg :error)
+
+; The corollary didn't parse as a meta/clause-processor rule (as per token).
+; But we quietly accept it knowing that the corresponding chk-acceptable-x-rule
+; will cause an error.
+
+            (value nil))
+
+; Otherwise, fn is the metafunction or clause processor function, as per token.
+; We know that fn is a function symbol of arity (+ 1 (len rest-args)), that fn
+; returns an error triple iff triple-flg is t (and so its value must be
+; accessed with CLAUSES-RESULT), that hyp-fn is either nil or a function symbol
+; of the same arity as fn, and that `(,fn x ,@rest-args) and `(,hyp-fn x
+; ,@rest-args) are legal calls of those functions (assuming hyp-fn is non-nil).
+
+; We also know that x names at least one theorem, thm1 with name thm-name1.  We
+; know that thm2 is either a theorem with name thm-name2 or else thm2 and
+; thm-name2 are both nil.  Thm1 and thm2 are supposedly well-formedness
+; guarantees for fn and hyp-fn.  But we must confirm that.
+
+           (t (mv-let
+               (tvar1 wvar1 alist1 triple-flg1 rest-args1)
+               (interpret-term-as-well-formedness-guarantee-thm token fn thm1)
+               (cond
+                ((eq triple-flg1 :error)
+                 (er soft ctx
+                     "The :WELL-FORMEDNESS-GUARANTEE of ~x0 rule ~x1 is ~
+                      ill-formed.  We cannot interpret the theorem named ~x2 ~
+                      as a well-formedness guarantee for the function ~x3.  ~
+                      We expected the name of a theorem like ~X45.  See :DOC ~
+                      well-formedness-guarantee for details of the acceptable ~
+                      forms."
+                     token name thm-name1 fn
+                     expected-fn-form
+                     evisc))
+                ((and
+
+; Now we know that the alleged well-formedness theorem, thm1, is about the same
+; function symbol, fn!  Given the possibility that fn has changed since thm1
+; was proved, we do another check.  This is just out of politeness: fn could
+; only change due to a redefinition and soundness is now the user's
+; responsibility!  But we know that if this metatheorem/clause-processor is
+; approved, we're going to call fn on the arguments we see in corollary and we
+; want some assurance that thm1 guarantees the well-formedness of the result!
+; For example, imagine that when thm1 was proved about a metafunction fn, the
+; formals of fn were (x state mfc) but then before corollary was proved fn was
+; redefined with arguments (x mfc state).  If we were to approve this thm as a
+; well-formedness guarantee then we'd be wrong!  Of course, if fn has been
+; redefined, it hardly matters that the arguments are the same!  But since the
+; introduction of a non-term is a pretty difficult bug to diagnose, we prefer
+; to do what we can to prevent it even if it's the user's own fault!
+
+                  (equal-except-on-non-stobjs rest-args rest-args1 wrld)
+                  (eq triple-flg triple-flg1)
+
+                  (variablep tvar1)
+                  (variablep wvar1)
+                  (symbol-listp rest-args1) ;``(variable-listp rest-args1)''
+                  (no-duplicatesp-equal
+                   (list* tvar1 wvar1 rest-args1))
+                  (arity-alistp alist1))
+
+; We know thm is of the form (for token :meta):
+; (IMPLIES (AND (LOGIC-TERMP tvar1 wvar1)
+;               (ARITIES-OKP '<alist1> wvar1))
+;          (LOGIC-TERMP (fn tvar1 . rest-args1) wvar1))
+
+; For token :clause-processor we know:
+; (IMPLIES (AND (LOGIC-TERM-LISTP tvar1 wvar1)
+;               (ARITIES-OKP '<alist1> wvar1))
+;          (LOGIC-TERM-LIST-LISTP (fn tvar1 . rest-args1) wvar1))
+
+; possibly with a CLAUSES-RESULT wrapped around the fn call.  Now we know that
+; all the terms used as variables above really are variables and they're
+; distinct, and that alist1 pairs symbols to naturals.  (For politeness only we
+; know that the same stobjs are given to fn in both the corollary and thm1 and
+; that the output of fn is either a triple or a single value as specified by
+; triple-flg in both theorems.)
+
+; We claim the tests above insure that thm1 guarantees that fn always returns a
+; LOGIC-TERMP or LOGIC-TERM-LIST-LISTP provided the arity alist, alist1, is
+; valid in the current world.  Now we check the same things for the hyp-fn, if
+; any.
+
+                 (cond
+                  ((null hyp-fn)
+                   (cond
+                    (thm-name2
+                     (er soft ctx
+                         "The ~x0 rule ~x1 mentions the metafunction ~x2 but ~
+                          does not mention a hypothesis metafunction.  ~
+                          Therefore, it makes no sense to name a previously ~
+                          proved theorem that provides a well-formedness ~
+                          guarantee for a hypothesis metafunction.  But you ~
+                          have specified such a name, ~x4, with your ~
+                          :WELL-FORMEDNESS-GUARANTEE ~x3.  This may indicate ~
+                          a misunderstanding.  Replace your guarantee with ~
+                          :WELL-FORMEDNESS-GUARANTEE ~x5."
+                         token name fn x thm-name2 (list thm-name1)))
+                    (t
+                     (value (cons (list name fn thm-name1)
+                                  alist1)))))
+
+; Token is :META because we have a hyp-fn.
+
+                  ((null thm-name2)
+                   (er soft ctx
+                       "The :META rule ~x0 mentions the metafunction ~x1 and ~
+                        the hypothesis metafunction ~x2.  You have correctly ~
+                        named ~x3 as a previously proved theorem guaranteeing ~
+                        that ~x1 always returns a LOGIC-TERMP, but you have ~
+                        not specified such a name for ~x2.  We require that ~
+                        you do so.  That is, prove a theorem like ~X45 with ~
+                        some name and change your :WELL-FORMEDNESS-GUARANTEE ~
+                        value to (~x3 name)."
+                       name fn hyp-fn thm-name1 expected-hyp-fn-form evisc))
+                  (t (mv-let
+                      (tvar2 wvar2 alist2 triple-flg2 rest-args2)
+                      (interpret-term-as-well-formedness-guarantee-thm
+                       token hyp-fn thm2)
+                      (cond
+                       ((and
+                         (equal-except-on-non-stobjs rest-args rest-args2 wrld)
+                         (eq triple-flg triple-flg2)
+                         (variablep tvar2)
+                         (variablep wvar2)
+                         (no-duplicatesp-equal
+                          (list* tvar2 wvar2 rest-args2))
+                         (arity-alistp alist2))
+                        (cond
+                         ((compatible-arity-alistsp alist1 alist2)
+                          (value (cons (list name
+                                             fn thm-name1
+                                             hyp-fn thm-name2)
+                                       (union-equal alist1 alist2))))
+                         (t (er soft ctx
+                                "The :WELL-FORMEDNESS-GUARANTEE of the :META ~
+                                 rule ~x0 for the metafunction ~x1 with ~
+                                 hypothesis metafunction ~x2 is inadmissible ~
+                                 because the two LOGIC-TERMP theorems (~x3 ~
+                                 and ~x4) assume different arities for one or ~
+                                 more function symbols, to wit ~&5.  You will ~
+                                 have to prove LOGIC-TERMP guarantee theorems ~
+                                 that make compatible arity assumptions!"
+                                name fn hyp-fn thm-name1 thm-name2
+                                (collect-disagreeing-arity-assumptions
+                                 alist1 alist2)))))
+                       (t (er soft ctx
+                              "The :WELL-FORMEDNESS-GUARANTEE of the :META ~
+                               rule ~x0 for the metafunction ~x1 with ~
+                               hypothesis metafunction ~x2 specified that ~x3 ~
+                               is the name of the previously proved theorem ~
+                               that guarantees that ~x2 always returns a ~
+                               LOGIC-TERMP.  But theorem ~x3 is not of the ~
+                               expected form.  We expected it to be something ~
+                               like:~X45.  See :DOC well-formedness-guarantee."
+                              name fn hyp-fn thm-name2
+                              expected-hyp-fn-form evisc)))))))
+                (t (er soft ctx
+                       "The :WELL-FORMEDNESS-GUARANTEE of the ~x0 rule ~x1 ~
+                        for ~x2 specified that ~x3 is the name of the ~
+                        previously proved theorem that established that ~x2 ~
+                        always returns a LOGIC-TERMP.  But theorem ~x3 is not ~
+                        of the expected form.  We expected it to be something ~
+                        like ~X45. See :DOC well-formedness-guarantee."
+                       token name fn thm-name1
+                       expected-fn-form evisc))))))))))))
+
 (defun translate-rule-class-alist (token alist seen corollary name x ctx ens
                                          wrld state)
 
@@ -7356,7 +8452,7 @@
      ((eq token :FORWARD-CHAINING)
       (cond ((not (assoc-eq :TRIGGER-TERMS seen))
              (mv-let (hyps concls)
-                     (destructure-forward-chaining-term corollary)
+                     (destructure-forward-chaining-term corollary wrld)
                      (declare (ignore concls))
                      (cond ((null hyps)
                             (er soft ctx
@@ -7371,7 +8467,7 @@
                                 x))
                            (t (let* ((first-hyp
                                       (if (and (nvariablep (car hyps))
-                                               (not (fquotep (car hyps)))
+;                                              (not (fquotep (car hyps)))
                                                (or (eq (ffn-symb (car hyps))
                                                        'force)
                                                    (eq (ffn-symb (car hyps))
@@ -7379,9 +8475,7 @@
                                           (fargn (car hyps) 1)
                                         (car hyps)))
                                      (trigger-term
-                                      (if (and (nvariablep first-hyp)
-                                               (not (fquotep first-hyp))
-                                               (eq (ffn-symb first-hyp) 'not))
+                                      (if (ffn-symb-p first-hyp 'not)
                                           (fargn first-hyp 1)
                                         first-hyp)))
                                 (pprogn
@@ -7400,11 +8494,9 @@
       (cond ((not (assoc-eq :TYPED-TERM seen))
              (mv-let
               (hyps concl)
-              (unprettyify-tp (remove-guard-holders corollary))
+              (unprettyify-tp (remove-guard-holders corollary wrld))
               (declare (ignore hyps))
-              (let ((pat (cond ((and (not (variablep concl))
-                                     (not (fquotep concl))
-                                     (eq (ffn-symb concl) 'implies))
+              (let ((pat (cond ((ffn-symb-p concl 'implies)
                                 (find-type-prescription-pat (fargn concl 2)
                                                             ens wrld))
                                (t (find-type-prescription-pat concl ens
@@ -7492,9 +8584,10 @@
                    that maps each function symbol in the :CLIQUE to a list of ~
                    t's and nil's whose length is equal to the arity of the ~
                    function symbol. ~x0 is an inappropriate controller alist ~
-                   for the :CLIQUE consisting of ~&1.  See :DOC definition."
+                   for the ~@1.  See :DOC definition."
                   controller-alist
-                  clique)))))))
+                  (cond ((null clique) "empty clique")
+                        (t (msg ":CLIQUE consisting of ~&0" clique))))))))))
      ((eq token :INDUCTION)
       (cond ((not (assoc-eq :PATTERN seen))
              (er soft ctx
@@ -7515,26 +8608,26 @@
                  (cond
                   ((not (subsetp-eq cond-vars pat-vars))
                    (er soft ctx
-                       "The variables occuring freely in the :CONDITION term ~
+                       "The variables occurring freely in the :CONDITION term ~
                         of an :INDUCTION rule class must be a subset of those ~
-                        occuring freely in the :PATTERN term.  But the ~
+                        occurring freely in the :PATTERN term.  But the ~
                         condition term ~x0 mentions ~&1, which ~#1~[does~/do~] ~
                         not occur in the pattern term ~x2.  Thus the ~
                         :INDUCTION rule class specified for ~x3 is illegal."
                        cond-term
-                       (set-difference-eq cond-vars pat-vars)
+                       (reverse (set-difference-eq cond-vars pat-vars))
                        pat-term
                        name))
                   ((not (subsetp-eq scheme-vars pat-vars))
                    (er soft ctx
-                       "The variables occuring freely in the :SCHEME term ~
+                       "The variables occurring freely in the :SCHEME term ~
                         of an :INDUCTION rule class must be a subset of those ~
-                        occuring freely in the :PATTERN term.  But the ~
+                        occurring freely in the :PATTERN term.  But the ~
                         scheme term ~x0 mentions ~&1, which ~#1~[does~/do~] ~
                         not occur in the pattern term ~x2.  Thus the ~
                         :INDUCTION rule class specified for ~x3 is illegal."
                        scheme-term
-                       (set-difference-eq scheme-vars pat-vars)
+                       (reverse (set-difference-eq scheme-vars pat-vars))
                        pat-term
                        name))
                   ((assoc-eq :condition seen)
@@ -7657,7 +8750,7 @@
 ; We allow but do not require :TRIGGER-TERMS to be provided for :LINEAR rules.
 ; The whole idea of :TRIGGER-TERMS specified at the rule-class level is a
 ; little jarring in the case of linear rules because we generate a linear rule
-; for each unprettified branch through the COROLLARY of the rule class and the
+; for each unprettyified branch through the COROLLARY of the rule class and the
 ; appropriate trigger terms for one branch may not be those for another.
 ; Nevertheless, when :TRIGGER-TERMS is provided, we store the rule for every
 ; branch under every given trigger.  You get what you ask for.  The moral is
@@ -7677,11 +8770,12 @@
                               See :DOC linear."
                              name))
                         (t
-                         (let ((terms (remove-guard-holders-lst terms)))
+                         (let ((terms (remove-guard-holders-lst terms wrld)))
                            (er-progn
                             (chk-legal-linear-trigger-terms
                              terms
-                             (unprettyify (remove-guard-holders corollary))
+                             (unprettyify
+                              (remove-guard-holders corollary wrld))
                              name ctx state)
                             (value terms)))))))
                     ((eq token :FORWARD-CHAINING)
@@ -7694,7 +8788,8 @@
                                    one trigger.  Your rule class, ~x0, ~
                                    specifies none.  See :DOC forward-chaining."
                                   x))
-                             (t (value (remove-guard-holders-lst terms))))))
+                             (t (value
+                                 (remove-guard-holders-lst terms wrld))))))
                     (t
                      (er soft ctx
                          ":TRIGGER-TERMS can only be specified for ~
@@ -7702,6 +8797,114 @@
                           illegal.  See :DOC ~@1."
                          x
                          (symbol-name token)))))
+                  (:WELL-FORMEDNESS-GUARANTEE
+                   (cond
+                    ((and (not (eq token :META))
+                          (not (eq token :CLAUSE-PROCESSOR)))
+                     (er soft ctx
+                         "Only :META and :CLAUSE-PROCESSOR rule classes are ~
+                          permitted to have a :WELL-FORMEDNESS-GUARANTEE ~
+                          component.  Thus, ~x0 is illegal.  See :DOC ~
+                          well-formedness-guarantee."
+                         x))
+                    (t (er-let*
+                         ((well-formedness-guarantee
+                           (translate-well-formedness-guarantee
+                            token
+                            (cadr alist)
+                            name corollary ctx wrld state)))
+
+; well-formedness-guarantee is of the form ((name fn thm-name1 hyp-fn
+; thm-name2) .  alist), where hyp-fn and thm-name2 are omitted if there is no
+; hyp-fn.  Alist is the combined arity alist of both logic-termp theorems.
+; We next check that all of these functions have appropriate arities in the
+; current world and that none are currently on forbidden-fns.
+
+                         (let* ( ; (fn (nth 1 (car well-formedness-guarantee)))
+                                (thm-name1
+                                 (nth 2 (car well-formedness-guarantee)))
+                                (hyp-fn
+                                 (nth 3 (car well-formedness-guarantee))) ; may be nil
+                                (thm-name2
+                                 (nth 4 (car well-formedness-guarantee))) ; may be nil
+                                (alist
+                                 (cdr well-formedness-guarantee))
+                                (bad-arity-info (collect-bad-fn-arity-info
+                                                 alist wrld nil nil))
+                                (bad-arity-alist (car bad-arity-info))
+                                (non-logic-fns (cdr bad-arity-info))
+                                (forbidden-fns
+                                 (intersection-eq (strip-cars alist)
+                                                  (forbidden-fns wrld state))))
+                           (cond
+                            (bad-arity-alist
+                             (er soft ctx
+                                 "~x0 rule ~x1 is inadmissible because its ~
+                                  :WELL-FORMEDNESS-GUARANTEE ~
+                                  theorem~#2~[~/s~], named ~&2, ~
+                                  ~#2~[is~/are~] incompatible with the ~
+                                  current world.  In particular, the ~
+                                  ~#2~[theorem makes~/theorems make~] invalid ~
+                                  assumptions about the arities of one or ~
+                                  more function symbols possibly introduced ~
+                                  by the ~s3.  The following alist ~
+                                  shows assumed arities that are different ~
+                                  from the actual arities of those symbols in ~
+                                  the current world: ~X45."
+                                 token
+                                 name
+                                 (if hyp-fn
+                                     (list thm-name1 thm-name2)
+                                     (list thm-name1))
+                                 (if (eq token :META)
+                                     "metafunction"
+                                   "clause-processor")
+                                 bad-arity-alist
+                                 nil))
+                            (non-logic-fns
+                             (er soft ctx
+                                 "~x0 rule ~x1 is inadmissible because its ~
+                                  :WELL-FORMEDNESS-GUARANTEE ~
+                                  theorem~#2~[~/s~], named ~&2, ~
+                                  ~#2~[is~/are~] incompatible with the ~
+                                  current world.  In particular, the ~
+                                  ~#2~[theorem assumes~/theorems assume~] ~
+                                  that relevant functions are in :logic mode, ~
+                                  but :program mode function symbol~#3~[ ~&3 ~
+                                  is~/s ~&3 are~] perhaps introduced by the ~
+                                  ~s4, ~&3."
+                                 token
+                                 name
+                                 (if hyp-fn
+                                     (list thm-name1 thm-name2)
+                                   (list thm-name1))
+                                 non-logic-fns
+                                 (if (eq token :META)
+                                     "metafunction"
+                                   "clause-processor")))
+                            (forbidden-fns
+                             (er soft ctx
+                                 "~x0 rule ~x1 is inadmissible because its ~
+                                  well-formedness theorem~#2~[~/s~], named ~
+                                  ~&2, ~#2~[is~/are~] incompatible with the ~
+                                  current world.  In particular, judging by ~
+                                  the ARITIES-OKP ~
+                                  ~#2~[hypothesis~/hypotheses~] of the ~
+                                  theorem~#2~[~/s~], the specified ~s3 may ~
+                                  introduce one or more functions that are ~
+                                  currently forbidden, to wit ~&4.  See :DOC ~
+                                  set-skip-meta-termp-checks and :DOC ~
+                                  well-formedness-guarantee."
+                                 token
+                                 name
+                                 (if hyp-fn
+                                     (list thm-name1 thm-name2)
+                                     (list thm-name1))
+                                 (if (eq token :META)
+                                     "metafunction"
+                                   "clause-processor")
+                                 forbidden-fns))
+                            (t (value well-formedness-guarantee))))))))
                   (:TYPED-TERM
                    (cond
                     ((not (eq token :TYPE-PRESCRIPTION))
@@ -7733,10 +8936,12 @@
                             (:type-prescription
                              (mv-let
                               (hyps concl)
-                              (unprettyify-tp (remove-guard-holders corollary))
+                              (unprettyify-tp
+                               (remove-guard-holders corollary wrld))
                               (list (cons hyps concl))))
                             (otherwise
-                             (unprettyify (remove-guard-holders corollary))))))
+                             (unprettyify
+                              (remove-guard-holders corollary wrld))))))
                      (cond
                       ((not (member-eq token
                                        '(:REWRITE :META :LINEAR
@@ -8013,10 +9218,11 @@
                                 the application of a lambda expression.  Thus ~
                                 ~x0 is illegal.  See :DOC induction."
                                x))
-                          ((not (or (getprop (ffn-symb term) 'induction-machine
-                                             nil 'current-acl2-world wrld)
-                                    (getprop (ffn-symb term) 'induction-rules
-                                             nil 'current-acl2-world wrld)))
+                          ((not (or (getpropc (ffn-symb term)
+                                              'induction-machine
+                                              nil wrld)
+                                    (getpropc (ffn-symb term) 'induction-rules
+                                              nil wrld)))
                            (er soft ctx
                                "The function symbol of the :SCHEME term of an ~
                                 :INDUCTION rule class must, at least ~
@@ -8071,7 +9277,7 @@
 ; :OTF-FLG.
 
 ; Note: The "definitive" description of the fields in our rule classes is to be
-; found in :DOC rule-classes.  It is hygenic to compare periodically the
+; found in :DOC rule-classes.  It is hygienic to compare periodically the
 ; setting below to the form described there.
 
   (let ((rule-tokens '(:REWRITE
@@ -8167,7 +9373,7 @@
                (keyword-value-listp (cdr x))))
       (translate-rule-class1
 
-; Note that we observe the requirement dicussed in the comment (warning) at the
+; Note that we observe the requirement discussed in the comment (warning) at the
 ; top of this definition, about the :corollary field being independent of
 ; context.
 
@@ -8355,12 +9561,12 @@
 
 (defun chk-acceptable-rules (name classes ctx ens wrld state)
 
-; The classes have already been translated, so we do not need to worry
-; about unrecognized classes.  Each class contains a :COROLLARY which
-; is a translated term.  We check that the :COROLLARY term can be used
-; as a rule of the class indicated.  We either cause an error or
-; return a ttree justifying whatever pre/post-processing is done to
-; store the rules.  If we are not doing proofs we skip the checks.
+; The classes have already been translated, so we do not need to worry about
+; unrecognized classes.  Each class contains a :COROLLARY which is a translated
+; term.  We check that the :COROLLARY term can be used as a rule of the class
+; indicated.  We either cause an error or return a ttree justifying whatever
+; pre/post-processing is done to store the rules.  If we are under include-book
+; or the second pass of encapsulate, we skip the checks.
 
   (let ((classes
          (cond ((or (eq (ld-skip-proofsp state) 'include-book)
@@ -8421,7 +9627,17 @@
 ;    :hints (("goal" :use qed :in-theory (enable goo)))
 ;    :rule-classes nil)
 
-                (collect-keys-eq '(:meta :clause-processor) classes))
+; We also check for :congruence rules even when skipping proofs.  Without this
+; check we can get a hard error during the local compatibility check of
+; certify-book.  Those hard errors appear to be rare (probably the first one
+; was reported by Nathan Guermond in October, 2018), but :congruence rules are
+; much less common than :rewrite rules, so we prefer to do the extra check here
+; so that a nice, soft error is reported.  Without this check we can get a hard
+; (implementation) error after a failed call of
+; interpret-term-as-congruence-rule in add-congruence-rule.
+
+                (collect-keys-eq '(:meta :clause-processor :congruence)
+                                 classes))
                (t classes))))
     (cond
      ((null classes) ; optimization
@@ -8488,11 +9704,17 @@
           (:META
            (add-meta-rule rune nume
                           (cadr (assoc-keyword :TRIGGER-FNS (cdr class)))
+                          (cadr (assoc-keyword :WELL-FORMEDNESS-GUARANTEE
+                                               (cdr class)))
                           term
                           (assoc-keyword :BACKCHAIN-LIMIT-LST (cdr class))
                           wrld))
           (:CLAUSE-PROCESSOR
-           (add-clause-processor-rule (base-symbol rune) term wrld))
+           (add-clause-processor-rule (base-symbol rune)
+                                      (cadr (assoc-keyword
+                                             :WELL-FORMEDNESS-GUARANTEE
+                                             (cdr class)))
+                                      term wrld))
           (:FORWARD-CHAINING
            (add-forward-chaining-rule rune nume
                                       (cadr (assoc-keyword :TRIGGER-TERMS
@@ -8733,9 +9955,9 @@
 ; when a :corollary is implicit, then translate-rule-class generates the
 ; :corollary to be exactly the original theorem.
 
-  (or (and (equal term (getprop name 'theorem 0 'current-acl2-world wrld))
+  (or (and (equal term (getpropc name 'theorem 0 wrld))
            (equal (truncate-classes classes term)
-                  (getprop name 'classes 0 'current-acl2-world wrld)))
+                  (getpropc name 'classes 0 wrld)))
       (assert$ event-form
                (equal event-form
                       (get-event name wrld)))))
@@ -8808,7 +10030,7 @@
           (er-let*
            ((ttree1 (cond
                      (instructions
-                      (proof-checker nil (untranslate goal t wrld)
+                      (proof-builder nil (untranslate goal t wrld)
                                      goal nil instructions
                                      wrld state))
                      (t (prove goal
@@ -8825,7 +10047,7 @@
 ; Rule-classes is a list of translated rule classes.  The basic idea
 ; is to prove the :COROLLARY of every class in rule-classes.  Like
 ; prove, we return an error triple; the non-erroneous value is a ttree
-; signalling the successful proof of all the corollaries.
+; signaling the successful proof of all the corollaries.
 
   (let* ((classes (non-tautological-classes term rule-classes))
          (n (length classes)))
@@ -8902,14 +10124,6 @@
                 (info-for-lemmas (cdr lemmas) numes ens wrld))
         (info-for-lemmas (cdr lemmas) numes ens wrld)))))
 
-(defun world-to-next-event (wrld)
-  (cond ((null wrld) nil)
-        ((and (eq (caar wrld) 'event-landmark)
-              (eq (cadar wrld) 'global-value))
-         nil)
-        (t (cons (car wrld)
-                 (world-to-next-event (cdr wrld))))))
-
 (defun assoc-eq-eq (x y alist)
 
 ; We look for a pair on alist of the form (x y . val) where we compare with x
@@ -8920,24 +10134,6 @@
               (eq (car (cdr (car alist))) y))
          (car alist))
         (t (assoc-eq-eq x y (cdr alist)))))
-
-(defun actual-props (props seen acc)
-
-; Props is a list whose elements have the form (sym key . val), where val could
-; be *acl2-property-unbound*.  Seen is the list containing some (sym key . &)
-; for each pair (sym key) that has already been seen.
-
-  (cond
-   ((null props)
-    (reverse acc))
-   ((assoc-eq-eq (caar props) (cadar props) seen)
-    (actual-props (cdr props) seen acc))
-   ((eq (cddr (car props)) *acl2-property-unbound*)
-    (actual-props (cdr props) (cons (car props) seen) acc))
-   (t
-    (actual-props (cdr props)
-                  (cons (car props) seen)
-                  (cons (car props) acc)))))
 
 (defun info-for-well-founded-relation-rules (rules)
 
@@ -9242,8 +10438,6 @@
        (info-for-built-in-clause-rules val numes ens wrld))
       (type-set-inverter-rules
        (info-for-type-set-inverter-rules val numes ens wrld))
-      (recognizer-alist
-       (info-for-compound-recognizer-rules val numes ens wrld))
       (generalize-rules
        (info-for-generalize-rules val numes ens wrld))
       (otherwise nil)))
@@ -9267,6 +10461,8 @@
        (info-for-type-prescriptions val numes ens wrld))
       (induction-rules
        (info-for-induction-rules val numes ens wrld))
+      (recognizer-alist
+       (info-for-compound-recognizer-rules val numes ens wrld))
       (otherwise nil)))))
 
 (defun info-for-rules (props numes ens wrld)
@@ -9318,7 +10514,7 @@
   (print-info-for-rules
    (info-for-rules (actual-props wrld-segment nil nil)
                    numes
-                   (ens state)
+                   (ens-maybe-brr state)
                    wrld)
    (standard-co state)
    state))
@@ -9328,8 +10524,8 @@
               (not (keywordp name)))
          (let* ((wrld (w state))
                 (name (deref-macro-name name (macro-aliases wrld)))
-                (numes (strip-cars (getprop name 'runic-mapping-pairs nil
-                                            'current-acl2-world wrld)))
+                (numes (strip-cars
+                        (getpropc name 'runic-mapping-pairs nil wrld)))
                 (wrld-segment (world-to-next-event
                                (cdr (decode-logical-name name wrld)))))
            (pr-body wrld-segment numes wrld state)))
@@ -9390,420 +10586,315 @@
   (list 'pr!-fn cd 'state))
 
 (defun disabledp-fn-lst (runic-mapping-pairs ens)
-  (cond ((null runic-mapping-pairs) nil)
+  (declare (xargs :guard ; see guard on enabled-runep
+                  (and (enabled-structure-p ens)
+                       (nat-alistp runic-mapping-pairs))))
+  (cond ((endp runic-mapping-pairs) nil)
         ((enabled-numep (caar runic-mapping-pairs) ens)
          (disabledp-fn-lst (cdr runic-mapping-pairs) ens))
         (t (cons (cdar runic-mapping-pairs)
                  (disabledp-fn-lst (cdr runic-mapping-pairs) ens)))))
 
 (defun disabledp-fn (name ens wrld)
-  (declare (xargs :guard t))
+  (declare (xargs :guard (and (enabled-structure-p ens)
+                              (plist-worldp wrld)
+                              (symbol-alistp (macro-aliases wrld))
+                              (r-symbol-alistp (macro-aliases wrld))
+                              (known-package-alistp
+                               (global-val 'known-package-alist wrld))
+                              (cond
+                               ((symbolp name)
+                                (let ((name2 (deref-macro-name
+                                              name
+                                              (macro-aliases wrld))))
+                                  (cond ((and (not (eq name2 :here))
+                                              name2
+                                              (logical-namep name2 wrld))
+                                         (nat-alistp
+                                          (getpropc name2 'runic-mapping-pairs
+                                                    nil wrld)))
+                                        (t t))))
+                               (t (and (consp name)
+                                       (consp (cdr name))
+                                       (symbolp (cadr name))
+                                       (let ((rune (translate-abbrev-rune
+                                                     name
+                                                     (macro-aliases wrld))))
+                                         (nat-alistp
+                                          (getpropc (base-symbol rune)
+                                                    'runic-mapping-pairs
+                                                    nil
+                                                    wrld)))))))))
   (cond ((symbolp name)
          (let ((name2 (deref-macro-name name (macro-aliases wrld))))
-           (cond ((and (not (eq name2 :here))
-                       name2
-                       (logical-namep name2 wrld))
-                  (disabledp-fn-lst (getprop name2 'runic-mapping-pairs nil
-                                             'current-acl2-world wrld)
-                                    ens))
-                 (t (er hard 'disabledp
-                        "Illegal call of disabledp on symbolp argument ~x0.  ~
-                         See :DOC disabledp."
-                        name)))))
+           (cond
+            ((and (not (eq name2 :here))
+                  name2
+                  (logical-namep name2 wrld))
+             (disabledp-fn-lst (getpropc name2 'runic-mapping-pairs nil wrld)
+                               ens))
+            (t (er hard? 'disabledp
+                   "Illegal call of disabledp on symbolp argument ~x0.  See ~
+                    :DOC disabledp."
+                   name)))))
         (t (let* ((rune (translate-abbrev-rune name (macro-aliases wrld))))
              (cond
               ((runep rune wrld)
                (not (enabled-runep rune ens wrld)))
-              (t (er hard 'disabledp
+              (t (er hard? 'disabledp
                      "Illegal call of disabledp: ~x0 does not designate a ~
                       rune or a list of runes.  See :DOC disabledp."
                      name)))))))
 
 (defmacro disabledp (name)
-  `(disabledp-fn ,name (ens state) (w state)))
+  `(disabledp-fn ,name (ens-maybe-brr state) (w state)))
 
-(defun access-x-rule-rune (x rule)
+(defun collect-abbreviation-subclass (rules)
 
-; Given a rule object, rule, of record type x, we return the :rune of rule.
-; This is thus typically ``(access x rule :rune).''
-
-; Note: We include with every case the rule-class tokens that create this rule
-; so that we can search for any such tokens and find this function when adding
-; a new, similar, rule-class.
-
-; There is no record object generated only by        ;;; :refinement
-;                                                    ;;; :tau-system
-  (case x
-        (recognizer-tuple                            ;;; :compound-recognizer
-         (access recognizer-tuple rule :rune))
-        (type-prescription                           ;;; :type-prescription
-         (access type-prescription rule :rune))
-        (congruence-rule                             ;;; :congruence
-                                                     ;;; :equivalence
-         (access congruence-rule rule :rune))
-        (pequiv                                      ;;; :congruence
-         (access congruence-rule
-                 (access pequiv rule :congruence-rule)
-                 :rune))
-        (rewrite-rule                                ;;; :rewrite
-                                                     ;;; :meta
-                                                     ;;; :definition
-         (access rewrite-rule rule :rune))
-        (well-founded-relation-rule                  ;;; :well-founded-relation
-; No such record type, but we pretend!
-         (cddr rule))
-        (linear-lemma                                ;;; :linear
-         (access linear-lemma rule :rune))
-        (forward-chaining-rule                       ;;; :forward-chaining
-         (access forward-chaining-rule rule :rune))
-        (built-in-clause                             ;;; :built-in-clause
-         (access built-in-clause rule :rune))
-        (elim-rule                                   ;;; :elim
-         (access elim-rule rule :rune))
-        (generalize-rule                             ;;; :generalize
-         (access generalize-rule rule :rune))
-        (induction-rule                              ;;; :induction
-         (access induction-rule rule :rune))
-        (type-set-inverter-rule                      ;;; :type-set-inverter
-         (access type-set-inverter-rule rule :rune))
-        (otherwise (er hard 'access-x-rule-rune
-                       "Unrecognized rule class, ~x0."
-                       x))))
-
-(defun collect-x-rules-of-rune (x rune lst ans)
-
-; Lst is a list of rules of type x.  We collect all those elements of lst
-; with :rune rune.
-
-  (cond ((null lst) ans)
-        ((equal rune (access-x-rule-rune x (car lst)))
-         (collect-x-rules-of-rune x rune (cdr lst)
-                                  (add-to-set-equal (car lst) ans)))
-        (t (collect-x-rules-of-rune x rune (cdr lst) ans))))
-
-(defun collect-congruence-rules-of-rune-in-geneqv-lst (geneqv-lst rune ans)
-
-; A geneqv is a list of congruence rules.  Geneqv-lst, above, is a list of
-; geneqvs.  We scan every congruence rule in geneqv-lst and collect those with
-; the :rune rune.
-
-  (cond
-   ((null geneqv-lst) ans)
-   (t (collect-congruence-rules-of-rune-in-geneqv-lst
-       (cdr geneqv-lst) rune
-       (collect-x-rules-of-rune 'congruence-rule rune (car geneqv-lst) ans)))))
-
-(defun collect-congruence-rules-of-rune (congruences rune ans)
-
-; The 'congruences property of an n-ary function symbol is a list of tuples,
-; each of which is of the form (equiv geneqv1 ... geneqvn), where each geneqvi
-; is a list of congruence rules.  Congruences is the 'congruences property of
-; some function.  We scan it and collect every congruence rule in it that has
-; :rune rune.
-
-  (cond
-   ((null congruences) ans)
-   (t (collect-congruence-rules-of-rune
-       (cdr congruences) rune
-       (collect-congruence-rules-of-rune-in-geneqv-lst (cdr (car congruences))
-                                                       rune ans)))))
-
-(defun collect-pequivs-of-rune (alist rune ans)
-
-; Alist has the form of the :deep or :shallow field of the 'pequivs property of
-; a function symbol.  Thus, each element of alist is of the form (equiv pequiv1
-; ... pequivn), where each pequivi is a pequiv record.  We scan this alist and
-; collect every pequiv record in it whose :rune is rune.
-
-  (cond
-   ((null alist) ans)
-   (t (collect-pequivs-of-rune
-       (cdr alist)
-       rune
-       (collect-x-rules-of-rune 'pequiv rune (cdr (car alist)) ans)))))
-
-(defun find-rules-of-rune2 (rune sym key val ans)
-
-; (sym key . val) is a member of wrld.  We collect all the rules in val with
-; :rune rune.  This function is patterned after info-for-x-rules.
-
-; Wart: If key is 'eliminate-destructors-rule, then val is a single rule, not a
-; list of rules.  We handle this case specially below.
-
-; Warning: Keep this function in sync with info-for-x-rules.  In that spirit,
-; note that tau rules never store runes and hence are completely ignored
-; here, as in info-for-x-rules.
-
-  (let ((token (car rune)))
-
-; As an efficiency, we do not look for rune in places where it cannot occur.
-; For example, if token is :elim then there is no point in searching through
-; the 'lemmas properties.  In general, each case below insists that token is of
-; the appropriate class.  Sometimes there are more than one.  For example, the
-; 'lemmas property may contain :rewrite, :definition, and :meta runes, all of
-; which are stored as REWRITE-RULEs.
-
-    (cond
-     ((eq key 'global-value)
-      (case sym
-            (well-founded-relation-alist
-             (if (eq token :well-founded-relation)
-                 (collect-x-rules-of-rune 'well-founded-relation-rule rune
-                                          val ans)
-                 ans))
-            (built-in-clauses
-             (if (eq token :built-in-clause)
-                 (collect-x-rules-of-rune 'built-in-clause rune val ans)
-                 ans))
-            (type-set-inverter-rules
-             (if (eq token :type-set-inverter)
-                 (collect-x-rules-of-rune 'type-set-inverter-rule rune
-                                          val ans)
-                 ans))
-            (recognizer-alist
-             (if (eq token :compound-recognizer)
-                 (collect-x-rules-of-rune 'recognizer-tuple rune val ans)
-                 ans))
-            (generalize-rules
-             (if (eq token :generalize)
-                 (collect-x-rules-of-rune 'generalize-rule rune val ans)
-                 ans))
-            (otherwise ans)))
-     (t
-      (case key
-            (lemmas
-             (if (member-eq token '(:rewrite :meta :definition))
-                 (collect-x-rules-of-rune 'rewrite-rule rune val ans)
-                 ans))
-            (linear-lemmas
-             (if (eq token :linear)
-                 (collect-x-rules-of-rune 'linear-lemma rune val ans)
-                 ans))
-            (eliminate-destructors-rule
-             (if (eq token :elim)
-                 (collect-x-rules-of-rune 'elim-rule rune (list val) ans)
-                 ans))
-            (congruences
-             (if (member-eq token '(:congruence :equivalence))
-                 (collect-congruence-rules-of-rune val rune ans)
-                 ans))
-            (pequivs
-             (if (eq token :congruence)
-                 (collect-pequivs-of-rune
-                  (access pequivs-property val :deep)
-                  rune
-                  (collect-pequivs-of-rune
-                   (access pequivs-property val :shallow)
-                   rune
-                   ans))
-               ans))
-            (coarsenings
-
-; :Refinement rules add to the 'coarsenings property.  If equiv1 is a
-; refinement of equiv2, then equiv2 is a coarsening of equiv1 and the lemma
-; establishing that fact adds equiv2 to the 'coarsenings property of equiv1.
-; There is no rule object corresponding to this fact.  Hence, even if rune is
-; the :refinement rune responsible for adding some equiv2 to this list, we
-; won't find a rule object here by the name rune.
-
-; Similar comments apply to :equivalence rules.  They add to the 'coarsenings
-; property but no rule object exists.  It should be noted that some congruence
-; rules are added by lemmas of class :equivalence and those rules are named by
-; :equivalence runes and are found among the 'congruences properties.
-
-             ans)
-            (forward-chaining-rules
-             (if (eq token :forward-chaining)
-                 (collect-x-rules-of-rune 'forward-chaining-rule rune val ans)
-                 ans))
-            (type-prescriptions
-             (if (eq token :type-prescription)
-                 (collect-x-rules-of-rune 'type-prescription rune val ans)
-                 ans))
-            (induction-rules
-             (if (eq token :induction)
-                 (collect-x-rules-of-rune 'induction-rule rune val ans)
-                 ans))
-            (otherwise ans))))))
-
-(defun find-rules-of-rune1 (rune props ans)
-
-; Props is a list of triples and can be considered a segment of some wrld.  (It
-; is not only because duplicates have been removed.)  We visit every property
-; and collect all the rules with :rune rune.
-
-  (cond ((null props) ans)
-        ((eq (cddar props) *acl2-property-unbound*)
-         (find-rules-of-rune1 rune (cdr props) ans))
-        (t (find-rules-of-rune1 rune (cdr props)
-                                (find-rules-of-rune2 rune
-                                                     (caar props)
-                                                     (cadar props)
-                                                     (cddar props)
-                                                     ans)))))
-
-(defun find-rules-of-rune (rune wrld)
-
-; Find all the rules in wrld with :rune rune.  We do this by first obtaining
-; that segment of wrld consisting of the properties stored by the event
-; named by the base symbol of rune.  Then we collect every rule mentioned
-; in the segment, provided the rule has :rune rune.
-
-  (declare (xargs :guard (and (plist-worldp wrld)
-                              (runep rune wrld))))
-  (let ((wrld-tail (decode-logical-name (base-symbol rune) wrld)))
-    (find-rules-of-rune1 rune
-                         (actual-props
-                          (world-to-next-event (cdr wrld-tail))
-                          nil
-                          nil)
-                         nil)))
-
-(defun collect-non-backchain-subclass (rules)
-
-; Rules is a list of REWRITE-RULEs.  We collect all those that are not
-; of :subclass 'backchain.
+; Rules is a list of REWRITE-RULEs.  We collect all those that are of :subclass
+; 'ABBREVIATION.
 
   (cond ((null rules) nil)
-        ((eq (access rewrite-rule (car rules) :subclass) 'backchain)
-         (collect-non-backchain-subclass (cdr rules)))
-        (t (cons (car rules) (collect-non-backchain-subclass (cdr rules))))))
+        ((eq (access rewrite-rule (car rules) :subclass) 'ABBREVIATION)
+         (cons (car rules) (collect-abbreviation-subclass (cdr rules))))
+        (t (collect-abbreviation-subclass (cdr rules)))))
 
-(defun chk-acceptable-monitor (rune expr ctx state)
-
-; We check that rune is a breakable rune and expr is a suitable
-; conditional expression.  We either cause an error or return
-; the translation of expr.
-
+(defun runes-to-monitor1 (runes x wrld ctx state
+                                only-simple only-simple-count
+                                some-simple some-s-all some-s-bad
+                                acc)
   (cond
-   ((not (runep rune (w state)))
-    (er soft ctx "~x0 is not a rune." rune))
-   ((not (member-eq (car rune) '(:rewrite :definition :linear)))
-    (er soft ctx
-        "Only :REWRITE, :DEFINITION, and :LINEAR runes may be monitored.  We ~
-         cannot break ~x0."
-        rune))
-   (t (er-let*
-          ((term (translate-break-condition expr ctx state)))
+   ((endp runes)
+    (cond
+     ((null acc)
+      (er soft ctx
+          "~x0 does not represent any runes to be monitored.  See :DOC ~
+           monitor."
+          x))
+     (t
+      (pprogn
+       (cond
+        (only-simple
+         (warning$ ctx "Monitor"
+                   "The rune~#0~[~/s~] ~&0 name~#1~[s only a~/ only~] simple ~
+                    abbreviation rule~#1~[~/s~].  Monitors can be installed ~
+                    on abbreviation rules, but will not fire during ~
+                    preprocessing, so you may want to supply the hint :DO-NOT ~
+                    '(PREPROCESS); see :DOC hints.  For an explanation of ~
+                    what a simple abbreviation rule is, see :DOC simple.  ~
+                    Also, see :DOC monitor."
+                   only-simple
+                   (if (> only-simple-count 1) 1 0)))
+        (t state))
+       (cond
+        (some-simple
+         (assert$
+          (< 1 some-s-all)
+          (warning$ ctx "Monitor"
+                    "Among the ~n0 rules named ~v1 ~#2~[is a simple ~
+                     abbreviation rule~/are ~n3 simple abbreviation rules~].  ~
+                     Such rules can be monitored, but will not fire during ~
+                     preprocessing, so you may want to supply the hint ~
+                     :DO-NOT '(PREPROCESS); see :DOC hints.  For an ~
+                     explanation of what a simple abbreviation rule is, see ~
+                     :DOC simple.  Also, see :DOC monitor."
+                    some-s-all
+                    some-simple
+                    (if (< 1 some-s-bad) 1 0)
+                    some-s-bad)))
+        (t state))
+       (value (reverse acc))))))
+   (t
+    (let ((rune (car runes)))
+      (cond
+       ((member-eq (car rune) '(:rewrite :definition))
+        (let ((rules (find-rules-of-rune rune wrld)))
           (cond
-           ((eq (car rune) :rewrite)
+           ((null rules)
+            (pprogn (warning$ ctx "Monitor"
+                              "No rules are named ~x0."
+                              rune)
+                    (runes-to-monitor1
+                     (cdr runes) x wrld ctx state
+                     only-simple
+                     only-simple-count
+                     some-simple some-s-all some-s-bad
+                     acc)))
+           (t
+            (let ((bad-rewrite-rules (collect-abbreviation-subclass rules)))
+              (cond
+               ((equal (length bad-rewrite-rules) (length rules))
+                (runes-to-monitor1
+                 (cdr runes) x wrld ctx state
+                 (cons rune only-simple)
+                 (+ (length rules) only-simple-count)
+                 some-simple some-s-all some-s-bad
+                 (cons rune acc)))
+               (bad-rewrite-rules
+                (runes-to-monitor1
+                 (cdr runes) x wrld ctx state
+                 only-simple only-simple-count
+                 (cons rune some-simple)
+                 (+ (length rules) some-s-all)
+                 (+ (length bad-rewrite-rules) some-s-bad)
+                 (cons rune acc)))
+               (t (runes-to-monitor1 (cdr runes) x wrld ctx state
+                                     only-simple only-simple-count
+                                     some-simple some-s-all some-s-bad
+                                     (cons rune acc)))))))))
+       (t (runes-to-monitor1 (cdr runes) x wrld ctx state
+                             only-simple only-simple-count
+                             some-simple some-s-all some-s-bad
+                             (cons rune acc))))))))
 
-; The checks below can be extremely expensive when dealing with a :definition
-; rule for a function that is part of a large mutual recursion nest.  We have
-; seen the call of actual-props in find-rules-of-rune take over a minute for a
-; function defined in a mutual-recursion nest of several thousand functions.
-; So we restrict the check to :rewrite rules.
+(defconst *monitorable-rune-types*
+  '(:rewrite :definition :linear))
 
-            (let* ((rules (find-rules-of-rune rune (w state)))
-                   (bad-rewrite-rules (collect-non-backchain-subclass rules)))
+(defun monitorable-runes (lst)
+  (cond ((endp lst) nil)
+        ((member-eq (caar lst) *monitorable-rune-types*)
+         (cons (car lst)
+               (monitorable-runes (cdr lst))))
+        (t (monitorable-runes (cdr lst)))))
 
-; Observe that we collect all the non-backchain rules but then claim to the
-; user that they are all abbreviation rules.  That is because we believe that
-; there are only four subclasses of rewrite rules: backchain, abbreviation,
-; definition, and meta and the latter two have runes beginning with the tokens
-; :definition and :meta instead of :rewrite.
+(defun monitorable-runes-from-mapping-pairs (sym wrld)
 
-              (pprogn
-               (cond
-                ((null rules)
-                 (prog2$
-                  (er hard ctx
-                      "Implementation error (please contact the ACL2 ~
-                       implementors): Although ~x0 is a runep, ~
-                       find-rules-of-rune fails to find any rules for it."
-                      rune)
-                  state))
-                ((equal (length bad-rewrite-rules) (length rules))
-                 (warning$ ctx "Monitor"
-                           "The rune ~x0 only names ~#1~[a simple ~
-                            abbreviation rule~/~n2 simple abbreviation ~
-                            rules~].  Monitors can be installed on ~
-                            abbreviation rules, but will not fire during ~
-                            preprocessing, so you may want to supply the hint ~
-                            :DO-NOT '(PREPROCESS); see :DOC hints.  For an ~
-                            explanation of what a simple abbreviation rule ~
-                            is, see :DOC simple.  Also, see :DOC monitor."
-                           rune
-                           bad-rewrite-rules
-                           (length bad-rewrite-rules)))
-                (bad-rewrite-rules
-                 (warning$ ctx "Monitor"
-                           "Among the ~n0 rules named ~x1 ~#2~[is a simple ~
-                            abbreviation rule~/are ~n3 simple abbreviation ~
-                            rules~].  Such rules can be monitored, but will ~
-                            not fire during preprocessing, so you may want to ~
-                            supply the hint :DO-NOT '(PREPROCESS); see :DOC ~
-                            hints,  For an explanation of what a simple ~
-                            abbreviation rule is, see :DOC simple.  Also, see ~
-                            :DOC monitor."
-                           (length rules)
-                           rune
-                           bad-rewrite-rules
-                           (length bad-rewrite-rules)))
-                (t state))
-               (value term))))
-           (t (value term)))))))
+; Note: another function that deals in runic mapping pairs is
+; convert-theory-to-unordered-mapping-pairs1.  In both cases we are guided by
+; the discussion of runic designators in :doc theories.  However, here we do
+; not include :induction runes, and we do not accommodate theories because we
+; wonder what complexity that might introduce in providing useful errors and
+; warnings from :monitor, and we don't (yet?)  consider it likely that users
+; will want to monitor theories.
 
-(defun chk-acceptable-monitors (lst ctx state)
+; We accumulate runic mapping pairs of sym into ans, except in the case that
+; sym is a defined function, we only include the :definition rune and, if indp
+; is true, the induction rune.
 
-; We check that lst is an acceptable value for the brr-global
-; 'brr-monitored-runes.  We return the translation of lst or cause an
-; error.
+  (let ((temp (strip-cdrs
+               (getpropc (deref-macro-name sym (macro-aliases wrld))
+                         'runic-mapping-pairs nil wrld))))
+    (monitorable-runes temp)))
 
-  (cond ((null lst) (value nil))
-        ((not (and (consp (car lst))
-                   (consp (cdr (car lst)))
-                   (null (cddr (car lst)))))
-         (er soft ctx
-             "Every element of brr-monitored-runes must be a doublet of the ~
-              form (rune term) and ~x0 is not."
-             (car lst)))
-        (t (er-let*
-            ((term (chk-acceptable-monitor (car (car lst))
-                                              (cadr (car lst))
-                                              ctx state))
-             (rlst (chk-acceptable-monitors (cdr lst) ctx state)))
-            (value (cons (list (car (car lst)) term) rlst))))))
+(defun runes-to-monitor (x ctx state)
+  (er-let* ((wrld (value (w state)))
+            (runes
+             (cond
+              ((symbolp x)
+               (value (monitorable-runes-from-mapping-pairs x wrld)))
+              (t
+               (let ((rune (translate-abbrev-rune x (macro-aliases wrld))))
+                 (cond
+                  ((not (runep rune wrld))
+                   (er soft ctx "~x0 does not designate a (valid) rune."
+                       rune))
+                  ((not (member-eq (car rune) *monitorable-rune-types*))
+                   (er soft ctx
+                       "Only ~&0 runes may be monitored.  We cannot break ~x1."
+                       *monitorable-rune-types*
+                       rune))
+                  (t (value (list rune)))))))))
+    (runes-to-monitor1 runes x wrld ctx state
+                       nil 0
+                       nil 0 0
+                       nil)))
 
-(defun monitor1 (rune form ctx state)
+(defun remove1-assoc-equal? (key alist)
+  (cond ((assoc-equal key alist)
+         (remove1-assoc-equal key alist))
+        (t alist)))
+
+(defun remove1-assoc-equal?-lst (lst alist)
+  (declare (xargs :guard (alistp alist)))
+  (if (consp lst)
+      (remove1-assoc-equal?-lst (cdr lst)
+                                (remove1-assoc-equal? (car lst) alist))
+    alist))
+
+(defun monitor1 (x form ctx state)
 
 ; The list of monitored runes modified by this function is a brr-global.
 ; Thus, this function should only be evaluated within a wormhole.  The macro
 ; monitor can be called in either a wormhole state or a normal state.
 
-  (er-let*
-   ((term (chk-acceptable-monitor rune form ctx state)))
-   (prog2$
-    (or (f-get-global 'gstackp state)
-        (cw "Note: Enable break-rewrite with :brr t.~%"))
-    (pprogn
-     (f-put-global 'brr-monitored-runes
-                   (put-assoc-equal rune (list term)
-                                    (get-brr-global 'brr-monitored-runes
-                                                         state))
-                   state)
-     (value (get-brr-global 'brr-monitored-runes state))))))
+  (er-let* ((runes (runes-to-monitor x ctx state))
+            (term (translate-break-condition form ctx state)))
+    (prog2$
+     (or (f-get-global 'gstackp state)
+         (cw "Note: Enable break-rewrite with :brr t.~%"))
+     (pprogn
+      (f-put-global 'brr-monitored-runes
+                    (append (pairlis-x2 runes (list term))
+                            (remove1-assoc-equal?-lst
+                             runes
+                             (get-brr-global 'brr-monitored-runes
+                                             state)))
+                    state)
+      (value (get-brr-global 'brr-monitored-runes state))))))
 
-(defun unmonitor1 (rune ctx state)
-  (cond
-   ((assoc-equal rune (get-brr-global 'brr-monitored-runes state))
-    (pprogn
-     (f-put-global 'brr-monitored-runes
-                   (remove1-equal
-                    (assoc-equal rune
-                                 (get-brr-global 'brr-monitored-runes state))
-                    (get-brr-global 'brr-monitored-runes state))
-                   state)
-     (prog2$
-      (cond ((and (f-get-global 'gstackp state)
-                  (null (get-brr-global 'brr-monitored-runes state)))
-             (cw "Note:  No runes are being monitored.  Disable break-rewrite ~
-                  with :brr nil.~%"))
-            (t nil))
-      (value (get-brr-global 'brr-monitored-runes state)))))
-   (t (er soft ctx "~x0 is not monitored." rune))))
+(defun remove1-assoc-equal-lst (lst alist)
+  (declare (xargs :guard (alistp alist)))
+  (if (consp lst)
+      (remove1-assoc-equal-lst (cdr lst)
+                               (remove1-assoc-equal (car lst) alist))
+    alist))
 
-(defun monitor-fn (rune expr state)
+(defun set-difference-assoc-equal (lst alist)
+  (declare (xargs :guard (and (true-listp lst)
+                              (alistp alist))))
+  (cond ((endp lst) nil)
+        ((assoc-equal (car lst) alist)
+         (set-difference-assoc-equal (cdr lst) alist))
+        (t (cons (car lst) (set-difference-assoc-equal (cdr lst) alist)))))
+
+(defun unmonitor1 (x ctx state)
+  (let* ((wrld (w state))
+         (runes (cond
+                 ((symbolp x)
+                  (monitorable-runes-from-mapping-pairs x wrld))
+                 (t (list (translate-abbrev-rune x (macro-aliases wrld)))))))
+    (cond
+     ((null runes)
+      (er soft ctx
+          "The value ~x0 does not specify any runes that could be monitored."
+          x))
+     (t
+      (let* ((monitored-runes-alist
+              (get-brr-global 'brr-monitored-runes state))
+             (bad-runes ; specified to unmonitor, but not monitored
+              (set-difference-assoc-equal runes monitored-runes-alist)))
+        (er-progn
+         (cond ((null bad-runes)
+                (value nil))
+               ((not (intersectp-equal runes (strip-cars monitored-runes-alist)))
+                (cond
+                 ((null (cdr runes)) ; common case
+                  (er soft ctx "~x0 is not monitored." (car runes)))
+                 (t
+                  (er soft ctx
+                      "None of the ~n0 runes specified to be unmonitored is ~
+                       currently monitored."
+                      (length runes)))))
+               (t
+                (pprogn (warning$ ctx "Monitor"
+                                  "Skipping the rune~#0~[~/s~] ~&0, as ~
+                                   ~#0~[it is~/they are~] not currently ~
+                                   monitored."
+                                  bad-runes)
+                        (value nil))))
+         (pprogn
+          (f-put-global 'brr-monitored-runes
+                        (remove1-assoc-equal-lst runes monitored-runes-alist)
+                        state)
+          (prog2$
+           (cond ((and (f-get-global 'gstackp state)
+                       (null monitored-runes-alist))
+                  (cw "Note:  No runes are being monitored.  Disable ~
+                       break-rewrite with :brr nil.~%"))
+                 (t nil))
+           (value monitored-runes-alist)))))))))
+
+(defun monitor-fn (x expr state)
 
 ; If we are not in a wormhole, get into one.  Then we set brr-monitored-runes
 ; appropriately.  We always print the final value of brr-monitored-runes to the
@@ -9812,7 +10903,7 @@
   (cond
    ((eq (f-get-global 'wormhole-name state) 'brr)
     (er-progn
-     (monitor1 rune expr 'monitor state)
+     (monitor1 x expr 'monitor state)
      (prog2$
       (cw "~Y01~|" (get-brr-global 'brr-monitored-runes state) nil)
       (value :invisible))))
@@ -9822,28 +10913,21 @@
            (set-wormhole-entry-code whs :ENTER))
         nil
         `(er-progn
-          (monitor1 ',rune ',expr 'monitor state)
+          (monitor1 ',x ',expr 'monitor state)
           (prog2$
            (cw "~Y01~|" (get-brr-global 'brr-monitored-runes state) nil)
            (value nil)))
         nil)
        (value :invisible)))))
 
-(defun unmonitor-fn (rune ctx state)
+(defun unmonitor-fn (x ctx state)
   (cond
    ((eq (f-get-global 'wormhole-name state) 'brr)
     (er-progn
-     (cond ((eq rune :all)
+     (cond ((eq x :all)
             (pprogn (f-put-global 'brr-monitored-runes nil state)
                     (value nil)))
-           ((and (consp rune)
-                 (keywordp (car rune)))
-            (unmonitor1 rune ctx state))
-           (t (er soft ctx
-                  "The only legal arguments to UNMONITOR are runes
-                   and :ALL, but ~x0 is neither.  See :DOC unmonitor ~
-                   for a more precise explanation of the requirements."
-                  rune)))
+           (t (unmonitor1 x ctx state)))
      (prog2$
       (cw "~Y01~|" (get-brr-global 'brr-monitored-runes state) nil)
       (value :invisible))))
@@ -9854,18 +10938,10 @@
          (set-wormhole-entry-code whs :ENTER))
       nil
       `(er-progn
-        (cond ((eq ',rune :all)
+        (cond ((eq ',x :all)
                (pprogn (f-put-global 'brr-monitored-runes nil state)
                        (value nil)))
-              ((and (consp ',rune)
-                    (keywordp (car ',rune)))
-               (unmonitor1 ',rune ',ctx state))
-              (t (er soft ',ctx
-                     "The only legal arguments to UNMONITOR are runes ~
-                      and :ALL, but ~x0 is neither.  See :DOC ~
-                      unmonitor for a more precise explanation of the ~
-                      requirements."
-                     ',rune)))
+              (t (unmonitor1 ',x ',ctx state)))
         (prog2$
          (cw "~Y01~|" (get-brr-global 'brr-monitored-runes state) nil)
          (value nil)))
@@ -9890,13 +10966,20 @@
 
 (defun brr-fn (flg state)
   (cond
+   #+acl2-par
+   ((and flg
+         (f-get-global 'waterfall-parallelism state))
+    (er soft 'brr
+        "Brr is not supported in ACL2(p) with waterfall parallelism on.  See ~
+         :DOC unsupported-waterfall-parallelism-features."))
    (flg
     (pprogn
      (f-put-global 'gstackp t state)
+     (maybe-initialize-brr-evisc-tuple state)
      (prog2$
-      (cw "Use :a! to exit break-rewrite.~|See :DOC set-evisc-tuple to ~
-           control suppression of details when printing.~|~%The monitored ~
-           runes are:~%")
+      (cw "Use :a! to exit break-rewrite.~|See :DOC set-brr-evisc-tuple and ~
+           :DOC iprint to control suppression of details when ~
+           printing.~|~%The monitored runes are:~%")
       (er-progn
        (monitored-runes-fn state)
        (value t)))))
@@ -9933,8 +11016,8 @@
         (:final-ttree '(get-brr-local 'final-ttree state))
         (otherwise '(get-brr-global 'brr-gstack state))))
 
-(defmacro monitor (rune expr)
-  `(monitor-fn ,rune ,expr state))
+(defmacro monitor (x expr)
+  `(monitor-fn ,x ,expr state))
 
 (defmacro unmonitor (rune)
   `(unmonitor-fn ,rune 'unmonitor state))
@@ -9949,24 +11032,32 @@
 ; print -  exit brr after printing results of attempted application
 ; break -  do not exit brr
 
-; Runes is allegedly either t or a list of runes to be used as brr-monitored-runes
-; after pairing every rune with *t*.  If it is t, it means use the same
-; brr-monitored-runes.  Otherwise, we check that they are all legal.  If not, we
-; warn and do not exit.  We may wish someday to provide the capability of
-; proceeding with conditions other than *t* on the various runes, but I haven't
-; seen a nice design for that yet.
+; Runes is allegedly either t or a list of runes (or any runic designators
+; legal for monitoring) to be used as brr-monitored-runes after pairing every
+; rune with *t*.  If it is t, it means use the same brr-monitored-runes.
+; Otherwise, we check that they are all legal.  If not, we warn and do not
+; exit.  We may wish someday to provide the capability of proceeding with
+; conditions other than *t* on the various runes, but I haven't seen a nice
+; design for that yet.
 
   (er-let*
-   ((lst (if (eq runes t)
-             (value nil)
-             (chk-acceptable-monitors (pairlis-x2 runes (list *t*))
-                                      ctx state))))
+   ((lst (cond ((eq runes t)
+                (value nil))
+               ((eq runes nil)
+
+; This special case avoids getting an error when calling runes-to-monitor.
+
+                (value nil))
+               (t (runes-to-monitor runes ctx state)))))
    (pprogn
     (put-brr-local 'saved-standard-oi
                    (f-get-global 'standard-oi state)
                    state)
     (put-brr-local 'saved-brr-monitored-runes
                    (get-brr-global 'brr-monitored-runes state)
+                   state)
+    (put-brr-local 'saved-brr-evisc-tuple
+                   (get-brr-global 'brr-evisc-tuple state)
                    state)
     (if (eq runes t)
         state
@@ -10035,23 +11126,21 @@
 ;       OR
 ;      (ii) term is the body of a defaxiom.
 
- ; Then when we (conceptually at least) functionally instantiate a :meta or
-; :clause-processor rule using a functional substitution of the form ((evl
-; evl') (evl-list evl'-list)), we need to know that the above proof obligations
-; are met.
+; Then when we (conceptually at least) functionally instantiate a theorem
+; using a functional substitution of the form fs = ((evl evl') (evl-list
+; evl'-list)), we need to know that the above proof obligations are met.
 
-; ACL2 insists (in function chk-evaluator-use-in-rule) that the evaluator of a
-; proposed :meta or :clause-processor rule is not ancestral in any defaxiom or
-; in the definition of, or constraint on, the rule's metafunctions, nor is the
-; evaluator ancestral in meta-extract-global-fact+ and
+; ACL2 insists (in function chk-evaluator-use-in-rule) that the evaluator evl
+; of a proposed :meta or :clause-processor rule is not ancestral in any
+; defaxiom, nor is it ancestral in meta-extract-global-fact+ and
 ; meta-extract-contextual-fact if they are used in the rule.  Thus, when we
-; imagine functionally instantiating the rule as discussed above, at the point
-; of its application, the only relevant theorems for (i) above are the
-; constraints on the evaluator, and there are no relevant theorems for (ii)
-; above.  We can use our usual computation of "ancestral", which does not
-; explore below functions that are not instantiablep, since (presumably!)
-; non-instantiablep functions are primitives in which no evaluator functions is
-; ancestral.
+; functionally instantiate formula (2) in the Essay on Correctness of Meta
+; Reasoning, which has calls of only those meta-extract function symbols and
+; evl, the only relevant theorems for (i) above are the constraints on evl, and
+; there are no relevant theorems for (ii) above.  We can use our usual
+; computation of "ancestral", which does not explore below functions that are
+; not instantiablep, since (presumably!) non-instantiablep functions are
+; primitives in which no evaluator function is ancestral.
 
 ; But there is a subtlety not fully addressed above.  Consider the following
 ; case: a legitimate :meta (or :clause-processor) rule, with evaluator evl, is
@@ -10070,7 +11159,7 @@
   (let ((supporters (instantiable-ancestors (all-fnnames tterm) wrld nil)))
     (value supporters)))
 
-(defun defaxiom-fn (name term state rule-classes doc event-form)
+(defun defaxiom-fn (name term state rule-classes event-form)
 
 ; Important Note: Don't change the formals of this function without reading the
 ; *initial-event-defmacros* discussion in axioms.lisp.
@@ -10078,7 +11167,7 @@
   (when-logic
    "DEFAXIOM"
    (with-ctx-summarized
-    (if (output-in-infixp state) event-form (cons 'defaxiom name))
+    (make-ctx-for-event event-form (cons 'defaxiom name))
 
 ; At one time we thought that event-form could be nil.  It is simplest, for
 ; checking redundancy, not to consider the case of manufacturing an event-form,
@@ -10108,8 +11197,9 @@
 
             (let ((attached-fns
                    (attached-fns (canonical-ancestors-lst
-                                  (all-ffn-symbs (remove-guard-holders tterm)
-                                                 nil)
+                                  (all-ffn-symbs
+                                   (remove-guard-holders tterm wrld)
+                                   nil)
                                   wrld)
                                  wrld)))
               (cond
@@ -10123,9 +11213,10 @@
                 (enforce-redundancy
                  event-form ctx wrld
                  (er-let*
-                     ((ttree1 (chk-acceptable-rules name classes ctx ens wrld state))
-                      (wrld1 (chk-just-new-name name 'theorem nil ctx wrld state))
-                      (doc-pair (translate-doc name doc ctx state))
+                     ((ttree1 (chk-acceptable-rules name classes ctx ens wrld
+                                                    state))
+                      (wrld1 (chk-just-new-name name nil 'theorem nil ctx wrld
+                                                state))
                       (ttree3
                        (cond ((ld-skip-proofsp state)
                               (value nil))
@@ -10133,9 +11224,7 @@
                               (prove-corollaries name tterm classes ens wrld1 ctx
                                                  state)))))
                    (let* ((wrld2
-                           (update-doc-database
-                            name doc doc-pair
-                            (add-rules name classes tterm term ens wrld1 state)))
+                           (add-rules name classes tterm term ens wrld1 state))
                           (wrld3 (global-set
                                   'nonconstructive-axiom-names
                                   (cons name
@@ -10171,7 +11260,8 @@
               set to T."
              event-form)))
 
-;; RAG - this trio of functions adds the hypothesis "(standardp x)"
+;; Historical Comment from Ruben Gamboa:
+;; this trio of functions adds the hypothesis "(standardp x)"
 ;; for each variable x in the theorem.
 
 #+:non-standard-analysis
@@ -10281,16 +11371,31 @@
   (declare (ignore name))
   form)
 
+(defun translate-for-defthm (name term ctx wrld state)
+  (let ((rec (get-translate-cert-data-record
+              :defthm
+              (cert-data-val name (cert-data-entry :translate state))
+              state)))
+    (cond (rec (value (assert$ (equal (access translate-cert-data-record rec
+                                              :inputs)
+                                      name)
+                               (cons nil ; do not store
+                                     (access translate-cert-data-record rec
+                                             :value)))))
+          (t (er-let* ((tterm (translate term t t t ctx wrld state)))
+               (value (cons (store-cert-data tterm wrld state)
+                            tterm)))))))
+
 (defun defthm-fn1 (name term state
                         rule-classes
                         instructions
                         hints
                         otf-flg
-                        doc
                         event-form
                         #+:non-standard-analysis std-p)
   (with-ctx-summarized
-   (if (output-in-infixp state) event-form (cons 'defthm name))
+   (make-ctx-for-event event-form (cons 'defthm name))
+
 ; At one time we thought that event-form could be nil.  It is simplest, for
 ; checking redundancy, not to consider the case of manufacturing an event-form,
 ; so now we insist on event-form being supplied (not nil).
@@ -10313,9 +11418,6 @@
                                             nil)
                                           (if otf-flg
                                               (list :otf-flg otf-flg)
-                                            nil)
-                                          (if doc
-                                              (list :doc doc)
                                             nil)))))
            (ld-skip-proofsp (ld-skip-proofsp state)))
        (pprogn
@@ -10327,8 +11429,10 @@
          (er-progn
           (chk-all-but-new-name name ctx nil wrld state)
           (er-let*
-              ((tterm0 (translate term t t t ctx wrld state))
-; known-stobjs = t (stobjs-out = t)
+              ((cert-data-flg/tterm0
+                (translate-for-defthm name term ctx wrld state))
+               (cert-data-flg (value (car cert-data-flg/tterm0)))
+               (tterm0 (value (cdr cert-data-flg/tterm0)))
                (tterm
                 #+:non-standard-analysis
                 (if std-p
@@ -10356,10 +11460,12 @@
                (er-let*
                    ((ttree1 (chk-acceptable-rules name classes ctx ens wrld
                                                   state))
-                    (wrld1 (chk-just-new-name name 'theorem nil ctx wrld state)))
+                    (wrld1 (chk-just-new-name name nil 'theorem nil ctx wrld
+                                              state)))
                  (er-let*
                      ((instructions (if (or (eq ld-skip-proofsp 'include-book)
-                                            (eq ld-skip-proofsp 'include-book-with-locals)
+                                            (eq ld-skip-proofsp
+                                                'include-book-with-locals)
                                             (eq ld-skip-proofsp 'initialize-acl2))
                                         (value nil)
                                       (translate-instructions name instructions
@@ -10386,7 +11492,6 @@
                                                  (and (null instructions)
                                                       (default-hints wrld1))
                                                  ctx wrld1 state)))
-                      (doc-pair (translate-doc name doc ctx state))
                       (ttree2 (cond (instructions
                                      (er-progn
                                       (cond (hints (er soft ctx
@@ -10398,14 +11503,14 @@
                                       (if std-p
 
 ; How could this happen?  Presumably the user created a defthm event using the
-; proof-checker, and then absent-mindedly somehow suffixed "-std" on to the
+; proof-builder, and then absent-mindedly somehow suffixed "-std" on to the
 ; car, defthm, of that form.
 
                                           (er soft ctx
                                               ":INSTRUCTIONS are not supported for ~
                                         defthm-std events.")
                                         (value nil))
-                                      (proof-checker name term
+                                      (proof-builder name term
                                                      tterm classes instructions
                                                      wrld1 state)))
                                     (t (prove tterm
@@ -10414,14 +11519,23 @@
                                                          :otf-flg otf-flg)
                                               hints ens wrld1 ctx state))))
                       (ttree3 (cond (ld-skip-proofsp (value nil))
-                                    (t (prove-corollaries name tterm0 classes ens wrld1
-                                                          ctx state)))))
-                   (let ((wrld2
-                          (update-doc-database
-                           name doc doc-pair
-                           (add-rules name classes tterm0 term ens wrld1 state)))
-                         (ttree4 (cons-tag-trees ttree1
-                                                 (cons-tag-trees ttree2 ttree3))))
+                                    (t (prove-corollaries name tterm0 classes
+                                                          ens wrld1 ctx
+                                                          state)))))
+                   (let* ((wrld2 (add-rules name classes tterm0 term ens wrld1
+                                            state))
+                          (wrld3 (if cert-data-flg
+                                     (update-translate-cert-data
+                                      name wrld wrld2
+                                      :type :defthm
+                                      :inputs name
+                                      :value tterm0
+                                      :fns (all-fnnames tterm0)
+                                      :vars (state-globals-set-by tterm0 nil))
+                                   wrld2))
+                          (ttree4 (cons-tag-trees ttree1
+                                                  (cons-tag-trees ttree2
+                                                                  ttree3))))
                      (er-progn
                       (chk-assumption-free-ttree ttree4 ctx state)
                       (print-rule-storage-dependencies name ttree1 state)
@@ -10430,7 +11544,7 @@
                                      'defthm
                                      name
                                      ttree4
-                                     nil :protect ctx wrld2
+                                     nil :protect ctx wrld3
                                      state))))))))))))))))
 
 (defun defthm-fn (name term state
@@ -10438,7 +11552,6 @@
                        instructions
                        hints
                        otf-flg
-                       doc
                        event-form
                        #+:non-standard-analysis std-p)
 
@@ -10452,44 +11565,62 @@
      instructions
      hints
      otf-flg
-     doc
      event-form
      #+:non-standard-analysis std-p)))
 
-(defmacro thm (term &key hints otf-flg doc)
-  (list 'thm-fn
-        (list 'quote term)
-        'state
-        (list 'quote hints)
-        (list 'quote otf-flg)
-        (list 'quote doc)))
-
-(defun thm-fn (term state hints otf-flg doc)
+(defun thm-fn (term state hints otf-flg)
   (er-progn
    (with-ctx-summarized
-    (if (output-in-infixp state)
-        (list* 'THM term (if (or hints otf-flg doc) '(irrelevant) nil))
-        "( THM ...)")
-    (let ((wrld (w state))
-          (ens (ens state)))
-      (er-let* ((hints (translate-hints+ 'thm
-                                         hints
-                                         (default-hints wrld)
-                                         ctx wrld state))
-                (doc-pair (translate-doc nil doc ctx state)))
-               (er-let* ((tterm (translate term t t t ctx wrld state))
+    (make-ctx-for-event
+     (list* 'THM term (if (or hints otf-flg) '(irrelevant) nil))
+     "( THM ...)")
+    (cond
+     ((member-eq (ld-skip-proofsp state)
+                 '(include-book include-book-with-locals initialize-acl2))
+      (value nil))
+     (t
+      (let ((wrld (w state))
+            (ens (ens state)))
+        (er-let* ((hints (translate-hints+ 'thm
+                                           hints
+                                           (default-hints wrld)
+                                           ctx wrld state)))
+          (er-let* ((tterm (translate term t t t ctx wrld state))
 ; known-stobjs = t (stobjs-out = t)
-                         (ttree (prove tterm
-                                       (make-pspv ens wrld state
-                                                  :displayed-goal term
-                                                  :otf-flg otf-flg)
-                                       hints ens wrld ctx state)))
-                        (value nil)))))
-   (pprogn (io? prove nil state
+                    (ttree (prove tterm
+                                  (make-pspv ens wrld state
+                                             :displayed-goal term
+                                             :otf-flg otf-flg)
+                                  hints ens wrld ctx state)))
+            (value nil)))))))
+   (pprogn (io? summary nil state
                 nil
-                (fms "Proof succeeded.~%" nil
+                (fms (if (ld-skip-proofsp state)
+                         "Proof skipped.~%"
+                       "Proof succeeded.~%")
+                     nil
                      (proofs-co state) state nil))
            (value :invisible))))
+
+(defmacro thm (term &key hints otf-flg)
+
+; We started using make-event here in January, 2019.  Instead of defining
+; thm-fn above and generating a call of it below, we could presumably generate
+; a new name and instead call defthm with that name, adding :rule-classes nil.
+; But to reduce risk and potential churn we decided, when introducing
+; make-event here, to continue with the existing definition of thm-fn, and
+; essentially the same use of thm-fn.  It seems very reasonable to try the
+; defthm approach instead if someone wants to do that.
+
+  `(with-output :off summary :stack :push
+     (make-event (er-progn (with-output :stack :pop
+                             (thm-fn ',term
+                                     state
+                                     ',hints
+                                     ',otf-flg))
+                           (value '(value-triple :invisible)))
+                 :expansion? (value-triple :invisible)
+                 :on-behalf-of :quiet!)))
 
 ; Note:  During boot-strapping the thm macro is unavailable because it is
 ; not one of the *initial-event-defmacros*.
@@ -10517,130 +11648,270 @@
          rule-classes)
         (t (cons class rule-classes))))
 
-(defun gen-new-name-in-package-of-symbol1 (char-lst cnt pkgsym wrld)
+(defconst *defequiv-package-values* '(:current :equiv :legacy))
 
-; This function generates a symbol in the same package as pkgsym that
-; is guaranteed to be a new-namep in wrld.  We form a symbol by
-; concatenating char-lst and the decimal representation of the natural
-; number cnt (separated by a hyphen).  Clearly, for some sufficiently
-; large cnt that symbol is a new name.
+(defun defequiv-form (equiv package current-pkg event-name
+                            rule-classes instructions hints otf-flg)
+  (declare (xargs :guard
+                  (and (symbolp equiv)
+                       (member-eq package *defequiv-package-values*)
+                       (or (null current-pkg) (stringp current-pkg))
+                       (symbolp event-name))))
+  (let* ((sym (case package
+                (:current (pkg-witness current-pkg))
+                (otherwise equiv)))
+         (default-name (gen-sym-sym (list equiv "-IS-AN-EQUIVALENCE") sym))
+         (event-name (or event-name default-name))
+         (equivalence-condition (equivalence-relation-condition equiv sym)))
+    `(defthm ,event-name
+       ,equivalence-condition
+       :rule-classes
+       ,(extend-rule-classes :equivalence rule-classes)
+       ,@(if instructions (list :instructions instructions) nil)
+       ,@(if hints (list :hints hints) nil)
+       ,@(if otf-flg (list :otf-flg otf-flg) nil))))
 
-  (let ((sym (intern-in-package-of-symbol
-              (coerce
-               (append char-lst
-                       (cons #\- (explode-nonnegative-integer cnt 10 nil)))
-               'string)
-              pkgsym)))
-    (cond ((new-namep sym wrld)
-           sym)
-          (t
-           (gen-new-name-in-package-of-symbol1 char-lst (1+ cnt) pkgsym
-                                               wrld)))))
-
-(defun gen-new-name-in-package-of-symbol (sym pkgsym wrld)
-
-; We generate a symbol, sym', in the same package as pkgsym, such that
-; (new-namep sym' wrld).  If sym itself will not do, we start trying
-; the extension of sym with successive integers, e.g., sym-0, sym-1,
-; sym-2, ...
-
-  (let ((sym1 (if (equal (symbol-package-name sym)
-                         (symbol-package-name pkgsym))
-                  sym
-                  (intern-in-package-of-symbol
-                   (symbol-name sym)
-                   pkgsym))))
-    (cond ((new-namep sym1 wrld) sym1)
-          (t (gen-new-name-in-package-of-symbol1
-              (coerce (symbol-name sym) 'list)
-              0
-              pkgsym
-              wrld)))))
+(defun defequiv-fn (equiv package event-name rule-classes instructions hints
+                          otf-flg)
+  (let ((ctx (cons 'defequiv equiv)))
+    (cond
+     ((not (symbolp equiv))
+      `(er soft ',ctx
+           "The first argument of ~x0 must be a symbol, but ~x1 is not.  See ~
+            :DOC defequiv."
+           'defequiv
+           ',equiv))
+     ((not (member-eq package *defequiv-package-values*))
+      `(er soft ',ctx
+           "The (optional) :PACKAGE keyword of ~x0 must be ~v1, but ~x2 is ~
+            none of these.  See :DOC defequiv."
+           'defequiv
+           *defequiv-package-values*
+           ',package))
+     ((not (symbolp event-name))
+      `(er soft ',ctx
+           "The (optional) :EVENT-NAME keyword argument of ~x0 must be a ~
+            symbol, but ~x1 is not.  See :DOC defequiv."
+           'defequiv
+           ',event-name))
+     ((not (eq package :current))
+      (defequiv-form equiv package nil event-name
+        rule-classes instructions hints otf-flg))
+     (t `(make-event (defequiv-form
+                       ',equiv
+                       ',package
+                       (current-package state)
+                       ',event-name
+                       ',rule-classes
+                       ',instructions
+                       ',hints
+                       ',otf-flg))))))
 
 (defmacro defequiv (equiv
-                    &key (rule-classes '(:EQUIVALENCE))
+                    &key
+                    (package ':current)
+                    event-name
+                    (rule-classes '(:equivalence))
                     instructions
                     hints
-                    otf-flg
-                    event-name
-                    doc)
-  `(defthm ,(or event-name
-                (intern-in-package-of-symbol
-                 (coerce (packn1 (list equiv "-IS-AN-EQUIVALENCE")) 'string)
-                 equiv))
-     ,(equivalence-relation-condition equiv)
-     :rule-classes
-     ,(extend-rule-classes :equivalence rule-classes)
-     ,@(if instructions (list :instructions instructions) nil)
-     ,@(if hints (list :hints hints) nil)
-     ,@(if otf-flg (list :otf-flg otf-flg) nil)
-     ,@(if doc (list :doc doc) nil)))
+                    otf-flg)
+  (defequiv-fn equiv package event-name rule-classes instructions hints
+    otf-flg))
 
-(defmacro defrefinement (equiv1 equiv2
-                                &key (rule-classes '(:REFINEMENT))
-                                instructions
-                                hints
-                                otf-flg
-                                event-name
-                                doc)
-  `(defthm
-     ,(or event-name
-          (intern-in-package-of-symbol
-           (coerce (packn1 (list equiv1 "-REFINES-" equiv2)) 'string)
-           equiv1))
-     (implies (,equiv1 x y) (,equiv2 x y))
-     :rule-classes
-     ,(extend-rule-classes :REFINEMENT rule-classes)
-     ,@(if instructions (list :instructions instructions) nil)
-     ,@(if hints (list :hints hints) nil)
-     ,@(if otf-flg (list :otf-flg otf-flg) nil)
-     ,@(if doc (list :doc doc) nil)))
+(defconst *defrefinement-package-values* '(:current :equiv1 :equiv2 :legacy))
 
-(defmacro defcong (&whole x
-                          equiv1 equiv2 fn-args k
-                          &key (rule-classes '(:CONGRUENCE))
-                          instructions
-                          hints
-                          otf-flg
-                          event-name
-                          doc)
-  (cond
-   ((not (and (symbolp equiv1)
-              (symbolp equiv2)
-              (integerp k)
-              (< 0 k)
-              (symbol-listp fn-args)
-              (no-duplicatesp-equal (cdr fn-args))
-              (< k (length fn-args))))
-    `(er soft 'defcong
-         "The form of a defcong event is (defcong equiv1 equiv2 term k ...), ~
-          where equiv1 and equiv2 are symbols and k is a positive integer less ~
-          than the length of term, where term should be a call of a function ~
-          symbol on distinct variable arguments.  However, ~x0 does not have ~
-          this form.  See :DOC defcong."
-         ',x))
-   (t
-    (let ((sym (if (equal (symbol-package-name equiv1)
-                          *main-lisp-package-name*)
-                   (pkg-witness "ACL2")
-                 equiv1)))
-      `(defthm
-         ,(or event-name
-              (intern-in-package-of-symbol
-               (coerce (packn1 (list equiv1 "-IMPLIES-"
-                                     equiv2 "-" (car fn-args) "-" k)) 'string)
-               sym))
-         ,(let ((arg-k-equiv (intern-in-package-of-symbol
-                              (coerce (packn1 (list (nth k fn-args) '-equiv))
-                                      'string)
-                              sym)))
-            `(implies (,equiv1 ,(nth k fn-args)
-                               ,arg-k-equiv)
-                      (,equiv2 ,fn-args
-                               ,(update-nth k arg-k-equiv fn-args))))
-         :rule-classes
-         ,(extend-rule-classes :CONGRUENCE rule-classes)
-         ,@(if instructions (list :instructions instructions) nil)
-         ,@(if hints (list :hints hints) nil)
-         ,@(if otf-flg (list :otf-flg otf-flg) nil)
-         ,@(if doc (list :doc doc) nil))))))
+(defun defrefinement-form (equiv1 equiv2 package current-pkg event-name
+                                  rule-classes instructions hints otf-flg)
+  (declare (xargs :guard
+                  (and (symbolp equiv1)
+                       (symbolp equiv2)
+                       (member package *defrefinement-package-values*)
+                       (or (null current-pkg) (stringp current-pkg))
+                       (symbolp event-name))))
+  (let* ((sym (case package
+                (:current (pkg-witness current-pkg))
+                (:equiv2 equiv2)
+                (otherwise equiv1)))
+         (default-name
+           (gen-sym-sym (list equiv1 "-REFINES-" equiv2) sym))
+         (event-name (or event-name default-name))
+         (x (fix-intern-in-pkg-of-sym "X" sym))
+         (y (fix-intern-in-pkg-of-sym "Y" sym)))
+    `(defthm ,event-name
+       (implies (,equiv1 ,x ,y) (,equiv2 ,x ,y))
+       :rule-classes
+       ,(extend-rule-classes :refinement rule-classes)
+       ,@(if instructions (list :instructions instructions) nil)
+       ,@(if hints (list :hints hints) nil)
+       ,@(if otf-flg (list :otf-flg otf-flg) nil))))
+
+(defun defrefinement-fn (equiv1 equiv2 package event-name rule-classes
+                                instructions hints otf-flg)
+  (let ((ctx (cons 'defrefinement equiv1)))
+    (cond
+     ((not (and (symbolp equiv1)
+                (symbolp equiv2)))
+      `(er soft ',ctx
+           "The first two arguments of ~x0 must be symbols, but ~@1.  See ~
+            :DOC defrefinement."
+           'defrefinement
+           ,(cond ((symbolp equiv1)
+                   `(msg "~x0 is not" ',equiv2))
+                  ((symbolp equiv2)
+                   `(msg "~x0 is not" ',equiv1))
+                  (t
+                   `(msg "~&0 are not" '(,equiv1 ,equiv2))))))
+     ((not (member-eq package *defrefinement-package-values*))
+      `(er soft ',ctx
+           "The (optional) :PACKAGE keyword of ~x0 must be ~v1, but ~x2 is ~
+            none of these.  See :DOC defequiv."
+           'defrefinement
+           *defrefinement-package-values*
+           ',package))
+     ((not (symbolp event-name))
+      `(er soft ',ctx
+           "The (optional) :EVENT-NAME keyword argument of ~x0 must be a ~
+            symbol, but ~x1 is not.  See :DOC defequiv."
+           'defrefinement
+           ',event-name))
+     ((not (eq package :current))
+      (defrefinement-form equiv1 equiv2 package nil event-name
+        rule-classes instructions hints otf-flg))
+     (t `(make-event (defrefinement-form
+                       ',equiv1
+                       ',equiv2
+                       ',package
+                       (current-package state)
+                       ',event-name
+                       ',rule-classes
+                       ',instructions
+                       ',hints
+                       ',otf-flg))))))
+
+(defmacro defrefinement (equiv1
+                         equiv2
+                         &key
+                         (package ':current)
+                         event-name
+                         (rule-classes '(:refinement))
+                         instructions
+                         hints
+                         otf-flg)
+  (defrefinement-fn equiv1 equiv2 package event-name rule-classes instructions
+    hints otf-flg))
+
+(defconst *defcong-package-values* '(:current :equiv1 :legacy :equiv2 :function))
+
+(defun defcong-form (equiv1 equiv2 fn-args k package current-pkg event-name
+                            rule-classes instructions hints otf-flg )
+  (declare (xargs :guard
+                  (and (symbolp equiv1)
+                       (symbolp equiv2)
+                       (symbol-listp fn-args)
+                       (no-duplicatesp-equal (cdr fn-args))
+                       (integerp k)
+                       (< 0 k)
+                       (< k (length fn-args))
+                       (not (eq (car fn-args) 'if))
+                       (member package *defcong-package-values*)
+                       (or (null current-pkg) (stringp current-pkg))
+                       (symbolp event-name))))
+  (let* ((fn (car fn-args))
+         (sym (case package
+                (:current (pkg-witness current-pkg))
+                (:equiv2 equiv2)
+                (:function fn)
+                (otherwise equiv1)))
+         (default-name
+           (gen-sym-sym (list equiv1 "-IMPLIES-" equiv2 "-" fn "-" k)
+                        sym))
+         (event-name (or event-name default-name))
+         (kth-arg (nth k fn-args))
+         (arg-k-equiv (gen-sym-sym (list kth-arg '-equiv) sym))
+         (updated-fn-args (update-nth k arg-k-equiv fn-args)))
+    `(defthm ,event-name
+       (implies (,equiv1 ,kth-arg ,arg-k-equiv)
+                (,equiv2 ,fn-args ,updated-fn-args))
+       :rule-classes
+       ,(extend-rule-classes :CONGRUENCE rule-classes)
+       ,@(if instructions (list :instructions instructions) nil)
+       ,@(if hints (list :hints hints) nil)
+       ,@(if otf-flg (list :otf-flg otf-flg) nil))))
+
+(defun defcong-fn (equiv1 equiv2 fn-args k package event-name rule-classes
+                          instructions hints otf-flg)
+  (let ((ctx (cons 'defcong equiv1)))
+    (cond
+     ((not (and (symbolp equiv1)
+                (symbolp equiv2)))
+      `(er soft ',ctx
+           "The first two arguments of ~x0 must be symbols, but ~@1.  See ~
+            :DOC defcong."
+           'defcong
+           ,(cond ((symbolp equiv1)
+                   `(msg "~x0 is not" ',equiv2))
+                  ((symbolp equiv2)
+                   `(msg "~x0 is not" ',equiv1))
+                  (t
+                   `(msg "~&0 are not" '(,equiv1 ,equiv2))))))
+     ((not (and (symbol-listp fn-args)
+                (no-duplicatesp-eq (cdr fn-args))
+                (not (eql (car fn-args) 'acl2::if))))
+      `(er soft ',ctx
+           "The third argument of ~x0 must be a list, starting with a symbol ~
+            other than ~x1 and followed by a duplicate-free list of symbols. ~
+            However, ~x2 is not of this form.  See :DOC defcong."
+           'defcong
+           'if
+           ',fn-args))
+     ((not (and (integerp k)
+                (< 0 k)
+                (< k (length fn-args))))
+      `(er soft ',ctx
+           "The fourth argument of ~x0, ~x1, is illegal.  It must be a ~
+            positive integer less than the length of the third argument ~
+            (which in this case is ~x2).  See :DOC defcong."
+           'defcong
+           ',k
+           ',(length fn-args)))
+     ((not (member-eq package *defcong-package-values*))
+      `(er soft ',ctx
+           "The (optional) :PACKAGE keyword of ~x0 must be ~v1, but ~x2 is ~
+            none of these.  See :DOC defcong."
+           'defcong
+           *defcong-package-values*
+           ',package))
+     ((not (symbolp event-name))
+      `(er soft ',ctx
+           "The (optional) :EVENT-NAME keyword argument of ~x0 must be a ~
+            symbol, but ~x1 is not.  See :DOC defcong."
+           'defcong
+           ',event-name))
+     ((not (equal package :current))
+      (defcong-form equiv1 equiv2 fn-args k package nil event-name
+        rule-classes instructions hints otf-flg ))
+     (t `(make-event (defcong-form
+                       ',equiv1
+                       ',equiv2
+                       ',fn-args
+                       ',k
+                       ',package
+                       (current-package state)
+                       ',event-name
+                       ',rule-classes
+                       ',instructions
+                       ',hints
+                       ',otf-flg))))))
+
+(defmacro defcong (equiv1
+                   equiv2
+                   fn-args
+                   k
+                   &key (package ':current)
+                   event-name
+                   (rule-classes '(:congruence))
+                   instructions
+                   hints
+                   otf-flg)
+  (defcong-fn equiv1 equiv2 fn-args k package event-name rule-classes
+    instructions hints otf-flg))

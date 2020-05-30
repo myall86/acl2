@@ -1,6 +1,6 @@
 ; ACL2 Version 1.9
 
-; Copyright (C) 1989-96 Computational Logic, Inc. (CLI).  All rights reserved.
+; Copyright (C) 1989-1996 Computational Logic, Inc. (CLI).  All rights reserved.
 
 ; Use of this software constitutes agreement with the terms of the
 ; license agreement, found in the file LICENSE.
@@ -136,7 +136,7 @@
 		     nil)))
 	      (t nil)))))))
 
-;; The following two functions support the reading of 
+;; The following two functions support the reading of
 ;; keyword commands, using ACL2 mechanisms for computing
 ;; number of args, if allowed.
 

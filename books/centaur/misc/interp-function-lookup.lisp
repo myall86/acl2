@@ -218,6 +218,7 @@
                 ;; the & is the rune equating the function call with
                 ;; the body
                 (and (symbolp fn)
+                     (not (eq fn 'quote))
                      (pseudo-termp body)
                      (nonnil-symbol-listp formals)
                      (no-duplicatesp formals)))))
@@ -341,17 +342,16 @@
                     (enable
                      hons-assoc-equal-interp-defs-alistp)))))
   (b* ((look (hons-get fn defs))
-       ((when look)
-        (mv nil
-            (caddr look)
-            (cadr look)
-            defs))
-       (ov-look (hons-get fn overrides))
+       (ov-look (or look (hons-get fn overrides)))
        ((when ov-look)
-        (mv nil
-            (caddr ov-look)
-            (cadr ov-look)
-            (hons-acons fn (cdr ov-look) defs)))
+        (b* (((list formals body) (cdr ov-look))
+             (defs (if look defs (hons-acons fn (cdr ov-look) defs)))
+             ((unless (mbt (and (nonnil-symbol-listp formals)
+                                (no-duplicatesp-eq formals)
+                                (pseudo-termp body))))
+              (mv (msg "Override for ~x0 ill-formed~%" fn)
+                  nil nil nil)))
+          (mv nil body formals defs)))
        ((mv err formals body)
         (meta-extract-function-formals/body fn world))
        ((when err) (mv err nil nil nil)))
@@ -381,9 +381,7 @@
 (defthm interp-function-lookup-wfp
   (b* (((mv erp body formals &)
         (interp-function-lookup fn in-defs overrides world)))
-    (implies (and (not erp)
-                  (interp-defs-alistp in-defs)
-                  (interp-defs-alistp overrides))
+    (implies (not erp)
              (and (pseudo-termp body)
                   (nonnil-symbol-listp formals)
                   (no-duplicatesp-equal formals))))
@@ -437,7 +435,8 @@
                        (a (ifl-ev-falsify (disjoin clause))))
             (:instance ifl-ev-falsify
                        (x (disjoin (cons lit clause)))
-                       (a (ifl-ev-falsify (disjoin clause)))))))
+                       (a (ifl-ev-falsify (disjoin clause)))))
+           :in-theory (enable ifl-ev-disjoin-cons)))
   :otf-flg t)
 
 
@@ -472,7 +471,7 @@
     (implies (and (ifl-ev-theoremp
                    (conjoin-clauses
                     (interp-defs-alist-clauses defs)))
-                  (interp-defs-alistp defs)
+                  ;; (interp-defs-alistp defs)
                   entry)
              (equal
               (equal (ifl-ev (cons fn (cadr entry)) a)
@@ -510,8 +509,8 @@
                   (ifl-ev-theoremp
                    (conjoin-clauses
                     (interp-defs-alist-clauses out-defs)))
-                  (interp-defs-alistp in-defs)
-                  (interp-defs-alistp overrides)
+                  ;; (interp-defs-alistp in-defs)
+                  ;; (interp-defs-alistp overrides)
                   (ifl-ev-meta-extract-global-facts))
              (equal (ifl-ev body a)
                     (ifl-ev (cons fn formals) a))))
@@ -540,14 +539,6 @@
                    vars (cons (cons key val) rest))
                   (ifl-ev-lst
                    vars rest))))
-
-
-(defun list-fix (x)
-  (declare (xargs :guard t))
-  (if (consp x)
-      (cons (car x) (list-fix (cdr x)))
-    nil))
-
 
 
 (defthm ifl-ev-lst-pairlis
@@ -586,13 +577,16 @@
                   (ifl-ev-theoremp
                    (conjoin-clauses
                     (interp-defs-alist-clauses out-defs)))
-                  (interp-defs-alistp in-defs)
-                  (interp-defs-alistp overrides)
+                  ;; (interp-defs-alistp in-defs)
+                  ;; (interp-defs-alistp overrides)
                   (equal (len formals) (len actuals))
                   (not (eq fn 'quote))
                   (ifl-ev-meta-extract-global-facts))
              (equal (ifl-ev body (pairlis$ formals actuals))
-                    (ifl-ev (cons fn (kwote-lst actuals)) nil)))))
+                    (ifl-ev (cons fn (kwote-lst actuals)) nil))))
+  :hints (("goal" :do-not-induct t)
+          (and stable-under-simplificationp
+               '(:in-theory (enable ifl-ev-constraint-0)))))
 
 
 (defthm len-ifl-ev-lst
@@ -607,8 +601,8 @@
                   (ifl-ev-theoremp
                    (conjoin-clauses
                     (interp-defs-alist-clauses out-defs)))
-                  (interp-defs-alistp in-defs)
-                  (interp-defs-alistp overrides)
+                  ;; (interp-defs-alistp in-defs)
+                  ;; (interp-defs-alistp overrides)
                   (equal (len formals) (len actuals))
                   (not (eq fn 'quote))
                   (ifl-ev-meta-extract-global-facts))

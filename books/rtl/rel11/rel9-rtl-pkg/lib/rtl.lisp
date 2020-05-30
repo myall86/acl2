@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -36,7 +24,7 @@
 ;;This book contains definitions of the ACL2 functions that are used in the
 ;;formalization of RTL semantics.
 
-	       
+
 ;;Bit-vector access:
 
 (defund fl (x)
@@ -102,9 +90,9 @@
         ((endp (cddddr x))
          `(binary-cat ,@x))
         (t
-         `(binary-cat ,(car x) 
-                      ,(cadr x) 
-                      (cat ,@(cddr x)) 
+         `(binary-cat ,(car x)
+                      ,(cadr x)
+                      (cat ,@(cddr x))
                       ,(cat-size (cddr x))))))
 
 ;Allows things like (in-theory (disable cat)) to refer to binary-cat.
@@ -148,7 +136,7 @@
 ;LAND (bitwise and):
 
 (defund binary-land (x y n)
-  (declare (xargs :guard (and (natp x) 
+  (declare (xargs :guard (and (natp x)
                               (natp y)
                               (integerp n)
                               (< 0 n))
@@ -173,7 +161,7 @@
                               (consp (cddr x)))))
   (cond ((endp (cdddr x)) ;(land x y n) -- the base case
          `(binary-land ,@x))
-        (t         
+        (t
          `(binary-land ,(car x)
                        (land ,@(cdr x))
                        ,(car (last x))))))
@@ -184,7 +172,7 @@
 ;;LIOR (bitwise inclusive or):
 
 (defund binary-lior (x y n)
-  (declare (xargs :guard (and (natp x) 
+  (declare (xargs :guard (and (natp x)
                               (natp y)
                               (integerp n)
                               (< 0 n))
@@ -209,7 +197,7 @@
                               (consp (cddr x)))))
   (cond ((endp (cdddr x)) ;(lior x y n) -- the base case
          `(binary-lior ,@x))
-        (t         
+        (t
          `(binary-lior ,(car x)
                        (lior ,@(cdr x))
                        ,(car (last x))))))
@@ -220,7 +208,7 @@
 ;;LXOR (bitwise exclusive or):
 
 (defund binary-lxor (x y n)
-  (declare (xargs :guard (and (natp x) 
+  (declare (xargs :guard (and (natp x)
                               (natp y)
                               (integerp n)
                               (< 0 n))
@@ -245,7 +233,7 @@
                               (consp (cddr x)))))
   (cond ((endp (cdddr x)) ;(lxor x y n) -- the base case
          `(binary-lxor ,@x))
-        (t         
+        (t
          `(binary-lxor ,(car x)
                        (lxor ,@(cdr x))
                        ,(car (last x))))))
@@ -364,7 +352,7 @@
   (declare (xargs :guard (and (rationalp x) (rationalp y) (integerp n))))
   (log>= (comp2 x n) (comp2 y n)))
 
- 
+
 ;;Unary logical operations:
 
 (defund logand1 (x n)
@@ -452,15 +440,15 @@ get rid of the bits call.
 
 (defund decode (x n)
   (declare (xargs :guard (rationalp n)))
-  (if (and (natp x) (< x n)) 
-      (ash 1 x) 
+  (if (and (natp x) (< x n))
+      (ash 1 x)
     0))
 
 (defund encode (x n)
     (declare (xargs :guard (and (acl2-numberp x)
                                 (integerp n)
                                 (<= 0 n))))
-  (if (zp n) 
+  (if (zp n)
       0
     (if (= x (ash 1 n))
         n
@@ -534,7 +522,7 @@ get rid of the bits call.
   (equal (bvecp (if1 x y z) n)
          (if1 x (bvecp y n) (bvecp z n))))
 
-; The following are analogous to mk-bvarr etc. in rtlarr.lisp.
+; The following are analogous to mk-bvarr etc.
 
 (defun mk-bvec (r k)
   (declare (xargs :guard (integerp k)))
@@ -554,26 +542,26 @@ get rid of the bits call.
                               (bvecp i n))))
   i)
 
-(encapsulate 
+(encapsulate
  ((reset (key size) t))
  (local (defun reset (key size) (declare (ignore key size)) 0))
  (defthm bvecp-reset (bvecp (reset key size) size)
    :hints (("Goal" :in-theory (enable bvecp expt)))
-   :rule-classes 
-   (:rewrite 
-    (:forward-chaining :trigger-terms ((reset key size)))	
+   :rule-classes
+   (:rewrite
+    (:forward-chaining :trigger-terms ((reset key size)))
     (:type-prescription :corollary
-                        (and (integerp (reset key size)) 
+                        (and (integerp (reset key size))
                              (>= (reset key size) 0))
                         :hints
                         (("Goal" :in-theory '(implies bvecp)))))))
 
-(encapsulate 
+(encapsulate
  ((unknown (key size n) t))
  (local (defun unknown (key size n) (declare (ignore key size n)) 0))
  (defthm bvecp-unknown (bvecp (unknown key size n) size)
    :hints (("Goal" :in-theory (enable bvecp expt)))
-   :rule-classes 
+   :rule-classes
    (:rewrite
     (:forward-chaining :trigger-terms ((unknown key size n)))
     (:type-prescription :corollary

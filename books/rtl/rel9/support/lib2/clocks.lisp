@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -31,7 +19,7 @@
 (include-book "../support/clocks")
 
 ; The analysis of clocks uses some new functions.
-; 
+;
 ; First, even and odd are not the same as evenp and oddp.  For one thing, even
 ; and odd are defined recursively, and I've proved a bunch of nice rules about
 ; them which we probably want to use and which may not be proved about evenp and
@@ -40,7 +28,7 @@
 ; evenp returns t for non-numbers like nil or '(a b).)  So rules which would
 ; naturally have both the hyp (integerp n) and the hyp (evenp n) now can just
 ; have (even n).
-; 
+;
 ; Second, I also define a function, MOD4. I didn't want to use MOD itself in the
 ; clocking logic because reasoning about clocks needs to be fast and predictable.
 ; (I can imagine that we'll have rules about MOD, especially when doing FP
@@ -48,7 +36,7 @@
 ; even open up MOD on occasion.)  So, in order to get complete control over the
 ; rules which fire when we reason about clocks, I introduced MOD4, which we
 ; expect never to have to open after proving a nice set of rules about it.
-; 
+;
 ; Also, theorems about MOD4 may be nicer than their analogs for MOD.  For
 ; example, MOD4 is always equal to 0, 1, 2, or 3, but (mod #c(0 1) 4) = #c(0 1),
 ; which isn't even rational.
@@ -95,7 +83,7 @@
 
 #|
 
-'fast-clock : 
+'fast-clock :
 
  _   _   _   _   _   _   _
 | |_| |_| |_| |_| |_| |_| |_|
@@ -115,13 +103,13 @@ ____| |_____| |_____| |_____| |__
 
 'slow-clock-two-quanta-wide :
 
- ___     ___     ___     ___     
+ ___     ___     ___     ___
 |   |___|   |___|   |___|   |___|
 
 
 'slow-clock-two-quanta-wide-shifted :
 
-     ___     ___     ___     
+     ___     ___     ___
 |___|   |___|   |___|   |___|
 
 'always-1 :

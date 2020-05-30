@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -94,9 +82,9 @@
         ((endp (cddddr x))
          `(binary-cat ,@x))
         (t
-         `(binary-cat ,(car x) 
-                      ,(cadr x) 
-                      (cat ,@(cddr x)) 
+         `(binary-cat ,(car x)
+                      ,(cadr x)
+                      (cat ,@(cddr x))
                       ,(cat-size (cddr x))))))
 
 ;Allows things like (in-theory (disable cat)) to refer to binary-cat.
@@ -199,7 +187,7 @@
       (and (consp x)
            (consp (car x))
            (rcdp (cdr x))
-           (not (equal (cdar x) 
+           (not (equal (cdar x)
                        (default-get-valu)))
            (or (null (cdr x))
                (acl2::<< (caar x) (caadr x))))))
@@ -210,7 +198,7 @@
 (defmacro ifrp-tag ()
   ''unlikely-to-ever-occur-in-an-executable-counterpart)
 
-(defun ifrp (x) ;; ill-formed rcdp 
+(defun ifrp (x) ;; ill-formed rcdp
   (declare (xargs :guard t))
   (or (not (rcdp x))
       (and (consp x)
@@ -252,7 +240,7 @@
          (acons-if a v r))
         ((equal a (caar r))
          (acons-if a v (cdr r)))
-        (t 
+        (t
          (cons (car r) (as-aux a v (cdr r))))))
 
 (defun as (a v x) ;; the generic record s(et) which works on any ACL2 object.
@@ -263,7 +251,7 @@
 ;;Basic properties of arrays:
 
 (defthm ag-same-as
-  (equal (ag a (as a v r)) 
+  (equal (ag a (as a v r))
          v))
 
 (defthm ag-diff-as
@@ -283,7 +271,7 @@
 (in-theory (disable ag-of-as-redux))
 
 (defthm as-same-ag
-  (equal (as a (ag a r) r) 
+  (equal (as a (ag a r) r)
          r))
 
 (defthm as-same-as
@@ -307,12 +295,12 @@
            (as a v r)))
 
 (defthm non-nil-if-ag-not-default
-  (implies (not (equal (ag a r) 
+  (implies (not (equal (ag a r)
                        (default-get-valu)))
            r)
   :rule-classes :forward-chaining)
 
-;;We disable as and ag, assuming the rules proved in this book are 
+;;We disable as and ag, assuming the rules proved in this book are
 ;;sufficient to manipulate any record terms that are encountered.
 
 (in-theory (disable as ag))
@@ -394,7 +382,7 @@
 
 (defun false$ () 0)
 
-(defmacro if1 (x y z) `(if (eql ,x 0) ,z ,y))    
+(defmacro if1 (x y z) `(if (eql ,x 0) ,z ,y))
 
 (defmacro in-function (fn term)
   `(if1 ,term () (er hard ',fn "Assertion ~x0 failed" ',term)))

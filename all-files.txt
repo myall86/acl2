@@ -11,13 +11,18 @@ akcl-acl2-trace.lisp
 allegro-acl2-trace.lisp
 all-files.txt
 # aux -- developer directory
+apply-constraints.lisp
+apply.lisp
+apply-prim.lisp
+apply-raw.lisp
 axioms.lisp
 basis-a.lisp
 basis-b.lisp
 bdd.lisp
 # bin -- under source control but not distributed
 # books -- no longer distributed at UT
-boot-strap-pass-2.lisp
+boot-strap-pass-2-a.lisp
+boot-strap-pass-2-b.lisp
 build-allegro-exe.cl
 defpkgs.lisp
 defthm.lisp
@@ -54,9 +59,9 @@ other-processes.lisp
 other-releases.html
 parallel.lisp
 parallel-raw.lisp
-proof-checker-a.lisp
-proof-checker-b.lisp
-proof-checker-pkg.lisp
+proof-builder-a.lisp
+proof-builder-b.lisp
+proof-builder-pkg.lisp
 prove.lisp
 # README.md -- not distributed (github file)
 rewrite.lisp
@@ -66,8 +71,9 @@ save-gprof.lsp
 serialize.lisp
 serialize-raw.lisp
 simplify.lisp
-# The following is distributed but is not under source control:
+# The following two are distributed but is not under source control:
 TAGS
+TAGS-acl2-doc
 tau.lisp
 translate.lisp
 type-set-a.lisp
@@ -76,6 +82,7 @@ workshops.html
 
 acl2-customization-files:
 bookdata.lisp
+no-serialize.lisp
 parallel-full.lisp
 parallel-resource-based.lisp
 parallel-top-level.lisp
@@ -87,12 +94,11 @@ set-compile-fns.lisp
 # bin -- under source control but not distributed
 
 doc:
-# The following is distributed but is not under source control:
+# The following distributed file is generated and also under source control:
 acl2-code-size.txt
-acl2-wc.txt
 create-acl2-code-size
 create-doc
-# The following is distributed but is not under source control
+# The following distributed file is generated and also under source control:
 home-page.html
 home-page.lisp
 # The following is distributed but is not under source control
@@ -111,6 +117,7 @@ installation
 
 # The following is distributed but is not under source control
 doc/HTML/installation:
+ccl.html
 installation.html
 installing-make.html
 misc.html
@@ -123,7 +130,6 @@ windows-gcl-jared.html
 # The following is distributed but is not under source control
 doc/manual:
 download
-HTML
 LICENSE
 # Makefile -- not distributed
 res
@@ -131,11 +137,6 @@ res
 
 # The following is distributed but is not under source control
 doc/manual/download:
-
-# The following is currently empty.  Perhaps HTML should be generated
-# before running "make copy-distribution".
-# doc/manual/HTML:
-# *
 
 # The following is distributed but is not under source control
 doc/manual/lib:
@@ -167,6 +168,7 @@ doc/manual/res/tours:
 *.gif
 
 emacs:
+acl2-doc-open-url.el
 acl2-doc.el
 emacs-acl2.el
 monitor.el
@@ -176,6 +178,7 @@ graphics:
 *.gif
 
 installation:
+ccl.html
 installation.html
 installing-make.html
 misc.html

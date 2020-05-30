@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 8.3 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2020, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -87,7 +87,6 @@
     fast-alist-summary
     cons-subtrees
     number-subtrees
-    clear-hash-tables
     flush-hons-get-hash-table-link
     ;; from memoize.lisp
     clear-memoize-table
@@ -156,10 +155,8 @@
                (condition ,condition)
                (formals
                 (and (symbolp fn) ; guard for getprop
-                     (getprop fn 'formals t
-                              'current-acl2-world wrld)))
-               (stobjs-in (getprop fn 'stobjs-in t
-                                   'current-acl2-world wrld))
+                     (getpropc fn 'formals t wrld)))
+               (stobjs-in (getpropc fn 'stobjs-in t wrld))
                (condition-fn (or ,condition-fn
                                  (add-suffix fn "-MEMOIZE-CONDITION")))
                (hints ,hints)
@@ -175,13 +172,13 @@
                        (symbolp fn)
                        (not (eq t formals))
                        (not (eq t stobjs-in))
-                       (not (eq t (getprop fn 'stobjs-out t
+                       (not (eq t (getpropc fn 'stobjs-out t
 
 ; Normally we would avoid getting the stobjs-out of return-last.  But
 ; return-last will eventually be rejected for mamoization anyhow (by
 ; memoize-table-chk).
 
-                                           'current-acl2-world wrld)))
+                                            wrld)))
                        (cltl-def-from-name fn wrld)))
                  (er hard 'memoize
                      "The symbol ~x0 is not a known function symbol, and thus ~
@@ -207,8 +204,7 @@
                       (declare
                        (ignorable ,@formals)
                        (xargs :guard
-                              ,(getprop fn 'guard *t*
-                                        'current-acl2-world wrld)
+                              ,(getpropc fn 'guard *t* wrld)
                               :verify-guards nil
                               ,@(let ((stobjs (remove nil stobjs-in)))
                                   (and stobjs
@@ -411,10 +407,29 @@
             '(value-triple :invisible))
     :check-expansion t))
 
+(defconst *bad-lisp-consp-memoization*
+  '(bad-lisp-consp :forget t))
+
 (defconst *thread-unsafe-builtin-memoizations*
 
 ; This alist associates built-in raw Lisp functions with corresponding
 ; keyword arguments for memoize-fn.  These functions may be unsafe to memoize
 ; when using ACL2(hp).
 
-  '((bad-lisp-objectp :forget t)))
+  (list *bad-lisp-consp-memoization*))
+
+#+acl2-loop-only
+(defun set-bad-lisp-consp-memoize (arg)
+
+; Warning: Keep the return values in sync for the logic and raw Lisp.
+
+  (declare (xargs :guard t)
+           (ignore arg))
+  nil)
+
+(defconst *special-cltl-cmd-attachment-mark-name*
+; This is used in memoize-raw.lisp, so we define it here.
+  ':apply$-userfn/badge-userfn)
+
+(defconst *special-cltl-cmd-attachment-mark*
+  `(attachment ,*special-cltl-cmd-attachment-mark-name*))

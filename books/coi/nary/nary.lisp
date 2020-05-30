@@ -309,12 +309,15 @@
 
 (set-state-ok t)
 
-(defun ith (i list)
-  (declare (type (integer 0 *) i))
-  (if (consp list)
-      (if (zp i) (car list)
-        (ith (1- i) (cdr list)))
-    nil))
+;; [Jared] there is a conflicting version of Ith in the util directory.
+;; Trying to use its definition now.
+(include-book "../util/ith")
+;; (defun ith (i list)
+;;   (declare (type (integer 0 *) i))
+;;   (if (consp list)
+;;       (if (zp i) (car list)
+;;         (ith (1- i) (cdr list)))
+;;     nil))
 
 (defun remove-ith (i list)
   (declare (type (integer 0 *) i))
@@ -416,11 +419,11 @@
             (term-contains var (cdr term))))
     (equal var term)))
 
-(defun non-consp-list (list)
+(defun no-function-applicationsp (list)
   (declare (type t list))
   (or (not (consp list))
-      (and (not (consp (car list)))
-           (non-consp-list (cdr list)))))
+      (and (or (not (consp (car list))) (quotep (car list)))
+           (no-function-applicationsp (cdr list)))))
 
 (defun equiv-exp (val term)
   (declare (type t val term))
@@ -438,7 +441,7 @@
    ;; Because we don't currently support evaluation of terms we need
    ;; to make sure that the user doesn't hang themselves ..
    ;; (not (cw "Bound: ~p0~%" (caddr term)))
-   (non-consp-list (caddr term))
+   (no-function-applicationsp (caddr term))
 
    ))
 
@@ -779,12 +782,13 @@
     `(and ,@(generate-cong-hyps nil cong)
           ,@(and syntaxp `(,(generate-cong-syntax-hyps cong))))))
 
-(defmacro bind-contextp (cong &key (syntaxp 't))
+(defmacro bind-contextp (cong &key (syntaxp 't) (asymmetric 'nil))
   (declare (xargs :guard (or (wf-cong-list cong)
                              (wf-cong cong))))
   (let ((cong (if (wf-cong-list cong) cong (list cong))))
     `(and ,@(generate-cong-hyps t cong)
-          ,@(and syntaxp `(,(generate-cong-syntax-hyps cong))))))
+          ,@(and syntaxp `(,(generate-cong-syntax-hyps cong)))
+          ,@(and asymmetric `(,(generate-asymmetric-hyps cong))))))
 
 ;; = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 ;;
@@ -879,7 +883,7 @@
 	  `(cons ,(car args) ,(double-rewrite-congruences (cdr args) congruences))))
     *nil*))
 
-(defun defequiv-fn (term lhs rhs pred context equiv congruences chaining keywords)
+(defun defequiv-fun (term lhs rhs pred context equiv congruences keywords chaining chaining-ctx chaining-keywords skip)
   (declare (xargs :mode :program))
   (let* ((context-macro (if keywords context (safe-symbol (list context "-macro") context)))
          (context-fn    (if keywords (safe-symbol (list context "-fn") context) context))
@@ -1000,25 +1004,30 @@
                        `(,',fix-fn ,hyp ,@(list ,@args--)))))))
 
       ,@(and chaining
-             `(
-               (defthm ,fix-fn-chaining
-                 (implies
-                  (and
-                   (backchaining-check)
-                   (bind-contextp (,rhs (equal ,new-rhs ,(if keywords
-                                                             `(,context-macro ,rhs ,@(bind-keyargs (remove rhs lhs-rhs--)))
-                                                           `(,context ,@lhs-rhs--))))))
-                  (equal (,fix-fn ,@args)
-                         (skip-rewrite (,fix-fn (hide (,fix-fn ,@args)) ,@rhs-args--))))
-                 :rule-classes ((:rewrite :backchain-limit-lst 100))
-                 :hints (("Goal" :expand (:free (x) (hide x)))))
-               ))
+             (let ((context  (if chaining-ctx chaining-ctx (if keywords context-macro context)))
+                   (keywords (if chaining-ctx chaining-keywords keywords)))
+               `(
+                 (defthm ,fix-fn-chaining
+                   (implies
+                    (and
+                     (backchaining-check)
+                     (bind-contextp (,rhs (equal ,new-rhs ,(if keywords
+                                                               `(,context ,rhs ,@(bind-keyargs (remove rhs lhs-rhs--)))
+                                                             `(,context ,@lhs-rhs--))))))
+                    (equal (,fix-fn ,@args)
+                           ,(if skip 
+                                `(skip-rewrite (,fix-fn (hide (,fix-fn ,@args)) ,@rhs-args--))
+                              `(,fix-fn (hide (,fix-fn ,@args)) ,@rhs-args--))))
+                   :rule-classes ((:rewrite :backchain-limit-lst 100))
+                   :hints (("Goal" :expand (:free (x) (hide x)))))
+                 )))
 
       )))
 
 (defmacro defequivp+ (term &key  (lhs 'nil) (rhs 'nil) (pred 'nil) (context 'nil)
 			   (congruences 'nil)
-                           (equiv 'nil) (chaining 't) (keywords 't))
+                           (equiv 'nil) (keywords 't) (chaining 't) (chaining-ctx 'nil) (chaining-keywords 'nil)
+                           (skip 't))
   (declare (xargs :guard (and (symbolp lhs)
                               (symbolp rhs)
                               (symbolp pred)
@@ -1035,7 +1044,7 @@
          (lhs      (or lhs     (ith 1 term)))
          (rhs      (or rhs     (ith 2 term)))
          (context  (or context (safe-symbol (list pred-fn "-CTX") pred-fn))))
-    (defequiv-fn term lhs rhs pred context equiv congruences chaining keywords)))
+    (defequiv-fun term lhs rhs pred context equiv congruences keywords chaining chaining-ctx chaining-keywords skip)))
 
 ;; Depricated
 (defmacro defequiv+ (&rest args)
@@ -1106,7 +1115,7 @@
 ;;
 ;; = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
-(defmacro defcong+ (name term &key (hyps 'nil) (cong 'nil) (check 'nil) (hints 'nil) (equiv 'equal))
+(defmacro defcong+ (name term &key (hyps 'nil) (cong 'nil) (check 'nil) (hints 'nil) (equiv 'equal) (skip 't))
   (declare (type (satisfies wf-cong-list) cong))
 
   `(defthm ,name
@@ -1136,13 +1145,15 @@
 
        ,@(if check `(,check) nil))
       (,equiv ,term
-              (skip-rewrite ,(replace-cong-terms cong term))))
+              ,(if skip `(skip-rewrite ,(replace-cong-terms cong term))
+                 (replace-cong-terms cong term))))
+              
      ,@(if hints `(:hints ,hints) nil)
      ;;`(:hints (("Goal" :in-theory (enable ,@(cong-equivs cong)))))))
      )
   )
 
-(defmacro defcongp+ (name term &key (rhs 'nil) (hyps 'nil) (cong 'nil) (check 'nil) (hints 'nil) (equiv 'equal))
+(defmacro defcongp+ (name term &key (rhs 'nil) (hyps 'nil) (cong 'nil) (check 'nil) (hints 'nil) (equiv 'equal) (skip 't))
   (declare (type (satisfies wf-cong-list) cong))
 
   `(defthm ,name
@@ -1164,7 +1175,7 @@
 
        ,@(generate-cong-hyps t cong)
 
-       ,@(and rhs (generate-asymmetric-hyps cong))
+       ,@(and rhs `(,(generate-asymmetric-hyps cong)))
 
        ;; See if anything has changed ..
 
@@ -1176,7 +1187,9 @@
        )
 
       (,equiv ,term
-              ,(if (not rhs) `(skip-rewrite ,(replace-cong-terms cong term))
+              ,(if (not rhs) 
+                   (if skip `(skip-rewrite ,(replace-cong-terms cong term))
+                     (replace-cong-terms cong term))
                  rhs)))
      ,@(if hints `(:hints ,hints) nil)
      ;; `(:hints (("Goal" :in-theory (enable ,@(cong-equivs cong)))))))

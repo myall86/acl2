@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -56,8 +44,8 @@ binds the variable k
   (declare (xargs :guard (pseudo-termp term)))
   (if (not (consp term)) ;term was a symbol
       nil
-    (case (car term)	
-      (quote (if (integerp (cadr term)) 
+    (case (car term)
+      (quote (if (integerp (cadr term))
                  nil ;no denominator
                (if (rationalp (cadr term))
                    `((k . ',(denominator (cadr term))))
@@ -76,7 +64,7 @@ binds the variable k
   (declare (xargs :guard (pseudo-termp term)))
   (if (not (consp term)) ;term was a symbol
       (equal factor term)
-    (case (car term)	
+    (case (car term)
       (binary-* (if (equal factor (cadr term))
                     t
                   (is-a-factor factor (caddr term))))
@@ -100,7 +88,7 @@ binds the variable k
   (declare (xargs :guard (pseudo-termp term)))
   (if (not (consp term)) ;term was a symbol
       t
-    (case (car term)	
+    (case (car term)
       (binary-* nil) ;associativity of * must not have fired (or we are in the (* x y) of a (/ (* x y))
       (binary-+ nil) ;distributivity must not have fired...
       (unary-/ (and (consp (cdr term))
@@ -110,14 +98,14 @@ binds the variable k
 
 
 ;Checks whether TERM is a product of (1 or more) "factors".
-;Also checks that only the first factor (if any) is a constant...  (If the constants aren't collected, the 
+;Also checks that only the first factor (if any) is a constant...  (If the constants aren't collected, the
 ;term isn't yet normalized, and rules can loop). BOZO document why the cancelling rule is okay even though
 ;constants are a little weird..
 (defun product-syntaxp (term first-factor-can-be-a-constant)
   (declare (xargs :guard (pseudo-termp term)))
   (if (not (consp term)) ;term was a symbol
       t
-    (case (car term)	
+    (case (car term)
       (binary-* (and (factor-syntaxp (cadr term) first-factor-can-be-a-constant)
                      (product-syntaxp (caddr term) nil)))
 ;check that term is a single factor..
@@ -132,7 +120,7 @@ binds the variable k
   (declare (xargs :guard (pseudo-termp term)))
   (if (not (consp term)) ;term was a symbol
       t
-    (case (car term)	
+    (case (car term)
       (binary-+ (and (product-syntaxp (cadr term) t)
                      (sum-of-products-syntaxp (caddr term))))
       (otherwise (product-syntaxp term t)))))

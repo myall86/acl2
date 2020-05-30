@@ -1,19 +1,5 @@
-; Arithmetic-3 Library
-; Copyright (C) 2004 Robert Krug <rkrug@cs.utexas.edu>
-;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT
-; ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-; FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
-; details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; if not, write to the Free Software Foundation, Inc., 51
-; Franklin Street, Suite 500, Boston, MA 02110-1335, USA.
+; See the top-level arithmetic-3 LICENSE file for authorship,
+; copyright, and license information.
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
@@ -112,7 +98,7 @@
 ;;; The next six rules are gathered up into a single theory,
 ;;; strong-expt-type-prescription-rules and disabled in top.lisp.
 ;;; They are too expensive for daily wear, but are occasionally
-;;; useful.  
+;;; useful.
 
 (defthm expt-type-prescription-negative-base-even-exponent
   (implies (and (< r 0)
@@ -137,7 +123,7 @@
 		(integerp (* 1/2 i)))
            (<= 0 (expt r i)))
   :rule-classes (:type-prescription :generalize)
-  :hints (("Goal" :use ((:instance 
+  :hints (("Goal" :use ((:instance
 			 expt-type-prescription-negative-base-even-exponent)))))
 
 (defthm expt-type-prescription-nonpositive-base-odd-exponent
@@ -147,7 +133,7 @@
 		(not (integerp (* 1/2 i))))
            (<= (expt r i) 0))
   :rule-classes (:type-prescription :generalize)
-  :hints (("Goal" :use ((:instance 
+  :hints (("Goal" :use ((:instance
 			 expt-type-prescription-negative-base-odd-exponent)))))
 
 (defthm expt-negative-base-even-exponent

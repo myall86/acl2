@@ -57,7 +57,7 @@
 	     (iff (= (bitn x n) 0)
 		  (evenp (fl (/ x (expt 2 n))))))
   :rule-classes ()
-  :hints (("Goal" :use ((:instance floor-fl (m x) (n (expt 2 n))))))))  
+  :hints (("Goal" :use ((:instance floor-fl (m x) (n (expt 2 n))))))))
 
 (local
 (defthm bitn-def-6
@@ -94,7 +94,32 @@
    :hints (("Goal" :use ((:instance bitn-def-6 (n k))
 			 (:instance rem012 (x (fl (/ x (expt 2 k)))))))))
 
-(in-theory (disable bitn))
+(progn
+
+; Matt K. mod: The addition of natp-bitn, and the corresponding disable of (:t
+; bitn), produces the state that existed before April 2016, when ACL2 started
+; providing a type-set bit for the set {1}.  Without the changes, the following
+; community books failed to certify after that ACL2 change (and a few still
+; fail without additional changes).
+
+;   rtl/rel1/support/fadd/add3.lisp
+;   rtl/rel1/support/fadd/stick.lisp
+;   rtl/rel1/support/fadd/top.lisp
+;   rtl/rel1/support/merge.lisp
+;   rtl/rel1/support/fadd/lop2.lisp
+;   rtl/rel1/support/fadd/lop3.lisp
+;   workshops/1999/multiplier/proof.lisp
+
+; Technical Note: For the four books just above, only, the book certifies if
+; for the all-type-reasoning-tags-p case in rewrite-atm, we add a COND clause
+; that avoids returning any change in the case that the atom is a call of IF.
+
+  (defthm natp-bitn
+    (natp (bitn x n))
+    :rule-classes :type-prescription)
+
+  (in-theory (disable bitn (:t bitn)))
+  )
 
 (defthm BITN-ALT-0
     (implies (and (integerp x)
@@ -177,7 +202,7 @@
    :rule-classes ()
    :hints (("Goal" :in-theory (disable a10)
 		   :use ((:instance integerp-expt-type (n (- n k)))
-			 (:instance fl+int 
+			 (:instance fl+int
 				    (x (/ (rem x (expt 2 n)) (expt 2 k)))
 				    (n (* (expt 2 (- n k)) (fl (/ x (expt 2 n)))))))))))
 
@@ -265,7 +290,7 @@
 			(:instance integerp-expt-type (n (1- (- n k))))
 			(:instance bit-rem-6)
 			(:instance bit-rem-7)
-			(:instance rem+ 
+			(:instance rem+
 				   (n 2)
 				   (m (fl (/ (rem x (expt 2 n))	(expt 2 k))))
 				   (a (* (expt 2 (1- (- n k))) (fl (/ x (expt 2 n)))))))))))
@@ -495,7 +520,7 @@
   :rule-classes ()
   :hints (("Goal" :in-theory (disable a2 a9 a8)
 		  :use ((:instance bit-bits-1)
-			(:instance bit-bits-3 
+			(:instance bit-bits-3
 				   (x (/ x (expt 2 k)))
 				   (y (+ (* (expt 2 (- n k))
 					    (fl (/ x (expt 2 n))))
@@ -512,7 +537,7 @@
 		  (integerp k)
 		  (>= k 0)
 		  (>= i k))
-	     (= (rem (fl (/ x (expt 2 k))) 
+	     (= (rem (fl (/ x (expt 2 k)))
 		     (expt 2 (- (1+ i) k)))
 		(rem (+ (* (expt 2 (- (1+ i) k))
 			   (fl (/ x (expt 2 (1+ i)))))
@@ -564,7 +589,7 @@
 		  (integerp k)
 		  (>= k 0)
 		  (>= i k))
-	     (= (rem (fl (/ x (expt 2 k))) 
+	     (= (rem (fl (/ x (expt 2 k)))
 		     (expt 2 (- (1+ i) k)))
 		(rem (fl (/ (rem x (expt 2 (1+ i)))
 			    (expt 2 k)))
@@ -574,7 +599,7 @@
 		  :use ((:instance bit-bits-5)
 			(:instance bit-bits-6)
 			(:instance bit-bits-7)
-			(:instance rem+ 
+			(:instance rem+
 				   (m (fl (/ (rem x (expt 2 (1+ i))) (expt 2 k))))
 				   (n (expt 2 (- (1+ i) k)))
 				   (a (fl (/ x (expt 2 (1+ i)))))))))))
@@ -624,7 +649,7 @@
 		  (integerp k)
 		  (>= k 0)
 		  (>= i k))
-	     (= (rem (fl (/ x (expt 2 k))) 
+	     (= (rem (fl (/ x (expt 2 k)))
 		     (expt 2 (- (1+ i) k)))
 		(fl (/ (rem x (expt 2 (1+ i)))
 		       (expt 2 k)))))
@@ -633,7 +658,7 @@
 			(:instance bit-bits-6)
 			(:instance bit-bits-7)
 			(:instance bit-bits-10)
-			(:instance rem< 
+			(:instance rem<
 				   (m (fl (/ (rem x (expt 2 (1+ i))) (expt 2 k))))
 				   (n (expt 2 (- (1+ i) k)))))))))
 
@@ -674,7 +699,7 @@
   :hints (("Goal" :in-theory (disable a15 bits integerp-expt-type)
 		  :use ((:instance expo+ (m k) (n (- j k)))
 			(:instance integerp-expt-type (n (- j k)))
-			(:instance fl/int 
+			(:instance fl/int
 				   (x (/ (rem x (expt 2 (1+ i))) (expt 2 k)))
 				   (n (expt 2 (- j k)))))))))
 
@@ -844,10 +869,10 @@
 			(:instance expo+ (m b) (n (- a b)))
 			(:instance rem-rem-1)
 			(:instance rem>=0 (m x) (n (expt 2 a)))
-			(:instance integerp-expt-type (n (- a b)))			
-			(:instance rem+ 
+			(:instance integerp-expt-type (n (- a b)))
+			(:instance rem+
 				   (m (rem x (expt 2 a)))
-				   (n (expt 2 b)) 
+				   (n (expt 2 b))
 				   (a (* (expt 2 (- a b)) (fl (/ x (expt 2 a))))))))))
 
 (local
@@ -867,7 +892,7 @@
 		       (expt 2 l)))))
   :rule-classes ()
   :hints (("Goal" :use ((:instance bit-bits-18)
-			(:instance rem-rem 
+			(:instance rem-rem
 				   (x (fl (/ x (expt 2 j))))
 				   (a (- (1+ i) j))
 				   (b (1+ k))))))))
@@ -953,7 +978,7 @@
 		  :use ((:instance logand-def)
 			(:instance rem012)
 			(:instance rem012 (x y))
-			(:instance rem+ 
+			(:instance rem+
 				   (m (logand (rem x 2) (rem y 2)))
 				   (n 2)
 				   (a (logand (fl (/ x 2)) (fl (/ y 2)))))
@@ -1217,7 +1242,7 @@
 			(:instance x-or-x/2-5 (x (* -1/2 x))))))))
 
 (defthm X-OR-X/2
-    (implies (integerp x) 
+    (implies (integerp x)
 	     (or (integerp (/ x 2)) (integerp (/ (1+ x) 2))))
   :rule-classes ()
   :hints (("Goal" :use ((:instance x-or-x/2-4)

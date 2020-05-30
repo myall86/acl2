@@ -123,10 +123,10 @@
 
   (declare (xargs :guard (alist-of-alistsp lst)
                   :mode :logic))
-  (cond 
+  (cond
    ((atom lst)
     lst)
-   (t 
+   (t
     (let* ((current-entry (car lst)))
       (cond ((atom current-entry)
              (prog2$ (er hard 'make-fast-alist-of-alists
@@ -227,7 +227,7 @@
 
 (defxdoc fast-alists-free-on-exit
   :parents (fast-alists)
-  :short "Concisely call ~ilc[fast-alist-free-on-exit] for several alists."
+  :short "Concisely call @(tsee fast-alist-free-on-exit) for several alists."
   :long "<p>For example:</p>
 
 @({

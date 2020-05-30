@@ -147,7 +147,7 @@ that behave the same as the ones above, execpt that they don't take the
        (new-stobj (if (cdr stobjs-out)
                       `(mv-nth ,(position stobjname stobjs-out) ,call)
                     call))
-       (recp (acl2::recursivep fn$ world))
+       (recp (acl2::recursivep fn$ t world))
        (expand/induct-hints
         (if (and recp (not (cdr recp)))
             `((just-induct-and-expand ,call))
@@ -265,7 +265,7 @@ that behave the same as the ones above, execpt that they don't take the
                                            ruleset templates history
                                            deps enable disable
                                            (rule-classes ':rewrite))
-  (add-stobj-preservation-thm-fn name vars body hints ruleset 
+  (add-stobj-preservation-thm-fn name vars body hints ruleset
                                  templates history deps enable disable rule-classes))
 
 (defxdoc add-stobj-preservation-thm

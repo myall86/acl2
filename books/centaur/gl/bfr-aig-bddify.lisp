@@ -121,6 +121,7 @@
                   (acl2::aig-eval x aig-env)))
   :hints (("goal" :induct (acl2::aig-eval x aig-env)
            :in-theory (e/d (subsetp-equal
+                            acl2::aig-alist-lookup
                             acl2::aig-env-lookup) (nfix)))
           (and stable-under-simplificationp
                '(:in-theory (enable nfix)))))
@@ -160,7 +161,10 @@ by transforming them to BDDs."
              (bfr-sat bfr-sat-bddify)
              :hints (("goal" :in-theory '(bfr-sat-bddify-unsat))
                      (and stable-under-simplificationp
-                          '(:in-theory (enable bfr-sat-bddify))))))))
+                          '(:in-theory (enable bfr-sat-bddify)))))
+            (defattach (bfr-vacuity-check
+                        bfr-sat)
+              :hints (("goal" :use bfr-sat-unsat))))))
 
 (local (gl-aig-bddify-mode))
 

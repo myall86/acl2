@@ -29,7 +29,7 @@
 ; Original author: Jared Davis <jared@centtech.com>
 
 (in-package "VL")
-(include-book "lexer")
+(include-book "top")
 (local (include-book "../../util/arithmetic"))
 
 (program)
@@ -51,8 +51,9 @@
         (nwarnings '0))
   `(assert!
     (b* ((echars (vl-echarlist-from-str ,input))
+         (breakp nil)
          (st     (vl-lexstate-init ,config))
-         ((mv tok remainder warnings) (vl-lex-token echars st nil))
+         ((mv tok remainder warnings) (vl-lex-token echars breakp st nil))
          (- (cw "Echars: ~x0~%Tok: ~x1~%Remainder: ~x2~%Warnings:~x3~%"
                 echars tok remainder warnings)))
         (debuggable-and ,@(if successp
@@ -149,7 +150,8 @@
             ("<<<=" . :vl-ashleq)
             (">>>=" . :vl-ashreq)
             ("'"    . :vl-quote)
-            ("$"    . :vl-$))))
+            ("$"    . :vl-$)
+            ("1step" . :vl-1step))))
 
 (defun make-punctuation-tests (alist config)
   (b* (((when (atom alist))
@@ -260,14 +262,15 @@
   (b* (((strtest test) test)
        (echars    (vl-echarlist-from-str test.input))
        (st        (vl-lexstate-init config))
-       ((mv tok remainder) (vl-lex-string echars st))
+       (breakp    nil)
+       ((mv tok remainder) (vl-lex-string echars breakp st))
        (- (cw "Echars: ~x0~%"      (vl-echarlist->string echars)))
        (- (cw "Result: ~x0~%"      (and (vl-stringtoken-p tok)
                                         (vl-stringtoken->expansion tok))))
        (- (cw "Remainder: ~x0~%~%" (vl-echarlist->string remainder)))
 
        ;; Also check vl-lex-token instead of just vl-lex-string...
-       ((mv lextok lexrem warnings) (vl-lex-token echars st nil))
+       ((mv lextok lexrem warnings) (vl-lex-token echars breakp st nil))
 
        ((unless test.successp)
         (debuggable-and (not tok)
@@ -311,7 +314,6 @@
   (list
    (make-strtest :input "\"Hello\""
                  :expansion "Hello")
-
    (make-strtest :input "\"Hello\" world"
                  :remainder " world"
                  :expansion "Hello")
@@ -519,15 +521,16 @@ line\""
                    (config vl-loadconfig-p))
   (b* (((itest test) test)
        (echars (vl-echarlist-from-str test.input))
+       (breakp nil)
        (?st    (vl-lexstate-init config))
-       ((mv tok remainder warnings) (vl-lex-integer echars nil))
+       ((mv tok remainder warnings) (vl-lex-integer echars breakp nil))
        (- (cw "input: ~x0~%" test.input))
        (- (cw "tok: ~x0~%" (and tok
                                 (vl-inttoken-p tok)
                                 (vl-echarlist->string (vl-inttoken->etext tok)))))
        (- (cw "rem: ~x0~%" remainder))
        (- (cw "warnings: ~x0.~%" warnings))
-       ((mv lextok lexrem lexwrn) (vl-lex-token echars st nil))
+       ((mv lextok lexrem lexwrn) (vl-lex-token echars breakp st nil))
        ((unless test.successp)
         (debuggable-and (not tok)
                         (equal remainder echars)
@@ -616,7 +619,13 @@ line\""
                :nwarnings 1)
 
    (make-itest :input "0'h0" ;; size 0 illegal
-               :successp nil)
+               :successp t
+               :width 32
+               :value 0
+               :signedp nil
+               :bits ""
+               :wasunsized t
+               :nwarnings 1)
 
    (make-itest :input "1'h" ;; no value is illegal
                :successp nil)
@@ -814,9 +823,10 @@ line\""
                                      (config '*vl-default-loadconfig*))
   `(assert!
     (b* ((echars             (vl-echarlist-from-str ,input))
+         (breakp             nil)
          (?st                (vl-lexstate-init ,config))
          ((mv tok remainder warnings)
-          (vl-lex-token echars st nil))
+          (vl-lex-token echars breakp st nil))
          (-                  (cw "Echars: ~x0~%Tok: ~x1~%Remainder: ~x2~%~%" echars tok remainder)))
         (debuggable-and ,@(if successp
                               `((vl-realtoken-p tok)
@@ -861,3 +871,77 @@ line\""
                       :remainder "+0")
 
 
+
+
+(defmacro vl-lex-misc-testcase (&key input
+                                     successp
+                                     value
+                                     type
+                                     (remainder '"")
+                                     (nwarnings '0)
+                                     (config '*vl-default-loadconfig*))
+  `(assert!
+    (b* ((echars             (vl-echarlist-from-str ,input))
+         (breakp             nil)
+         (?st                (vl-lexstate-init ,config))
+         ((mv tok remainder ?warnings)
+          (vl-lex-token echars breakp st nil))
+         (-                  (cw "Echars: ~x0~%Tok: ~x1~%Remainder: ~x2~%~%" echars tok remainder)))
+        (debuggable-and ,@(if successp
+                              `((equal (append (vl-token->etext tok)
+                                               remainder)
+                                       echars)
+                                (equal (vl-token->type tok) ,type)
+                                (equal (vl-echarlist->string (vl-token->etext tok))
+                                       ,value)
+                                (equal (vl-echarlist->string remainder) ,remainder)
+                                (equal (len warnings) ,nwarnings))
+                            '((not tok)
+                              (equal remainder echars)))))))
+
+(vl-lex-misc-testcase :input "// foo bar baz
+4 5 6"
+  :successp t
+  :value "// foo bar baz
+"
+  :type :vl-comment
+  :remainder "4 5 6")
+
+(vl-lex-misc-testcase :input "`timescale 1ns/1ps"
+  :successp t
+  :value "`timescale 1ns/1ps"
+  :type :vl-ws
+  :remainder "")
+
+(vl-lex-misc-testcase :input "`timescale 1 ns / 10 ps 5 6 7"
+  :successp t
+  :value "`timescale 1 ns / 10 ps"
+  :type :vl-ws
+  :remainder " 5 6 7")
+
+(vl-lex-misc-testcase :input "`timescale 1 s /100us
+a b c"
+  :successp t
+  :value "`timescale 1 s /100us"
+  :type :vl-ws
+  :remainder "
+a b c")
+
+(vl-lex-misc-testcase :input "`timescale bogus"
+  :successp nil)
+
+(vl-lex-misc-testcase :input "1step"
+  :successp t
+  :value "1step"
+  :type :vl-1step
+  :remainder ""
+  :config (change-vl-loadconfig *vl-default-loadconfig*
+                                :edition :system-verilog-2012))
+
+(vl-lex-misc-testcase :input "1step"
+  :successp t
+  :value "1"
+  :type :vl-inttoken
+  :remainder "step"
+  :config (change-vl-loadconfig *vl-default-loadconfig*
+                                :edition :verilog-2005))

@@ -37,7 +37,7 @@
 (in-package "ACL2")
 (include-book "defsort")
 (include-book "misc/total-order" :dir :system)
-(include-book "misc/assert" :dir :system)
+(include-book "std/testing/assert" :dir :system)
 
 
 ;; The following defines (<-SORT X), which orders a list of rational numbers
@@ -164,7 +164,7 @@
     :extra-args-guard (intval-alistp alist)
     :comparablep (lambda (x alist) (stringp x))
     :compare< intval-alist-<2))
-  
+
 
 
 
@@ -289,7 +289,7 @@
 (local
  (encapsulate ()
    (local (defun sorteltlist-p (x)
-            (declare (xargs :guard t)) 
+            (declare (xargs :guard t))
             (if (atom x)
                 (not x)
               (and (sortelt-p (car x))
@@ -304,7 +304,7 @@
 (local
  (encapsulate ()
    (local (defun sorteltlist-p (x)
-            (declare (xargs :guard t)) 
+            (declare (xargs :guard t))
             (if (atom x)
                 t
               (and (sortelt-p (car x))

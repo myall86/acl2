@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -51,7 +39,7 @@
        (<= 0 (lnot x n)))
   :rule-classes ((:type-prescription :typed-term (lnot x n))))
 
-(in-theory (disable (:type-prescription lnot))) 
+(in-theory (disable (:type-prescription lnot)))
 
 (defthmd lnot-bits-1
   (equal (lnot (bits x (1- n) 0) n)
@@ -152,7 +140,7 @@
                               (consp (cddr x)))))
   (cond ((endp (cdddr x))
          `(binary-land ,@x))
-        (t         
+        (t
          `(binary-land ,(car x)
                        (land ,@(cdr x))
                        ,(car (last x))))))
@@ -165,7 +153,7 @@
 (in-theory (disable (:type-prescription binary-land)))
 
 (defund binary-lior (x y n)
-  (declare (xargs :guard (and (natp x) 
+  (declare (xargs :guard (and (natp x)
                               (natp y)
                               (integerp n)
                               (< 0 n))
@@ -190,7 +178,7 @@
                               (consp (cddr x)))))
   (cond ((endp (cdddr x)) ;(lior x y n) -- the base case
          `(binary-lior ,@x))
-        (t         
+        (t
          `(binary-lior ,(car x)
                        (lior ,@(cdr x))
                        ,(car (last x))))))
@@ -203,7 +191,7 @@
 (in-theory (disable (:type-prescription binary-lior)))
 
 (defund binary-lxor (x y n)
-  (declare (xargs :guard (and (natp x) 
+  (declare (xargs :guard (and (natp x)
                               (natp y)
                               (integerp n)
                               (< 0 n))
@@ -228,7 +216,7 @@
                               (consp (cddr x)))))
   (cond ((endp (cdddr x))
          `(binary-lxor ,@x))
-        (t         
+        (t
          `(binary-lxor ,(car x)
                        (lxor ,@(cdr x))
                        ,(car (last x))))))
@@ -474,8 +462,8 @@
 		(case-split (integerp n))
 		(case-split (integerp i)))
 	   (equal (bits (land x y n) i j)
-		  (land (bits x i j) 
-			(bits y i j) 
+		  (land (bits x i j)
+			(bits y i j)
 			(+ (min n (1+ i)) (- j))))))
 
 (defthm bits-lior
@@ -483,8 +471,8 @@
 		(case-split (integerp n))
 		(case-split (integerp i)))
 	   (equal (bits (lior x y n) i j)
-		  (lior (bits x i j) 
-			(bits y i j) 
+		  (lior (bits x i j)
+			(bits y i j)
 			(+ (min n (1+ i)) (- j))))))
 
 (defthm bits-lxor
@@ -492,8 +480,8 @@
 		(case-split (integerp n))
 		(case-split (integerp i)))
 	   (equal (bits (lxor x y n) i j)
-		  (lxor (bits x i j) 
-			(bits y i j) 
+		  (lxor (bits x i j)
+			(bits y i j)
 			(+ (min n (1+ i)) (- j))))))
 
 (defthm bitn-land
@@ -501,8 +489,8 @@
 		(case-split (integerp n)))
 	   (equal (bitn (land x y n) k)
 		  (if (< k n)
-		      (land (bitn x k) 
-			    (bitn y k) 
+		      (land (bitn x k)
+			    (bitn y k)
 			    1)
 		    0))))
 
@@ -511,8 +499,8 @@
 		(case-split (integerp n)))
 	   (equal (bitn (lior x y n) k)
 		  (if (< k n)
-		      (lior (bitn x k) 
-			    (bitn y k) 
+		      (lior (bitn x k)
+			    (bitn y k)
 			    1)
 		    0))))
 
@@ -521,8 +509,8 @@
 		(case-split (integerp n)))
 	   (equal (bitn (lxor x y n) k)
 		  (if (< k n)
-		      (lxor (bitn x k) 
-			    (bitn y k) 
+		      (lxor (bitn x k)
+			    (bitn y k)
 			    1)
 		    0))))
 

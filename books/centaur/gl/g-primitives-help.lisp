@@ -75,15 +75,23 @@
          (hyp-fix-hints ,hyp-fix-hints)
          (body ,(if replace-g-ifs `(body-replace-g-ifs ,body) body)))
       `(progn
-         (defun ,gfn (,@formals hyp clk config bvar-db state)
-           (declare (xargs :guard (and (natp clk)
-                                       (glcp-config-p config))
-                           :measure ,measure
-                           :verify-guards nil
-                           :stobjs (hyp bvar-db state))
-                    (ignorable ,@formals . ,params))
-           (let* ((hyp (lbfr-hyp-fix hyp)))
-             ,body))
+         (encapsulate
+           ()
+
+; The following set-bogus-measure-ok was added by Matt K. 2/20/2016 (as well
+; as the surrounding encapsulate call) in consultation with Sol S., since the
+; defun might not be recursive (e.g., (def-g-fn hide ...) in g-hide.lisp).
+
+           (set-bogus-measure-ok t)
+           (defun ,gfn (,@formals hyp clk config bvar-db state)
+             (declare (xargs :guard (and (natp clk)
+                                         (glcp-config-p config))
+                             :measure ,measure
+                             :verify-guards nil
+                             :stobjs (hyp bvar-db state))
+                      (ignorable ,@formals . ,params))
+             (let* ((hyp (lbfr-hyp-fix hyp)))
+               ,body)))
          (def-hyp-congruence ,gfn
            :hints ,hyp-hints
            :pres-hints ,pres-hints
@@ -92,6 +100,41 @@
          (in-theory (disable (:d ,gfn)))
 
          (table g-functions ',',fn ',gfn)))))
+
+(defun def-g-binary-op-body (a b fn gfn body)
+  `(cond ((and (general-concretep ,a) (general-concretep ,b))
+          (gret (mk-g-concrete
+                 (ec-call (,fn (general-concrete-obj ,a)
+                               (general-concrete-obj ,b))))))
+         ((mbe :logic (eq (tag ,a) :g-ite)
+               :exec (and (consp ,a) (eq (tag ,a) :g-ite)))
+          (if (zp clk)
+              (gret (g-apply ',fn (gl-list ,a ,b)))
+            (let* ((test (g-ite->test ,a))
+                   (then (g-ite->then ,a))
+                   (else (g-ite->else ,a)))
+              (g-if (gret test)
+                    (,gfn then ,b hyp clk config bvar-db state)
+                    (,gfn else ,b hyp clk config bvar-db state)))))
+         ((mbe :logic (eq (tag ,b) :g-ite)
+               :exec (and (consp ,b) (eq (tag ,b) :g-ite)))
+          (if (zp clk)
+              (gret (g-apply ',fn (gl-list ,a ,b)))
+            (let* ((test (g-ite->test ,b))
+                   (then (g-ite->then ,b))
+                   (else (g-ite->else ,b)))
+              (g-if (gret test)
+                    (,gfn ,a then hyp clk config bvar-db state)
+                    (,gfn ,a else hyp clk config bvar-db state)))))
+         ((mbe :logic (not (member-eq (tag ,a) '(:g-var :g-apply)))
+               :exec (or (atom ,a)
+                         (not (member-eq (tag ,a) '(:g-var :g-apply)))))
+          (cond ((mbe :logic (not (member-eq (tag ,b) '( :g-var :g-apply)))
+                      :exec (or (atom ,b)
+                                (not (member-eq (tag ,b) '( :g-var :g-apply)))))
+                 ,body)
+                (t (gret (g-apply ',fn (gl-list ,a ,b))))))
+         (t (gret (g-apply ',fn (gl-list ,a ,b))))))
 
 
 
@@ -104,35 +147,7 @@
            (b (cadr formals)))
       `(def-g-fn ,fn
          (let ((a ',a) (b ',b) (fn ',fn))
-           `(cond ((and (general-concretep ,a) (general-concretep ,b))
-                   (gret (mk-g-concrete
-                          (ec-call (,fn (general-concrete-obj ,a)
-                                        (general-concrete-obj ,b))))))
-                  ((and (consp ,a) (eq (tag ,a) :g-ite))
-                   (if (zp clk)
-                       (gret (g-apply ',fn (gl-list ,a ,b)))
-                     (let* ((test (g-ite->test ,a))
-                            (then (g-ite->then ,a))
-                            (else (g-ite->else ,a)))
-                       (g-if (gret test)
-                             (,gfn then ,b hyp clk config bvar-db state)
-                             (,gfn else ,b hyp clk config bvar-db state)))))
-                  ((and (consp ,b) (eq (tag ,b) :g-ite))
-                   (if (zp clk)
-                       (gret (g-apply ',fn (gl-list ,a ,b)))
-                     (let* ((test (g-ite->test ,b))
-                            (then (g-ite->then ,b))
-                            (else (g-ite->else ,b)))
-                       (g-if (gret test)
-                             (,gfn ,a then hyp clk config bvar-db state)
-                             (,gfn ,a else hyp clk config bvar-db state)))))
-                  ((or (atom ,a)
-                       (not (member-eq (tag ,a) '(:g-var :g-apply))))
-                   (cond ((or (atom ,b)
-                              (not (member-eq (tag ,b) '( :g-var :g-apply))))
-                          ,',',body)
-                         (t (gret (g-apply ',fn (gl-list ,a ,b))))))
-                  (t (gret (g-apply ',fn (gl-list ,a ,b))))))
+           (def-g-binary-op-body a b fn gfn ',',body))
          :hyp-hints ,',hyp-hints
          :pres-hints ,',pres-hints
          :hyp-fix-hints ,',hyp-fix-hints))))

@@ -252,7 +252,7 @@ expressions.</p>"
   (local (Defthm vl-stmtlist-count-of-append
            (equal (vl-stmtlist-count (append a b))
                   (+ -1 (vl-stmtlist-count a) (vl-stmtlist-count b)))
-           :hints(("Goal" 
+           :hints(("Goal"
                    :in-theory (enable append)
                    :induct (append a b)
                    :expand ((vl-stmtlist-count a)
@@ -277,7 +277,7 @@ expressions.</p>"
     (if initval
         (cons initval (vl-vardecllist->initvals (cdr x)))
       (vl-vardecllist->initvals (cdr x)))))
-    
+
 
 
 (define vl-compoundstmt->exprs ((x vl-stmt-p))
@@ -447,7 +447,8 @@ directly part of the statement.</p>"
   (local (defthmd c3
            (implies (<= (nfix n) (len x))
                     (equal (append (take n x) (nthcdr n (list-fix x)))
-                           (list-fix x)))))
+                           (list-fix x)))
+           :hints (("Goal" :in-theory (enable take)))))
 
   (local (defthm c4
            (implies (<= (nfix n) (len x))
@@ -582,7 +583,8 @@ directly part of the statement.</p>"
   (defthm vl-stmtlist-fix-of-take
     (implies (<= (nfix n) (len x))
              (equal (vl-stmtlist-fix (take n x))
-                    (take n (vl-stmtlist-fix x)))))
+                    (take n (vl-stmtlist-fix x))))
+    :hints (("Goal" :in-theory (enable take))))
 
   (defthm vl-stmtlist-fix-of-nthcdr
     (equal (vl-stmtlist-fix (nthcdr n x))
@@ -678,7 +680,9 @@ provide a :ctrl when there is one, etc.</p>
 
   (defmacro change-vl-compoundstmt (x &rest args)
     (change-vl-compoundstmt-fn x
-                               (std::da-changer-args-to-alist args '(:stmts :exprs :ctrl :vardecls :paramdecls))))
+                               (std::da-changer-args-to-alist 'change-vl-compoundstmt
+                                                              args
+                                                              '(:stmts :exprs :ctrl :vardecls :paramdecls))))
 
   (local (defthm test0
            (equal (change-vl-compoundstmt x)
@@ -873,6 +877,3 @@ process them.</p>"
   :inline t
   :enabled t
   (eq (vl-stmt-kind x) :vl-timingstmt))
-
-
-

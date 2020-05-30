@@ -1,3 +1,5 @@
+#!/usr/bin/env ruby
+
 # VL Verilog Toolkit
 # Copyright (C) 2008-2015 Centaur Technology
 #
@@ -28,6 +30,7 @@
 #
 # Original author: Jared Davis <jared@centtech.com>
 
+require 'require_relative' if RUBY_VERSION =~ /1\.8/
 require_relative '../utils'
 outlaw_bad_warnings()
 

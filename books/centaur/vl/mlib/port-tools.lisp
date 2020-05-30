@@ -30,7 +30,6 @@
 
 (in-package "VL")
 (include-book "expr-tools")
-(include-book "range-tools")
 (include-book "scopestack")
 (local (include-book "../util/arithmetic"))
 (local (std::add-default-post-define-hook :fix))
@@ -93,10 +92,6 @@
         (vl-partition-plainargs (cdr x) inputs outputs (cons x1 inouts) unknowns)))
     (vl-partition-plainargs (cdr x) inputs outputs inouts (cons x1 unknowns))))
 
-(fty::deflist vl-directionlist
-  :elt-type vl-direction-p
-  :elementp-of-nil nil)
-
 
 
 (defxdoc port-expressions
@@ -138,25 +133,18 @@ regular expressions, it insists that the expression is a portexpr.</p>
 
 <p><u>Internalnames.</u> Given a valid portexpr, we can easily collect up the
 identifiers that occur within it.  The main function to do this for a portexpr
-is @(see vl-portexpr->internalnames).  This is a bit different than, e.g., just
-using @(see vl-expr-names), because it omits any names that occur in index
-expressions.</p>")
+is @(see vl-portexpr->internalnames).</p>")
 
 (local (xdoc::set-default-parents port-expressions))
 
 (define vl-atomicportexpr-p ((x vl-expr-p))
   :returns (okp booleanp :rule-classes :type-prescription)
   :short "Recognize non-concatenations that can occur in port expressions."
-  (b* (((when (vl-fast-atom-p x))
-        (vl-idexpr-p x))
-       ((vl-nonatom x))
-       ((when (and (or (eq x.op :vl-bitselect)
-                       (eq x.op :vl-index))))
-        (vl-idexpr-p (first x.args)))
-       ((when (and (or (eq x.op :vl-select-colon)
-                       (eq x.op :vl-partselect-colon))))
-        (vl-idexpr-p (first x.args))))
-    nil))
+  (vl-expr-case x
+    :vl-index (vl-scopeexpr-case x.scope
+                :end (vl-hidexpr-case x.scope.hid :end)
+                :otherwise nil)
+    :otherwise nil))
 
 (deflist vl-atomicportexprlist-p (x)
   :guard (vl-exprlist-p x)
@@ -165,13 +153,10 @@ expressions.</p>")
 (define vl-portexpr-p ((x vl-expr-p))
   :returns (okp booleanp :rule-classes :type-prescription)
   :short "Recognizes all expressions that can validly occur in a (non-blank) port."
-  (b* (((when (vl-atomicportexpr-p x))
-        t)
-       ((when (vl-fast-atom-p x))
-        nil)
-       ((vl-nonatom x)))
-    (and (eq x.op :vl-concat)
-         (vl-atomicportexprlist-p x.args))))
+  (or (vl-atomicportexpr-p x)
+      (vl-expr-case x
+        :vl-concat (vl-atomicportexprlist-p x.parts)
+        :otherwise nil)))
 
 (define vl-maybe-portexpr-p ((x vl-maybe-expr-p))
   :short "Recognizes all expressions that can validly occur in a (possibly blank) port."
@@ -203,9 +188,7 @@ expressions.</p>")
   :guard (vl-atomicportexpr-p x)
   :returns (name stringp :rule-classes :type-prescription)
   :guard-hints (("Goal" :in-theory (enable vl-atomicportexpr-p)))
-  (if (vl-fast-atom-p x)
-      (vl-idexpr->name x)
-    (vl-idexpr->name (first (vl-nonatom->args x)))))
+  (vl-hidexpr-end->name (vl-scopeexpr-end->hid (vl-index->scope x))))
 
 (defprojection vl-atomicportexprlist->internalnames ((x vl-exprlist-p))
   :guard (vl-atomicportexprlist-p x)
@@ -228,16 +211,15 @@ to the port.  For instance, in the following module,</p>
 <p>the internalnames for the first port are @('(\"a\")'), the second port to
 @('(\"foo\")'), and for the third port to @('(\"bar\" \"baz\")').</p>
 
-<p>Note that this is a bit different than, e.g., just using @(see
-vl-expr-names), because we omit any names that occur in index expressions,
-i.e., notice how we omit @('width') in the third port.</p>"
+<p>Note that we omit any names that occur in index expressions, i.e., notice
+how we omit @('width') in the third port.</p>"
 
   :guard (vl-portexpr-p x)
   :returns (names string-listp)
   :guard-hints(("Goal" :in-theory (enable vl-portexpr-p)))
   (if (vl-atomicportexpr-p x)
       (list (vl-atomicportexpr->internalname x))
-    (vl-atomicportexprlist->internalnames (vl-nonatom->args x))))
+    (vl-atomicportexprlist->internalnames (vl-concat->parts x))))
 
 (define vl-port->internalnames ((x vl-port-p))
   :guard (vl-port-wellformed-p x)
@@ -400,8 +382,7 @@ and add a warning that this case is very unusual.</p>"
         nil)
        (name (vl-portdecl->name (car x)))
        (loc  (vl-portdecl->loc (car x)))
-       (guts (make-vl-id :name name))
-       (expr (make-vl-atom :guts guts)))
+       (expr (vl-idexpr name)))
     (cons (make-vl-regularport :name name :expr expr :loc loc)
           (vl-ports-from-portdecls (cdr x)))))
 

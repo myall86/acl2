@@ -1,19 +1,5 @@
-; Arithmetic-3 Library
-; Copyright (C) 2004 Robert Krug <rkrug@cs.utexas.edu>
-;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT
-; ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-; FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
-; details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; if not, write to the Free Software Foundation, Inc., 51
-; Franklin Street, Suite 500, Boston, MA 02110-1335, USA.
+; See the top-level arithmetic-3 LICENSE file for authorship,
+; copyright, and license information.
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
@@ -51,12 +37,12 @@
 
 (include-book "integerp-meta")
 
-(deftheory pre-basic 
+(deftheory pre-basic
   (current-theory :here))
 
 (include-book "basic")
 
-(deftheory post-basic 
+(deftheory post-basic
   (current-theory :here))
 
 (include-book "collect")
@@ -65,10 +51,10 @@
 
 (include-book "arithmetic-theory")
 
-(deftheory full 
+(deftheory full
   (current-theory :here))
 
-(deftheory minimal-arithmetic-theory 
+(deftheory minimal-arithmetic-theory
    (union-theories (theory 'arithmetic-3-bind-free-base)
                    (set-difference-theories (theory 'post-basic)
                                             (theory 'pre-basic))))
@@ -88,7 +74,7 @@
       simplify-products-gather-exponents-<))
 
 (deftheory scatter-exponents-theory
-    '(|(expt x (+ m n))| 
+    '(|(expt x (+ m n))|
       |(expt x (+ m n)) non-zero x|
       |(expt x c)|
       ;;|(expt x (+ m n)) non-pos m and n|
@@ -139,7 +125,7 @@
 
 (prefer-positive-addends)
 
-(theory-invariant 
+(theory-invariant
  (not (and (active-runep '(:rewrite |(expt x (+ m n))|))
            (active-runep '(:rewrite normalize-factors-gather-exponents))))
  :error nil)
@@ -298,7 +284,7 @@
 		    Unicity-of-0 Inverse-of-+ Rationalp-+
 		    Rationalp-unary-- Unicity-of-1
 		    Associativity-of-* Commutativity-of-*
-                    Rational-implies2 
+                    Rational-implies2
 		    Inverse-of-* Rationalp-*
 		    Rationalp-unary-/
 		    Distributivity

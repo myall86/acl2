@@ -1,19 +1,5 @@
-; Arithmetic-2 Library
-; Copyright (C) 1999 Robert Krug <rkrug@cs.utexas.edu>
-;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT
-; ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-; FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
-; details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; if not, write to the Free Software Foundation, Inc., 51
-; Franklin Street, Suite 500, Boston, MA 02110-1335, USA.
+; See the top-level arithmetic-2 LICENSE file for authorship,
+; copyright, and license information.
 
 ;;
 ;; basic-arithmetic.lisp
@@ -79,12 +65,12 @@
 
 (defthm equal-+-x-y-x
   (equal (equal (+ x y) x)
-         (and (acl2-numberp x) 
+         (and (acl2-numberp x)
 	      (equal (fix y) 0))))
 
 (defthm equal-+-x-y-y
   (equal (equal (+ x y) y)
-	 (and (acl2-numberp y) 
+	 (and (acl2-numberp y)
 	      (equal (fix x) 0))))
 
 (defthm equal-minus-minus
@@ -148,7 +134,7 @@
 (defthm equal-*-x-y-x
   (equal (equal (* x y) x)
 	 (and (acl2-numberp x)
-	      (or (equal x 0) 
+	      (or (equal x 0)
 		  (equal y 1))))
   :hints (("Goal" :use
            ((:instance right-cancellation-for-*
@@ -159,7 +145,7 @@
 (defthm equal-*-y-x-x
   (equal (equal (* y x) x)
 	 (and (acl2-numberp x)
-	      (or (equal x 0) 
+	      (or (equal x 0)
 		  (equal y 1)))))
 
 (defthm equal-/-/
@@ -190,7 +176,7 @@
 	     (equal 1 (* x y))
 	     (equal y 0))))
 
-; The following hack helps in the application of equal-/ when 
+; The following hack helps in the application of equal-/ when
 ; forcing is turned off.
 
 (defthm numerator-nonzero-forward

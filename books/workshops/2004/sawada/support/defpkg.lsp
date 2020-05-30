@@ -1,5 +1,9 @@
 (in-package "ACL2")
 
+; The following comment line tells the build system that if *acl2-exports*
+; changes, then every book that uses this file should be recertified:
+; (depends-on "build/acl2-exports.certdep" :dir :system)
+
 ;; Package for hexadecimal printing
 (defpkg "PRB"
   (union-eq '(fmx)
@@ -193,7 +197,11 @@
 
 
 (defpkg "BV"
-    (union-eq *acl2-exports*
-	      (union-eq *common-lisp-symbols-from-main-lisp-package*
-			*ihs-symbols*)))
+; Matt K. mod April 2016: removed bitp to avoid name clash, now that bitp is
+; defined in ACL2.
+  (set-difference-eq
+   (union-eq *acl2-exports*
+             (union-eq *common-lisp-symbols-from-main-lisp-package*
+                       *ihs-symbols*))
+   '(bitp)))
 

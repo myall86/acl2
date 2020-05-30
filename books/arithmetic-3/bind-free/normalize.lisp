@@ -1,19 +1,5 @@
-; Arithmetic-3 Library
-; Copyright (C) 2004 Robert Krug <rkrug@cs.utexas.edu>
-;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT
-; ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-; FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
-; details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; if not, write to the Free Software Foundation, Inc., 51
-; Franklin Street, Suite 500, Boston, MA 02110-1335, USA.
+; See the top-level arithmetic-3 LICENSE file for authorship,
+; copyright, and license information.
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
@@ -49,10 +35,10 @@
 
 (include-book "common")
 
-(local 
+(local
  (in-theory (enable collect-+)))
 
-(local 
+(local
  (in-theory (enable collect-*)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -110,7 +96,7 @@
       (+ 1 (number-of-addends (fargn sum 2)))
     1))
 
-(defun find-denominators-with-sums (addend denominator-list 
+(defun find-denominators-with-sums (addend denominator-list
                                     number-of-addends-in-sum)
   (declare (xargs :guard (and (pseudo-termp addend)
                               (integerp number-of-addends-in-sum))))
@@ -203,8 +189,8 @@
          (implies (and (pseudo-termp denominator)
                        (true-listp factors)
                        (true-list-listp to-be-found))
-                  (true-list-listp (to-be-found denominator 
-                                                saved-denominator 
+                  (true-list-listp (to-be-found denominator
+                                                saved-denominator
                                                 factors
                                                 to-be-found)))))
 
@@ -239,7 +225,7 @@
         (factors2 (factors (fargn denominator 1))))
     (if (intersectp-equal factors1 factors2)
         (let* ((factors (set-difference-equal factors1 factors2))
-               (to-be-found (to-be-found (fargn denominator 2) 
+               (to-be-found (to-be-found (fargn denominator 2)
                                          (list 'UNARY-/ denominator)
                                          factors nil))
                (remainder (remainder-aaa to-be-found rest nil)))
@@ -289,8 +275,8 @@
   (declare (xargs :guard (and (pseudo-termp x)
                               (pseudo-termp y))))
   (if (eq (fn-symb x) 'BINARY-*)
-      (normalize-terms-such-as-a/a+b-+-b/a+b-fn-1 
-       (find-denominators-with-sums x 
+      (normalize-terms-such-as-a/a+b-+-b/a+b-fn-1
+       (find-denominators-with-sums x
                                     nil
                                     (+ 1 (number-of-addends y)))
        x
@@ -302,7 +288,7 @@
 
  (local
   (include-book "../pass1/top"))
- 
+
  (defthm normalize-terms-such-as-a/a+b-+-b/a+b
      (implies (and (bind-free
                     (normalize-terms-such-as-a/a+b-+-b/a+b-fn x y)
@@ -399,7 +385,7 @@
              (equal (+ x y)
                     (+ (bubble-down x match) y))))
 
-(theory-invariant 
+(theory-invariant
  (or (not (active-runep '(:rewrite normalize-addends)))
      (and (active-runep '(:rewrite bubble-down-+-bubble-down))
           (active-runep '(:rewrite bubble-down-+-match-1))
@@ -431,14 +417,14 @@
          nil)))
 
 (defthm normalize-factors-gather-exponents
-    (implies (bind-free 
-              (find-matching-factor-gather-exponents 
+    (implies (bind-free
+              (find-matching-factor-gather-exponents
                (factor-pattern-gather-exponents x) y)
               (match))
              (equal (* x y)
                     (* (bubble-down x match) y))))
 
-(theory-invariant 
+(theory-invariant
  (or (not (active-runep '(:rewrite normalize-factors-gather-exponents)))
      (and (active-runep '(:rewrite bubble-down-*-bubble-down))
           (active-runep '(:rewrite bubble-down-*-match-1))
@@ -470,14 +456,14 @@
          nil)))
 
 (defthm normalize-factors-scatter-exponents
-    (implies (bind-free 
+    (implies (bind-free
               (find-matching-factor-scatter-exponents
                (factor-pattern-scatter-exponents x) y)
               (match))
              (equal (* x y)
                     (* (bubble-down x match) y))))
 
-(theory-invariant 
+(theory-invariant
  (or (not (active-runep '(:rewrite normalize-scatter-exponents)))
      (and (active-runep '(:rewrite bubble-down-*-bubble-down))
           (active-runep '(:rewrite bubble-down-*-match-1))
@@ -491,7 +477,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(theory-invariant 
+(theory-invariant
  (not (and (active-runep '(:rewrite normalize-factors-gather-exponents))
            (active-runep '(:rewrite normalize-factors-scatter-exponents))))
  :error nil)
@@ -630,7 +616,7 @@
                  (list (cons 'c factor)
                        (cons 'd d))
                nil))))))
-        
+
 
 (defthm find-rest-of-ratio (numerator denominator z)
   (mv-let (to-be-found factor)

@@ -138,7 +138,8 @@ statement is well-formed.</p>")
   :parents (vl-parse-edge-symbol)
   (case (vl-token->type x)
     (:vl-times t)
-    (:vl-idtoken (consp (member-equal (vl-idtoken->name x) '("r" "R" "f" "F" "p" "P" "n" "N"))))))
+    (:vl-idtoken (consp (member-equal (vl-idtoken->name x) '("r" "R" "f" "F" "p" "P" "n" "N"))))
+    (otherwise nil)))
 
 (define vl-udp-edge-symbol-token->interp ((x vl-token-p))
   :parents (vl-parse-edge-symbol)
@@ -186,6 +187,71 @@ statement is well-formed.</p>")
          (return-raw (vl-parse-error "Expected a UDP level symbol.")))
        (level := (vl-match))
        (return (vl-udp-level-symbol-token->interp level))))
+
+(define vl-01-integer-token-p ((x vl-token-p))
+  (case (vl-token->type x)
+    (:vl-inttoken (let ((etext (vl-inttoken->etext x)))
+                    (and (eql (len etext) 2)
+                         (eql (vl-echar->char (first etext)) #\0)
+                         (eql (vl-echar->char (second etext)) #\1))))
+    (otherwise nil)))
+
+(define vl-10-integer-token-p ((x vl-token-p))
+  (case (vl-token->type x)
+    (:vl-inttoken (let ((etext (vl-inttoken->etext x)))
+                    (and (eql (len etext) 2)
+                         (eql (vl-echar->char (first etext)) #\1)
+                         (eql (vl-echar->char (second etext)) #\0))))
+    (otherwise nil)))
+
+(defparser vl-parse-two-level-symbols ()
+  :short "Horrible.  To support edge_indicator, match two @('level_symbol')s,
+          which would be so easy except they might not be separated by
+          whitespace."
+  :result (vl-udpentry-p val)
+  :resultp-of-nil nil
+  :fails gracefully
+  :count strong
+  (seq tokstream
+       (when (and (consp (vl-tokstream->tokens))
+                  (vl-udp-level-symbol-token-p (car (vl-tokstream->tokens))))
+         ;; We found a legitimate level_symbol right away, so there must be
+         ;; whitespace separating these.  So try to parse them both.
+         (prev := (vl-parse-level-symbol))
+         (next := (vl-parse-level-symbol))
+         (return (make-vl-udpedge :prev prev :next next)))
+       ;; Otherwise, we might still have a valid level_symbol token, but it
+       ;; might take many forms.  The valid level symbols are:
+       ;;
+       ;;    0   1   x   X   ?   b   B
+       ;;
+       ;; So if we have two of these together with no whitespace, we might
+       ;; have lots of combinations.
+       ;;
+       ;; We can ignore all ? cases because those would look like separate
+       ;; tokens: they're not identifiers and not numbers, so there's no way
+       ;; they'll get merged with anything and we've handled them above.  So
+       ;; that leaves:
+       ;;
+       ;;   0   1   x   X   b   B
+       ;;
+       ;;    {0}{1}     -- token is 01, need to handle this
+       ;;    {1}{0}     -- token is 10, need to handle this
+       ;;    {01}{xXbB} -- separate tokens, handled above, no need to handle this below
+       ;;    {xXbB}{*}  -- single identifier token, need to handle this
+       (when (and (consp (vl-tokstream->tokens))
+                  (vl-01-integer-token-p (car (vl-tokstream->tokens))))
+         (:= (vl-match))
+         (return (make-vl-udpedge :prev :vl-udp-0 :next :vl-udp-1)))
+
+       (when (and (consp (vl-tokstream->tokens))
+                  (vl-10-integer-token-p (car (vl-tokstream->tokens))))
+         (:= (vl-match))
+         (return (make-vl-udpedge :prev :vl-udp-1 :next :vl-udp-0)))
+
+       ;; BOZO try harder and implement the other identifier cases, if they're valid.
+       (return-raw
+        (vl-parse-error "Unsupported two level_symbols"))))
 
 (defparser vl-parse-output-symbol ()
   :short "@('output_symbol ::= '0' | '1' | 'x' | 'X'')"
@@ -301,13 +367,11 @@ statement is well-formed.</p>")
   :fails gracefully
   :count strong
   (seq tokstream
-       (when (vl-is-token? :vl-kwd-lparen)
+       (when (vl-is-token? :vl-lparen)
          (:= (vl-match))
-         (prev := (vl-parse-level-symbol))
-         (next := (vl-parse-level-symbol))
-         (:= (vl-match-token :vl-kwd-rparen))
-         (return (make-vl-udpedge :prev prev
-                                  :next next)))
+         (edge := (vl-parse-two-level-symbols))
+         (:= (vl-match-token :vl-rparen))
+         (return edge))
        (sym := (vl-parse-edge-symbol))
        (return sym)))
 
@@ -453,7 +517,7 @@ statement is well-formed.</p>")
 
 (defaggregate vl-udp-head
   :tag nil
-  :legiblep nil
+  :layout :fulltree
   :short "Temporary structure for parsing UDPs."
   ((output vl-portdecl-p     "Output port for this UDP.")
    (inputs vl-portdecllist-p "Input ports for this UDP, in order.")
@@ -461,6 +525,8 @@ statement is well-formed.</p>")
 
 (defaggregate vl-udp-body
   :short "Temporary structure for parsing UDPs."
+  :tag nil
+  :layout :fulltree
   ((init  vl-maybe-expr-p "Initial value for the sequential UDP register, if applicable.")
    (table vl-udptable-p   "The parsed state table.")))
 
@@ -522,7 +588,7 @@ statement is well-formed.</p>")
        (:= (vl-match-token :vl-kwd-input))
        ;; list_of_port_identifiers ::= identifier { ',' identifier }
        (ids := (vl-parse-1+-identifiers-separated-by-commas))
-       (return (vl-make-udp-portdecls ids :vl-input *vl-plain-old-wire-type* atts))))
+       (return (vl-make-udp-portdecls ids :vl-input *vl-plain-old-logic-type* atts))))
 
 (defparser vl-parse-1+-udp-input-declarations-separated-by-commas ()
   :short "@('udp_input_declaration { ',' udp_input_declaration }')"
@@ -569,14 +635,14 @@ implement the optional assignment part here.</p>"
         (make-vl-portdecl :loc (vl-token->loc id)
                           :name (vl-idtoken->name id)
                           :dir :vl-output
-                          :type (if reg *vl-plain-old-reg-type* *vl-plain-old-wire-type*)
+                          :type (if reg *vl-plain-old-reg-type* *vl-plain-old-logic-type*)
                           :atts atts)))
   ///
   (defthm type-of-vl-parse-udp-output-declaration
     (b* (((mv err val ?tokstream) (vl-parse-udp-output-declaration atts)))
       (implies (not err)
                (let ((type (vl-portdecl->type val)))
-                 (or (equal type *vl-plain-old-wire-type*)
+                 (or (equal type *vl-plain-old-logic-type*)
                      (equal type *vl-plain-old-reg-type*)))))
     :rule-classes ((:forward-chaining :trigger-terms ((mv-nth 1 (vl-parse-udp-output-declaration atts)))))))
 
@@ -978,14 +1044,14 @@ their declarations.</p>"
                                :msg "[[ Remaining ]]: ~s0 ~s1.~%"
                                :args (list (vl-tokenlist->string-with-spaces
                                             (take (min 4 (len tokens))
-                                                  (redundant-list-fix tokens)))
+                                                  (list-fix tokens)))
                                            (if (> (len tokens) 4) "..." ""))
                                :fatalp t
                                :fn __function__)))
     (make-vl-udp :name name
                  :output (make-vl-portdecl :name "FAKE_PORT_FOR_UDP_WITH_PARSE_ERROR"
                                            :dir :vl-output
-                                           :type *vl-plain-old-wire-type*
+                                           :type *vl-plain-old-logic-type*
                                            :loc minloc)
                  :minloc minloc
                  :maxloc maxloc

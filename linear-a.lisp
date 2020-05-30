@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 8.3 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2020, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -32,33 +32,28 @@
 ; We begin with some general support functions.  They should
 ; probably be organized and moved to axioms.lisp.
 
-(defabbrev ts-acl2-numberp (ts)
-  (ts-subsetp ts *ts-acl2-number*))
+(defmacro ts-acl2-numberp (ts)
+  `(ts-subsetp ,ts *ts-acl2-number*))
 
-(defabbrev ts-rationalp (ts)
-  (ts-subsetp ts *ts-rational*))
+(defmacro ts-rationalp (ts)
+  `(ts-subsetp ,ts *ts-rational*))
 
-(defabbrev ts-real/rationalp (ts)
+(defmacro ts-real/rationalp (ts)
   #+non-standard-analysis
-  (ts-subsetp ts *ts-real*)
+  `(ts-subsetp ,ts *ts-real*)
   #-non-standard-analysis
-  (ts-subsetp ts *ts-rational*))
+  `(ts-subsetp ,ts *ts-rational*))
 
-(defabbrev ts-integerp (ts)
-  (ts-subsetp ts *ts-integer*))
-
-(defun all-quoteps (lst)
-  (cond ((null lst) t)
-        (t (and (quotep (car lst))
-                (all-quoteps (cdr lst))))))
+(defmacro ts-integerp (ts)
+  `(ts-subsetp ,ts *ts-integer*))
 
 (mutual-recursion
 
 (defun dumb-occur (x y)
 
-; This function determines if term x occurs in term y, but does not
-; look for x inside of quotes.  It is thus equivalent to occur if you
-; know that x is not a quotep.
+; This function determines if term x occurs free in term y, but does not look
+; for x inside of quotes.  It is thus equivalent to occur if you know that x is
+; not a quotep.
 
   (cond ((equal x y) t)
         ((variablep y) nil)
@@ -233,8 +228,7 @@
 
 ; 'lemma
 
-; The tagged object is either a lemma name (a symbolp) or else is the
-; integer 0 indicating the use of linear arithmetic.
+; The tagged object is a rune.
 
 ; 'pt
 
@@ -309,7 +303,7 @@
 ; remove-tag-from-tag-tree, which does make that assumption.
 
   (cond ((assoc-eq tag ttree)
-         (delete-assoc-eq tag ttree))
+         (remove1-assoc-eq tag ttree))
         (t ttree)))
 
 (defun remove-tag-from-tag-tree! (tag ttree)
@@ -319,7 +313,7 @@
 ; In this function we assume that tag is a key of ttree.  See also
 ; remove-tag-from-tag-tree, which does not make that assumption.
 
-  (delete-assoc-eq tag ttree))
+  (remove1-assoc-eq tag ttree))
 
 ; To add a tagged object to a tree we use the following function.  Observe
 ; that it does nothing if the object is already present.
@@ -380,15 +374,20 @@
 (defconst *fake-rune-for-anonymous-enabled-rule*
   '(:FAKE-RUNE-FOR-ANONYMOUS-ENABLED-RULE nil))
 
+(defmacro fake-rune-for-anonymous-enabled-rule-p (rune)
+
+; Rather than pay the price of recognizing the
+; *fake-rune-for-anonymous-enabled-rule* perfectly we exploit the fact that no
+; true rune has :FAKE-RUNE-FOR-ANONYMOUS-ENABLED-RULE as its token.
+
+  `(eq (car ,rune) :FAKE-RUNE-FOR-ANONYMOUS-ENABLED-RULE))
+
 (defabbrev push-lemma (rune ttree)
 
 ; This is just (add-to-tag-tree 'lemma rune ttree) and is named in honor of the
-; corresponding act in Nqthm.  We do not record uses of the fake rune.  Rather
-; than pay the price of recognizing the *fake-rune-for-anonymous-enabled-rule*
-; perfectly we exploit the fact that no true rune has
-; :FAKE-RUNE-FOR-ANONYMOUS-ENABLED-RULE as its token.
+; corresponding act in Nqthm.  We do not record uses of the fake rune.
 
-  (cond ((eq (car rune) :FAKE-RUNE-FOR-ANONYMOUS-ENABLED-RULE) ttree)
+  (cond ((fake-rune-for-anonymous-enabled-rule-p rune) ttree)
         (t (add-to-tag-tree 'lemma rune ttree))))
 
 ; Historical Note from the days when tag-trees were constructed using (acons
@@ -404,22 +403,22 @@
 ; ; from Eric Smith on getting stack overflows from tag-tree-occur, but this
 ; ; problem has also occurred in the past (as best Matt can recall).
 
-(defun delete-assoc-eq-assoc-eq-1 (alist1 alist2)
+(defun remove1-assoc-eq-assoc-eq-1 (alist1 alist2)
   (declare (xargs :guard (and (symbol-alistp alist1)
                               (symbol-alistp alist2))))
   (cond ((endp alist2)
          (mv nil nil))
         (t (mv-let (changedp x)
-                   (delete-assoc-eq-assoc-eq-1 alist1 (cdr alist2))
+                   (remove1-assoc-eq-assoc-eq-1 alist1 (cdr alist2))
                    (cond ((assoc-eq (caar alist2) alist1)
                           (mv t x))
                          (changedp
                           (mv t (cons (car alist2) x)))
                          (t (mv nil alist2)))))))
 
-(defun delete-assoc-eq-assoc-eq (alist1 alist2)
+(defun remove1-assoc-eq-assoc-eq (alist1 alist2)
   (mv-let (changedp x)
-          (delete-assoc-eq-assoc-eq-1 alist1 alist2)
+          (remove1-assoc-eq-assoc-eq-1 alist1 alist2)
           (declare (ignore changedp))
           x))
 
@@ -461,9 +460,9 @@
                 (pair1 (assoc-eq tag ttree1)))
            (cond (pair1 (acons tag
                                (union-equal (cdr pair1) (cdr pair2))
-                               (delete-assoc-eq tag ttree1)))
+                               (remove1-assoc-eq tag ttree1)))
                  (t (cons pair2 ttree1)))))
-        (t (let ((ttree3 (delete-assoc-eq-assoc-eq ttree1 ttree2)))
+        (t (let ((ttree3 (remove1-assoc-eq-assoc-eq ttree1 ttree2)))
              (cons-tag-trees1 ttree1 ttree2 ttree3)))))
 
 (defmacro tagged-objects (tag ttree)
@@ -563,7 +562,7 @@
 ; Previously, we stored the parents of a poly in the poly's :ttree field
 ; and used to-be-ignoredp.  However, tests have shown that under certain
 ; conditions to-be-ignoredp was taking up to 80% of the time spent by
-; add-poly.  We now store the poly's parents in a seperate field and
+; add-poly.  We now store the poly's parents in a separate field and
 ; use ignore-polyp.  The next few functions are used in the implementation
 ; of this change.
 
@@ -772,8 +771,10 @@
    ((endp type-alist) nil)
    ((contains-assumptionp (cddar type-alist))
     (remove-assumption-entries-from-type-alist (cdr type-alist)))
-   (t (cons (car type-alist)
-            (remove-assumption-entries-from-type-alist (cdr type-alist))))))
+   (t (cons-with-hint
+       (car type-alist)
+       (remove-assumption-entries-from-type-alist (cdr type-alist))
+       type-alist))))
 
 (defun force-assumption1
   (rune target term type-alist rewrittenp immediatep ttree)
@@ -1006,7 +1007,7 @@
 
 ; The wonderful thing about this definition, is that it enjoys the algebraic
 ; laws we need to support linear arithmetic.  The "box" below contains the
-; complete listing of the algegraic laws supporting linear arithmetic
+; complete listing of the algebraic laws supporting linear arithmetic
 ; ("alsla").
 
 ; However, interspersed around them in the box are some events that ACL2's
@@ -1063,7 +1064,7 @@
 ; ; lessp have those properties.  We prove the properties, but we prove them from
 ; ; witnesses of plus and lessp that are ACL2's completed + and < supported by
 ; ; ACL2's linear arithmetic and hence, if the soundness of ACL2's arithmetic is
-; ; in doubt, as it is in this exercise, then no assurrance can be drawn from the
+; ; in doubt, as it is in this exercise, then no assurance can be drawn from the
 ; ; constructive nature of this axiomatization of rational arithmetic.
 ;
 ;              (local (defun plus (x y)
@@ -1481,7 +1482,8 @@
 ; present in the community books are representative this
 ; is sufficient.  Perhaps this should be reconsidered later.
 
-;; RAG - I thought about adding lines here for real numbers, but since we
+;; Historical Comment from Ruben Gamboa:
+;; I thought about adding lines here for real numbers, but since we
 ;; cannot construct actual real constants, I don't think this is
 ;; needed here.  Besides, I'm not sure what the right value would be
 ;; for a real number!
@@ -1851,7 +1853,7 @@
 ; by add-poly.)  See collect-parents and marry-parents for how we establish and
 ; maintain this relationship, and ignore-polyp for its use.
 
-; Rational-poly-p is a booolean flag used in non-linear arithmetic.  When it is
+; Rational-poly-p is a boolean flag used in non-linear arithmetic.  When it is
 ; true, then the right-hand side of the inequality (the polynomial) is known to
 ; have a rational number value.  (But note that for ACL2(r), i.e. for
 ; #+:non-standard-analysis, the value need only be real.  Through the linear
@@ -1934,7 +1936,7 @@
 ; Note: In Nqthm, we thought of polynomials being inequalities in a different
 ; logic, or at least, in an extension of the Nqthm logic that included the
 ; rationals.  In ACL2, we think of a poly as simply being an alternative
-; represention of a term, in which we have normalized by the use of certain
+; representation of a term, in which we have normalized by the use of certain
 ; algebraic laws governing the ACL2 function symbols <, <=, +, and *.  We
 ; noted these above (see ALSLA).  In addition, we think of the operations
 ; performed upon polys being just ordinary inferences within the logic,
@@ -1949,9 +1951,9 @@
 ; of theorems in two different theories but rather an entirely
 ; proof-theoretic step.
 
-(defabbrev first-var (p) (caar (access poly p :alist)))
+(defmacro first-var (p) `(caar (access poly ,p :alist)))
 
-(defabbrev first-coefficient (p) (cdar (access poly p :alist)))
+(defmacro first-coefficient (p) `(cdar (access poly ,p :alist)))
 
 ; We expect polys to meet the following invariant implied in the discussion
 ; above:
@@ -1995,7 +1997,8 @@
 ; and abs.  We know, however, that we will only apply them to acl2-numberps
 ; so we do not need to consider fixing the arguments.
 
-;; RAG - I changed rational to real in the test to use < as the comparator.
+;; Historical Comment from Ruben Gamboa:
+;; I changed rational to real in the test to use < as the comparator.
 
 (defun logical-< (x y)
   (declare (xargs :guard (and (acl2-numberp x) (acl2-numberp y))))
@@ -2007,7 +2010,8 @@
         (t (and (= (realpart x) (realpart y))
                 (< (imagpart x) (imagpart y))))))
 
-;; RAG - Another change of rational to real in the test to use <= as the
+;; Historical Comment from Ruben Gamboa:
+;; Another change of rational to real in the test to use <= as the
 ;; comparator.
 
 (defun logical-<= (x y)
@@ -2118,15 +2122,20 @@
 ; poly1, then poly1 might be usable in a context where poly2 is not usable.
 ; Use parents-check = nil if such a consideration does not apply.
 
-  (let ((c1 (access poly poly2 :constant))
-        (c2 (access poly poly1 :constant)))
-    (and (or (logical-< c1 c2)
+  (let ((c1 (access poly poly1 :constant))
+        (c2 (access poly poly2 :constant)))
+    (and (or (logical-< c2 c1)
 
-; The above inequality test is potentially confusing.  In the comments, it is
-; said that (<= 3 (* x y)) is weaker than (<= 17/5 (* x y)).  Recall that the
-; polys are stored in a format suggested by: (< (+ constant (* k1 t1) ... (* kn
-; tn)) 0).  Thus, the two constants would be stored as a -3 and a -17/5, and
-; the above test is correct.  -17/5 < -3.
+; Let us see how the check (logical-< c2 c1) plays out for a case described in
+; the comments above: poly1, (<= 3 (* x y)), is weaker than poly2, (<= 17/5 (*
+; x y)).  Recall that the polys are stored in a format suggested by: (< 0 (+
+; constant (* k1 t1) ... (* kn tn))), so we have:
+
+; poly1: (<= 0 (+ -3 (* x y)))     ; so c1 = -3
+; poly2: (<= 0 (+ -17/5 (* x y)))  ; so c2 = -17/5
+
+; -17/5 is indeed less than -3, so (logical-< c2 c1) is true, which supports
+; the conclusion that poly1 is weaker than poly2.
 
              (and (eql c1 c2)
                   (or (eq (access poly poly1 :relation) '<=)
@@ -3019,7 +3028,7 @@
 ; does not descend from a (not (equal & &)).  We know they have the same
 ; first-var.
 
-; We first determine whether they are complementary multiples of eachother
+; We first determine whether they are complementary multiples of each other
 ; and have not been used by find-equational-poly already.  If so, we
 ; return a ttree and two terms, as described by find-equational-poly.
 
@@ -3181,17 +3190,17 @@
 ; are now guaranteed to be 1.)  We do add a twist to the naive
 ; implementation though.  Rather than adding the two alists, and
 ; then normalizing the result, we calculate what would have been
-; the leading coeficient and normalize as we go (dividing by its
+; the leading coefficient and normalize as we go (dividing by its
 ; absolute value).
 
 ; We return two values.  The first indicates whether we have
 ; discovered a contradiction.  If the first result is non-nil then it
-; is the impossible poly formed by cancelling p1 and p2.  The ttree of
+; is the impossible poly formed by canceling p1 and p2.  The ttree of
 ; that poly will be interesting to our callers because it contains
 ; such things as the assumptions made and the lemmas used to get the
 ; contradiction.  When we return a contradiction, the second result is
 ; always nil.  Otherwise, the second result is either nil (meaning that
-; the cancellation yeilded a trivially true poly) or is the newly
+; the cancellation yielded a trivially true poly) or is the newly
 ; formed poly.
 
 ; Historical note: The affect of the newly (v2_8) introduced field,
@@ -3474,6 +3483,8 @@
 ; are produced.  It returns 2 values:  the standard contradictionp in the
 ; the first and the final pot-lst in the second.
 
+; See add-polys0 for a discussion of max-rounds.
+
   (cond ((eql max-rounds rounds-completed)
          (mv nil pot-lst))
         ((null lst)
@@ -3516,6 +3527,10 @@
 ; impossible ones) and then normalize and add the rest to pot-lst.
 ; Any new polys thereby produced are also added until there's nothing
 ; left to do.  We return the standard contradictionp and a new pot-lst.
+
+; If max-rounds is numeric, as it is when we use linear arithmetic in type-set,
+; then it limits the number of rounds.  Otherwise there is no bound on the
+; number of rounds; we keep adding polys until there are no new ones.
 
   (mv-let (contradictionp lst)
     (filter-polys lst nil)

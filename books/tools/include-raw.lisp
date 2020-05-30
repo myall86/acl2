@@ -203,8 +203,10 @@ differences between ACL2's reader and what raw Lisp code is expecting.</p>")
         ;; See comment in raw-compile, above, for why we avoid #+cltl2/#-cltl2.
         (let* ((fname          (extend-pathname (cbd) name state))
                (compiled-fname (compile-file-pathname fname))
-               (src-date       (file-write-date fname))
-               (compiled-date  (file-write-date compiled-fname)))
+; Matt K. mod: Using our-ignore-errors because file-write-date can cause an
+; error when the file does not exist (I have seen that happen in SBCL).
+               (src-date       (our-ignore-errors (file-write-date fname)))
+               (compiled-date  (our-ignore-errors (file-write-date compiled-fname))))
           (cond
 
            ((and src-date compiled-date (< compiled-date src-date))
@@ -275,7 +277,9 @@ differences between ACL2's reader and what raw Lisp code is expecting.</p>")
         ;; events of the include-book are being processed to run this, so that
         ;; our compiled file isn't loaded twice.
         (when (null *hcomp-fn-macro-restore-ht*)
-          (,(if do-not-compile 'raw-load-uncompiled 'raw-load)
-           ,fname ,(not on-load-fail-p) ',on-load-fail state)))
+          (extend-with-raw-code
+           ;; See :doc note-8-1-books re: extend-with-raw-code (Matt K. mod)
+           '(,(if do-not-compile 'raw-load-uncompiled 'raw-load)
+             ,fname ,(not on-load-fail-p) ',on-load-fail state)
+           state)))
       (value-triple ,fname))))
-

@@ -347,7 +347,17 @@
                           state)))
           (mv-let (erp val state)
                   (with-output :off :all (ld '(,deflabel-form)
-                                             :ld-error-action :error))
+                                             :ld-error-action :error
+                                             :ld-user-stobjs-modified-warning
+
+; Matt K. mod: ACL2 now requires keyword :ld-user-stobjs-modified-warning in
+; code.  If this macro is only to be evaluated at the top level, that keyword
+; isn't needed.  But I'm including it, with value :same to preserve existing
+; behavior, just in case someone uses it in code.  Perhaps more thought should
+; be given to whether or not we want a warning here when a user stobj is
+; modified.
+
+                                             :same))
                   (declare (ignore val))
                   (if erp
                       (mv-let
@@ -367,7 +377,9 @@
 (defxdoc defopener
   :parents (miscellaneous)
   :short "Create a defthm equating a call with its simplification."
-  :long "<p>Example:</p>
+  :long "<p>For a related tool, see @(see defopen).</p>
+
+<p>Example:</p>
 
 @({
   (include-book \"misc/defopener\" :dir :system)
@@ -386,7 +398,7 @@
              (EQUAL (APPEND X Y)
                     (IF (NOT X)
                         Y
-                        (CONS (CAR X) (APPEND (CDR X) Y))))))~/
+                        (CONS (CAR X) (APPEND (CDR X) Y))))))
 })
 
 <p>In general, the form</p>
@@ -432,6 +444,10 @@ indicated as follows.</p>
   @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 })
 
+<p>To abbreviate the above message, you can specify an @(tsee
+evisc-tuple) using the @(':evisc-tuple') keyword of @('defopener'),
+which is @('nil') by default.</p>
+
 <p>The simplification that takes place uses a prover interface that is also
 used in the distributed book @('misc/bash'), in which the following hint is
 automatically generated for @('\"Goal\"'), though they can be overridden if
@@ -461,7 +477,7 @@ prefer the more primitive form, use @(':flatten nil').</p>
 
 (defmacro defopener (&whole ev-form
                             name call
-                            &key hyp equiv hints debug (flatten 't))
+                            &key hyp equiv hints debug (flatten 't) (evisc-tuple 'nil))
   (let* ((ctx (cons 'defopener name))
          (form `(er-let*
                  ((name-chk (chk-name ,name ,ctx ,ev-form)))
@@ -498,7 +514,7 @@ prefer the more primitive form, use @(':flatten nil').</p>
                                     ',ev-form)))
                       (pprogn
                        (fms "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@~|~%"
-                            nil (proofs-co state) state nil)
+                            nil (proofs-co state) state ,evisc-tuple)
                        (if flatten-failed-flg
                            (warning$ ',ctx nil
                                      "An incomplete case split for ~
@@ -512,7 +528,7 @@ prefer the more primitive form, use @(':flatten nil').</p>
                                 (list (cons #\0 defthm-form2))
                                 (proofs-co state)
                                 state
-                                nil))
+                                ,evisc-tuple))
                        (value `(encapsulate
                                 ()
                                 ,table-ev

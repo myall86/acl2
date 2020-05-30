@@ -37,24 +37,18 @@
 (include-book "g-always-equal")
 (include-book "g-integer-length")
 (include-book "g-lessthan")
-(include-book "g-logand")
-(include-book "g-logior")
-(include-book "g-logeqv")
-(include-book "g-lognot")
+(include-book "g-logops")
 (include-book "g-logbitp")
 (include-book "g-unary--")
 (include-book "g-hide")
 (include-book "g-predicates")
 (include-book "g-binary-mult")
-(include-book "g-floor")
 (include-book "g-make-fast-alist")
-(include-book "g-mod")
 (include-book "g-truncate")
-(include-book "g-rem")
 (include-book "g-unary-concrete")
-(include-book "g-coerce")
-(include-book "g-code-char")
-(include-book "g-intern")
+;; (include-book "g-coerce")
+;; (include-book "g-code-char")
+;; (include-book "g-intern")
 ;(include-book "centaur/aig/g-aig-eval" :dir :system)
 ;(include-book "g-make-fast-alist")
 
@@ -64,6 +58,8 @@
 (include-book "def-gl-clause-proc")
 (include-book "gify-thms")
 (include-book "auto-bindings")
+(include-book "secondary-types")
+
 ;;; Matt K., 2/22/13: Sol Swords suggested commenting out the following
 ;;; include-book form, in order to avoid dependence on ttag :COUNT-BRANCHES-TO
 ;;; from centaur/aig/bddify.lisp.
@@ -104,7 +100,7 @@
           (b* ((result-exprs (dumb-gify-body-lst (cdr x)))
                (vars (cadr (car x)))
                (body (caddr (car x))))
-            `(b* ,(pairlis$ 
+            `(b* ,(pairlis$
                    (pairlis$ (acl2::replicate (len vars) 'mv)
                              (pairlis$ vars
                                        (pairlis$ (acl2::replicate (len vars) 'hyp)
@@ -113,7 +109,7 @@
                ,(dumb-gify-body body))))
          (t (b* ((result-exprs (dumb-gify-body-lst (cdr x)))
                  (vars (mk-xes (len (cdr x)) 0)))
-              `(b* ,(pairlis$ 
+              `(b* ,(pairlis$
                      (pairlis$ (acl2::replicate (len vars) 'mv)
                                (pairlis$ vars
                                          (pairlis$ (acl2::replicate (len vars) 'hyp)
@@ -127,8 +123,8 @@
        nil
      (cons (dumb-gify-body (car x))
            (dumb-gify-body-lst (cdr x))))))
-               
-          
+
+
 
 (defmacro def-g-simple (name body)
   `(progn (def-g-fn ,name ',(dumb-gify-body body))
@@ -144,10 +140,9 @@
 (def-g-simple complex-rationalp
   (equal 'nil (equal '0 (imagpart x))))
 
+(def-g-simple acl2::bool-fix$inline (if x 't 'nil))
 
-(def-g-simple acl2::boolfix (if x 't 'nil))
-
-(def-g-simple implies (if (not p) 't (acl2::boolfix q)))
+(def-g-simple implies (if (not p) 't (acl2::bool-fix$inline q)))
 
 (def-g-simple eq (equal x y))
 
@@ -515,7 +510,7 @@
 (verify-g-guards hons-get)
 
 (def-gobj-dependency-thm hons-get
-  :hints `(("Goal" 
+  :hints `(("Goal"
             :in-theory (e/d (,gfn)))))
 
 
@@ -629,21 +624,14 @@ simulation.</p>"
              (bfr-sat bfr-sat-bdd)
              :hints (("goal" :in-theory '(bfr-sat-bdd-unsat))
                      (and stable-under-simplificationp
-                          '(:in-theory (enable bfr-sat-bdd))))))))
+                          '(:in-theory (enable bfr-sat-bdd)))))
+            (acl2::defattach (bfr-vacuity-check
+                              bfr-sat)
+              :hints (("goal" :use bfr-sat-unsat))))))
 
 ;; BDD mode is on by default -- the above defattaches are set up in bfr.lisp
 ;; and bfr-sat.lisp, respectively.
 ;; (gl-bdd-mode)
-
-(defsection g-int
-  :parents (shape-specs)
-  :short "Create a g-binding for an integer."
-  :long "<p>This is a low-level way to create a custom shape specifier for a
-signed integer.  You might generally prefer higher-level tools like @(see
-auto-bindings).</p>"
-
-  (defun g-int (start by n)
-    (g-number (list (numlist start by n)))))
 
 ;; Fix for unsigned-byte-p's recursive definition in ihs books
 (table acl2::structural-decomp-defs 'unsigned-byte-p 'unsigned-byte-p)
@@ -698,6 +686,46 @@ auto-bindings).</p>"
                                     `((#\0 . ,(car acl2::arglist))
                                       (#\1 . ,(cadr acl2::arglist)))
                                     0
-                                    (acl2::evisc-tuple 3 6 nil nil))
+                                    (acl2::evisc-tuple 3 6 nil nil)
+                                    nil)
                                    (break$)))))
 
+
+
+
+;; gl-set-allowed-accessors -- add a hook to add-term-bvar$c to complain if we
+;; try to add a term that contains an IF or any functions outside of a
+;; given set.
+
+(mutual-recursion
+ (defun gobj-check-accessors (x fnlist)
+   (declare (xargs :guard (symbol-listp fnlist)))
+   (if (atom x)
+       t
+     (case (tag x)
+       (:g-boolean t)
+       (:g-integer t)
+       (:g-concrete t)
+       (:g-ite nil)
+       (:g-var t)
+       (:g-apply (and (member (g-apply->fn x) fnlist)
+                      (gobjlist-check-accessors (g-apply->args x) fnlist)))
+       (otherwise (and (gobj-check-accessors (car x) fnlist)
+                       (gobj-check-accessors (cdr x) fnlist))))))
+
+ (defun gobjlist-check-accessors (x fnlist)
+   (declare (xargs :guard (symbol-listp fnlist)))
+   (or (atom x)
+       (and (gobj-check-accessors (car x) fnlist)
+            (gobjlist-check-accessors (cdr x) fnlist)))))
+
+(defun check-bvar-term-accessors (x fnlist)
+  (if (gobj-check-accessors x fnlist)
+      nil
+    (prog2$ (cw "Bad term in add-term-bvar: ~x0~%" (gobj-abstract-top x))
+            (break$))))
+
+
+(defmacro gl-set-allowed-accessors (fns)
+  `(trace$ #!gl (add-term-bvar$c
+                 :cond (check-bvar-term-accessors x ,fns))))

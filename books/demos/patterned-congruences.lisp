@@ -19,7 +19,7 @@
 
 (in-package "ACL2")
 
-(include-book "misc/eval" :dir :system)
+(include-book "std/testing/eval" :dir :system)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Demo
@@ -357,8 +357,8 @@
 #+skip ; only for interactive use
 (trace-pequivs nil)
 
-; Rewriting in the proof-checker comprehends patterned congruences:
-(defthm test-1-proof-checker
+; Rewriting in the proof-builder comprehends patterned congruences:
+(defthm test-1-proof-builder
   (iff (f1 3 (f2 z 8) (cons u u))
        (f1 3 z (cons u u)))
   :instructions ((:dv 1 2)
@@ -930,9 +930,9 @@
 ; a theorem into a non-theorem, from which we could easily prove nil.  Hence
 ; the defthm just below should produce the following error:
 
-;   ACL2 Error in ( DEFTHM EQUIV-IMPLIES-EQUAL-EQUAL-2 ...):  
+;   ACL2 Error in ( DEFTHM EQUIV-IMPLIES-EQUAL-EQUAL-2 ...):
 ;   EQUIV-IMPLIES-EQUAL-EQUAL-2 is an unacceptable :CONGRUENCE rule because
-;   the variable X-EQUIV occurs more than once in 
+;   the variable X-EQUIV occurs more than once in
 ;   (EQUAL (IDENTITY X-EQUIV) X-EQUIV).  See :DOC congruence.
 
 (must-fail
@@ -1362,7 +1362,7 @@
        (f9 3 (car v) z (cons u u) (cdr v)))
   :rule-classes nil)
 
-(defthm test-10-proof-checker
+(defthm test-10-proof-builder
   (iff (f9 3 (car v) (f2 z 8) (cons u u) (cdr v))
        (f9 3 (car v) z (cons u u) (cdr v)))
   :instructions ((:dv 1 3)

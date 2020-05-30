@@ -29,10 +29,10 @@
 ; Original author: Jared Davis <jared@centtech.com>
 
 (in-package "BITOPS")
-(include-book "std/util/define" :dir :system)
+(include-book "std/util/defrule" :dir :system)
 (include-book "std/basic/defs" :dir :system)
 (include-book "ihs/basic-definitions" :dir :system)
-(include-book "centaur/misc/arith-equivs" :dir :system)
+(include-book "std/basic/arith-equivs" :dir :system)
 (include-book "centaur/gl/gl-mbe" :dir :system)
 (local (include-book "ihsext-basics"))
 (local (include-book "arithmetic/top-with-meta" :dir :system))
@@ -64,7 +64,7 @@ and lemmas for reasoning about them.")
          ;;   (time (loop for i fixnum from 1 to 100000000 do
          ;;               (rem places width))))
          (implies (and (natp places)
-                       (posp width))
+                       (natp width))
                   (equal (rem places width)
                          (mod places width)))
          :hints(("Goal" :in-theory (enable mod rem)))))
@@ -196,6 +196,9 @@ since rotating @('width')-many times is the same as not rotating at all.</p>"
 
   (local (in-theory (disable max)))
 
+  (defthm rotate-left-zero-width
+    (equal (rotate-left x 0 places) 0))
+
   (defthm rotate-left-by-zero
     (equal (rotate-left x width 0)
            (loghead width x))
@@ -210,6 +213,7 @@ since rotating @('width')-many times is the same as not rotating at all.</p>"
     :hints(("Goal" :in-theory (enable logbitp-of-rotate-left-split
                                       logbitp-of-loghead-split))
            (equal-by-logbitp-hint))))
+
 
 
 (define rotate-left-1
@@ -235,7 +239,14 @@ since rotating @('width')-many times is the same as not rotating at all.</p>"
              (cond ((>= n width) nil)
                    ((equal n 0)  (logbitp (+ -1 width) x))
                    (t            (logbitp (+ -1 n) x)))))
-    :hints(("Goal" :in-theory (enable logbitp-of-loghead-split)))))
+    :hints(("Goal" :in-theory (enable logbitp-of-loghead-split))))
+
+  (defthm unsigned-byte-p-of-rotate-left-1
+    (implies (natp width)
+             (unsigned-byte-p width (rotate-left-1 x width)))
+    :hints(("Goal"
+            :in-theory (e/d* (ihsext-recursive-redefs)
+                             (unsigned-byte-p))))))
 
 
 
@@ -245,7 +256,7 @@ since rotating @('width')-many times is the same as not rotating at all.</p>"
 
   (local (defthm lalala
            (implies (and (syntaxp (quotep c))
-                         (posp n)
+                         (natp n)
                          (natp m)
                          (integerp g3)
                          (equal c (- m n))
@@ -255,7 +266,7 @@ since rotating @('width')-many times is the same as not rotating at all.</p>"
            :hints(("Goal" :in-theory (e/d (mod) ((force)))))))
 
   (local (defthm case-split-mod-of-decrement-l0
-           (implies (and (posp n)
+           (implies (and (natp n)
                          (integerp a)
                          (equal (mod a n) 0))
                     (equal (mod (+ -1 a) n)
@@ -266,7 +277,7 @@ since rotating @('width')-many times is the same as not rotating at all.</p>"
                                            (acl2::z n)))))))
 
   (local (defthm case-split-mod-of-decrement-l1
-           (implies (and (posp n)
+           (implies (and (natp n)
                          (integerp a)
                          (not (equal (mod a n) 0)))
                     (equal (mod (+ -1 a) n)
@@ -274,7 +285,7 @@ since rotating @('width')-many times is the same as not rotating at all.</p>"
            :hints(("goal" :in-theory (e/d (mod))))))
 
   (defthmd case-split-mod-of-decrement
-    (implies (and (posp n)
+    (implies (and (natp n)
                   (integerp a))
              (equal (mod (+ -1 a) n)
                     (if (equal (mod a n) 0)
@@ -335,6 +346,27 @@ enabled when you want to use them.</p>"
            (and stable-under-simplificationp
                 '(:in-theory (e/d (logbitp-of-rotate-left-1-split
                                    logbitp-of-rotate-left-split)))))))
+
+
+(defsection rotate-left-extra
+  :extension (rotate-left)
+
+  (local (include-book "std/basic/inductions" :dir :system))
+
+  (defrule unsigned-byte-p-of-rotate-left
+    (implies (natp width)
+             (unsigned-byte-p width (rotate-left x width places)))
+    :induct (acl2::dec-induct places)
+    :enable rotate-left**
+    :disable unsigned-byte-p)
+
+  (defrule rotate-left-of-rotate-left
+    (equal (rotate-left (rotate-left x width places1) width places2)
+           (rotate-left x width (+ (nfix places1) (nfix places2))))
+    :induct (acl2::dec-induct places2)
+    :in-theory (e/d (rotate-left**) (loghead))
+    :hints (("Subgoal *1/1" :cases ((natp width))))))
+
 
 
 (define rotate-right
@@ -463,6 +495,9 @@ since rotating @('width')-many times is the same as not rotating at all.</p>"
 
   (local (in-theory (disable max)))
 
+  (defthm rotate-right-zero-width
+    (equal (rotate-right x 0 places) 0))
+
   (defthm rotate-right-by-zero
     (equal (rotate-right x width 0)
            (loghead width x))
@@ -507,7 +542,15 @@ since rotating @('width')-many times is the same as not rotating at all.</p>"
              (cond ((>= n width)          nil)
                    ((equal n (- width 1)) (logbitp 0 x))
                    (t                     (logbitp (+ 1 n) x)))))
-    :hints(("Goal" :in-theory (enable logbitp-of-loghead-split)))))
+    :hints(("Goal" :in-theory (enable logbitp-of-loghead-split))))
+
+  (defthm unsigned-byte-p-of-rotate-right-1
+    (implies (natp width)
+             (unsigned-byte-p width (rotate-right-1 x width)))
+    :hints(("Goal"
+            :in-theory (e/d* (ihsext-recursive-redefs)
+                             (unsigned-byte-p))))))
+
 
 
 (defsection rotate-right**
@@ -564,3 +607,22 @@ explicitly enabled when you want to use them.</p>"
                                     logbitp-of-rotate-right-1-split
                                     logbitp-of-rotate-right-split)))))))
 
+
+(defsection rotate-right-extra
+  :extension (rotate-right)
+
+  (local (include-book "std/basic/inductions" :dir :system))
+
+  (defrule unsigned-byte-p-of-rotate-right
+    (implies (natp width)
+             (unsigned-byte-p width (rotate-right x width places)))
+    :induct (acl2::dec-induct places)
+    :enable rotate-right**
+    :disable unsigned-byte-p)
+
+  (defrule rotate-right-of-rotate-right
+    (equal (rotate-right (rotate-right x width places1) width places2)
+           (rotate-right x width (+ (nfix places1) (nfix places2))))
+    :induct (acl2::dec-induct places2)
+    :in-theory (e/d (rotate-right**) (loghead))
+    :hints (("Subgoal *1/1" :cases ((natp width))))))

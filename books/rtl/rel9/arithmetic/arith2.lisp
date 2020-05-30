@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -115,7 +103,7 @@ It's still kind of a mess.  But it's better now that we have the rules in common
                 (case-split (acl2-numberp b))
                 (case-split (acl2-numberp c))
                 )
-           (equal (equal (* a c) (* b c)) 
+           (equal (equal (* a c) (* b c))
                   (if (equal c 0)
                       t
                     (equal a b))))
@@ -127,7 +115,7 @@ It's still kind of a mess.  But it's better now that we have the rules in common
 
 ;instead of these, we should just cancel common factors from the constants
 
-;open question: how to handle (equal (* 2 x) (* 3 y)) -- should we collect the constants or not? 
+;open question: how to handle (equal (* 2 x) (* 3 y)) -- should we collect the constants or not?
 ;maybe so, since doing so would let us substitue for one of the vars (x or y).
 
 ;don't yet handle negative constants
@@ -145,11 +133,11 @@ It's still kind of a mess.  But it's better now that we have the rules in common
                   (if (> c1 c2)
                       (< (* (/ c1 c2) a) b)
                     (< a (* (/ c2 c1) b)))))
-  :hints (("Goal" :use ((:instance mult-both-sides-of-<-by-positive 
+  :hints (("Goal" :use ((:instance mult-both-sides-of-<-by-positive
                                    (a (* c1 a))
                                    (b (* c2 b))
                                    (c (/ c1)))
-                        (:instance mult-both-sides-of-<-by-positive 
+                        (:instance mult-both-sides-of-<-by-positive
                                    (a (* c1 a))
                                    (b (* c2 b))
                                    (c (/ c2)))))))
@@ -163,7 +151,7 @@ It's still kind of a mess.  But it's better now that we have the rules in common
                 (rationalp b))
            (equal (< c1 (* c2 b))
                   (< (/ c1 c2) b)))
-  :hints (("Goal" :use ((:instance mult-both-sides-of-<-by-positive 
+  :hints (("Goal" :use ((:instance mult-both-sides-of-<-by-positive
                                    (a c1)
                                    (b (* c2 b))
                                    (c (/ c2)))))))
@@ -177,7 +165,7 @@ It's still kind of a mess.  But it's better now that we have the rules in common
                 (rationalp b))
            (equal (< (* c2 b) c1)
                   (< b (/ c1 c2))))
-  :hints (("Goal" :use ((:instance mult-both-sides-of-<-by-positive 
+  :hints (("Goal" :use ((:instance mult-both-sides-of-<-by-positive
                                    (b c1)
                                    (a (* c2 b))
                                    (c (/ c2)))))))
@@ -286,9 +274,9 @@ It's still kind of a mess.  But it's better now that we have the rules in common
                       (< x 0))))))
 
 
-(in-theory (disable prod-<-0-cancel-neg 
+(in-theory (disable prod-<-0-cancel-neg
                     prod-<-0-cancel-pos
-                    prod->-0-cancel-neg  
+                    prod->-0-cancel-neg
                     prod->-0-cancel-pos))
 
 
@@ -340,8 +328,8 @@ It's still kind of a mess.  But it's better now that we have the rules in common
 (defthmd move-a-negative-coeff
   (equal (< (+ a (* -1 b)) c)
          (< a (+ b c))))
-  
-;can simplify the *-1 term to have only one var 
+
+;can simplify the *-1 term to have only one var
 ;do we need this?
 (defthm rearr-negative-coeffs-<-sums-blah
   (equal (< (+ A e (* -1 C)) B)
@@ -386,8 +374,8 @@ It's still kind of a mess.  But it's better now that we have the rules in common
 
 ;a<b and b<=c together imply a<c
 (defthm <-and-<=-transitivity
-  (implies (and (< a b)	
-                (<= b c)	
+  (implies (and (< a b)
+                (<= b c)
                 )
            (< a c)
            )
@@ -396,8 +384,8 @@ It's still kind of a mess.  But it's better now that we have the rules in common
 
 ;a<=b and b<c together imply a<c
 (defthm <=-and-<-transitivity
-  (implies (and (< a b)	
-                (<= b c)	
+  (implies (and (< a b)
+                (<= b c)
                 )
            (< a c)
            )
@@ -553,7 +541,7 @@ It's still kind of a mess.  But it's better now that we have the rules in common
                   (equal 0 (+ x1 (* x2 x3) x4 (* x5 x6)))))
   :hints (("Goal" :in-theory (disable product-equal-zero)
            :use (:instance product-equal-zero (x y) (y (+ x1 (* x2 x3) x4 (* x5 x6))))))
-  
+
   )
 
 ;expensive?

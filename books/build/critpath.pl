@@ -34,20 +34,22 @@
 
 use warnings;
 use strict;
-use Getopt::Long qw(:config bundling); 
+use Getopt::Long qw(:config bundling);
 use File::Spec;
 use FindBin qw($RealBin);
-use Storable;
+use lib "$RealBin/lib";
+use Storable qw(nstore retrieve);
+use Certlib;
 
 # Note: Trying out FindBin::$RealBin.  If breaks, we can go back to
 # the system below.
 
-(do "$RealBin/certlib.pl") or die("Error loading $RealBin/certlib.pl:\n $!");
+# (do "$RealBin/certlib.pl") or die("Error loading $RealBin/certlib.pl:\n $!");
 
 
 my $HELP_MESSAGE = "
 
- critpath.pl [OPTIONS] <top-book1> <top-book2> ... 
+ critpath.pl [OPTIONS] <top-book1> <top-book2> ...
 
  This program displays the longest dependency chain leading up to any of the
  top-books specified, measured in sequential certification time.  This is the
@@ -76,6 +78,7 @@ my $HELP_MESSAGE = "
 
        --nowarn     Suppress warnings.
        --nopath     Suppress critical path information.
+       --nodepthpath Suppress max-depth path information.
        --nolist     Suppress individual-files list.
 
        -r, --real   Toggle real time versus user+system
@@ -110,6 +113,13 @@ my $HELP_MESSAGE = "
                     correctly if all targets/dependencies are the
                     same.
 
+       -f, --from-file <filename>
+                    This option may be given multiple times.  Instead
+                    of assuming that everything starts out
+                    uncertified, assume that the given file(s) are the
+                    only ones that have been updated, and compute
+                    paths relative to them.
+
    --pcert-all
           Compute dependencies assuming provisional certification is used
           for all books, not just the ones with the \'pcert\' cert_param.
@@ -142,21 +152,34 @@ my %OPTIONS = (
 my @user_targets = ();
 my @targets = ();
 my @deps_of = ();
+my @user_from_files = ();
+my %from_files = ();
 
 my $debug = 0;
 
 my $cache_file = 0;
 my $params_file = 0;
+
+my %certlib_opts = ( "debugging" => 0,
+		     "clean_certs" => 0,
+		     "print_deps" => 0,
+		     "all_deps" => 1,
+                     "pcert_all" => 0,
+		     "include_excludes" => 0,
+    );
+
+
 my $options_okp = GetOptions('h|html' => \$OPTIONS{'html'},
 			     'help'   => \$OPTIONS{'help'},
 			     'nowarn' => \$OPTIONS{'nowarn'},
 			     'nopath' => \$OPTIONS{'nopath'},
+			     'nodepthpath' => \$OPTIONS{'nodepthpath'},
 			     'nolist' => \$OPTIONS{'nolist'},
 			     'short=i' =>  \$OPTIONS{'short'},
 			     'max-depth|m=i' =>  \$OPTIONS{'short'},
 			     'real|r'  => \$OPTIONS{'real'},
 			     'debug|d' => \$debug,
-			     "targets|t=s"          
+			     "targets|t=s"
 			              => sub { shift;
 					       read_targets(shift, \@user_targets);
 					   },
@@ -167,8 +190,10 @@ my $options_okp = GetOptions('h|html' => \$OPTIONS{'html'},
 			     "params=s"             => \$params_file,
 			     "write-costs|w=s" => \$OPTIONS{'write_costs'},
 			     "costs-file=s" => \$OPTIONS{'costs_file'},
-                             "pcert-all"    => \$OPTIONS{'pcert_all'},
+                             "pcert-all"    => \$certlib_opts{'pcert_all'},
+                             "include-excludes"  => \$certlib_opts{'include_excludes'},
                              "target-ext|e=s"    => \$OPTIONS{'target_ext'},
+                             "from-file|f=s"     => \@user_from_files,
 			     );
 
 my $cache = {};
@@ -186,13 +211,6 @@ if (!$options_okp || $OPTIONS{"help"})
 
 my $costs = {};
 my $warnings = [];
-
-my %certlib_opts = ( "debugging" => 0,
-		     "clean_certs" => 0,
-		     "print_deps" => 0,
-		     "all_deps" => 1,
-                     "pcert_all" => $OPTIONS{'pcert_all'},
-    );
 
 certlib_set_opts(\%certlib_opts);
 
@@ -234,12 +252,23 @@ foreach my $target (@targets) {
     }
 }
 
+foreach my $from (@user_from_files) {
+    my $path = canonical_path(to_cert_name($from, $OPTIONS{'target_ext'}));
+    if ($path) {
+	$from_files{$path}=1;
+    } else {
+	print "Warning: bad from_file path $from\n";
+    }
+
+}
+
+
 if ($params_file && open (my $params, "<", $params_file)) {
     while (my $pline = <$params>) {
 	my @parts = $pline =~ m/([^:]*):(.*)/;
 	if (@parts) {
 	    my ($certname, $paramstr) = @parts;
-	    my $certpars = cert_get_params($certname, $depdb);
+	    my $certpars = $depdb->cert_get_params($certname);
 	    if ($certpars) {
 		my $passigns = parse_params($paramstr);
 		foreach my $pair (@$passigns) {
@@ -272,15 +301,16 @@ if ($OPTIONS{'write_costs'}) {
     nstore($basecosts, $OPTIONS{'write_costs'});
 }
 
+my $updateds = (@user_from_files) ? \%from_files : 1;
+compute_cost_paths($depdb, $basecosts, $costs, $updateds, $warnings);
 
-compute_cost_paths($depdb, $basecosts, $costs, $warnings);
 print "done compute_cost_paths\n" if $debug;
 
 print "costs: " .  $costs . "\n" if $debug;
 
-(my $topbook, my $topbook_cost) = find_most_expensive(\@targets, $costs);
+(my $topbook, my $topbook_cost) = find_most_expensive(\@targets, $costs, $updateds);
 
-my $savings = compute_savings($costs, $basecosts, \@targets, $debug, $depdb); 
+my $savings = compute_savings($costs, $basecosts, \@targets, $updateds, $debug, $depdb);
 
 
 	# ($costs, $warnings) = make_costs_table($target, $depdb, $costs, $warnings, $OPTIONS{"short"});
@@ -297,6 +327,10 @@ unless ($OPTIONS{'nopath'}) {
 
 unless ($OPTIONS{'nolist'}) {
     print individual_files_report($costs, $basecosts, $OPTIONS{"html"}, $OPTIONS{"short"});
+}
+
+unless ($OPTIONS{'nodepthpath'}) {
+    print deepest_path_report($costs, $basecosts, $savings, $topbook, $OPTIONS{"html"}, $OPTIONS{"short"});
 }
 
 

@@ -30,7 +30,7 @@
 
 (in-package "ACL2")
 (include-book "hons-check")
-(include-book "misc/assert" :dir :system)
+(include-book "std/testing/assert" :dir :system)
 (include-book "std/osets/top" :dir :system)
 
 ; cert_param: (hons-only)
@@ -172,7 +172,7 @@
   (or (atom domain)
       (and (or (equal (assoc-equal (car domain) slow-al)
                       (hons-get (car domain) fast-al))
-               (cw "Fail for ~x0: slow = ~x1, fast = ~x2~%" 
+               (cw "Fail for ~x0: slow = ~x1, fast = ~x2~%"
                    (car domain)
                    (assoc-equal (car domain) slow-al)
                    (hons-get (car domain) fast-al)))

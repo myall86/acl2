@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -85,7 +73,7 @@
            (equal (logand i j k)
                   (logand (logand i j) k))))
 
- 
+
 (defthm logand-with-minus-one
    (implies (case-split (integerp i))
             (equal (logand -1 i) i))
@@ -314,7 +302,7 @@
     ()))
 
 
-(encapsulate 
+(encapsulate
  ()
  (local (defthm logand-2**n-1-aux
   (implies (and (< i (expt 2 n))
@@ -338,7 +326,7 @@
 )
 
 
-(encapsulate 
+(encapsulate
  ()
  (local
   (defthm and-dist-b-1
@@ -360,10 +348,10 @@
     (implies (and (integerp x) (>= x 0)
 		  (integerp y) (>= y 0)
 		  (integerp n) (> n 0)
-		  (= (logand (* (expt 2 (1- n)) x) (fl (/ y 2))) 
+		  (= (logand (* (expt 2 (1- n)) x) (fl (/ y 2)))
 		     (* (expt 2 (1- n)) (logand x (fl (/ (fl (/ y 2)) (expt 2 (1- n))))))))
 	     (= (logand (* (expt 2 n) x) y)
-		(* 2 
+		(* 2
 		   (* (expt 2 (1- n))
 		      (logand x
 			      (fl (/ (fl (/ y 2)) (expt 2 (1- n)))))))))
@@ -375,10 +363,10 @@
     (implies (and (integerp x) (>= x 0)
 		  (integerp y) (>= y 0)
 		  (integerp n) (> n 0)
-		  (= (logand (* (expt 2 (1- n)) x) (fl (/ y 2))) 
+		  (= (logand (* (expt 2 (1- n)) x) (fl (/ y 2)))
 		     (* (expt 2 (1- n)) (logand x (fl (/ (fl (/ y 2)) (expt 2 (1- n))))))))
 	     (= (logand (* (expt 2 n) x) y)
-		(* 2 
+		(* 2
 		   (* (expt 2 (1- n))
 		      (logand x
 			      (fl (/ y (expt 2 n))))))))
@@ -428,7 +416,7 @@
   :rule-classes ()
   :hints (("Goal" :use ((:instance and-dist-c-1)
 ;			(:instance mod>=0 (m x) (n (expt 2 n)))
-			(:instance bit-basic-h 
+			(:instance bit-basic-h
 				   (x y)
 				   (y (* (expt 2 n) (fl (/ x (expt 2 n)))))
 				   (z (mod x (expt 2 n))))
@@ -444,7 +432,7 @@
 		  (integerp y) (>= y 0)
 		  (integerp n) (>= n 0))
 	     (= (logand x y)
-		(logior (* (expt 2 n) 
+		(logior (* (expt 2 n)
 			   (logand (fl (/ x (expt 2 n)))
 				   (fl (/ y (expt 2 n)))))
 			(logand (mod x (expt 2 n))
@@ -459,7 +447,7 @@
 		  (integerp y) (>= y 0)
 		  (integerp n) (>= n 0))
 	     (= (logand x y)
-		(+ (* (expt 2 n) 
+		(+ (* (expt 2 n)
 		      (logand (fl (/ x (expt 2 n)))
 			      (fl (/ y (expt 2 n)))))
 		   (logand (mod x (expt 2 n))
@@ -471,7 +459,7 @@
 					      (fl (/ y (expt 2 n)))))
 				   (y (logand (mod x (expt 2 n))
 					      y)))
-;			(:instance mod>=0 (m x) (n (expt 2 n)))			
+;			(:instance mod>=0 (m x) (n (expt 2 n)))
 			(:instance mod-bnd-1 (m x) (n (expt 2 n)))
 			(:instance and-dist-a (x (mod x (expt 2 n)))))))))
 
@@ -483,11 +471,11 @@
 		(logand (mod x (expt 2 n)) y)))
   :rule-classes ()
   :hints (("Goal" :use ((:instance and-dist-c-4)
-;			(:instance mod+-thm 
-	;			   (m (logand (mod x (expt 2 n)) y)) 
+;			(:instance mod+-thm
+	;			   (m (logand (mod x (expt 2 n)) y))
 		;		   (n (expt 2 n))
 			;	   (a (logand (fl (/ x (expt 2 n))) (fl (/ y (expt 2 n))))))
-;			(:instance mod>=0 (m x) (n (expt 2 n)))			
+;			(:instance mod>=0 (m x) (n (expt 2 n)))
 			(:instance mod-bnd-1 (m x) (n (expt 2 n)))
 			(:instance and-dist-a (x (mod x (expt 2 n))))
 			(:instance mod-does-nothing (m (logand (mod x (expt 2 n)) y))
@@ -548,11 +536,11 @@
            :induct (op-dist-induct x y n))))
 
   :hints (("Goal" :use ((:instance and-dist-c-4)
-;			(:instance mod+-thm 
-	;			   (m (logand (mod x (expt 2 n)) y)) 
+;			(:instance mod+-thm
+	;			   (m (logand (mod x (expt 2 n)) y))
 		;		   (n (expt 2 n))
 			;	   (a (logand (fl (/ x (expt 2 n))) (fl (/ y (expt 2 n))))))
-;			(:instance mod>=0 (m x) (n (expt 2 n)))			
+;			(:instance mod>=0 (m x) (n (expt 2 n)))
 			(:instance mod-bnd-1 (m x) (n (expt 2 n)))
 			(:instance and-dist-a (x (mod x (expt 2 n))))
 			(:instance mod-does-nothing (m (logand (mod x (expt 2 n)) y))
@@ -584,7 +572,7 @@
   :hints (("Goal" :in-theory (enable logand))))
 |#
 
-(defthm logand-0 
+(defthm logand-0
   (equal (logand 0 j) 0)
   :hints (("goal" :in-theory (enable logand)))
   )
@@ -623,7 +611,7 @@
 	  (list i j)
 	(op-dist-induct-negative (fl (/ i 2)) (fl (/ j 2)) (1+ n)))
     ()))
-  
+
 (defthm mod-logand-aux
     (implies (and (integerp x) (>= x 0)
 		  (integerp y) (>= y 0)
@@ -632,7 +620,7 @@
 		(logand (mod x (expt 2 n)) y)))
     :otf-flg t
   :rule-classes ()
-  :hints (("Goal" :do-not-induct t 
+  :hints (("Goal" :do-not-induct t
            :do-not '(generalize)
            :induct ( op-dist-induct x y n)
            :expand (LOGAND Y (MOD X (EXPT 2 N)))

@@ -1,5 +1,5 @@
 ; XDOC Documentation System for ACL2
-; Copyright (C) 2009-2011 Centaur Technology
+; Copyright (C) 2009-2015 Centaur Technology
 ;
 ; Contact:
 ;   Centaur Technology Formal Verification Group
@@ -33,9 +33,10 @@
 (in-package "XDOC")
 (defvar *raw-xdoc-list* nil)
 
-(defun defxdoc-raw-fn (name parents short long)
-  (let* ((pkg   (package-name *package*))
-         (entry (list (cons :name name)
+(defun defxdoc-raw-fn (name parents short long pkg)
+  (let* ((pkg   (or pkg (package-name *package*)))
+         (entry (list (cons :from "[defxdoc-raw]")
+                      (cons :name name)
                       (cons :base-pkg (acl2::pkg-witness pkg))
                       (cons :parents parents)
                       (cons :short short)
@@ -68,7 +69,6 @@ documentation added by @('defxdoc').</p>")
 (defun all-xdoc-topics (state)
   (if (not (acl2::live-state-p state))
       (prog2$ (er hard? 'all-xdoc-topics "all-xdoc-topics requires a live state.")
-              (mv nil state))
-    (mv (append *raw-xdoc-list*
-                (get-xdoc-table (w state)))
-        state)))
+              (value nil))
+    (value (append *raw-xdoc-list*
+                   (get-xdoc-table (w state))))))

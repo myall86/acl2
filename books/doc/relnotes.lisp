@@ -27,31 +27,3427 @@
 ;   DEALINGS IN THE SOFTWARE.
 ;
 ; Original author: Jared Davis <jared@centtech.com>
+; Contributing author: Alessandro Coglio <coglio@kestrel.edu>
 
 (in-package "ACL2")
-(include-book "xdoc/top" :dir :system)
+
+; Matt K. mod: Moved to cert.acl2 to support running defxdoc forms below
+; without LDing this file.
+; (include-book "xdoc/constructors" :dir :system)
 
 ;; These books aren't really necessary, but are harmless enough and are useful
 ;; when debugging the release note markup.
 (include-book "centaur/nrev/portcullis" :dir :system)
 (include-book "centaur/vl/portcullis" :dir :system)
+(include-book "centaur/ipasir/portcullis" :dir :system)
+(include-book "centaur/sv/portcullis" :dir :system)
 (include-book "centaur/gl/portcullis" :dir :system)
 (include-book "centaur/bed/portcullis" :dir :system)
 (include-book "centaur/bitops/portcullis" :dir :system)
+(include-book "build/portcullis" :dir :system)
+(include-book "rtl/rel11/portcullis" :dir :system)
+(include-book "kestrel/apt/portcullis" :dir :system)
+(include-book "kestrel/soft/portcullis" :dir :system)
+(include-book "kestrel/abnf/portcullis" :dir :system)
+(include-book "kestrel/java/portcullis" :dir :system)
+(include-book "kestrel/ethereum/portcullis" :dir :system)
+(include-book "kestrel/bitcoin/portcullis" :dir :system)
+(include-book "kestrel/utilities/omaps/portcullis" :dir :system)
 
-; Please note:
+; Book release notes are sometimes disorganized.
+; They are often cleaned up before a release.
+
+; Starting with Version 7.3, we no longer maintain release notes
+; note-x-x-books.  Instead, we hope that the ACL2 Community will track
+; changes to the books by maintaining note-x-x-books as they go.
+
+(defxdoc release-notes-books
+
+; This is a parent for the note-x-x-books topics, so they're all visible in one
+; place.
+
+  :parents (release-notes)
+  :short "Pointers to what has changed in the community books"
+  :long "<p>This section of the online @(see documentation) contains notes on
+ the changes in the community books between successive released versions of
+ ACL2.</p>
+
+ <p>Each topic @('note-x-y-books') is a note describing what in the community
+ books distributed with ACL2 version X.Y was new in comparison to the community
+ books distributed with the preceding version of ACL2.</p>
+
+ <p>The current version of ACL2 is the value of the constant @('(@
+ acl2-version)').</p>")
+
+(defxdoc note-8-4-books
+
+; Please add information about your library in the appropriate
+; category below --- the category title is enclosed in (xdoc::h3 ...)
+; (of course, feel free to add a new category if needed).  To
+; ensure consistency with the style of previous book release doc
+; topics, please follow the following convention:
+
+;  (xdoc::h4 "Your Library Title")
+;  (xdoc::p "Details go here.")
+
+; Please put the h4's in alphabetical order, each preceded by 40 semicolons.
+; You can also use (xdoc::h5 ...) under each h4, e.g. for sub-libraries:
+; There is no need to order the h5's alphabetically,
+; but please precede each h5 by 20 semicolons.
+; If you are stuck, see the entries about other libraries.
+
+  :parents (note-8-4 release-notes-books)
+
+  :short "Release notes for the ACL2 Community Books for ACL2 8.4"
+
+  :long
+
+  (xdoc::topstring
+
+   (xdoc::p
+    "The following is a brief summary of
+     changes made to the @(see community-books)
+     between the releases of ACL2 8.3 and 8.4.")
+
+   (xdoc::p
+    "See also @(see note-8-4) for the changes made to ACL2 itself.
+     For additional details,
+     you may also see the raw "
+    (xdoc::ahref "https://github.com/acl2/acl2/commits/master" "commit log")
+    ".")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h3 "New Libraries")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "obag::obags" "Orderd Bags Library"))
+
+   (xdoc::p
+    "This is a library that represents bags (a.k.a. multisets)
+     as non-strictly ordered lists.
+     Thus, they capture (up to isomorphism) the mathematical notion of bag;
+     in particular, bag equality is @(tsee equal).")
+
+   (xdoc::p
+    "This is analogous to "
+    (xdoc::seetopic "set::std/osets" "the library of ordered sets")
+    " and to "
+    (xdoc::seetopic "omap::omaps" "the library of ordered maps")
+    ".")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h3 "Changes to Existing Libraries")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "apt::apt" "APT"))
+
+   (xdoc::p
+    "An " (xdoc::seetopic "apt::defaults-table" "APT defaults table")
+    " has been added, analogous to the "
+    (xdoc::seetopic "acl2-defaults-table" "ACL2 defaults table")
+    " but specific to APT.
+     Utilities to set and retrieve certain defaults have also been added.")
+
+   (xdoc::p
+    "The @(tsee apt::isodata) transformation has been improved as follows:")
+   (xdoc::ul
+    (xdoc::li
+     "The @(':thm-name') input has been replaced
+      with a new @(':old-to-new-name') input,
+      which, when absent, is taken from the APT defaults table.")
+    (xdoc::li
+     "The @(':thm-enable') input has been replaced
+      with a new @(':old-to-new-enable') input,
+      which, when absent, is taken from the APT defaults table.")
+    (xdoc::li
+     "A new @(':new-to-old-name') input has been added
+      to specify the name of the theorem @('new-to-old')
+      that rewrites calls of the new functions
+      to terms involving calls of the old function.
+      This theorem is now generated along with the converse one.
+      If the @(':new-to-old-name') input is absent,
+      it is taken from the APT defaults table.")
+    (xdoc::li
+     "A new @(':new-to-old-enable') input has been added
+      to specify whether the @('new-to-old') theorem is enabled or not.
+      If this input is absent, it is taken from the APT defaults table.")
+    (xdoc::li
+     "The @('newp-of-new') theorem,
+      which asserts that the new function maps
+      arguments in the new representation to results in the new representation,
+      is now generated not only locally to support some generated proofs,
+      but also non-locally, so that it remains in the ACL2 history.
+      This theorem is only generated if some result is being transformed.")
+    (xdoc::li
+     "A new @(':newp-of-new-name') input has been added
+      to specify the name fo the @('newp-of-new') theorem.
+      This input is allowed only if some result is being transformed,
+      because otherwise no @('newp-of-new') theorems is generated.")
+    (xdoc::li
+     "A new @(':newp-of-new-enable') input has been added
+      to specify whether the @('newp-of-new') theorem is enabled or not.
+      This input is allowed only if some result is being transformed,
+      because otherwise no @('newp-of-new') theorems is generated."))
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "event-macros" "Event Macros Library"))
+
+   (xdoc::p
+    "The utilities
+     @(tsee cw-event),
+     @(tsee fail-event),
+     @(tsee make-event-terse), and
+     @(tsee try-event)
+     have been moved here
+     from @('[books]/kestrel/utilities/user-interface.lisp').")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "fty" "Fixtype Definition Library"))
+
+   (xdoc::p
+    "A new macro @(tsee fty::defbyte-ihs-theorems) has been added
+     to generate theorems about fixtypes introduced via @(tsee fty::defbyte)
+     and functions in the " (xdoc::seetopic "ihs" "IHS") " library.
+     This macro has been used to generate, and make available,
+     these theorems for some of the "
+     (xdoc::seetopic "fty::defbyte-standard-instances"
+                     "@('fty::defbyte') standard instances")
+     ".")
+
+   (xdoc::p
+    "More "
+    (xdoc::seetopic "fty::defbyte-standard-instances"
+                    "@('fty::defbyte') standard instances")
+    " have been added.")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "java::java" "Java Library"))
+
+   ;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h5 (xdoc::seetopic "java::aij"
+                             "AIJ, the Deep Embedding of ACL2 into Java"))
+
+   (xdoc::p
+    "More " (xdoc::ahref "https://junit.org" "JUnit")
+    " unit tests have been added,
+     integrated with the IntelliJ IDEA project.")
+
+   ;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h5 (xdoc::seetopic "java::atj"
+                             "ATJ, the Java Code Generator for ACL2"))
+
+   (xdoc::p
+    "The model of Java primitive arrays has been extended
+     with functions to convert between arrays and corresponding ACL2 lists.
+     The model has been much more compact by defining and using a macro
+     that captures the structure common to the eight
+     Java primitive array types.")
+
+   (xdoc::p
+    "Support has been added to recognize ACL2 functions
+     that convert between Java primitive arrays and ACL2 lists,
+     and translate them to Java code that converts between arrays and lists.")
+
+   (xdoc::p
+    "A new post-translation step has been added
+     to ``inline'' (in a suitable sense) the calls of the array write methods
+     that are generated by the translation step.
+     This makes the generated Java code more idiomatic.")
+
+   ;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h5 (xdoc::seetopic "java::language" "Java Language Formalization"))
+
+   (xdoc::p
+    "Some functions and theorems related to integer literals have been added.
+     These are part of the formalized abstract syntax of Java.")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "std::std/util" "Standard Utilities Library"))
+
+   (xdoc::p
+    "A new macro @(tsee defmacro+) has been added,
+     with is like @(tsee defmacro) but with "
+    (xdoc::seetopic "xdoc" "XDOC")
+    "integration.")
+
+   (xdoc::p
+    "Like @(see defun-nx), now @(see define) also disables the executable
+     counterpart of a non-executable function.")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h3 "Licensing Changes")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h3 "Build System Updates")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h3 "Testing")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h3 "Miscellaneous")
+
+   ))
+
+(defxdoc note-8-3-books
+
+; Please add information about your library in the appropriate
+; category below --- the category title is enclosed in <h3>..</h3>
+; tags (of course, feel free to add a new category if needed).  To
+; ensure consistency with the style of previous book release doc
+; topics, please follow the following convention:
+
+;  (xdoc::h4 "Your Library Title")
+;  (xdoc::p "Details go here.")
+
+; Please put the h4's in alphabetical order, each preceded by 40 semicolons.
+; If you are stuck, see the entries about other libraries.
+
+; Note (probably too low level to mention in the :doc string): modified
+; defxdoc-raw so that the :from field is a string rather than nil, which can be
+; important for avoiding errors when building the "fast" documentation.  This
+; change has avoided an error using SBCL.
+
+  :parents (note-8-3 release-notes-books)
+
+  :short "Release notes for the ACL2 Community Books for ACL2 8.3"
+
+  :long
+
+  (xdoc::topstring
+
+   (xdoc::p
+    "The following is a brief summary of
+     changes made to the @(see community-books)
+     between the releases of ACL2 8.2 and 8.3.")
+
+   (xdoc::p
+    "See also @(see note-8-3) for the changes made to ACL2 itself.
+     For additional details,
+     you may also see the raw "
+    (xdoc::a :href "https://github.com/acl2/acl2/commits/master"
+      "commit log")
+    ".")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h3 "New Libraries")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 "Alists-light library")
+
+   (xdoc::p "A new library, @('alists-light') has been added.  It aims to
+   provide basic reasoning about alists while being as lightweight as possible.
+   See the directory @('[books]/kestrel/alists-light').")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 "Arithmetic-light library")
+
+   (xdoc::p "A new library, @('arithmetic-light') has been added.  It aims to
+   provide basic arithmetic reasoning while being as lightweight as possible.  See
+   the directory @('[books]/kestrel/arithmetic-light').")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 "Axe")
+
+   (xdoc::p "A directory has been started to contain the implementation of
+   Kestrel's Axe tool.  This will be populated over time as we open source Axe.
+   See the directory @('[books]/kestrel/axe').")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 "Booleans library")
+
+   (xdoc::p "A new library, @('booleans') has been added.  It provides
+   definitions and rules about operations on booleans.  See the directory
+   @('[books]/kestrel/booleans').")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 "BV (bit vector) library")
+
+   (xdoc::p "A new library, @('bv'), has been added.  It contains a
+   formalization of bit vectors as natural numbers.  The library underlies
+   several tools developed by Kestrel researchers. See the directory
+   @('[books]/kestrel/bv').")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 "BV-Lists library")
+
+   (xdoc::p "A new library, @('bv-lists'), has been added. It formalizes
+   notions related to lists of bit vectors from the @('bv') library, including
+   packing, unpacking, and conversions between lists of bits and lists of
+   bytes. See the directory @('[books]/kestrel/bv-lists').")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 "Centaur meta-reasoning library")
+
+   (xdoc::p "The @('centaur/meta') directory contains various new books focused
+     on meta-reasoning, differing from previous efforts in their use of
+     @('clause-processors/pseudo-term-fty.lisp') to treat pseudo-terms as a
+     sum-of-products type.  Among other things, this directory contains an
+     unconditional rewriter, a let-abstraction clause processor, and a clause
+     processor that quickly removes irrelevant parts of a clause during mutual
+     inductions using @('tools/flag.lisp').")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "hdwallet::crypto-hdwallet"
+                           "Cryptocurrency Hierarchical Deterministic Wallet"))
+
+   (xdoc::p
+    "This is a simple proof of concept of
+     a hierarchical deterministic wallet for cryptocurrencies,
+     which makes use of the "
+    (xdoc::seetopic "crypto::cryptography" "cryptographic") ", "
+    (xdoc::seetopic "bitcoin::bitcoin" "Bitcoin") ", and "
+    (xdoc::seetopic "ethereum::ethereum" "Ethereum") " libraries.")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 "File-io-light library")
+
+   (xdoc::p "A new library, @('file-io-light') has been added.  It aims to
+   provide rules about basic input/output operations on files, while being as
+   lightweight as possible.  See the directory
+   @('[books]/kestrel/file-io-light').")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 "Library-wrappers library")
+
+   (xdoc::p "A new library, @('library-wrappers'), has been added. It contains
+   books that aim to improve other libraries by including them and then
+   disabling or replacing rules that may be problematic. See the directory
+   @('[books]/kestrel/library-wrappers').")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 "Lists-light library")
+
+   (xdoc::p "A new library, @('lists-light') has been added.  It aims to
+   provide basic reasoning about lists while being as lightweight as possible.  See
+   the directory @('[books]/kestrel/lists-light').")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 "Prime-fields library")
+
+   (xdoc::p "A new library, @('prime-fields') has been added.  It contains a
+   formalization of prime fields and associated operations.  A prime field is a
+   finite field consisting of the integers modulo some prime. See the directory
+   @('[books]/kestrel/prime-fields').")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "std/system" "Standard System Library"))
+
+   (xdoc::p
+    "A new library for standard system utilities has been started.
+     This is currently mostly under the Kestrel books,
+     but it will be gradually moved directly under @('[books]/std/system').
+     This new library is being populated
+     with existing utilities factored out of
+     some Kestrel Books with system utilities,
+     as well as with some new utilities.")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "std/testing" "Standard Testing Library"))
+
+   (xdoc::p
+    "A new library for standard testing utilities has been started.  The
+     contents of the files @('[books]/misc/assert.lisp') and
+     @('[books]/misc/eval.lisp') have been moved here (with the same names),
+     while the two files under @('[books]/misc/') have been turned into
+     relocation stubs.  The utilities in those two files have been moved to new
+     individual files for greater modularity.  Some new testing utilities have
+     been added to this new library as well.")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "std/typed-alists"
+                             "Standard Typed Alists Library"))
+
+   (xdoc::p
+    "A new library has been added,
+     to collect recognizers and theorems for typed alists,
+     i.e. alists whose keys and values have specified types.
+     This is analogous to @(csee std/typed-lists).")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h3 "Changes to Existing Libraries")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "abnf::abnf" "ABNF Library"))
+
+   (xdoc::p
+    "Some functions have been improved slightly.")
+
+   (xdoc::p
+    "Some theorems have been added.")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "aignet" "Aignet Library"))
+
+   (xdoc::p
+    "Added @('centaur/aignet/cube-sat.lisp'), containing utilities for checking
+     satisfiability using @(see satlink) of a cube of aignet literals, possibly
+     after applying combinational-equivalence-preserving transformations.")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "apply$" "Apply$") " Books")
+
+; The timings discussed below were reported as follows, before and after the
+; change, respectively, on Matt Kaufmann's Mac.
+
+; 1662.81 seconds realtime, 1660.71 seconds runtime
+; (234,962,012,832 bytes allocated).
+
+; 178.47 seconds realtime, 174.30 seconds runtime
+; (47,399,184,272 bytes allocated).
+
+   (xdoc::p
+    "The proof of lemma @('apply$-prim-meta-fn-correct') is much faster in the
+    @('\"apply-prim\"') books in directories @('\"system/apply/\"'),
+    @('\"projects/apply-model/\"'), and @('\"projects/apply-model-2/\"').  In
+    particular, the time for proving that lemma in
+    @('\"projects/apply-model-2/apply-prim.lisp\"') has been measured (on a
+    Mac) at just under 3 minutes after the change but at 27.7 minutes before
+    the change.")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "apt::apt" "APT"))
+
+   (xdoc::p
+    "A new transformation, @(tsee apt::casesplit),
+     has been added to rephrase a function by cases.")
+
+   (xdoc::p
+    "A new transformation, @(tsee apt::isodata),
+     has been added to transform data between isomorphic representations.")
+
+   (xdoc::p
+    "@(tsee apt::parteval) now provides better support
+     for recursive functions whose static arguments
+     do not change across recursive calls.
+     @(tsee apt::parteval) has also been extended to support "
+    (xdoc::seetopic "apt::untranslate-specifier" "untranslate specifiers")
+    ".")
+
+   (xdoc::p
+    "@(tsee apt::restrict) now supports reflexive functions,
+     i.e. functions that occur in their termination theorem.")
+
+   (xdoc::p
+    "An input has been added to @(tsee apt::tailrec) to control whether
+     the wrapper function is generated or not.")
+
+   (xdoc::p
+    "A table of APT defaults has been started.
+     See @('[books]/kestrel/apt/utilities/defaults-table.lisp').")
+
+   (xdoc::p
+    "New APT-specific XDOC constructors have been added.
+     Some APT-specific XDOC constructors have been extended and improved.")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 "Arithmetic-3")
+
+   (xdoc::p "The inclusion of @('arithmetic-3/floor-mod/mod-expt-fast') in
+   @('arithmetic-3/top') has been commented out to prevent clashes with
+   @('arithmetic-5').")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 "Arithmetic-5")
+
+   (xdoc::p "The inclusion of @('arithmetic-5/lib/floor-mod/mod-expt-fast') in
+   @('arithmetic-5/lib/floor-mod/top'), which is in turn included by
+   @('arithmetic-5/top'), has been commented out to prevent clashes with
+   @('arithmetic-3').")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "bitcoin::bitcoin" "Bitcoin Library"))
+
+   (xdoc::p
+    "Some theorems have been added.")
+
+   (xdoc::p
+    "Verified executable attachments have been added
+     for some of the non-executable functions in the BIP 32 formalization.")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "crypto::cryptography" "Cryptographic Library"))
+
+   (xdoc::p
+    "A " (xdoc::seetopic "ecurve::elliptic-curves" "sub-library for elliptic curves")
+    " has been added,
+     which currently contains all the secp256k1 domain parameters,
+     and fixtypes for secp256k1 field elements, points, and keys.
+     The parameters and the fixtypes that were previously part of the "
+    (xdoc::seetopic "ecurve::secp256k1-interface"
+                  "elliptic curve secp256k1 interface")
+    " have been removed from that interface,
+     which now includes the domain parameters and the fixtypes
+     from the new sub-library.")
+
+   (xdoc::p
+    "A " (xdoc::seetopic "ecdsa::elliptic-curve-digital-signature-algorithm"
+		       "sub-library for ECDSA")
+    " (Elliptic Curve Digital Signature Algorithm)
+     has been added, which now contains the secp256k1 signing interface,
+     which was previously part of the "
+    (xdoc::seetopic "ecurve::secp256k1-interface"
+                  "elliptic curve secp256k1 interface") ".")
+
+   (xdoc::p
+    "A sub-library has been added that includes formal specifications for the
+    SHA-2 hash functions: SHA-224, SHA-256, SHA-384, and SHA-512.  The new
+    sub-library is in @('[books]/kestrel/crypto/sha-2/').")
+
+   (xdoc::p
+    "A " (xdoc::seetopic "keccak::keccak" "sub-library for KECCAK / SHA-3 hash functions")
+     " has been added.")
+
+   (xdoc::p
+    "A sub-library has been added that includes formal specifications for
+    HMAC-SHA-256 and HMAC-SHA-512, i.e., for the HMAC keyed-hash message
+    authentication code, using either SHA-256 or SHA-512 as the underlying hash
+    function.  The new sub-library is in @('[books]/kestrel/crypto/hmac/').")
+
+   (xdoc::p
+    "A sub-library for Password-Based Key Derivation Function 2 (PBKDF2)
+     as specified by RFC 8018, and specialized to use HMAC SHA-512,
+     has been added.
+     See @(tsee kdf::pbkdf2-hmac-sha-512).")
+
+   (xdoc::p
+    "A sub-library has been added that includes formal specifications for
+    several common padding operations used in cryptography.  The new
+    sub-library is in @('[books]/kestrel/crypto/padding/').")
+
+   (xdoc::p
+    "A macro @(tsee crypto::definterface-hash) has been added
+     to introduce interfaces of hash functions.")
+
+   (xdoc::p
+    "A macro @(tsee crypto::definterface-hmac) has been added
+     to introduce interfaces of HMAC functions.")
+
+   (xdoc::p
+    "A macro @(tsee crypto::definterface-pbkdf2) has been added
+     to introduce interfaces of PBKDF2 functions.")
+
+   (xdoc::p
+    "A macro @(tsee crypto::definterface-encrypt-block) has been added
+     to introduce interfaces of block encryption/decryption functions.")
+
+   (xdoc::p
+    "A macro @(tsee crypto::definterface-encrypt-init) has been added
+     to introduce interfaces of encryption/decryption functions
+     that use initialization vectors
+     (as in certain block cipher modes of operation).")
+
+   (xdoc::p
+    "Interfaces have been introduced (via @(tsee crypto::definterface-hash))
+     for the hash functions
+     Keccak-256, Keccak-512, RIPEMD-160, SHA-256, and SHA-512.
+     These supersede the previously existing placeholders
+     for Keccak-256, RIPEMD-160, and SHA-256, which have been removed.")
+
+   (xdoc::p
+    "Interfaces have been introduced (via @(tsee crypto::definterface-hmac))
+     for the HMAC functions HMAC-SHA-256 and HMAC-SHA-512.
+     These supersede the previously existing placeholder
+     for HMAC-SHA-512, which has been removed.")
+
+   (xdoc::p
+    "Interfaces have been introduced (via @(tsee crypto::definterface-pbkdf2))
+     for the PBKDF2 functions HMAC-SHA-256 and PBKDF2 HMAC-SHA-512.
+     These supersede the previously existing placeholder
+     for PBKDF2 HMAC-SHA-512, which has been removed.")
+
+   (xdoc::p
+    "Interfaces have been introduced
+     (via @(tsee crypto::definterface-encrypt-block))
+     for the AES-128, AES-192, and AES-256 block ciphers.")
+
+   (xdoc::p
+    "Interfaces have been introduced
+     (via @(tsee crypto::definterface-encrypt-init))
+     for the AES-128 CBC PKCS7, AES-192 CBC PKCS7, and AES-256 CBC PKCS7
+     ciphers (CBC mode, PKCS7 padding).")
+
+   (xdoc::p
+    "The `placeholder' for elliptic curve secp256k1
+     has been turned into an `interface' for elliptic curve secp256k1,
+     consistently with the changes above.
+     There are no more cryptographic `placeholders',
+     but `interfaces' instead.
+     Their structure is quite similar,
+     but the nomenclature indicates a more permanent status.")
+
+   (xdoc::p
+    "The "
+    (xdoc::seetopic "ecurve::secp256k1-interface"
+                  "elliptic curve secp256k1 interface")
+    " has been extended with an (abstract) signing operation.")
+
+   (xdoc::p
+    "Executable attachments have been added for
+     the Keccak-256 interface that operates on bytes,
+     the SHA-256 interface that operates on bytes,
+     the HMAC-SHA-512 interface,
+     the PBKDF2 HMAC-SHA-512 interface,
+     the secp256k1 interface, and
+     the secp256k1 ECDSA interface.")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "ethereum::ethereum" "Ethereum Library"))
+
+   (xdoc::p
+    "A function to construct signed transactions has been added.")
+
+   (xdoc::p
+    "Functions to calculate an account address
+     from a public key and from a private key (via its public key)
+     have been added.")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "event-macros" "Event Macros Library"))
+
+   (xdoc::p
+    "Utilities for applicability conditions have been added.")
+
+   (xdoc::p
+    "XDOC constructors for documenting the implementation of event macros
+     have been added.")
+
+   (xdoc::p
+    "More XDOC constructors for documenting event macros at the user level
+     have been added.")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "fty" "Fixtype Definition Library"))
+
+   (xdoc::p
+    "The @(tsee fty::defbyte) macro has been improved
+     to generate additional theorems.")
+
+   (xdoc::p
+    "The @(tsee fty::defbytelist) macro has been improved
+     to generate additional theorems.")
+
+   (xdoc::p
+    "The @(tsee fty::defset) macro has been improved
+     to generate additional theorems.
+     It has also been extended with an option @(':elementp-of-nil'),
+     similar to @(tsee std::deflist),
+     which results in some better theorems when supplied.")
+
+   (xdoc::p
+    "A new macro @(tsee fty::deffixequiv-sk) has been added
+     to automate the proof of @(tsee fty::deffixequiv) theorems
+     for @(tsee defun-sk) (including @(tsee std::define-sk)) functions.")
+
+   (xdoc::p
+    "A new macro @(tsee fty::defflatsum) has been added
+     to introduce ``flat'' (i.e. not tagged) sums of disjoint types.")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "gl::gl" "GL"))
+
+   (xdoc::p
+    "Changed accumulated-persistence-style profiling so that it doesn't count
+     the frames contained in nested applications of a rule multiple times
+     toward that rule's frame count.")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "java::java" "Java Library"))
+
+   ;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h5 (xdoc::seetopic "java::atj" "ATJ, the Java Code Generator for ACL2"))
+
+   (xdoc::p
+    "The implementation of ATJ has been improved
+     to use a more general abstract syntax and pretty-printer for Java
+     (which are currently part of the implementation of ATJ),
+     instead of writing directly to the output channel piecewise.
+     This provides more flexibility, and the ability to have more code
+     in logic mode and guard-verified.")
+
+   (xdoc::p
+    "ATJ has been extended with an option to generate Java code
+     according to a shallow embedding approach,
+     besides the previous deep embedding approach.")
+
+   (xdoc::p
+    "ATJ has been extended with an option to generate Java code
+     under the assumption that the guards are always satisfied.
+     This option should be used only with guard-verified ACL2 code
+     and with external Java code that calls the generated Java code
+     always with values that satisfy the guards.")
+
+   (xdoc::p
+    "ATJ has been extended with the ability to generate Java code
+     that operates on narrower types than the one for all ACL2 values.
+     This ability is available in the shallow embedding approach,
+     when guards are assumed satisfied.")
+
+   (xdoc::p
+    "ATJ has been extended with the ability to generate Java code
+     that uses Java primitive values and operations.
+     This ability is available in the shallow embedding approach,
+     when guards are assumed satisfied.")
+
+   (xdoc::p
+    "ATJ has been extended with the ability to generate Java code
+     that uses Java primitive arrays and operations,
+     and to destructively update arrays.
+     This ability is available in the shallow embedding approach,
+     when guards are assumed satisfied.")
+
+   (xdoc::p
+    "ATJ has been extended with the ability to generate Java loops
+     from tail-recursive ACL2 functions.
+     This ability is available in the shallow embedding approach,
+     when guards are assumed satisfied.")
+
+   (xdoc::p
+    "A comprehensive tutorial on ATJ has been started.
+     It is available at @(tsee java::atj-tutorial).")
+
+   ;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h5 (xdoc::seetopic "java::aij"
+                             "AIJ, the Deep Embedding of ACL2 into Java"))
+
+   (xdoc::p
+    "The return types of some of the methods that provide
+     native Java implementation of the ACL2 primitive functions
+     have been made more precise than the general type @('Acl2Value').
+     For instance, the method for @(tsee equal)
+     now returns @('Acl2Symbol').")
+
+   (xdoc::p
+    "Some of the native Java implementations of the ACL2 primitive functions
+     have been optimized.")
+
+   (xdoc::p
+    "Variant native Java implementations of the ACL2 primitive functions
+     have been added that operate
+     on narrower types than the one for all ACL2 values.
+     These are used by ATJ-generated code that operates on narrower types
+     (see release notes about ATJ).")
+
+   (xdoc::p
+    "Native Java implementations of a few more ACL2 built-in functions
+     have been added.")
+
+   (xdoc::p
+    "The documentation of AIJ has been extended and improved.
+     In particular, explicit preconditions have been added for public methods,
+     and explicit invariants have been added for non-public fields
+     and for arguments and results of non-public methods.")
+
+   (xdoc::p
+    "A number of JUnit unit tests have been added
+     for some of the AIJ Java code.
+     More unit tests are planned.")
+
+   ;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h5 (xdoc::seetopic "java::language" "Java Language Formalization"))
+
+   (xdoc::p
+    "An ABNF grammar has been added for the whole Java language,
+     consisting of the lexical and syntactic sub-grammars
+     from the Java language specification.
+     The grammar files have been parsed with "
+    (xdoc::seetopic "abnf::grammar-parser" "the verified ABNF grammar parser")
+    ", obtaining a formal representation of the grammar of Java,
+     which can be used to formally specify. at a very high and assured level,
+     the concrete syntax of Java.
+     Various properties of the thus-obtained grammar representation (e.g. "
+    (xdoc::seetopic "abnf::closure" "closure")
+    ") have been proved, for validation.")
+
+   (xdoc::p
+    "A model of Java Unicode characters has been added,
+     along with a model of their ASCII subset.")
+
+   (xdoc::p
+    "Models have been added
+     of the null and boolean literals,
+     of (non-restricted and restricted) keywords,
+     and of identifiers.
+     The consistency of these models with the grammar (see above)
+     has been proved.")
+
+   (xdoc::p
+    "Models have been added
+     of the decimal, hexadecimal, octal, and binary integer literals.
+     Abstract models have been added
+     of the floating-point literals.
+     Models have been added
+     of the character and string literals.")
+
+   (xdoc::p
+    "A model of the processing of Unicode escapes has been added.
+     This is Java's first lexical translation steps.")
+
+   (xdoc::p
+    "Models have been added of all the boolean and integer operations,
+     as well as of all the primitive conversions on integral values.
+     Abstract models have also been added of all the floating-point operations,
+     as well as of all the primitive conversions
+     involving floating-point values.")
+
+   (xdoc::p
+    "A model of (opaque) pointers has been added.
+     A model of reference values (consisting of pointers and a null reference)
+     has been added.
+     A model of all values, consisting of primitive and reference values,
+     has been added.")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 "Kestrel Utilities")
+
+   (xdoc::p
+    "Note that some of the books below are not as polished as they could be.
+    Such books contain the text @('STATUS: IN-PROGRESS') near the top of the
+    file.")
+
+   (xdoc::p
+    "A new book, @('[books]/kestrel/utilities/conjunctions') contains
+     utilities for manipulating conjunctions.")
+
+   (xdoc::p
+    "A new book, @('[books]/kestrel/utilities/declares0') contains
+     utilities for manipulating @(tsee declare)s .")
+
+   (xdoc::p
+    "A new book, @('[books]/kestrel/utilities/def-constant-opener')
+    contains a utility that generates an opener theorem for a function when all
+    arguments are constant (this is used by Axe).")
+
+   (xdoc::p
+    "A new book, @('[books]/kestrel/utilities/defopeners') contains a
+    utility for making opener rules for recursive functions.")
+
+   (xdoc::p
+    "A new book, @('[books]/kestrel/utilities/deftest'), contains a utility,
+     @('deftest') for isolating tests and running them with extensive guard
+     checking.")
+
+   (xdoc::p
+    "A new book, @('[books]/kestrel/utilities/defthm-events') contains
+    utilities for processing @(tsee defthm) forms.")
+
+   (xdoc::p
+    "A new book, @('[books]/kestrel/utilities/defun-events') contains
+    utilities for processing @(tsee defun) forms.")
+
+   (xdoc::p
+    "A new book, @('[books]/kestrel/utilities/disables') disables some
+    built-in functions that may be convenient to have disabled from the
+    start.")
+
+   (xdoc::p
+    "A new book, @('[books]/kestrel/utilities/doublets2') contains
+    utilities that deal with doublets (true lists of length 2).")
+
+   (xdoc::p
+    "A new book, @('[books]/kestrel/utilities/equal-of-booleans'), contains
+     rules to break an equality of two booleans into the equivalent conjunction
+     of two implications.")
+
+   (xdoc::p
+    "A new book, @('[books]/kestrel/utilities/erp') contains utilities
+    for returning errors (which are often assigned to a variable called @('erp').")
+
+   (xdoc::p
+    "A new book, @('[books]/kestrel/utilities/forms') contains basic
+    utilities about forms that look like function calls.")
+
+   (xdoc::p
+    "A new book, @('[books]/kestrel/utilities/keyword-value-lists2')
+    contains utilities about keyword-value-lists.")
+
+   (xdoc::p
+    "A new book, @('[books]/kestrel/utilities/make-and') contains a
+    utility to make an untranslated conjunction.")
+
+   (xdoc::p
+    "A new book, @('[books]/kestrel/utilities/make-and-nice') contains a
+    utility to make a, possibly simplified, untranslated conjunction.")
+
+   (xdoc::p
+    "A new book, @('[books]/kestrel/utilities/make-or') contains a
+    utility to make an untranslated disjunction.")
+
+   (xdoc::p
+    "A new book, @('[books]/kestrel/utilities/make-or-nice') contains a
+    utility to make a, possibly simplified, untranslated disjunction.")
+
+   (xdoc::p
+    "A new book, @('[books]/kestrel/utilities/my-get-event') contains a utility
+    to get the (untranslated) event that introduced a function.")
+
+   (xdoc::p
+    "A new book, @('[books]/kestrel/utilities/pack') contains utilities for
+    making symbols from strings, natural numbers, characters, and other
+    symbols.")
+
+   (xdoc::p
+    "A new book,
+    @('[books]/kestrel/utilities/remove-duplicates-equal-dollar') contains a
+    utility to remove duplicates, keeping the first of each set.")
+
+   (xdoc::p
+    "A new book, @('[books]/kestrel/utilities/smaller-termp'), contains
+     a utility to compare the sizes of terms.")
+
+   (xdoc::p
+    "A new book, @('[books]/kestrel/utilities/substitution') contains
+   utilities that perform substitution.")
+
+   (xdoc::p
+    "A new book, @('[books]/kestrel/utilities/terms') contains various
+    utilities for manipulating terms.")
+
+   (xdoc::p
+    "A new book, @('[books]/kestrel/utilities/world') contains utilities
+    for querying the ACL2 logical world.")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "list-utilities" "Kestrel List Utilities"))
+
+   (xdoc::p
+    "A theorem about @(tsee prefixp) has been added.")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "set::theorems-about-osets" "Kestrel Oset Theorems"))
+
+   (xdoc::p
+    "A theorem has been added.")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 "Pseudo-good-world")
+
+   (xdoc::p
+    "Some functions have been factored out of the file
+     @('[book]/system/pseudo-good-worldp.lisp'),
+     and put into new individual files,
+     for greater modularity.")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "remove-hyps" "Remove-hyps utility"))
+
+   (xdoc::p
+    "Now, @(tsee remove-hyps) succeeds when applied to a call of @(tsee thm)
+    whose formula is not in the form of a valid rewrite rule.")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "std/alists" "Standard Association Lists Library"))
+
+   (xdoc::p
+    "The functions @(tsee alist-map-keys) and @(tsee alist-map-vals)
+     have been moved to @('[books]/std/alists/')
+     from @('[books]/kestrel/utilities/alists/').")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "std/basic" "Standard Basic Library"))
+
+   (xdoc::p
+    "The function @(tsee pos-fix),
+     along with its accompanying theorems and XDOC topic,
+     has been moved from @('[books]/centaur/fty/basetypes.lisp')
+     to a new file @('[books]/std/basic/pos-fix.lisp').")
+
+   (xdoc::p
+    "The function @(tsee symbol-package-name-lst)
+     has been moved to the Std extensions in the Kestrel Books,
+     under @('[books]/kestrel/std/basic/').")
+
+   (xdoc::p
+    "The function @(tsee symbol-package-name-non-cl),
+     originally called @('symbol-package-name-safe') but now renamed,
+     has been moved to the Std extensions in the Kestrel Books,
+     under @('[books]/kestrel/std/basic/').")
+
+   (xdoc::p
+    "The functions @(tsee organize-symbols-by-name)
+     and @(tsee organize-symbols-by-pkg)
+     has been moved to the Std extensions in the Kestrel Books,
+     under @('[books]/kestrel/std/basic/').")
+
+   (xdoc::p
+    "A variant @(tsee mbt$) of @(tsee mbt) has been introduced,
+     which requires the argument to be just non-@('nil')
+     instead of exactly @('t').
+     This is in the Std extensions in the Kestrel Books,
+     under @('[books]/kestrel/std/basic/').")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "std/lists" "Standard Lists Library"))
+
+   (xdoc::p
+    "A file @('union.lisp') has been added
+     with theorems about @(tsee union-equal).")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "stobjs::std/stobjs" "Standard STOBJs Library"))
+
+   (xdoc::p
+    "The theorems about range equivalences in
+     @('std/stobjs/updater-independence.lisp') have been somewhat improved and
+     a new utility @('def-range-equiv') added to allow defining new types of
+     equivalences over ranges of indices.")
+
+   (xdoc::p
+    "A new book @('std/stobjs/nicestobj.lisp') defines @('defnicestobj'), a
+     utility for defining a stobj with non-interference theorems about its
+     accessors and updaters in the style discussed in @(see
+     stobjs::stobj-updater-independence), with accessors that apply fixing
+     functions to provide unconditionally well-typed results.")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "std/strings" "Standard Strings Library"))
+
+   (xdoc::p
+    "A variant @(tsee str::strtok!) of @(tsee str::strtok) has been added,
+     which does not treat contiguous delimiters as one.
+     This is under the Std extensions in the Kestrel Books.")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "std/typed-lists" "Standard Typed Lists Library"))
+
+   (xdoc::p
+    "A file for lists of strings and symbols has been added.
+     The recognizer has been factored out of
+     @('[books]/system/pseudo-good-worldp.lisp').")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "std::std/util" "Standard Utilities Library"))
+
+   (xdoc::p
+    "A new book @('std/util/defret-mutual-generate') provides a utility "
+    (xdoc::seetopic "std::defret-mutual-generate" "defret-mutual-generate")
+    " intended for generating mutually-inductive theorems over large mutual
+     recursions by applying a set of rules referencing the @(see define)
+     formals and returns to determine what hypotheses to assume and conclusions
+     to prove about each function in the mutual recursion.")
+
+   (xdoc::p
+    "@(csee std::defret) now substitutes the list of return value names for
+     symbols named @('<VALUES>') in the body and hints.")
+
+   (xdoc::p
+    "A new macro @(tsee defarbrec) (for `define arbitrary recursion')
+     has been added, to introduce recursive functions
+     without having to prove termination right away.
+     There exist similar macros in the community books,
+     but the specifics of this new macro are motivated for use with "
+    (xdoc::seetopic "apt::apt" "APT")
+    ". See the `Related Tools' section
+     of the documentation of @(tsee defarbrec) for more information.
+     This macro is currently in the Std/util extensions in the Kestrel Books,
+     but could be moved to @('[books]/std/util') at some point.")
+
+   (xdoc::p
+    "A new macro @(tsee std::deffixer) has been added
+     that automates the definition of fixing functions,
+     and the generation of theorems about them,
+     according to a common pattern.
+     The macro can be extended to cover variations in the pattern if needed.
+     This can be used as a building block
+     for extending @(tsee fty::deffixtype) to generate
+     not only the equivalence, but also the fixer for the fixtype.
+     This macro is currently in the Std/util extensions in the Kestrel Books,
+     but could be moved to @('[books]/std/util') at some point.")
+
+   (xdoc::p
+    "A new macro @(tsee defiso) has been added,
+     to establish isomorphic mappings by verification.")
+
+   (xdoc::p
+    "A new macro @(tsee defmax-nat) has been added,
+     to introduce functions to return maxima of sets of natural numbers.")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 "Tools")
+
+   (xdoc::p
+    "The tool @(tsee remove-hyps) no longer causes an error when the number of
+     prover steps exceeds the value of @('*default-step-limit*') (which is
+     @(`*default-step-limit*`)).  Thanks to Mihir Mehta for reporting this bug.
+     @(tsee Remove-hyps) also avoids skipping proofs, which can lead to false
+     ``theorems''.  Thanks to Stephen Westfold for reporting this issue.")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 "Toothbrush")
+
+   (xdoc::p
+    "Warnings have been eliminated when creating the file
+    @('books/system/toothbrush/defined-syms.lsp').")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "x86isa::x86isa" "X86ISA"))
+
+   (xdoc::p
+    "The following instructions have been added to the model:")
+   (xdoc::ul
+    (xdoc::li "@('MOV moffs8, AL')")
+    (xdoc::li "@('MOV moffs16, AX')")
+    (xdoc::li "@('MOV moffs32, EAX')")
+    (xdoc::li "@('MOV moffs64, RAX')")
+    (xdoc::li "@('SHLD r/m16, r16, imm8')")
+    (xdoc::li "@('SHLD r/m32, r32, imm8')")
+    (xdoc::li "@('SHLD r/m64, r64, imm8')")
+    (xdoc::li "@('SHLD r/m16, r16, CL')")
+    (xdoc::li "@('SHLD r/m32, r32, CL')")
+    (xdoc::li "@('SHLD r/m64, r64, CL')")
+    (xdoc::li "@('SHRD r/m16, r16, imm8')")
+    (xdoc::li "@('SHRD r/m32, r32, imm8')")
+    (xdoc::li "@('SHRD r/m64, r64, imm8')")
+    (xdoc::li "@('SHRD r/m16, r16, CL')")
+    (xdoc::li "@('SHRD r/m32, r32, CL')")
+    (xdoc::li "@('SHRD r/m64, r64, CL')"))
+
+   (xdoc::p
+    "The @('def-inst') macro has been extended
+     to generate more boilerplate code.")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h4 (xdoc::seetopic "xdoc" "XDOC"))
+
+   (xdoc::p
+    "A new generic composite constructor has been added,
+     namely @(tsee xdoc::ahref).")
+
+   (xdoc::p
+    "The generic composite constructor @('xdoc::seeurl')
+     has been renmed to @(tsee xdoc::seetopic).
+     The previous name is still temporarily available as a synonym,
+     for compatibility with existing uses.")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h3 "Licensing Changes")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h3 "Build System Updates")
+
+   (xdoc::p
+    "The `@('basic')' target in @('GNUmakefile') now certifies
+     @('projects/apply/top.lisp'), as is necessary for using @(tsee defun$) or
+     @(tsee defwarrant).")
+
+   (xdoc::p
+    "Modified custom makefiles @('books/projects/apply-model/Makefile') and
+     @('books/projects/apply-model-2/Makefile') to avoid apparent mishandling of
+     dependency analysis.")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h3 "Testing")
+
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+   (xdoc::h3 "Miscellaneous")
+
+   (xdoc::p
+    "Some @(see xdoc) string processing has been made a bit more efficient.")
+
+   (xdoc::p
+    "It was possible for some web-based @(see xdoc) manual pages to be
+     mysteriously empty due to control characters in the source documentation.
+     It is now checked before saving a web-based manual that the :short
+     and :long strings, when supplied, consist solely of standard
+     characters (see @(see standard-char-p)), except that tabs are also
+     permitted.")
+
+   (xdoc::p
+    "Supporting materials for ACL2 Workshop 2020 have been added.  They are in
+    directory @('workshops/2020/'); see the @('README') file there.")
+
+   ))
+
+(defxdoc note-8-2-books
+
+; Please add information about your library in the appropriate
+; category below --- the category title is enclosed in <h3>..</h3>
+; tags (of course, feel free to add a new category if needed).  To
+; ensure consistency with the style of previous book release doc
+; topics, please follow the following convention:
+
+;  <h4>Your Library Title</h4>
+;  <p>Details go here.</p>
+
+; If you are stuck, see comments in previous (defxdoc note-xxx-books ...).
+
+  :parents (note-8-2 release-notes-books)
+  :short "Release notes for the ACL2 Community Books for ACL2 8.2"
+
+  :long "<p>The following is a brief summary of changes made to the @(see
+ community-books) between the releases of ACL2 8.1 and 8.2.</p>
+
+ <p>See also @(see note-8-2) for the changes made to ACL2 itself.  For
+ additional details, you may also see the raw <a
+ href='https://github.com/acl2/acl2/commits/master'>commit log</a>.</p>
+
+ <h3>New Libraries</h3>
+
+ <h4>Kestrel Alist Utilities</h4>
+
+ <p>Added an operation @(tsee remove-assocs), which generalizes @(tsee
+ remove-assoc) from single keys to lists of keys.</p>
+
+ <h4><see topic='@(url crypto::cryptography)'>Cryptography</see></h4>
+
+ <p>Started a library with placeholders for cryptographic functions that will
+ be eventually replaced with complete specifications of those functions.</p>
+
+ <h4>Declarative Definitions of Maxima</h4>
+
+ <p>Added a macro @(tsee defmax-nat) to declaratively define the maximum of a
+ set of natural numbers.</p>
+
+ <h4><see topic='@(url event-macros)'>Event Macros</see></h4>
+
+ <p>Started a library of concepts and utilities to develop event
+ macros (i.e. macros at the event level) more quickly and consistently.</p>
+
+ <p>This library includes some XDOC constructor utilities for the reference
+ documentation of event macros.</p>
+
+ <p>This library also includes functions to process inputs common to multiple
+ event macros.</p>
+
+ <h4>Graphviz</h4>
+
+ <p>Added a book @('[books]/centaur/misc/graphviz.lisp') defining a syntax tree
+ for the Graphviz @('.dot') file syntax and a printer for that syntax.</p>
+
+ <h4><see topic='@(url irv::instant-runoff-voting)'>Instant Run-Off Voting</see></h4>
+
+ <p>Formalized an instant run-off voting scheme and proved that it
+ meets certain fairness criteria.</p>
+
+ <h4>Integer Arithmetic</h4>
+
+ <p>A library for integer arithmetic has been added at
+ @('[books]/kestrel/utilities/integer-arithmetic').</p>
+
+ <h4><see topic='@(url java::java)'>Java</see></h4>
+
+ <p>Added a library for Java-related formalizations and tools, including:</p>
+
+ <ul>
+
+ <li><see topic='@(url java::aij)'>AIJ (<b>A</b>CL2 <b>I</b>n
+ <b>J</b>ava)</see>, a deep embedding in Java of an executable,
+ side-effect-free, non-stobj-accessing subset of the ACL2 language without
+ guards.</li>
+
+ <li><see topic='@(url java::atj)'>ATJ (<b>A</b>CL2 <b>T</b>o
+ <b>J</b>ava)</see>, a simple Java code generator that turns ACL2 functions
+ into AIJ representations that are evaluated by the AIJ interpreter.</li>
+
+ <li>A <see topic='@(url java::language)'>formalization</see> in ACL2 of some
+ aspects of the Java language.</li>
+
+ </ul>
+
+ <h4><see topic='@(url omap::omaps)'>Omaps</see></h4>
+
+ <p>Added a library for omaps (ordered maps), analogous to @(csee
+ std/osets).</p>
+
+ <h3>Changes to Existing Libraries</h3>
+
+ <h4><see topic='@(url aignet::aignet)'>Aignet library</see></h4>
+
+ <p>Improved the @(see aignet::constprop) transform so that it canonicalizes
+ inputs known to be equivalent or opposite to each other, not just to
+ constants.  Added @(see aignet::obs-constprop) that combines this
+ with the existing observability transform, which works better than running
+ the two transforms separately.</p>
+
+ <h4><see topic='@(url apt::apt)'>APT</see></h4>
+
+ <p>Slightly extended the applicability of the @(tsee apt::tailrec)
+ transformation, by relaxing a requirement on the function to be
+ transformed.</p>
+
+ <p>Improved and extended some documentation.</p>
+
+ <p>Added some XDOC constructor utilities tailored to APT transformations.</p>
+
+ <h4><see topic='@(url bitcoin::bitcoin)'>Bitcoin</see></h4>
+
+ <p>Replaced uses of @(tsee ubyte8) and @(tsee ubyte8-list) with @(tsee byte)
+ and @(tsee byte-list).</p>
+
+ <p>Moved the previous placeholders for cryptographic functions into <see
+ topic='@(url crypto::cryptography)'>a new library</see>.</p>
+
+ <p>Added a formalization of BIPs (Bitcoin Improvement Proposal) 32, 39, 43,
+ and 44 for hierarchical deterministic wallets.</p>
+
+ <p>Improved the existing documentation.</p>
+
+ <h4>Bytes</h4>
+
+ <p>Added fixers @(tsee unsigned-byte-fix), @(tsee signed-byte-fix), @(tsee
+ unsigned-byte-list-fix), and @(tsee signed-byte-list-fix) for @(tsee
+ unsigned-byte-p), @(tsee signed-byte-p), @(tsee unsigned-byte-listp), and
+ @(tsee signed-byte-listp).</p>
+
+ <h4><see topic='@(url std::define)'>Define</see></h4>
+
+ <p>Added support for configuration objects that can be used to specify some
+ extended options.  Also added support for @(':verify-guards :after-returns')
+ that indicates that guards are to be verified after the returns
+ specifiers.</p>
+
+ <h4><see topic='@(url rstobj::defrstobj)'>Defrstobj</see></h4>
+
+ <p>Added support for defining universal accessor and updater functions.</p>
+
+ <h4>Digits in Arbitrary Bases</h4>
+
+ <p>The files @('[books]/kestrel/utilities/digits-any-base*.lisp') have been
+ moved to a new subdirectory @('[books]/kestrel/utilities/digits-any-base/')
+ and renamed.  Some files have been refactored into smaller files.</p>
+
+ <p>Some theorems have been added.</p>
+
+ <p>Added operations to group digits in a smaller base into digits in a larger
+ base, and vice versa, in both big-endian and little-endian.</p>
+
+ <p>The macro to generate additional return types for conversions from natural
+ numbers to digits has been generalized and renamed.</p>
+
+ <p>A macro @(tsee defdigits) has been added, to generate specialized versions
+ of the conversion operations, and some theorems about them, for specific bases
+ and specific recognizers and fixers of (lists of) digits.  Used this macro for
+ some library fixtypes (e.g. bits and bytes as digits in base 2 and 256
+ respectively).</p>
+
+ <p>A macro @(tsee defdigit-grouping) has been added, to generate specialized
+ versions of the digit grouping functions, and some theorems about them, for
+ specific pair of bases such that the larger base is a positive power, greater
+ than 1, of the smaller base.  Used this macro for some library fixtypes
+ (e.g. to convert between bits and bytes).</p>
+
+ <h4><see topic='@(url error-checking)'>Error-Checking Utilities</see></h4>
+
+ <p>Added more error-checking functions.</p>
+
+ <p>The files @('[books]/kestrel/utilities/error-checking*.lisp') have been
+ moved to a new subdirectory @('[books]/kestrel/utilities/error-checking/')
+ and renamed.  Some files have been refactored into smaller files.</p>
+
+ <h4><see topic='@(url ethereum::ethereum)'>Ethereum</see></h4>
+
+ <p>Replaced uses of @(tsee ubyte8), @(tsee ubyte8-list), @(tsee ubyte4), and
+ @(tsee ubyte4-list) with @(tsee byte), @(tsee byte-list), @(tsee nibble), and
+ @(tsee nibble-list).</p>
+
+ <p>Modified the formalizations of RLP encoding and decoding to return an
+ explicit error flag.  Added theorems showing that RLP encodings are decodable:
+ RLP encoding is injective, and no valid encoding is a strict prefix of another
+ one.  Added executable RLP decoders and proved them correct with respect to
+ the ones declaratively defined as inverses of the RLP encoders.  Added the RLP
+ tests from the Ethereum Wiki's page on RLP.</p>
+
+ <p>Added a formalization of hex-prefix decoding, declaratively defined as the
+ inverse of hex-prefix encoding.</p>
+
+ <p>Added a formalization of Modified Merkle Patricia trees.</p>
+
+ <p>Added a formalization of the database that underlies Modified Merkle
+ Patricia trees.  This database is a finite map from Keccak-256
+ hashes (i.e. byte arrays of length 32) to byte arrays.</p>
+
+ <p>Added a formalization of the format of transactions and of their RLP
+ encoding and decoding.</p>
+
+ <p>Added several other theorems.  Improved some existing theorems.</p>
+
+ <p>Improved some documentation.</p>
+
+ <p>Moved the previous placeholders for cryptographic functions into <see
+ topic='@(url crypto::cryptography)'>a new library</see>.</p>
+
+ <h4>Filesystem Books</h4>
+
+ <p>The filesystem books @('[books]/projects/filesystems/') have been
+ substantially expanded; in particular, they now contain a new model which
+ faithfully represents the state of a FAT32 disk image. More details about this
+ work are available in the paper <i>Formalising Filesystems in the ACL2 Theorem
+ Prover: an Application to FAT32</i>, to appear in the proceedings of
+ ACL2-2018.</p>
+
+ <p>Recent improvements to the filesystem books include proofs of correctness of
+ filesystem representation transformations in terms of invertibility, and an
+ expanded set of POSIX system calls verified through refinement.</p>
+
+ <h4>FTY Type Definition Library</h4>
+
+ <p>Added an option @(':non-emptyp') to @('fty::deflist') and @('std::deflist')
+ to define list types that must contain at least one element.</p>
+
+ <p>Added a book @('[books]/centaur/fty/typegraph.lisp') containing a utility that
+ writes a Graphviz @('.dot') file showing an FTY type hierarchy.</p>
+
+ <p>Added a book @('[books]/clause-processors/pseudo-term-fty') that supports
+ for treating pseudo-terms as an FTY sum-of-products type; see @(see
+ pseudo-term-fty).</p>
+
+ <p>Collected several <see topic='@(url fty::fty-extensions)'>FTY
+ extensions</see> under the <see topic='@(url acl2::kestrel-books)'>Kestrel
+ Books</see>:</p>
+
+ <ul>
+
+ <li>A new macro @(tsee fty::deflist-of-len) that generates fixtypes for lists
+ of specified lengths, based on existing fixtypes of lists of arbitrary
+ lenghts (introduced via @(tsee fty::deflist)).</li>
+
+ <li>A new macro @(tsee fty::defset) that generates fixtypes for @(csee
+ std/osets) with elements of specified fixtypes.  This is analogous to @(tsee
+ fty::deflist) and @(tsee fty::defalist).</li>
+
+ <li>A new macro @(tsee fty::defomap) that generates fixtypes for <see
+ topic='@(url omap::omaps)'>omaps</see> with keys and values of specified
+ fixtypes.  This is analogous to @(tsee fty::deflist) and @(tsee
+ fty::defalist).</li>
+
+ <li>The @('acl2::defbyte') macro, which generated fixtypes and additional
+ theorems for both bytes and lists of bytes, has been split into two macros
+ @(tsee fty::defbyte), which generates a fixtype and some additional theorems
+ for bytes, and @(tsee fty::defbytelist), which generates a fixtype and some
+ additional theorems for lists of byte.</li>
+
+ <li>A new macro @(tsee fty::deffixtype-alias) to introduce an ``alias'' of an
+ existing fixtype, as well as of its recognizer, fixer, and equivalence.</li>
+
+ <li>An existing fixtype @(tsee omap::map) for <see topic='@(url
+ omap::omaps)'>omaps</see> with keys and values of any types.</li>
+
+ <li>An existing fixtype @(tsee set::set) for @(csee std/osets) with elements
+ of any types.</li>
+
+ <li>An existing fixtype @(tsee nati) for natural numbers and infinity.</li>
+
+ <li>New fixtypes @(tsee byte), @(tsee byte-list), @(tsee byte-list20), @(tsee
+ byte-list32), and @(tsee byte-list64) for (unsigned 8-bit) bytes, true lists
+ of bytes, and true lists of 20, 32, and 64 bytes.</li>
+
+ <li>New fixtypes @(tsee nibble) and @(tsee nibble-list) for (unsigned 4-bit)
+ nibbles and true lists of nibbles.</li>
+
+ <li>A new fixtype @(tsee bit-list) for true lists of bits.</li>
+
+ <li>Existing fixtypes @('ubyteN'), @('sbyteN'), @('ubyteN-list'), and
+ @('sbyteN-list') for standard(ly named) fixtypes for unsigned or signed (true
+ lists of) bytes of various sizes.</li>
+
+ </ul>
+
+ <h4><see topic='@(url ipasir::ipasir)'>Ipasir library</see></h4>
+
+ <p>Used new ACL2 system features to fix the remaining known soundness bug and
+ remove a trust tag.</p>
+
+ <h4><see topic='@(url list-utilities)'>List Utilities</see></h4>
+
+ <p>Added some theorems about functions on lists.</p>
+
+ <h4>Profiling</h4>
+
+ <p>Attempts to run @(tsee profile-acl2) or @(tsee profile-all) had failed, for
+ ACL2 built on SBCL, with an obscure SBCL error message.  Now, the error
+ message gives instructions for how to avoid the error by rebuilding SBCL from
+ sources after doing a specified edit.  Thanks to Stas Boukarev for pointing to
+ the appropriate SBCL source code line.</p>
+
+ <h4>Quadratic Reciprocity</h4>
+
+ <p>In @('projects/quadratic-reciprocity/'), certain include-books, namely
+ those that bring in books from @('support/'), have been made local.  This follows
+ the standard pattern of putting all proof work in separate \"support books\"
+ which are included only locally in the main files.  (The main files simply
+ re-iterate, redundantly, the events to be exported.)  If this change causes
+ proof failures, and your development includes books such as
+ @('projects/quadratic-reciprocity/fermat'), consider now also including the
+ corresponding support books (e.g.,
+ @('projects/quadratic-reciprocity/support/fermat')).  (Actually, to get
+ broken proofs working again, it may suffice to include simpler books that were
+ previously brought in via the support books, such as
+ @('rtl/rel11/support/basic') or @('rtl/rel11/support/util').)</p>
+
+ <h4>RAC: Restricted Algorithmic C</h4>
+
+ <p>Minor modifications of @('projects/rac/') include a bug fix in the parser
+ and a rewrite of @('examples/hello.cpp')
+ (hat-tip to D. Hardin).</p>
+
+ <h4>@(csee rtl)</h4>
+
+ <p>A number of new lemmas have been added to @('rtl/rel11/lib/'), which were
+ required in the verification of an Arm FPU currently under development.  This
+ in turn required some minor modifications of @('projects/arm/*/').</p>
+
+ <h4><see topic='@(url soft::soft)'>SOFT</see></h4>
+
+ <p>The @(tsee soft::defun2), @(tsee soft::defchoose2), @(tsee
+ soft::defun-sk2), and @(tsee soft::defun-inst) macros no longer include an
+ explicit list of function parameters.  The function is implicitly
+ parameterized over the function variables that it depends on.</p>
+
+ <h4>@(csee std/alists)</h4>
+
+ <p>Added a function @(tsee remove-assocs), moved from
+ @('[books]/kestrel/utilities/').</p>
+
+ <p>Added some theorems about @(tsee remove-assoc-equal), moved from
+ @('[books]/kestrel/utilities/').</p>
+
+ <h4>@(csee std/basic)</h4>
+
+ <p>Added a recognizer @(tsee bytep) for ``standard'' (i.e. unsigned 8-bit)
+ bytes, moved from @(csee std/io).</p>
+
+ <p>Added a recognizer @(tsee nibblep) for ``standard'' (i.e. unsigned 4-bit)
+ nibbles, moved from
+ @('[books]/projects/oracle/stv-invariant-extraction-pitfall/alu.lisp').</p>
+
+ <h4>@(csee std/io)</h4>
+
+ <p>Added new lemmas to the <see topic='@(url combine-functions)'>Std/io
+ byte-combining libraries</see>.</p>
+
+ <p>Factored out the @(tsee bytep) predicate into a new file under @(csee
+ std/basic).</p>
+
+ <h4>@(csee std/lists)</h4>
+
+ <p>The definition of function @(see list-fix) from
+ @('\"books/std/lists/list-fix.lisp\"') has been incorporated into the ACL2
+ sources in a way that minimizes changes to existing books.  See @(see
+ note-8-2) for details.</p>
+
+ <p>The built-in function @(tsee take) has been redefined exactly along the
+ lines suggested by the theorem @('take-redefinition') that was previously
+ introduced in @('\"books/std/lists/take.lisp\"').  This theorem has been now
+ removed.  See @(see note-8-2) for details.</p>
+
+ <h4>@(csee std/util)</h4>
+
+ <p>Added macros @(tsee std::defthm-natp), @(tsee std::defthm-unsigned-byte-p),
+ and @(tsee std::defthm-signed-byte-p), from the X86ISA model.</p>
+
+ <h4><see topic='@(url string-utilities)'>String Utilities</see></h4>
+
+ <p>Added new lemmas and generalized and improved some existing lemmas.</p>
+
+ <p>Redefined more compactly the predicates in
+ @('[books]/kestrel/utilities/string/char-kinds.lisp') via @(tsee
+ str::defcharset).  Added a new predicate.</p>
+
+ <p>Added functions @(tsee hexchars=>ubyte8) and @(tsee ubyte8=>hexchars) to
+ convert between single bytes and pairs of hexadecimal digit characters;
+ rephrased @(tsee ubyte8s=>hexchars) in terms of @(tsee ubyte8=>hexchars).
+ Added functions @(tsee hexchars=>ubyte8s) and @(tsee hexstring=>ubyte8s),
+ inverses of @(tsee ubyte8s=>hexchars) and @(tsee ubyte8s=>hexstring).</p>
+
+ <h4>System Utilities</h4>
+
+ <p>The new utility @(tsee sublis-expr+) replaces terms by variables even
+ inside @('lambda') (@('let')) bodies.</p>
+
+ <p>Several files @('[books]/kestrel/utilities/*.lisp') that contain system
+ utilities have been moved to the subdirectory
+ @('[books]/kestrel/utilities/system/').</p>
+
+ <p>The utility, @(tsee directed-untranslate), has been improved in several
+ ways, including more complete handling of @(tsee mv-let), @(tsee let*), @(tsee
+ b*), @(tsee progn$), @(tsee er), @(tsee cw), and @(tsee mbe).</p>
+
+ <p>For the event macro @(tsee orelse*), the default for the @(':expansion?p')
+ argument has been changed from @('nil') to @('t'), for consistency with @(tsee
+ orelse).</p>
+
+ <p>Added utilities @(tsee macro-keyword-args) and @(tsee macro-keyword-args+)
+ to retrieve an alist of the keyword arguments of a macro, associated to their
+ default values.</p>
+
+ <p>The file @('kestrel/utilities/system/event-forms.lisp') has been split,
+ with material on lists of event forms put into the new file
+ @('kestrel/utilities/system/event-form-lists.lisp').  When @('event-forms') is
+ included, @(tsee std::deflist) is now no longer brought in, so
+ @('std/util/deflist') may now need to be explicitly included in more
+ places.</p>
+
+ <h4><see topic='@(url use-termhint)'>Termhint utility</see></h4>
+
+ <p>The @('use-termhint') utility has been moved to its own book
+ @('std/util/termhints') from its former location at
+ @('clause-processors/use-by-hint').</p>
+
+ <p>Added a new utility, @(see function-termhint), for creating termhints from
+ existing function definitions containing @(see hintcontext) annotations.</p>
+
+ <h4>Typed List Utilities</h4>
+
+ <p>Refactored the old file
+ @('[books]/kestrel/utilities/typed-list-theorems.lisp') into separate files
+ under a new directory @('[books]/kestrel/utilities/typed-lists').</p>
+
+ <p>Added a recognizer @(tsee bit-listp) for true lists of bits, and associated
+ theorems.</p>
+
+ <h4><see topic='@(url x86isa)'>X86ISA</see></h4>
+
+ <p>Finished adding support for 32-bit application-level execution for all the
+ instructions, including the floating-point ones, supported by the model.</p>
+
+ <p>Added support for enabling/disabling machine features that depend on CPUID
+ flags.</p>
+
+ <p>Detection of many decode-time exceptions is now done during opcode
+ dispatch, as opposed to inside the instruction semantic functions.  This not
+ only lets us catch exceptions early, but also allows us to specify them
+ even if the semantic functions themselves are missing.</p>
+
+ <p>Improved incrementing and decrementing of the stack pointer to be modular:
+ 64, 32, or 16 bits, based on the current mode and on the SS.B bit of the
+ current stack segment.</p>
+
+ <p>Modified the logical definitions of the x86 state (i.e., the abstract
+ stobj).  Now, the x86 state accessor functions unconditionally return
+ well-formed values and the x86 state updater functions return a well-formed
+ state, provided that the initial state was well-formed; thus, constraints on
+ the index (in case of array fields) and value being written have been
+ eliminated.</p>
+
+ <p>Improved the @('defthm-natp'), @('defthm-usb'), and @('defthm-sb')
+ utilities to generate minimal and reliable hints for corollaries.  Improved
+ the @('defthm-natp') utility to also generate a rewrite rule.  Extended
+ @('defthm-natp') with the ability to turn on/off the generation of the type
+ and linear corollaries, to modify their hypotheses, to supply more specific
+ hints for the corollaries, and to specify @(':otf-flg'); these options are
+ like the ones provided by @('defthm-usb') and @('defthm-sb').  Improved the
+ @('defthm-usb') utility to also generate a linear linear saying that the value
+ is greater than or equal to 0.  Renamed @('defthm-usb') and @('defthm-sb') to
+ @('defthm-unsigned-byte-p') and @('defthm-signed-byte-p'), for consistency
+ with @('defthm-natp').  Moved all three utilities to @(csee std/util).</p>
+
+ <p>Extended top-level memory reading functions to take into account the R bit
+ of code segment descriptors, when they access for reading (not execution) a
+ code segment in 32-bit mode: in this case, if R = 0, the code segment is
+ execute-only and thus reading data from it is not allowed.  Extended top-level
+ memory functions to take into account the W bit of data segment descriptors,
+ in 32-bit mode: if W = 0, the data segment is read-only and thus writing data
+ to it is not allowed; writing to a code segment is not allowed either.</p>
+
+ <p>Opcode maps are now represented using @(see fty::defprod)s, which makes it
+ easier to operate on them in order to automatically generate dispatch
+ functions and documentation, and to precompute some kinds of decoding
+ information.</p>
+
+ <p>Extended effective-to-linear address translation to check that the visible
+ part of the DS, ES, FS, and GS segment registers does not contain a null
+ segment selector.  A similar check on CS and SS is not needed because a null
+ segment selector cannot be loaded into these two segment registers.</p>
+
+ <p>Improved the `PUSH segment register' instruction to handle a 32-bit operand
+ size as in modern processors: instead of zero-extending the 16-bit content of
+ the segment register to 32 bits, now the model writes the low 16 bits, leaving
+ the high 16 bits unchanged.</p>
+
+ <p>Extended @(tsee x86isa::select-operand-size) to accommodate instructions
+ that do not follow the ``normal'' rules.  The extended function has additional
+ parameters, whose different values trigger the use of the non-``normal''
+ rules.  Now many more instructions use this function, avoiding repeated blocks
+ of identical codes in their semantic functions.</p>
+
+ <p>Improved and extended some documentation.</p>
+
+ <h4>XDOC Utilities</h4>
+
+ <p>Improved the <see topic='@(url xdoc::constructors)'>XDOC constructors</see>
+ to use a tree representation that is converted into a flat string only at the
+ top level.  This enforces a better type discipline and facilitates future
+ optimizations if needed.</p>
+
+ <p>Introduced several additional constructors.</p>
+
+ <p>Extended the documentation of the constructors.</p>
+
+ <p>Moved the constructors to @('[books]/xdoc/constructors.lisp').</p>
+
+ <h3>Licensing Changes</h3>
+
+ <h3>Build System Updates</h3>
+
+ <p>Added a feature to @('books/GNUMakefile') that allows books to specify
+ dependencies on cert ACL2 system features, so that they will be automatically
+ be recertified when such features are changed.  See @(see
+ build::acl2-system-feature-dependencies).</p>
+
+ <p>Added utilities @(see ifdef-define) and @(see ifdef-undefine) in
+ @('books/build/ifdef.lisp') which set or unset environment variables while
+ allowing the build system to correctly track them for its support of @(see
+ ifdef) and @(see ifndef).</p>
+
+ <p>Cleaned up the Perl scripts implementing <see topic='@(url build::cert.pl)'>cert.pl</see>,
+ factoring them into several supporting libraries.</p>
+
+ <h3>Testing</h3>
+
+ <h3>Miscellaneous</h3>
+
+ <p>We now avoid causing an error when building the manual in the case that the
+ @('zip') program is not installed; that causes a warning instead.</p>
+
+ ")
+
+(defxdoc note-8-1-books
+
+; Please add information about your library in the appropriate
+; category below --- the category title is enclosed in <h3>..</h3>
+; tags (of course, feel free to add a new category if needed).  To
+; ensure consistency with the style of previous book release doc
+; topics, please follow the following convention:
+
+;  <h4>Your Library Title</h4>
+;  <p>Details go here.</p>
+
+; See also comments in (defxdoc note-8-0-books ...).
+
+; Too trivial to mention in the xdoc string below:
+
+; - Added a check in defopener -- actually, in supporting function
+;   simplify-with-prover in books/misc/bash.lisp -- that :hints is indeed an
+;   alist, to avoid an ugly raw Lisp error when that's not the case.
+
+  :parents (note-8-1 release-notes-books)
+  :short "Release notes for the ACL2 Community Books for ACL2 8.1"
+
+  :long "<p>The following is a brief summary of changes made to the @(see
+ community-books) between the releases of ACL2 8.0 and 8.1.</p>
+
+ <p>See also @(see note-8-1) for the changes made to ACL2 itself.  For
+ additional details, you may also see the raw <a
+ href='https://github.com/acl2/acl2/commits/master'>commit log</a>.</p>
+
+ <h3>New Libraries</h3>
+
+ <p>A new regular expression library, @(see acre::acre), is available in
+ @('books/centaur/acre/').  Compared to the implementation in
+ @('projects/regex'), this version's features are less similar to GNU grep and
+ somewhat more similar to Perl regular expressions.  However, it does not aim
+ to be fully compatible, but to have a well-defined set of features with clean
+ code that can be easily extended and behaves predictably (as much as possible,
+ for regular expressions).</p>
+
+ <p>Added PLTP(A), The Pure Lisp Theorem Prover, reimplemented in ACL2.  An
+ ACL2 reconstruction of the 1973 Pure Lisp Theorem Prover (PLTP), the original
+ ``Boyer-Moore theorem prover'' after which both NQTHM and ACL2 were modeled,
+ is available in @('books/projects/pltpa/pltpa.lisp').  More importantly, a <a
+ href='http://www.cs.utexas.edu/users/moore/best-ideas/pltp/index.html'>PLTP
+ archive</a> has been set up.  That archive includes much original source
+ material (e.g., scanned images of the 1973 POP-2 implementation of PLTP) as
+ well as an extensive discussion of the differences between PLTP and PLTP(A),
+ and an OCaml version of PLTP, named PLTA(O), by Grant Passmore.</p>
+
+ <p>A new directory, @('books/projects/arm/'), contains proofs of correctness
+ of the Floating-point operations of addition, multiplication, fused
+ multiply-add, division, and square root, as implemented in the FPU of an Arm
+ Cortex-A class high-end processor.</p>
+
+ <p>Added utility @(see include-book-paths) to list paths via @(tsee
+ include-book) down to a given book, which may be useful for reducing book
+ dependencies.</p>
+
+ <p>Added utility @(see apply-fn-if-known) to apply a function that might not
+ exist; even the package for the function symbol might not exist.</p>
+
+ <p>Added a fixer @(tsee integer-range-fix) for @(tsee integer-range-p), as
+ well as a recognizer @(tsee integer-range-listp) and and a fixer @(tsee
+ integer-range-list-fix) for true lists of @(tsee integer-range-p), all with
+ accompanying theorems.</p>
+
+ <p>Added a <see topic='@(url digits-any-base)'>library</see> to convert
+ between natural numbers and their representations as lists of digits in
+ arbitrary bases in big-endian and little-endian order.  Digits are natural
+ numbers below the base.  There are variants for minimum-length,
+ non-zero-minimum-length, and specified-length lists of digits.  The library
+ includes, among others, theorems stating that the number-to-digits and
+ digits-to-number conversions are mutual inverses in a suitable sense.</p>
+
+ <p>Added a new utility, @(tsee skip-in-book), that wraps around a form to
+ prevent its evaluation during book certification or inclusion.</p>
+
+ <p>The new utility @(tsee defthm<w) will attempt to prove a theorem directly
+ from previously-proved theorems.  It does this by generating suitable @(see
+ hints) using the new utility, @(see previous-subsumer-hints).</p>
+
+ <p>Added some utilities for building XDOC documentation.  The <see
+ topic='@(url xdoc::constructors)'>XDOC constructors</see> are utilities to
+ construct well-tagged XDOC strings via ACL2 function calls whose nesting
+ structure mirrors the nesting of the XML.  @(tsee defxdoc+) extends @(tsee
+ defxdoc) with additional conveniences.</p>
+
+ <p>A new event, @(tsee defunt), is a variant of @(tsee defun) that uses
+ termination theorems from a large set of @(see community-books) &mdash;
+ namely, all books included in @('books/doc/top.lisp'), which is the book that
+ creates the ACL2+Books manual &mdash; to generate termination proofs
+ automatically.  Those proofs use @(':')@(tsee termination-theorem) @(see
+ lemma-instance)s that reference @('defun') events in those included books.
+ Several new supporting utilities are documented: @(tsee fms!-lst), which
+ writes a list to a character output channel; @(tsee injections), which lists
+ all maps from a domain to a range; @(tsee strict-merge-sort-<), which sorts without
+ duplicates; and @(tsee subsetp-eq-linear), which is a linear-time subset test
+ for sorted lists of symbols.</p>
+
+ <p>Added a new macro @('defbyte') for introducing fixtypes for unsigned and
+ signed bytes of specified sizes, as well as fixtypes of lists of such bytes,
+ along with theorems relating the fixtype recognizers to the built-in binary
+ predicates @(tsee unsigned-byte-p) and @(tsee signed-byte-p) and to the
+ library binary predicates @(tsee unsigned-byte-listp) and @(tsee
+ signed-byte-listp).</p>
+
+ <p>Started a new library for <a href=\"https://ethereum.org\">Ethereum</a>.</p>
+
+ <p>Started a new library for <a href=\"https://bitcoin.org\">Bitcoin</a>.</p>
+
+ <p>A new book, @('clause-processors/bindinglist.lisp'), supports a meta-level
+ structure for a list of bindings of variables to values, with functions that
+ convert these to and from nests of lambdas and proofs that establish these
+ functions' semantics with respect to an evaluator.</p>
+
+ <h3>Changes to Existing Libraries</h3>
+
+ <p>The behavior and code for the expander (see @(see defthm?)) have been
+ improved in a few ways (some of them technical), as follows.</p>
+
+ <ul>
+
+ <li>A bug has been fixed that was preventing @(see hints) from being passed to
+ the forcing round (if any).  An example may be found in the new book,
+ @('misc/expander-tests.lisp').</li>
+
+ <li>The deprecated @(tsee fmt) directives @('~p') and @('~q') have been
+ replaced by @('~x') and @('~y'), respectively.</li>
+
+ <li>Error messages have been improved for the function @('simplify-hyps') when
+ there is a contradiction.</li>
+
+ <li>The @(see state) globals @('tool2-result') and @('tool2-error') are no
+ longer set.  (They appear to have been unused.)</li>
+
+ <li>The functions @('tool2-fn'), @('tool2-fn-lst'), and @('simplify-hyps') now
+ have a new final argument, @('ctx').  Also, the macro @('tool2') now has a
+ @(':ctx') keyword argument.</li>
+
+ </ul>
+
+ <p>Updated the ACL2+books manual to accommodate the replacement of David
+ Russinoff's online rtl manual by his upcoming Springer book.</p>
+
+ <p>Improved @(tsee install-not-normalized) to handle cases in which
+ recursively-defined functions have non-recursive normalized definitions.</p>
+
+ <p>The @('misc/assert.lisp') book no longer includes @('misc/eval.lisp'),
+ since tests about the @('misc/assert.lisp') utilities are now in a separate
+ book @('misc/assert-tests.lisp').</p>
+
+ <p>The @('misc/eval.lisp') utilities @(tsee ensure-error), @(tsee
+ ensure-soft-error), @(tsee ensure-hard-error), @(tsee thm?), and @(tsee
+ not-thm?)  have been renamed to @(tsee must-fail-with-error), @(tsee
+ must-fail-with-soft-error), @(tsee must-fail-with-hard-error), @(tsee
+ must-prove), and @(tsee must-not-prove).  The old names are still available as
+ deprecated synonyms, which will be removed in one of the next releases.</p>
+
+ <p>The old directory @('books/projects/masc/') has been replaced by the bew
+ directory@('books/projects/rac/').  The reason is that our RTL modeling
+ language now uses the register class templates of Algorithm C instead of those
+ of SystemC, so the name <i>Modeling Algorithms in SystemC</i> now makes even
+ less sense than it did; the best we could come up with as a replacement is
+ <i>Restricted Algorithmic C</i>. </p>
+
+ <p>The utility @(tsee make-flag) has a new keyword argument, @(':last-body'),
+ to specify using the most recent @(see definition) rule for a function symbol
+ instead of its original definition.</p>
+
+ <p>Extended and simplified the <see topic='@(url
+ defun-sk-queries)'>@('defun-sk') query utilities</see>.  The utilities now
+ handle the recently introduced @(':constrain') option.  The utilities no
+ longer build a record with all the information about the @(tsee defun-sk)
+ function (whose fields can then be accessed); instead, now the utilities
+ retrieve the various pieces of information directly.</p>
+
+ <p>Extended the <see topic='@(url defchoose-queries)'>@('defchoose') query
+ utilities</see> with a recognizer for symbols that name @(tsee defchoose)
+ functions.</p>
+
+ <p>Made several improvements to @(tsee directed-untranslate), including: avoid
+ assertion errors that could occur when using @(tsee declare) forms with @(tsee
+ let), @(tsee let*), or @(tsee mv-let) expressions: enhance insertion of
+ appropriate @(tsee mv) calls; extend dropping of unused @(tsee let) bindings;
+ avoid an assertion error with @('mv-let') expressions; and preserve basic uses
+ of @(tsee b*).</p>
+
+ <p>Removed the @('keywords-of-keyword-value-list') utility, because it is
+ subsumed by the built-in @(tsee evens) utility.</p>
+
+ <p>Extended the <see topic='@(url error-checking)'>error-checking
+ utilities</see> with several error-checking functions.</p>
+
+ <p>Extended the Kestrel world query utilities with functions to collect the
+ names of all the known packages in the ACL2 @(see world) and to check if a
+ function is primitive.</p>
+
+ <p>Extended the <see topic='@(url std/system/term-function-recognizers)'>term
+ function recognizers</see> with recognizers for true lists of
+ (pseudo-)lambda-expressions and (pseudo-)term-functions.</p>
+
+ <p>Extended the Kestrel term utilities with operations to substitute function
+ symbols without performing simplification, to construct terms that are
+ functions applications of certain forms, to collect all the lambda expressions
+ in terms, and to collect all the package names in (symbols in) terms.</p>
+
+ <p>The utility @(tsee install-not-normalized-event) now includes option
+ @(':allp nil') in the generated @(tsee install-not-normalized) event.  The new
+ utility, @(tsee install-not-normalized-event-lst), can thus handle @(tsee
+ mutual-recursion) nicely, e.g.: @('(install-not-normalized-event-lst (getpropc
+ 'f1 'recursivep nil) nil nil (w state))').  Also, added new utility @(tsee
+ install-not-normalized$) to submit the event generated by @(tsee
+ install-not-normalized-event).</p>
+
+ <p>Extended the <see topic='@(url set::oset-utilities)'>oset utilities</see>
+ with a <see topic='@(url fty)'>fixtype</see> for osets.</p>
+
+ <p>Added some <see topic='@(url nat-list-fix-theorems)'>theorems about lists
+ of natural numbers</see>.</p>
+
+ <p>Added a theorem about lists of strings.</p>
+
+ <p>Merged the utilities in @('[books]/kestrel/utilities/characters.lisp') into
+ the <see topic='@(url string-utilities)'>string utilities</see>.  Extended the
+ combined utilities with some theorems about the pre-existing functions and
+ with new functions to check if (lists of) characters are all of specified
+ kinds, to convert a list of unsigned 8-bit bytes to a corresponding list or
+ string of hex digit characters.  Refactored all the old and new utilities into
+ separate files to reduce dependencies.</p>
+
+ <p>Extended the Kestrel symbol utilities with a utility that lifts @(tsee
+ symbol-package-name) to lists.</p>
+
+ <p>Moved @(tsee maybe-msgp) under newly created <see topic='@(url
+ message-utilities)'>message utilities</see>.  Extended these utilities with a
+ recognizer of true lists of messages.</p>
+
+ <p>Moved @(tsee msg-downcase-first) and @(tsee msg-upcase-first) from the <see
+ topic='@(url string-utilities)'>string utilities</see> to the <see
+ topic='@(url message-utilities)'>message utilities</see>.</p>
+
+ <p>A new book, @('kestrel/utilities/proof-builder-macros.lisp'), is a place to
+ define @(see proof-builder) macros.  This book currently defines a simple
+ macro, @('when-not-proved') (see @(tsee acl2-pc::when-not-proved)), for
+ skipping instructions when all goals have been proved.  It also defines two
+ (more complex) macros, @('prove-guard') (see @(tsee acl2-pc::prove-guard)) and
+ @('prove-termination') (see @(tsee acl2-pc::prove-termination)), for
+ (respectively) using previously-proved @(see guard) or termination theorems
+ efficiently, as well as a more general macro, @(tsee acl2-pc::fancy-use), for
+ using lemma instances (via @(':use')) efficiently.</p>
+
+ <p>Improved the @('copy-def') utility (community book
+ @('kestrel/utilities/copy-def.lisp')) in several ways: added an @(':expand')
+ hint in the recursive case (as is sometimes necessary), improved it to work
+ better with @(tsee mutual-recursion), and improved it to work better with an
+ @(':equiv') argument.</p>
+
+ <p>Fixed the utility, @(tsee orelse), so that @(':quiet t') pushes the output
+ stack, as per existing documentation.</p>
+
+ <p>Fixed a few books that broke due to the change in @(tsee defevaluator) (see
+ @(see note-8-1) for details).</p>
+
+ <h4><see topic='@(url soft::soft)'>SOFT</see></h4>
+
+ <p>Added a @(':print') option to control screen output.</p>
+
+ <p>Improved user input validation.</p>
+
+ <p>Added support for the new @(':constrain') option of @(tsee defun-sk).  This
+ option is now supported by SOFT's @(tsee soft::defun-sk2) and @(tsee
+ soft::defun-inst) macros.</p>
+
+ <h4><see topic='@(url x86isa)'>X86ISA</see></h4>
+
+ <p>Most of the model has been extended to 32-bit mode.  The only instructions
+ that remain to be extended to 32-bit mode are JMP far and the floating-point
+ instructions.  The 32-bit-only instructions PUSHA, POPA, INC with opcodes
+ 40h-47h, DEC with opcodes 48h-4Fh, and PUSH CS/SS/DS/ES have been added to the
+ model.  Support for the kinds of paging in 32-bit mode is still missing, but
+ this is only needed for the system view of the model, not the application
+ view.</p>
+
+ <p>Some of the XDOC documentation and some of the comments have been slightly
+ expanded.</p>
+
+ <p>The notion of programmer-level mode and system-level mode have been renamed
+ to `application-level view' and `system-level view', to avoid overloading the
+ word `mode', which in the x86 has a more specific meaning.  Similarly, the
+ notion of page structure marking mode has been renamed `marking view'.  This
+ involved renaming the @('programmer-level-mode') and
+ @('page-structure-marking-mode') field of the state stobj to the shorter
+ @('app-view') and @('marking-view'), and also renaming some functions and
+ theorems acccordingly.</p>
+
+ <p>The instruction decoder has been extended to detect VEX- and EVEX-encoded
+ (AVX, AVX2, AVX512) instructions, in both 64- and 32-bit modes of operation.
+ However, semantic functions of many of these instructions are still
+ unimplemented.</p>
+
+ <p>Annotated opcode maps are now used to generate opcode dispatch functions
+ and instruction coverage information.</p>
+
+ <h4><see topic='@(url apt::apt)'>APT</see></h4>
+
+ <p>Improved documentation.</p>
+
+ <p>Improved options to control the screen output.</p>
+
+ <p>Improved @(tsee apt::tailrec) transformation with an option to attempt to
+ automatically infer the domain for some of the transformation's applicability
+ conditions.</p>
+
+ <p>Improved @(tsee apt::restrict) transformation to wrap the restriction test
+ with @(tsee mbt); added an applicability condition to ensure that the
+ restriction test is boolean-valued.</p>
+
+ <p>Imported more symbols from the @('\"ACL2\"') package into the @('\"APT\"')
+ package.</p>
+
+ <h4><see topic='@(url acl2::bitops)'>Bitops</see></h4>
+
+ <p>Added the @(see bitops::sparseint) library, which represents large integers
+ as balanced binary trees, which can save memory by sharing structure among many
+ such objects.</p>
+
+ <h4><see topic='@(url acl2::sv)'>SV</see></h4>
+
+ <p>Improved scalability of several SV utilities when large variables are present
+ by recoding several functions that previously used Lisp bignums to use a
+ @(see bitops::sparseint) based encoding.</p>
+
+ <h4><see topic='@(url gl::gl)'>GL</see></h4>
+ <p>Added optional accumulated-persistence-style profiling of attempted rule
+ applications, available with keyword argument @(':prof-enabledp t').</p>
+
+ <p>Changed the representation of symbolic objects, removing the @(':g-number')
+ form which could represent complex rationals and replacing it with a simpler
+ @(':g-integer') form.  (Complex rationals may still be supported using
+ rewriting.  Also, the @(':g-number') shape specifier is still supported for
+ backward compatibility, though it is restricted to only represent integers and
+ translates directly into @(':g-integer') symbolic objects.)  Removed some
+ native symbolic counterparts for functions that can be dealt with more cleanly
+ via rewrite rules.</p>
+
+ <h4><see topic='@(url gl::glmc)'>GLMC</see></h4>
+ <p>Added option to bind some variables that can be used by the nextstate, property,
+ constraint, and initstate terms.  These bindings will be symbolically evaluated once,
+ which can perhaps improve performance by not requiring them to be repeated.</p>
+
+ <h4><see topic='@(url acl2::xdoc)'>Xdoc</see></h4>
+
+ <p>Added a utility, @(see xdoc::archive-xdoc), that saves the documentation
+ generated by a series of local events, partially preprocessing it to avoid
+ references to definitions that might only be locally available.</p>
+
+ <p>The @(tsee defpointer) utility for @(see xdoc) now accepts names that have
+ special characters such as @('<').</p>
+
+ <h4><see topic='@(url acl2::std)'>STD</see></h4>
+
+ <p>The @('std/typed-lists/unsigned-byte-listp.lisp') book now includes
+  @('std/lists/take') locally. As a result,
+  @('projects/x86isa/tools/execution/exec-loaders/mach-o/mach-o-reader.lisp'),
+  @('std/io/take-bytes.lisp'), @('unicode/read-utf8.lisp'), and
+  @('unicode/utf8-decode.lisp') also include this book locally.</p>
+
+ <h3>Licensing Changes</h3>
+
+ <h3>Build System Updates</h3>
+
+ <p>The build system now has support for @(see ifdef) and @(see ifndef), which
+ are @(see make-event)-supported macros defined in @('books/build/ifdef.lisp').
+ In particular, this allows the community books' makefile to support building
+ different versions of the manual depending what external tools are
+ installed.</p>
+
+ <h3>Testing</h3>
+
+ <h3>Miscellaneous</h3>
+
+ <p>A BibTeX file has been added to the community books, containing reference
+ information for papers published at the ACL2 Workshops.  This may be useful to
+ you if you wish to cite such a paper in a LaTeX document.  It is available at
+ @('books/workshops/references/').  That directory also contains an example
+ LaTeX file demonstrating how the references may be cited, as well as a README
+ with some more information.</p>
+
+ <p>A Developer's Guide (see @(see developers-guide)) has been added, to assist
+ those who may wish to become ACL2 Developers.  It replaces the much smaller
+ ``system-development'' topic.</p>
+
+ <p>The download button now works in the web-based manual.</p>
+
+ <p>When the @(tsee include-raw) utility with option @(':do-not-compile t') was
+ followed by @(':')@(tsee comp), it was possible for that subsequent
+ compilation to overwrite intended raw Lisp definitions, for a host Lisp that
+ does not compile on-the-fly (i.e., for a host Lisp other than CCL or SBCL).
+ The way to prevent such overwrites is to extend @(see state) globals
+ @('program-fns-with-raw-code') and @('logic-fns-with-raw-code'), which however
+ was not always done.  This is now done automatically, which fixes the
+ overwrite problem.</p>
+
+ ")
+
+(defxdoc note-8-0-books
+
+; Note: To see all git log entries with a given author, for example Joe
+; Q. Bignerd, you can issue a command such as the following (use a substring of
+; the author name) and then look at the new file, tmp:
+
+;    git log -n 1000 --name-only --author='gnerd' > tmp
+
+; Shilpi Goel: As discussed in the ACL2 2017 Workshop, I am adding
+; this doc topic in the hopes that the members of the ACL2 community
+; will track changes to their books as they go by logging them here.
+; The idea is that the information in this topic can be somewhat more
+; high-level than is normally provided in commit messages.
+
+; Please add information about your library in the appropriate
+; category below --- the category title is enclosed in <h3>..</h3>
+; tags (of course, feel free to add a new category if needed).  To
+; ensure consistency with the style of previous book release doc
+; topics, please follow the following convention:
+
+;  <h4>Your Library Title</h4>
+;  <p>Details go here.</p>
+
+  :parents (note-8-0 release-notes-books)
+  :short "Release notes for the ACL2 Community Books for ACL2 8.0"
+
+  :long "<p>The following is a brief summary of changes made to the @(see
+ community-books) between the releases of ACL2 7.4 and 8.0.</p>
+
+ <p>See also @(see note-8-0) for the changes made to ACL2 itself.  For
+ additional details, you may also see the raw <a
+ href='https://github.com/acl2/acl2/commits/master'>commit log</a>.</p>
+
+ <h3>New Libraries</h3>
+
+ <h4>Supporting materials for the 2017 ACL2 Workshop</h4>
+
+ <p>See the new directory, @('workshops/2017/') &mdash; specifically, its
+ @('README') file.</p>
+
+ <h4>SAT proof-checker for cube-and-conquer</h4>
+
+ <p>The new directory is @('projects/sat/lrat/cube/').  See file @('README') in
+ that directory.</p>
+
+ <h4>SAT proof-checker from 2011</h4>
+
+ <p>An early SAT proof-checker based on resolution may be found in directory
+ @('books/projects/sat/zz-resolution-checker/'); see the @('README') in that
+ directory.  It was sufficiently efficient to get limited use in industry, but
+ ultimately was superseded by much more efficient clause-based
+ proof-checking (see directory @('books/projects/sat/lrat/')).</p>
+
+ <h4>EDIF conversion</h4>
+
+ <p>See @('projects/async/tools/convert-edif.lisp') for tools to convert
+ between EDIF format and corresponding convenient s-expressions.</p>
+
+ <h4>try-gl-concls</h4>
+
+ <p>See @(see try-gl-concls) for a small but convenient utility to
+ find all the true conclusions (if any) from a user-provided list of
+ possible conclusions using @(see GL::GL).</p>
+
+ <h4>GLMC</h4>
+
+ <p>GLMC (in directory @('centaur/glmc')) is a connection from ACL2 to
+ AIG-based hardware model checkers, via @(see gl::gl); this can be used to
+ prove safety properties without finding an inductive invariant.  See @(see
+ gl::glmc) for details.</p>
+
+ <h4>Truth</h4>
+
+ <p>Directory @('centaur/truth') contains a library for using integers as a
+ representation for Boolean functions with small (single-digit) numbers of
+ variables, expressing the functions as truth tables.  Truth tables for 5 or
+ fewer variables are especially efficient since the formulas are represented as
+ fixnums (at least in 64-bit lisps).</p>
+
+ <h4>Ipasir</h4>
+
+ <p>The @(see ipasir::ipasir) library (in directory @('centaur/ipasir'))
+ contains an axiomatized interface for using incremental SAT solver libraries in
+ ACL2.  A solver object is represented as an abstract stobj, and actual solver
+ functions from a suitable shared library can be called as the implementation.
+ Integration with @(see aignet::aignet) is also provided in the book
+ @('centaur/aignet/ipasir').</p>
+
+ <h4>ABNF</h4>
+
+ <p>The <see topic='@(url abnf::abnf)'>ABNF (Augmented Backus-Naur Form)
+ library</see> provides (1) a formalization of the syntax and semantics of the
+ ABNF notation, (2) a verified parser that turns ABNF grammar text (e.g. from
+ the HTTP RFC) into a formal representation suitable for formal
+ specification (e.g. for HTTP parsing), and (3) executable operations on ABNF
+ grammars, e.g.  to check their well-formedness and to compose them.</p>
+
+ <h4>APT</h4>
+
+ <p>The <see topic='@(url apt::apt)'>APT (Automated Program Transformations)
+ library</see> provides tools to transform programs and program specifications
+ with automated support.</p>
+
+ <h3>Changes to Existing Libraries</h3>
+
+ <h4>@(see std/io)</h4>
+
+ <p>The @(see std/io) library now contains lemmas to help users prove
+ that opened input and output channels remain open until closed, to
+ aid guard theorem proofs.  See @(see open-channel-lemmas).</p>
+
+ <h4>Miscellaneous @(see std) changes</h4>
+
+ <p>The @('why') and @('why-explain') convenience macros in
+ @('std/std-customization.lsp') now support rule classes other than
+ @(':rewrite').</p>
+
+ <p>The rule @('sets-are-true-lists') has been split into three rules with the
+ same formula: a disabled @(see rewrite) rule of that name, a (@see
+ compound-recognizer) rule @('sets-are-true-lists-compound-recognizer'), and a
+ rewrite rule @('sets-are-true-lists-cheap') whose @(see backchain-limit) is
+ 1.</p>
+
+ <p>A new utility @('def-updater-independence-thm') for proving stobj (and
+ stobj-style) accessors independent of updaters has been added to
+ @('std/stobjs/updater-independence.lisp').</p>
+
+ <h4>Kestrel Utilities</h4>
+
+ <p>The <see topic='@(url kestrel-utilities)'>Kestrel Utilities</see> have
+ undergone several improvements and extensions.</p>
+
+ <p>Improved an error message for @('verify-guards-program') (thanks to Eric
+ Smith for feedback); see
+ @('kestrel/utilities/verify-guards-program.lisp').</p>
+
+ <p>Added utilities @(tsee trans-eval-state) and @(tsee
+ trans-eval-error-triple), which provide convenient interfaces to the ACL2
+ evaluator, @(tsee trans-eval).</p>
+
+ <p>Improved the utility, @(tsee directed-untranslate), especially for handling
+ @(tsee let) and @(tsee mv-let) expressions (and @('lambda') expressions) and
+ towards ensuring executability of its results.</p>
+
+ <p>Improved the utility, @('copy-def'), to avoid failures for some functions
+ defined by @(tsee mutual-recursion).  Thanks to Eric Smith for a helpful bug
+ report.</p>
+
+ <p>Added utility @(tsee er-soft+) for producing soft errors with @(':')@(tsee
+ logic) mode code, returning a specified @(see error-triple).  The new utility
+ @(tsee er-soft-logic) is similar but a bit simpler, for use when the only
+ property needed of the returned @(see error-triple) is that its error
+ component is not @('nil').</p>
+
+ <p>Added utility @(tsee manage-screen-output) which is an improved version of
+ @(tsee control-screen-output) (which may eventually be removed).  Added
+ utilities @(tsee make-event-terse), @(tsee restore-output), @(tsee
+ restore-output?), @(tsee fail-event), and @(tsee try-event) to fine-tune
+ screen output in event-generating macros.  Moved obsolete utility
+ @('control-screen-output-and-maybe-replay') to Workshop supporting materials,
+ where the only remaining use of this utility was.</p>
+
+ <p>The new utility @(tsee orelse) arranges to evaluate an event and, if that
+ fails, then to evaluate a second event.</p>
+
+ <p>The applicability condition utilities have been replaced with the <see
+ topic='@(url named-formulas)'>named formula utilities</see>, which are
+ slightly more general and include a few improvements.</p>
+
+ <p>New <see topic='@(url paired-names)'>paired name utilities</see> have been
+ added, to construct names consisting of two names separated by a global
+ customizable separator.</p>
+
+ <p>A new @(tsee add-const-to-untranslate-preprocess) utility has been added
+ that extend @(tsee untranslate-preprocess) to keep a constant unexpanded in
+ output.</p>
+
+ <p>New @(see error-checking) utilities have been added that check conditions
+ on data (e.g. user input) and provide informative and consistent error
+ messages. These utilities include a macro @(tsee def-error-checker) to
+ concisely define error-checking functions.</p>
+
+ <p>A new macro @('defbyte') has been added that introduces <see topic='@(url
+ fty)'>fixtypes</see> for signed or unsigned bytes of specified sizes. Several
+ instances of applications of this macro for common sizes of both signed and
+ unsigned bytes is also provided.</p>
+
+ <p>Utilities @(tsee doublets-to-alist) and @(tsee keyword-value-list-to-alist)
+ have been added that convert lists of doublets and keyword-value lists to
+ corresponding alists.</p>
+
+ <p>A utility @(tsee assert?) has been added that is a variant of @(tsee
+ assert$) with customizable context and message.</p>
+
+ <p>The @(tsee integers-from-to) utility now has a logical definition that is
+ easier to reason about than its tail-recursive definition for execution (which
+ has not changed).</p>
+
+ <p>The Kestrel world query utilities, term utilities, <see topic='@(url
+ string-utilities)'>string utilities</see>, and character utilities
+ (@('[books]/kestrel/utilities/characters.lisp')) have undergone several
+ improvements and extensions.</p>
+
+ <p>A few theorems about world-related functions and theorems about lists (in
+ @('kestrel/utilities/list-theorems.lisp')) have been added.</p>
+
+ <p>A new @(see logic)-mode utility, @(tsee magic-macroexpand), performs
+ macroexpansion when all macros to be expanded are in logic mode.</p>
+
+ <p>There is a new Kestrel symbol utilities book (initially with a single
+ function, @('symbol-package-name-safe')).</p>
+
+ <h4>The apply books</h4>
+
+ <p>Updated books pertaining to @('apply$'); see @('projects/apply-model/') and
+ @('projects/apply/').</p>
+
+ <h4>SAT proof-checker</h4>
+
+ <p>Additions and improvements have been made to the SAT proof-checker
+ directories, under @('projects/sat/lrat/').  In particular, the proof was
+ completed for the incremental checker (subdirectory @('incremental/') with an
+ improved soundness theorem; a new directory was addded (@('cube/'), as
+ mentioned above); and renamed subdirectory @('main/') to @('sorted/').  The
+ key subdirectory is @('incremental/'); a new top-level book @('top.lisp')
+ includes the top-level book in that subdirectory.</p>
+
+ <h4>Aignet library</h4>
+
+ <p>A few new verified <see topic='@(url aignet::aignet-comb-transforms)'>
+ combinational logic transforms</see> have been
+ added to aignet, most notably <see topic='@(url aignet::fraig)'>fraiging</see>,
+ DAG-aware <see topic='@(url aignet::rewrite)'>rewriting</see>, and
+ DAG-aware and-tree <see topic='@(url aignet::balance)'>balancing</see>.
+ These can be used as preprocessors for SAT solving with GL via @(see
+ gl::gl-simplify-satlink-mode).</p>
+
+ <h4>VL/SV libraries</h4>
+
+ <ul>
+
+ <li>SystemVerilog @('unique case') and @('unique0 case') can now optionally be
+ treated differently from regular @('case') statements: either a constraint may
+ be generated off to the side expressing the one-hot constraint, or logic may be
+ added that assigns @('X') instead of the stated values when the one-hot constraint
+ is violated.</li>
+
+ <li>Somewhat similarly, @('enum') type variables may optionally either
+ generate constraints stating that they take proper enum values, or may generate
+ extra logic that forces them to @('X') when assigned an improper value.</li>
+
+ <li>When composing together 0-delay update functions, if bit-level
+ combinational loops are present, these are composed together to a fixpoint.</li>
+
+ <li>@(see Vl::vl-lint) has yet another use-set check, @(see vl::vl-design-sv-use-set),
+ which uses SV's interpretation of SystemVerilog semantics to more exactly
+ analyze the usage and updates of module variables.  The previous @(see vl::Lucid)
+ use-set check is still useful since sv-use-set only checks variables, not
+ parameters, functions, types, etc., and also does not analyze variables local
+ to procedural code blocks.</li>
+
+ </ul>
+
+ <h4>SOFT</h4>
+
+ <p>The <see topic='@(url soft::soft)'>SOFT (Second-Order Functions and
+ Theorems) library</see> has been improved in several ways. The @(':thm-name')
+ option is now fully supported for second-order quantifier functions and their
+ instances.  The treatment of user inputs is more robust. The user interface is
+ more terse. The implementation is more streamlined. A more comprehensive test
+ suite now exists.</p>
+
+ <h4>X86ISA</h4>
+
+ <ul>
+
+ <li>The <see topic='@(url x86isa)'>X86ISA</see> has been slightly extended with
+ infrastructure to support 32-bit mode of operation; in particular, the
+ @('64-bit-modep') predicate is no longer always true. Some documentation
+ topics and some comments have been expanded and clarified. Some exceptions are
+ now being added to the fault field of the x86 state rather than the
+ model-specific field. A complete model of segment address translation has been
+ added.</li>
+
+ <li>Codewalker can now be used to reason about 64-bit user-level x86
+ programs --- see
+ @('books/projects/x86isa/proofs/codewalker-examples') for demos.</li>
+
+ <li>Memory functions do not traffic in lists anymore.  Instead of a
+ list of canonical addresses, a contiguous linear memory region is now
+ specified by: @('<n, lin-addr>'), where @('n') is the number of bytes
+ to be read or written and @('lin-addr') is the first address of the
+ memory region.</li>
+
+ <li>In the programmer-level mode, disjointness of memory regions can
+ be conveniently expressed using a function called @('separate').  All
+ the proofs in the programmer-level mode have been updated to use this
+ paradigm.</li>
+
+ </ul>
+
+ <h4>AVR ISA</h4>
+ <p>Julien Schmaltz and Peter Schwabes' AVR ISA model has been contributed in book
+ @('projects/avr-isa').</p>
+
+ <h4>Miscellaneous Books</h4>
+
+ <p>The book @('clause-processors/use-by-hint') now contains an additional
+ utility, @(see use-termhint), that helps structure hints in a way that
+ coincides with the structure of a proof and allows hints to contain terms that
+ have been simplified along with the goal.</p>
+
+ <p>A new book @('tools/symlet') introduces a macro @('let-syms') and @('b*')
+ binder @('symlet') that simply replace occurrences of some symbols with some
+ corresponding terms in the enclosed term.  Like Common Lisp's
+ @('symbol-macrolet') but much less smart.</p>
+
+ <p>Fixed @('misc/profiling.lisp') for newer distributions of CCL (Clozure
+ Common Lisp), both from SVN and from GitHub.</p>
+
+ <p>The macro @(tsee defconsts) now provides a better error message when given
+ a symbol that does not have the syntax of a constant.</p>
+
+ <p>The macro @(tsee must-fail) has a new keyword option, @(':expected'), to
+ indicate the kind of error that is expected.  New macros @(tsee
+ ensure-soft-error), @(tsee ensure-hard-error), and @(tsee ensure-error)
+ provide nice interfaces to @('must-fail') with the legal values of this new
+ option.  See @(see must-fail).  Thanks to Eric Smith for discussions leading
+ to these changes.</p>
+
+ <p>Modified @(tsee removable-runes) to allow a multiplier greater than 1.
+ Modified output accordingly.  Also, the multiplier @('m') now provides
+ non-strict bounds @('(floor (* m steps) 1)') rather than the previous
+ strict bound @('(1- (ceiling (* m steps) 1))').  Moreover, a related new utility,
+ @(tsee minimal-runes), returns a list of runes to enable that is sufficient
+ for admitting the event.</p>
+
+ <h3>Licensing Changes</h3>
+
+ <h3>Build System Updates</h3>
+
+ <p>Improved books cleaning slightly, in @('books/GNUmakefile').</p>
+
+ <p>By default, the @(''make'') targets for certifying books now include the
+ books that depend on quicklisp, except when the host Lisp is GCL.  Specify
+ @('USE_QUICKLISP=0') if that is not what you want.</p>
+
+ <p>Improved @('books/GNUmakefile') so that by default, it reports an error
+ when the @('bash') shell is missing.  (Note that a version of @('sh') on a
+ FreeBSD machine caused an error.)</p>
+
+ <p>Also see @(see note-8-0), specifically the section on ``Changes at the
+ System Level''.</p>
+
+ <h3>Testing</h3>
+
+ <p>The documentation topics for testing have been reorganized, with
+ introduction of a new topic, @('kestrel-testing-utilities'), as a parent of
+ the testing utilities that are part of the @(see kestrel-books), so that now
+ the topic @(see testing-utilities) is the top-level topic for the testing
+ utilities.</p>
+
+ <p>The Kestrel Testing Utilities have been integrated with similar testing
+ utilities under @('[books]/misc').  The utilities in
+ @('kestrel/utilities/testing.lisp') have been added to @('misc/eval.lisp') and
+ @('misc/assert.lisp'), and the tests in
+ @('kestrel/utilities/testing-tests.lisp') have been moved into two new files
+ @('misc/eval-test.lisp') and @('misc/assert-tests.lisp').</p>
+
+ <p>The utility @(tsee run-script) supports testing of evaluation of the forms
+ in a given file, to check that the output is as expected.  So far, several
+ existing scripts have been adapted to take advantage of this utility:</p>
+
+ <ul>
+
+ <li>@('books/demos/mini-proveall-input.lsp') &mdash; a long-standing, small
+ basic test of ACL2</li>
+
+ <li>@('books/demos/marktoberdorf-08/') &mdash; based on material originally
+ presented by J Moore in 2008 at the Marktoberdorf Summer School; see the
+ @('README') file in that directory</li>
+
+ <li>@('books/demos/big-proof-talks/') &mdash; based on material about ACL2
+ presented by J Moore on July 6 and 7, 2017, at the <a
+ href='https://www.newton.ac.uk/event/bpr'>Big Proof workshop</a>; see the
+ @('README') file in that directory</li>
+
+ <li>@('books/projects/paco/books/proveall-input.lsp'), formerly named
+ @('proveall.lsp')</li>
+
+ </ul>
+
+ <h3>Miscellaneous</h3>
+
+ <p>Added file @('system/to-do.txt') to list some potential developer
+ tasks.</p>
+
+ <p>Fixed a bug in the package redefinition utility in community book
+ @('books/misc/redef-pkg.lisp').</p>
+
+ <p>Defined a constant @(tsee *acl2-system-exports*) that extends @(tsee
+ *acl2-exports*) for system programmers.</p>
+
+ ")
+
+(defxdoc note-7-2-books
+
+; Shilpi Goel
+; A note on how I prepared :doc note-7-2-books
 ;
-;  - Jared often has uncommitted edits to this file.  Please coordinate with
-;    him before editing these topics!
+; Of course, the easiest (and the fairest?) way to prepare the books
+; release notes is for everyone to update them the way Matt updates the
+; ACL2 release notes --- as and when updates are made.  But we all don't
+; do that.
 ;
-;  - Book release notes are typically very disorganized.  This shouldn't be
-;    considered a bug until we are very close to a release.
+; In this note, I've mentioned some useful git filtering commands that
+; I used to sift through the commit messages. Please feel free to add
+; suggestions, advice, etc. or delete this note altogether.
+
+; Actually, this wasn't too bad to do, considering the huge amount of
+; work that was done in the community between 7.1 and 7.2 releases. It
+; took me about six hours, in two 3 hour increments. Note though that
+; note-7-2-vl was prepared by Jared Davis.
+;
+; # Get a commit log from the date of last release onwards; in this
+;   case, the date was May 5, 2015.
+;
+; > git log --since="May 5, 2015" --no-merges > note-7-2-books-raw.txt
+;
+; # Get a list of all authors that contributed during this period:
+;
+; > fgrep "Author:" note-7-2-books-raw.txt | sort | uniq
+;
+; # Separate out commit messages by author --- the assumption is that an
+;   author will usually work on the same corpus of books and it'll be
+;   easier to consolidate commmits made to them.
+;
+; > git log --since="May 5, 2015" --no-merges --author=shigoel > shigoel.txt
+;
+;   and so on for every author in the list above.
+;
+; # Check if any commits were missed out during this separation of
+;   commits by authors: the outputs of the following two commands must
+;   be the same. Note that the second command assumes that the only
+;   *.txt files in the current directory are those created during this
+;   process.
+;
+; > fgrep "Author:" note-7-2-books-raw.txt | wc -l
+;
+; > fgrep "Author:" --exclude=note-7-2-books-raw.txt *.txt | wc -l
+;
+; # Look in [books]/system/doc/acl2-doc.lisp (the book where users are
+;   free to contribute documentation) for clues about where the books
+;   release notes must be placed. For 7.2 release (and for others before
+;   it till 6.4 release), this is in [books]/doc/relnotes.lisp, as is
+;   noted in *acl2-broken-links-alist*.
+;
+; # Start writing the release notes by going over the author-specific
+;   text files.
+;
+;   - I mentioned the authors of "New Libraries" but I did not mention
+;     the names of those who made changes to existing libraries, unless
+;     their contribution was "overwhelming" or "total" in some
+;     way. E.g., Dmitry Nadezhin made considerable changes to the RTL
+;     books between 7.1 and 7.2 and so I've mentioned his name in the
+;     release notes under RTL.
+;
+;   - In case a commit message is unhelpful in determining whether that
+;     commit is weighty enough to warrant a mention in the release
+;     notes, it can be useful to get a list of files changed by an
+;     author along with the commit SHA and date.
+;
+;     > git log --since="May 5, 2015" --no-merges --stat --author="Foo"
+;
+;   - It can also help to read discussions on closed pull requests and
+;     steal stuff from there (see
+;     https://github.com/acl2/acl2/pulls?q=is%3Apr+is%3Aclosed). You can
+;     choose to filter the pull requests by author, term, etc., and even
+;     sort them.
+;
+;   - If you want to go crazy and do a thoroughly good job, you can
+;     examine the patch introduced at each commit. You might want to
+;     redirect the output to a temp file for the following command.
+;
+;     > git log --since="May 5, 2015" --no-merges -p --author="Foo"
+;
+;   - Sometimes, it can be helpful to see whether a new file was added
+;     in a commit or merely modified. Use --name-status for that.
+;
+;     > git log --since="May 5, 2015" --no-merges --author="Foo" --name-status
+;
+;   - To see the history of a particular file:
+;
+;     > git log --since="May 5, 2015" --no-merges --stat filename
+;
+  :parents (note-7-2 release-notes-books)
+  :short "Release notes for the ACL2 Community Books for ACL2 7.2 (Jan 2016)"
+  :long "<p>The following is a brief summary of changes made to the @(see
+ community-books) between the releases of ACL2 7.1 and 7.2.</p>
+
+ <p>See also @(see note-7-2) for the changes made to ACL2 itself.  For
+ additional details, you may also see the raw <a
+ href='https://github.com/acl2/acl2/commits/master'>commit log</a>.</p>
+
+ <h3>New Libraries</h3>
+
+<h4>@(see kestrel-books)</h4>
+
+ <p>Kestrel Institute's contributions are now available under
+ @('kestrel/') directory. This directory contains some system
+ utilities to complement the built-in @(see system-utilities). It also
+ includes some general utilities to build and execute tests, retrieve
+ constituents of ACL2 events like @(see defun-sk), etc.</p>
+
+ <h4>Modeling Algorithms in SystemC and ACL2</h4>
+
+ <p>David Russinoff has contributed a library, @('projects/masc/'),
+ for modeling algorithms in SystemC and ACL2.</p>
+
+ <h4>SOFT</h4>
+
+ <p>Alessandro Coglio has contributed a tool called SOFT (Second-Order
+ Functions and Theorems) that mimics second-order behavior. See
+ @('tools/soft.lisp').</p>
+
+ <h4>stateman</h4>
+
+ <p>J Strother Moore's @('stateman') books are located in
+ @('projects/stateman/'). @('Stateman') is a utility that uses
+ metafunctions to manage large terms tepresenting machine states.</p>
+
+ <h4>@(see sv)</h4>
+
+ <p>SV is a new hardware verification library from Centaur Technology
+that includes a vector-based expression representation, efficient
+symbolic simulation integrated with @(see gl), and support for many
+SystemVerilog features.  It replaces @(see esim) as a backend to @(see
+vl); see @(see sv::sv-versus-esim) for a comparison.</p>
+
+ <h4>@(see x86isa)</h4>
+
+ <p>Shilpi Goel, Warren A. Hunt, Jr., and Matt Kaufmann have
+ contributed a library, @('projects/x86isa/'), containing the
+ specification of the x86 instruction set architecture and utilities
+ to simulate and reason about x86 machine code.</p>
+
+ <h4>Other new books</h4>
+
+ <p>A toy cache coherency protocol called VI and its proof of
+  correctness have been contributed by Ben Selfridge and David Rager
+  in @('projects/cache-coherence/'). This effort takes an approach
+  that starts with a goal invariant and develops many helper
+  invariants while trying to prove this goal invariant.</p>
+
+ <p>David Russinoff has contributed a proof of the group axioms for
+ the addition operation on the elliptic curve known as
+ @('Curve25519'); these books can be found in
+ @('projects/curve25519/'). Another library in @('projects/shnf')
+ contains a formalization of the theory of sparse Horner normal forms
+ for integer polynomials.</p>
+
+ <p>Ben Selfridge has contributed his library @('projects/sb-machine')
+ that contains a formalization of the x86-TSO memory model. This model
+ contains a machine with multiple processors, a shared memory, and
+ store buffers.</p>
+
+ <p>The book @('demos/meta-wf-guarantee-example.lisp') has an example
+ that demonstrates the use of @(':well-formedness-guarantee') for
+ @(see meta) rules</p>
+
+ <p>The book @('misc/install-not-normalized.lisp') installs an
+ unnormalized definition; see @(see install-not-normalized).</p>
+
+ <p>The book @('hints/hint-wrapper.lisp') allows you to supply hints
+ in the statement of a theorem; see @(see hint-wrapper).</p>
+
+ <p>@('system/event-names.lisp') defines @(see ep) and @(see ep-) to
+  return the list of event names (resp., excluding those events built
+  into ACL2) with a given case-insensitive prefix.</p>
+
+ <p>@('system/termp.lisp') contains work done to verify the guards of
+  the ACL2 built-in function @(see termp).</p>
+
+ <p>A new book @('tools/flag.lisp') creates a flag-based induction
+ scheme for a mutual recursion; see @(see make-flag).</p>
+
+ <p>New timing tools like @(see oracle-time) and @('oracle-timelimit')
+ in @('tools/oracle-time.lisp') provide the run time and bytes
+ allocated during the execution of a form.</p>
+
+ <p>A new book @('tools/removable-runes.lisp') automatically computes
+    runes to disable in order to speed up a proof. See @(see
+    removable-runes).</p>
+
+ <h4>Libraries in @('workshops/2015/')</h4>
+
+ <p>Supporting materials for some accepted papers in the <a
+ href='https://www.cs.utexas.edu/users/moore/acl2/workshop-2015/'>ACL2
+ Workshop, 2015</a> can be found in the directory
+ @('workshops/2015/').</p>
+
+ <ul>
+
+ <li>Cuong Chau, Matt Kaufmann, and Warren Hunt contributed their
+ books on Fourier Series Formalization in ACL2(r) in subdirectory
+ @('chau-kaufmann-hunt/').</li>
+
+ <li>David Hardin contributed his books involving reasoning about LLVM
+ code using Codewalker in the subdirectory @('hardin/').</li>
+
+ <li>Panagiotis Manolios and Mitesh Jain submitted their work on
+ proving skipping refinement with ACL2s in the subdirectory
+ @('jain-manolios/').</li>
+
+ <li>Yan Peng and Mark Greenstreet contributed their libraries to
+ extend ACL2 with SMT solvers using SMTLINK in the subdirectory
+ @('peng-greenstreet/').</li>
+
+ </ul>
+
+ <h3>Changes to Existing Libraries</h3>
+
+ <h4>@(see ACL2-sedan) related books</h4>
+
+ <p>The book @('acl2s/defdata/defdata-attach.lisp'), which is used to
+ attach or modify metadata for a @(see defdata) type, now truely uses
+ defattach for enumerators, i.e., enumerators have constant names that
+ can be attached to different enumerator functions. This facility thus
+ deprecates enum/test and separate test-enumerators. For now, most
+ enumerators are in @(see program) mode and non-guard-verified, and
+ hence, defattaching them requires trust-tags.</p>
+
+ <p>The @(see cgen) books have been updated as follows:</p>
+
+ <ul>
+
+ <li>Support has been added for collecting statistics on which
+    hypotheses are failing in vacuous tests.</li>
+
+ <li>First-class support (e.g., for equality) has been added for
+    membership relation/constraint, i.e., member/enum has the same
+    status as range types.</li>
+
+ <li>Nested testable events like @('thm'), @('defthm'), etc. are not
+    supported anymore. This results in the simplification of the
+    @('event-stack') global to just a @('event-ctx') global, which
+    stores the @('ctx-form'). This simplification also allows us to
+    aim for a global timeout on cgen/testing thm/defthm forms.</li>
+
+ <li>Support for complex-rationals has been added in number
+    ranges.</li>
+
+ </ul>
+
+ <p>The @(see acl2s::defunc) books have been udpated as follows:</p>
+
+ <ul>
+
+  <li>The @('print-summary') event prints total time taken by
+    @('defunc') events.  Now time is only printed twice, once for
+    @('test?') and once for @('defunc') logical events. Both these
+    times are computed using @(see read-run-time) ACL2 function and is
+    the accurate run time (not wall-clock time).</li>
+
+  <li>A new timeout abort event is inserted at the beginning of the
+    defunc/static/non-static events set (generated by
+    @('defunc-events-with-staticp-flag') function) . This event checks
+    if the elapsed time has exceeded the timeout limit and if it has,
+    then it aborts with an error and thus we fall through the outer
+    @(':OR') to the next choice.</li>
+
+  <li>The @('program-mode-p') predicate function now checks the
+   following: Is there a program-mode sub-function in the body?</li>
+
+  <li>The @('cgen-timeout') parameter is used to restrict time spent
+   by all the body contract testing as a global timeout.</li>
+
+ </ul>
+
+ <h4>@(see b*)</h4>
+
+ <p>The syntax for FUN binders @(see patbind-fun) has been extended to
+    allow inline/notinline declarations on the resulting @('FLET')
+    forms.</p>
+
+ <p>@('b*') now requires that variables be bound to a form and it will
+ no longer treat @('nil') and @('t') as aliases for @('&'). Error
+ messages produced by @('b*') have been made more informative.</p>
+
+ <h4>@(see bitops)</h4>
+
+ <p> Reduction XOR related functions have been added to the
+ @('bitops') library in @(see bitops::parity). Lemmas in @(see
+ bitops::bitops/ihsext-basics) have been cleaned up. Theorems about
+ @(see unsigned-byte-p) have been added for @(see
+ bitops::rotate-right) and @(see bitops::rotate-left).</p>
+
+ <p>A small book about @(see floor) has been added:
+ @('centaur/bitops/floor.lisp').</p>
+
+ <p>More slice and merge functions have been added in @(see
+ bitops::bitops/merge). Some @(see integer-length) rules in
+ @('centaur/bitops/integer-length.lisp') have been changed to allow
+ better free variable matching.</p>
+
+ <h4>coi</h4>
+
+ <p>A new book for reasoning about modular arithmetic using @('nary')
+ congruences has been contributed; see
+ @('coi/nary/nary-mod.lisp').</p>
+
+ <p>Books in @('coi') have been updated so as to avoid name conflicts
+ with @('std') books.</p>
+
+ <h4>@(see fty)</h4>
+
+ <p>The @('fty') books have been re-organized --- @('deftypes.lisp')
+ has been split up into different files, and tests have been moved to
+ a subdirectory @('tests/'). Performance problems with certain macros,
+ mostly related to reasoning about tag and kind functions, have been
+ fixed.</p>
+
+ <p>@(see fty::deftranssum) has been extended to support nested @(see
+ fty::defprod)s.</p>
+
+ <h4>@(see quicklisp)</h4>
+
+ <p>The bundled quicklisp libraries have been updated.  The quicklisp
+books work only for ACL2 built on CCL or SBCL.</p>
+
+ <h4>@(see rtl)</h4>
+
+ <p>The @('rtl/rel11') books have seen many updates, courtesy of
+ Dmitry Nadezhin.</p>
+
+ <p>Guards have been added to functions in
+ @('rtl/rel11/lib/'). General cleanup of the @('rtl/rel11/') books,
+ like removing unnecessary hypotheses and @(see include-book)s, has
+ also been done.</p>
+
+ <p>New radix-aware versions of functions in @('rtl/rel11/support/')
+ directory have been added. E.g., the old function @('bitn') has a
+ fixed radix of 2 and takes @('x') and @('n') as input arguments and
+ the new radix-aware version corresponding to this function is
+ @('digitn'), which takes the radix @('b') in addition to @('x') and
+ @('n') as inputs.</p>
+
+ <p>The books @('rtl/rel11/support/basic.lisp'),
+ @('rtl/rel11/support/bits.lisp'),
+ @('rtl/rel11/support/float.lisp'),
+ @('rtl/rel11/support/reps.lisp'), and
+ @('rtl/rel11/support/masc.lisp') are now certifiable by ACL2(r).</p>
+
+ <p>Some books from @('rtl/rel11/rel9-rtl-pkg/lib'), like
+ @('reps.lisp'), @('rom-helpers.lisp'), and
+ @('simple-loop-helpers.lisp'), along with their supporters, have been
+ moved to @('rtl/rel11/support/').</p>
+
+ <p>Bugs in @('rtl/rel11/lib/excps.lisp') related to divide-by-zero
+ exception and the @('ep') exponent width in the function
+ @('convert-nan-to-op') have been fixed.</p>
+
+ <h4>@(see std)</h4>
+
+ <p>A new macro called @(see impliez) has been added in
+ @('std/basic/defs.lisp'). This macro expands to an @(see if), so
+ unlike @(see implies), guards in the consequent can be verified
+ assuming the antecedent.</p>
+
+ <p>New theorems about @(see acl2-count) and @(see nth) have been
+ added to @('std/lists/nth.lisp').</p>
+
+ <p>The guards of @(see list-equiv) in @('std/lists/list-defuns.lisp')
+ have been verified. The function @(see list-fix) was tweaked so that
+ it avoids consing if its input is indeed a @('true-listp'). A new
+ function @(see llist-fix), which is logically @('list-fix') but is
+ the identity function for execution, has been also added.</p>
+
+ <p>A possibly better non-CCL raw Lisp implementation of @(see
+ bitsets::bignum-extract) has been added.</p>
+
+ <p>A new rule @('pick-a-point-subset-constraint-helper') was added in
+    @('std/osets') to allow pick-a-point proofs to be used even when
+    subset is disabled.</p>
+
+ <p>For @(see std::define), @('defretd') has been added to go with
+ @(see std::defret). Also, @('defret') now allows the @('otf-flg')
+ flag. @(':guard t') declarations in @('define') have been eliminated
+ if guards have already been provided. Also, information displayed by
+ @(see pe) of functions introduced using @('define') has been cleaned
+ up using @(see pe-table).</p>
+
+ <p>A new macro @(see std::rule) is a @('THM')-like version of @(see
+ std::defrule).  @('Rule') and @('defrule') produce leaner output now,
+ almost identical to that produced by @('thm') and @('defthm').</p>
+
+ <h4>@(see vl)</h4>
+
+ <p>For details about changes made to VL, see @(see note-7-2-vl).</p>
+
+ <h4>@(see xdoc)</h4>
+
+ <p>Topics with missing parents are now placed under a new topic @(see
+ xdoc::missing-parents) instead of under @('top').</p>
+
+ <p>The title of xdoc manuals can be easily configured by editing
+ @('xdoc/fancy/config.js'). No warning about a redefined topic is
+ produced when the topic is identical to the original one.</p>
+
+ <p>@('xdoc') now loads @('acl2-doc-wrap') instead of @('acl2-doc') so
+ that the loaded documentation doesn't overwrite the user's
+ topics.</p>
+
+ <p>A bug in @('see') that did not allow properly escaping the printed
+ name of a symbol has been fixed. The implementation of @(see
+ xdoc::defsection) had another bug that caused 'Definitions and
+ Theorems' section to be added to topics even when there were no
+ definitions or theorems in that section; this bug has been fixed as
+ well. Also, @('defsection') does not explicitly turn on error
+ printing during event submission anymore.</p>
+
+ <p>The output from @(see xdoc::save) now shows more timing
+ information.</p>
+
+ <p>Legacy stuff like @('write-acl2-xdoc'), @(':import') option with
+ @(see xdoc::save), and @('xdoc-verbose') has been removed.</p>
+
+ <h4>Other Libraries</h4>
+
+ <p>A new book @('projects/codewalker/demo-fact-partial.lisp') is a
+ variant of @('projects/codewalker/demo-fact.lisp') that provides a
+ guide to how Codewalker might be modified so that termination proofs
+ can be avoided or delayed.</p>
+
+ <p>Multiple values and stobjs are now supported in the
+ @('coi/defung/') libraries.</p>
+
+ <p>@(see Must-fail) and related utilities in @('misc/eval.lisp')
+ produce much less output by default. Also,
+ @('make-event/eval-check.lisp') no longer duplicates code from
+ @('misc/eval.lisp').  Instead, it defines @('!') utilities that
+ behave like the counterparts previously defined (without the @('!')
+ suffix).</p>
+
+ <p>A bug in @(see remove-hyps) that occurred when no proof steps are
+ required in a proof has been fixed.</p>
+
+ <p>A new @('tarai-measure') has been added in
+ @('coi/termination/assuming/complex.lisp'), which is allows this book
+ to certify quickly in ACL2(r) as well. Consequently, this book was
+ removed from @('SLOW_BOOKS') in @('books/GNUmakefile').</p>
+
+ <p>Some floating-point support has been added to the JVM M5 model;
+ see @('models/jvm/m5/m5.lisp').</p>
+
+ <p>@(see GL) now displays a more informative error message about
+ duplicated indices in @(':g-bindings').</p>
+
+ <p>@(see Satlink) now uses @('drat-trim'), available at
+ @('tools/drat-trim/'), instead of @('drup-trim').</p>
+
+ <p>The book @('tools/untranslate-for-exec.lisp') has been improved to
+ handle nested mv-lets.</p>
+
+ <h4>Deleted Books and Stubs</h4>
+
+ <p>The book @('defexec/other-apps/records/records-bsd.lisp') has been
+ deleted --- it was out of sync with @('records.lisp') in the same
+ directory.</p>
+
+ <p>The book @('make-event/assert-check-include-1.lisp') has been
+ deleted.</p>
+
+ <p>The book @('misc/dead-events.lisp') has been moved to
+ @('tools/dead-events.lisp'), and a relocation stub has been added in
+ the older location.</p>
+
+ <p>In the directory @('misc/'), @('*-bsd.lisp') books are now
+ @('reloc_stub') books.</p>
+
+ <p>Books in @('projects/concurrent-programs/german-protocol/') have
+ been moved to @('projects/cache-coherence/german-protocol/').</p>
+
+ <p>The @('rtl/rel10') has been removed from the community
+ books. These books were not in use anywhere in the contributed
+ books.</p>
+
+ <p>The book @('system/gather-dcls.lisp') has been deleted after its
+ contents were moved to
+ @('system/verified-termination-and-guards.lisp').</p>
+
+ <h3>Licensing Changes</h3>
+
+ <p>The following books now have BSD-3-Clause license.</p>
+
+ <ul>
+
+ <li>@('arithmetic-2/') and @('arithmetic-3/')</li>
+
+ <li>@('misc/rtl-untranslate.lisp')</li>
+
+ <li>M5 books @('models/jvm/m5/')</li>
+
+ <li>@('rtl') books</li>
+
+ <li>@('system/cantor-pairing-bijective.lisp')</li>
+
+ <li>@('tools/with-arith5-help.lisp')</li>
+
+ </ul>
+
+ <h3>Build System Updates</h3>
+
+ <h4>@(see build::cert.pl)</h4>
+
+ <p>The @('cert.pl') documentation at @('build/doc.lisp') has been
+ moved to its own @('BUILD') package.</p>
+
+ <p>@('cert.pl') now produces successful certification messages that
+ include times and color coding.  @('cert.pl') has also been patched
+ to correctly handle filenames with dollar signs. It has new options
+ for removing @('.cert.out') files after successful certifications and
+ for sending them to a temporary directory.</p>
+
+ <p>A new @(see build::cert_param) for SMTLINK, @('uses-smtlink'), has
+    been added so that books using it will not be certified unless
+    supporting software such as Z3 is installed. Another
+    @('cert_param') called @('non-gcl') has been added.</p>
+
+ <p>A new @('CERT_PL_SHOW_HOSTNAME') environment variable has been
+ added to @('cert.pl') that can show the hostname after each book gets
+ certified.</p>
+
+ <h4>make system</h4>
+
+ <p>The topic @(see Books-certification) gives clearer instructions on
+ building the books and the manual.</p>
+
+ <ul>
+
+ <li>@('make manual') now just builds @('doc/top.cert') and
+ @('system/doc/acl2-manual.cert').</li>
+
+ <li>@('make everything') now just depends on all the books it was
+ going to build.</li>
+
+ <li>@('make quicklisp') now just causes an error if
+ @('USE_QUICKLISP') is not set.</li>
+
+ </ul>
+
+ <h3>Miscellaneous</h3>
+
+ <p>A new tool @('build/memsum.pl') analyzes memory usage during
+ regressions.</p>
+
+ <p>A new tool @('build/slowevents.pl') attempts to identify the
+ slowest events in a book or a set of books.</p>")
+
+(defxdoc note-7-2-vl
+  :parents (note-7-2-books)
+  :short "Notes about changes to @(see vl) and @(see sv) in ACL2 7.2."
+
+  :long "<p>Below we describe changes since the ACL2 7.1 release to the
+unstable, development version of @(see VL).  Note that the stable version,
+@(see vl2014), is essentially unchanged except for minor bugfixes.  See also
+@(see note-7-1-vl) for some background about VL and VL2014.</p>
+
+
+<h3>Extended SystemVerilog Support</h3>
+
+<p>Much of the development work has focused on supporting additional features
+of SystemVerilog.</p>
+
+<p><b>Interfaces.</b> VL and SV now have much better support for interfaces.
+They can now contain functions, tasks, assignments, etc.  Modports are now
+generally understood: they participate in scopes, are sanity checked for name
+clashes, are supported in submodule instantiation, etc.  Interface usage in
+submodule instances are properly type checked and are generally supported in VL
+and through SV.  Note that interface arrays are not yet supported.</p>
+
+<p><b>Assertions.</b> VL's parser and pretty-printer now support many
+SystemVerilog assertion features, including at least sequence/property
+expressions (see @(see vl::property-expressions)), procedural assertions (see
+@(see vl::vl-assertstmt) and @(see vl::vl-cassertstmt)), sequence and property
+declarations (see @(see vl::vl-sequence) and @(see vl::vl-property)), and
+module-level assertions (see @(see vl::vl-assertion) and @(see
+vl::vl-cassertion)).  Note that all of this assertion-related stuff is
+currently ignored by the SV flow.  However, modules with assertions should at
+least no longer result in parse errors, and these structures may some day be a
+useful basis for implementing assertion checking tools.</p>
+
+<p><b>Aliases.</b> Alias constructs should now work in VL and are also
+supported by SV.</p>
+
+<p><b>Expressions.</b> The @('**') (exponent/power) operator, @('inside')
+operator are now supported in both @(see vl) and SV.  Note that NCV/VCS
+disagree about the sizing of @('inside') operators and that in general these
+operators may be buggy on commercial tools.  Added support for a few additional
+system functions like @('$dimensions'), etc.</p>
+
+<p><b>Statements.</b> The parsing and representation of @(see vl::statements)
+has been extended in various ways.  Note that our support for statements in SV
+is still rather limited, so just because we can parse these things doesn't
+necessarily mean they will be handled all the way through the SV flow:</p>
+
+<ul>
+
+<li>@('break') and @('continue') statements are now implemented.</li>
+
+<li>Statement labels are now supported.</li>
+
+<li>There is better support for subroutine call statements; so we can now parse
+things like @('void'(...)') and otherwise do slightly better with calls of
+tasks/functions in statements.</li>
+
+<li>We now permit function calls/task enables with explicit parens but no
+arguments.  (In Verilog-2005, was is syntactically legal to write statements
+like @('mytask;') but not @('mytask();') with the explicit parens, even though
+they seem like they should be equivalent.  In SystemVerilog both forms are
+allowed, but we had previously only supported the @('mytask;') version.)</li>
+
+<li>Block statements (@('begin/end'), @('fork/join'), ...) can now have
+typedefs.  We can now parse @('fork/join_any') and @('fork/join_none')
+statements.</li>
+
+<li>@('final') statements are now allowed.  Much like @('initial') statements,
+these are simply ignored in the SV flow.</li>
+
+</ul>
+
+
+<p><b>DPI import/exports.</b> DPI import/exports, used to connect SystemVerilog
+to C programs, are now tolerated by VL's parser and are now to some degree
+understood by other parts of VL.  For instance, they are known to @(see
+vl::scopestack)s and can be considered when checking for name clashes,
+introducing implicit wires, etc.  See @(see vl::vl-dpiimport) and @(see
+vl::vl-dpiexport).</p>
+
+
+<p><b>Instances.</b> Module and gate instance arrays can now use the
+single-expression ranges, i.e., we now support things like:</p>
+
+@({
+      and foo [3] (o, a, b);
+      submod foo [3] (a, b, c);
+})
+
+<p>Note that SystemVerilog also allows multiple-dimension instance arrays, but
+those are still unsupported.</p>
+
+
+<p><b>Other.</b> Many bugfixes (e.g., to the parser, scoping, etc) have
+resulted in VL being able to successfully load additional designs.</p>
+
+
+<h3>Scoping and @(see vl::annotate) improvements.</h3>
+
+<p>The SV and Linter flows now use a unified @(see vl::annotate) meta-transform
+to prepare the design for analysis.  This transform has been significantly
+improved to do a better job with scoping issues related to functions, tasks,
+generate constructs, and statements.  This provides broad improvements to what
+VL can successfully parse and translate.</p>
+
+<p>The @(see vl::make-implicit-wires) transformation, which plays a
+surprisingly important role in getting scoping right, now more closely matches
+commercial tools like NCV and VCS.  We are particularly more careful about how
+implicit wires are inferred from expressions involving indexing/selection like
+@('foo[w]').  In general, in a structure pattern like @(''{foo : 3}'), it's
+tricky to tell whether @('foo') is a structure member or a parameter.  VL now
+handles this much better and our strategy is documented; see @(see
+vl::vl-patternkey-ambiguity).  It also used to be that such patterns could fool
+VL into inferring implicit wires for @('foo')!  This has been fixed.</p>
+
+<p>Much of @('make-implicit-wires') has been moved into the related @(see
+vl::shadowcheck) transform.  The representation of functions and tasks has been
+adjusted to better support correct scoping and shadowchecking, and shadowcheck
+now understands user-defined types.  Shadowcheck was also incorrectly handling
+certain situations with package imports, which has been fixed.  It also now
+checks for name clashes in all scopes and produces good warnings in this case.
+Finally, shadowcheck treats the global scope in a less incorrect way, fixing
+many problems with global package imports.</p>
+
+<p>VL's scoping of generates also used to be completely wrong.  While it still
+has some known bugs, it has been significantly improved.  The scoping of
+@('genvars') is also improved.  Bugs have also been fixed related to
+disambiguating types from expressions in functions and tasks, and also in the
+handling of types versus interfaces in ports.</p>
+
+
+<h3>Generates, Elaboration</h3>
+
+<p>One of the trickiest parts of VL is elaboration, where parameters are
+expanded into constants, generate blocks are resolved, etc.  To evaluate a
+parameter like</p>
+
+@({
+     parameter foo = $bits(mypkg::mytype_t) + blah2size(settings.blah);
+})
+
+<p>we need to evaluate its expression.  This can involve looking up the values
+of other parameters from other places in the hierarchy, evaluating system and
+user-defined functions, etc.  Functions are defined in terms of statements, so
+we need to understand statements as well.  This all gets to be a very messy
+mutual recursion.</p>
+
+<p>VL's implementation of elaboration now reuses much of the SV code for
+converting Verilog expressions into @(see sv::svex)es, and is now able to
+resolve many significantly more complex parameters and generates.</p>
+
+
+<h3>Linter</h3>
+
+<p>The @(see vl::vl-lint) tool now uses much more of the SV code.  It shares the
+@(see vl::annotate) code with the SV flow and also uses SV-based elaboration,
+which provides much better handling of generates and allows it to
+unparameterize modules involving types and other complex expressions.  The very
+useful size warnings from VL2014 have also been ported to work with the new SV
+code base.</p>
+
+<p>Various warning heuristics and messages have been tweaked.  We no longer
+complain about duplicate interface instances, since that's perfectly
+reasonable.  Parse errors have some additional context.  Lucid has been
+extended to understand new features like interfaces and modports, DPI
+imports/exports, and final blocks.</p>
+
+
+<h3>Test Suites</h3>
+
+<p>Significant work has gone into testing VL.  VL now has three test
+suites:</p>
+
+<ul>
+
+<li><b>centaur/vl/linttest</b> &mdash; tests of Linter functionality.  This
+notably includes a lot of tests of scoping and sizing issues.</li>
+
+<li><b>centaur/sv/cosims</b> &mdash; tests comparing VL+SV behavior against
+that of commercial simulators such as NCV and VCS.  These are our main tests of
+SV.  You can also search for @('no_ncv') or @('no_vcs') to discover places
+where VL disagrees with one tool or another (e.g., because the commercial tools
+don't agree.)</li>
+
+<li><b>centaur/sv/failtest</b> &mdash; tests that ensure VL+SV report fatal
+errors for modules that have some bad problem.  This turns out to be a nice way
+to test many scoping issues and make sure that we will reject bad
+constructs.</li>
+
+</ul>
+
+<p>Running @('make vl') in the @('acl2/books') directory now automatically also
+runs all of the linttests and failtests.  It doesn't automatically run the
+cosims, since that requires commercial simulators.)</p>
+
+<p>Each of the test suites has been extended considerably, especially in the
+tricky areas of scoping, implicit wire creation, generate handling, and also in
+order to test new features like interface support.  Many of the old VL2014
+@('systest') tests have also been ported to the new @('cosims') format.</p>
+
+
+
+<h3>Other Notes</h3>
+
+<p>VL and SV are still evolving rapidly and a lot is in flux.</p>
+
+<p>There has been significant renaming of files, moving of files, and deleting
+of dead files.  The documentation has gotten a lot of work in some areas, but
+of course there is more to do.</p>
+
+<p>Numerous minor bugfixes in all areas of VL are not mentioned, but can be
+found in the change log.</p>")
 
 (defxdoc note-7-1-books
-  :parents (note-7-1)
+  :parents (note-7-1 release-notes-books)
   :short "Release notes for the ACL2 Community Books for ACL2 7.1 (May 2015)"
-
-;; Current through May 1, 2015
 
   :long "<p>The following is a brief summary of changes made to the @(see
  community-books) between the releases of ACL2 7.0 and 7.1.</p>
@@ -68,9 +3464,9 @@
 
  <p>When we move a book, we often add a <b>stub</b> book in its previous
  location to help you transition your @(see include-book) commands.  The @(see
- cert.pl) build system prints warnings when a stub book is being included.
- Stub books have a lifespan of one release.  The following books were stubs in
- ACL2 7.0, so we've deleted them.</p>
+ build::cert.pl) build system prints warnings when a stub book is being
+ included.  Stub books have a lifespan of one release.  The following books
+ were stubs in ACL2 7.0, so we've deleted them.</p>
 
  @({
      Previous Location                          Replacement
@@ -111,9 +3507,9 @@
  <p>The new directory @('projects/fifo') has a list-based FIFO implementation,
  that has some properties proven about it.</p>
 
- <p>The new book @('books/tools/include-an-arithmetic-book.lisp') provides
- short-hand includes of the arithmetic libraries, including various
- configurations of @('arithmetic-5').</p>
+ <p>The new book @('books/tools/include-an-arithmetic-book.lisp')
+ provides short-hand includes of the arithmetic libraries, including
+ various configurations of @('arithmetic-5').</p>
 
  <p>The @('misc/assert') book is now documented; see for instance @(see
  assert!).</p>
@@ -287,7 +3683,7 @@
 
  <h3>Build System Updates</h3>
 
- <p>@(see cert.pl), et al. now tolerate @('( include-book...') instead
+ <p>@(see build::cert.pl), et al. now tolerate @('( include-book...') instead
  of @('(include-book...'), etc.</p>
 
  <p>Errors during portcullis events (i.e., @('.acl2') files) should now cause
@@ -297,8 +3693,8 @@
  <p>Various updates have been made to the Jenkins scripts to keep things up to
  date.</p>
 
- <p>For most Lisps, @(see cert.pl) will now include garbage collection messages
- in output logs files.  This may occasionally be useful when debugging
+ <p>For most Lisps, @(see build::cert.pl) will now include garbage collection
+ messages in output logs files.  This may occasionally be useful when debugging
  performance issues.</p>
 
 ")
@@ -404,7 +3800,7 @@
  </ul>
 
 
- <h3>@(see vl::lint) Improvements</h3>
+ <h3>@(see vl::vl-lint) Improvements</h3>
 
  <p>The loader works harder to attach parse-time warnings to the appropriate
  modules.</p>
@@ -433,7 +3829,7 @@
 
 
 (defxdoc note-7-0-books
-  :parents (note-7-0)
+  :parents (note-7-0 release-notes-books)
   :short "Release notes for the ACL2 Community Books for ACL2 7.0 (January
  2015)"
   :long "<p>The following is a brief summary of changes made to the @(see
@@ -466,7 +3862,8 @@
 
  <p>When we move a book, we often add a <b>stub</b> book in its previous
  location to help you transition your @(see include-book) commands.  The @(see
- cert.pl) build system prints warnings when a stub book is being included.</p>
+ build::cert.pl) build system prints warnings when a stub book is being
+ included.</p>
 
  <p>Stub books have a lifespan of one release.  The following books were stubs
  in ACL2 6.5, so we've deleted them.</p>
@@ -506,13 +3903,14 @@
  <li>@('cert.pl') now has better support for @(see
  provisional-certification).</li>
 
- <li>The @(see cert_param) mechanism, which is used by @(see cert.pl) to
- indicate that books have special requirements, is now documented.</li>
+ <li>The @(see build::cert_param) mechanism, which is used by @(see
+ build::cert.pl) to indicate that books have special requirements, is now
+ documented.</li>
 
  <li>New @('cert_param') directives have been added to avoid certifying certain
  books on incompatible Lisps.</li>
 
- <li>@(see cert.pl) now better avoids overflowing the maximum number of
+ <li>@(see build::cert.pl) now better avoids overflowing the maximum number of
  arguments to shell commands on some platforms when certifying large numbers of
  books.</li>
 
@@ -640,7 +4038,7 @@
 
  <p>The ACL2 @(see Sidekick) is an experimental and very preliminary graphical
  add-on to ACL2.  It currently features a session viewer, theory linter, a
- horribly primitive interface to the @(see proof-checker), and a slick
+ horribly primitive interface to the @(see proof-builder), and a slick
  <i>Lookup</i> feature that can show you documentation and other information
  about various symbols.</p>
 
@@ -1121,18 +4519,18 @@
 
  </ul>
 
- <p>Besides these improvements to the core library, there have been various user
- interface improvements.  For instance, the VL @(see vl::server) has been
+ <p>Besides these improvements to the core library, there have been various
+ user interface improvements.  For instance, the @(see vl::vl-server) has been
  entirely rewritten and is now included in the @(see vl::kit); it allows you to
  view Verilog modules in a web browser.  The loader has been made more
  user-friendly and more gracefully handles search paths, errors, etc.  The
- @(see vl::lint)er has been tweaked to provide better output and to run more
+ @(see vl::vl-lint)er has been tweaked to provide better output and to run more
  quickly.</p>")
 
 
 
 (defxdoc note-6-5-books
-  :parents (note-6-5)
+  :parents (note-6-5 release-notes-books)
   :short "Release notes for the ACL2 Community Books for ACL2 6.5 (August
  2014)."
 
@@ -1153,8 +4551,8 @@
  <h3>Deleted Stubs</h3>
 
  <p>When we move a book, we often add a <b>stub</b> book in its previous
- location to help you transition your @(see include-book) commands.  The
- @(see cert.pl) build system prints warnings when a stub book is being
+ location to help you transition your @(see include-book) commands.  The @(see
+ build::cert.pl) build system prints warnings when a stub book is being
  included.</p>
 
  <p>Stub books have a lifespan of one release.  The following books were stubs
@@ -1276,7 +4674,7 @@
  </ul>
 
 
- <p>The @(see cert.pl) build system has been enhanced in many ways.  Of
+ <p>The @(see build::cert.pl) build system has been enhanced in many ways.  Of
  particular note, it now deals more automatically with portcullis files, which
  may help to improve the reliability of including uncertified files.  Other
  improvements include:</p>
@@ -1392,7 +4790,7 @@
 
  <h5>New Documentation</h5>
 
- <p>The @(see cowles), @(see arithmetic-1), and @(see rtl) libraries now
+ <p>The @('cowles'), @(see arithmetic-1), and @(see rtl) libraries now
  have some XDOC documentation.</p>
 
  <p>There are now some preliminary recommendations for @(see best-practices) for
@@ -1873,7 +5271,7 @@
 
 
 (defxdoc note-6-4-books
-  :parents (note-6-4)
+  :parents (note-6-4 release-notes-books)
   :short "Release notes for the ACL2 Community Books for ACL2 6.4 (January,
  2013)."
 
@@ -1905,8 +5303,8 @@
  <h3>Deleted Stubs</h3>
 
  <p>When we move a book, we often add a <b>stub</b> book in its previous
- location to help you transition your @(see include-book) commands.  The
- @(see cert.pl) build system prints warnings when a stub book is being
+ location to help you transition your @(see include-book) commands.  The @(see
+ build::cert.pl) build system prints warnings when a stub book is being
  included.</p>
 
  <p>Stub books have a lifespan of one release.  The following books were stubs
@@ -2018,8 +5416,8 @@
 
  <h3>Scripts Moved</h3>
 
- <p>We've moved many build scripts like @(see cert.pl), @('clean.pl'), and
- @('critpath.pl') from the top-level @('books') directory, into a new
+ <p>We've moved many build scripts like @(see build::cert.pl), @('clean.pl'),
+ and @('critpath.pl') from the top-level @('books') directory, into a new
  @('books/build') directory.  You may need to update paths to these files in
  your Makefiles or other build scripts.</p>
 
@@ -2046,7 +5444,7 @@
  including at least:</p>
 
  <ul>
- <li>@(see cert.pl) - a build system for certifying ACL2 books</li>
+ <li>@(see build::cert.pl) - a build system for certifying ACL2 books</li>
  <li>@(see defconsts) - like @('defconst') but supports stobjs, state, and multiple values</li>
  <li>@(see defrstobj) - a macro for introducing record-like stobjs</li>
  <li>@(see bitops) - an arithmetic library especially for bit-vector arithmetic</li>
@@ -2166,7 +5564,7 @@
  <h5>@(see vl) - Verilog toolkit</h5>
  <ul>
  <li>Expanded @(see vl2014::always-top) with support for basic @('case') statements.</li>
- <li>Expanded @(see vl::expr-simp) to make more reductions and be more modular.</li>
+ <li>Expanded @(see vl2014::expr-simp) to make more reductions and be more modular.</li>
  <li>Added new support for hierarchical identifiers.</li>
  <li>Cleaned up support for gate instances.</li>
  <li>Multiplier synthesis now better matches GL's multipliers.</li>
@@ -2214,7 +5612,7 @@
  Mechanically Checked Proof of a Multiprocessor Result via a Uniprocessor
  View</i> by J Moore, in Formal Methods in System Design, March 1999.</p>
 
- <p>A new book, @('demos/patterned-congruences.lisp) demonstrates @(see
+ <p>A new book, @('demos/patterned-congruences.lisp') demonstrates @(see
  patterned-congruence) rules.</p>
 
 

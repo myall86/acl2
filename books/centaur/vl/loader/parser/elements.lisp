@@ -32,13 +32,17 @@
 (include-book "statements")
 (include-book "ports")      ;; vl-portdecllist-p, vl-portlist-p
 (include-book "nets")       ;; vl-assignlist-p, vl-netdecllist-p
-(include-book "blockitems") ;; vl-vardecllist-p, vl-paramdecllist-p
+(include-book "blockitems") ;; vl-vardecllist-p, vl-paramdecllist-p, typedefs
 (include-book "insts")      ;; vl-modinstlist-p
 (include-book "gates")      ;; vl-gateinstlist-p
 (include-book "functions")  ;; vl-fundecllist-p
 (include-book "modports")
-(include-book "typedefs")
 (include-book "imports")
+(include-book "asserts")
+(include-book "dpi")
+(include-book "clocking")
+(include-book "classes")
+(include-book "covergroups")
 (include-book "../../mlib/port-tools")  ;; vl-ports-from-portdecls
 (local (include-book "../../util/arithmetic"))
 
@@ -46,6 +50,7 @@
 
 
 (defparser vl-parse-1+-alias-rhses (atts lhs loc)
+  ;; Match '=' net_lvalue { '=' net_lvalue }
   :guard (and (vl-atts-p atts)
               (vl-expr-p lhs)
               (vl-location-p loc))
@@ -56,17 +61,17 @@
   :count strong
   (seq tokstream
         (:= (vl-match-token :vl-equalsign))
-        (rhs1 := (vl-parse-lvalue))
+        (rhs1 := (vl-parse-net-lvalue))
         (when (vl-is-token? :vl-equalsign)
           (rest := (vl-parse-1+-alias-rhses atts lhs loc)))
         (return (cons (make-vl-alias :lhs lhs
-                                       :rhs rhs1
-                                       :atts atts
-                                       :loc loc)
+                                     :rhs rhs1
+                                     :atts atts
+                                     :loc loc)
                       rest))))
 
-
 (defparser vl-parse-alias (atts)
+  ;; net_alias ::= 'alias' net_lvalue '=' net_lvalue { '=' net_lvalue } ';'
   :guard (vl-atts-p atts)
   :result (vl-aliaslist-p val)
   :true-listp t
@@ -76,12 +81,10 @@
   (seq tokstream
         (loc := (vl-current-loc))
         (:= (vl-match-token :vl-kwd-alias))
-        (lhs := (vl-parse-lvalue))
+        (lhs := (vl-parse-net-lvalue))
         (aliases := (vl-parse-1+-alias-rhses atts lhs loc))
+        (:= (vl-match-token :vl-semi))
         (return aliases)))
-
-
-
 
 
 
@@ -99,6 +102,23 @@
         (return (list (make-vl-initial :loc (vl-token->loc kwd)
                                        :stmt stmt
                                        :atts atts)))))
+
+(defparser vl-parse-final-construct (atts)
+  ;; SystemVerilog-2012 rules:
+  ;;   final_construct ::= 'final' function_statement
+  ;;   function_statement ::= statement
+  :guard (vl-atts-p atts)
+  :result (vl-finallist-p val)
+  :resultp-of-nil t
+  :true-listp t
+  :fails gracefully
+  :count strong
+  (seq tokstream
+        (kwd := (vl-match-token :vl-kwd-final))
+        (stmt := (vl-parse-statement))
+        (return (list (make-vl-final :loc (vl-token->loc kwd)
+                                     :stmt stmt
+                                     :atts atts)))))
 
 (defparser vl-parse-alwaystype ()
   :result (vl-alwaystype-p val)
@@ -233,6 +253,37 @@ rules:</p>
   (declare (ignore atts))
   (vl-unimplemented))
 
+(define vl-elaborate-system-task-function-p ((x vl-sysidtoken-p))
+  (if (member-equal (vl-sysidtoken->name x)
+                    '("$fatal" "$error" "$warning" "$info"))
+      t
+    nil))
+
+(defparser vl-parse-elaborate-system-task ()
+  :guard (and (vl-is-token? :vl-sysidtoken)
+              (vl-elaborate-system-task-function-p (car (vl-tokstream->tokens))))
+  :result (vl-elabtask-p val)
+  :resultp-of-nil nil
+  :true-listp nil
+  :fails gracefully
+  :count strong
+  :prepwork ((local (in-theory (enable vl-is-token?))))
+  ;; SystemVerilog-2012:
+  ;;
+  ;; elaboration_system_task ::=
+  ;;      '$fatal'   [ '(' finish_number [ ',' list_of_arguments ] ')' ] ';'
+  ;;    | '$error'   [ '(' [ list_of_arguments ] ')' ]                   ';'
+  ;;    | '$warning' [ '(' [ list_of_arguments ] ')' ]                   ';'
+  ;;    | '$info'    [ '(' [ list_of_arguments ] ')' ]                   ';'
+  ;;
+  ;; finish_number ::= '0' | '1' | '2'
+  ;;
+  ;; It seems pretty reasonable to be generous with the arguments here
+  ;; and just try to handle any system-tf-call of these four functions.
+  (seq tokstream
+       (stmt := (vl-parse-system-tf-call))
+       (:= (vl-match-token :vl-semi))
+       (return (make-vl-elabtask :stmt stmt))))
 
 
 (defconst *vl-netdecltypes-kwds*
@@ -254,7 +305,6 @@ rules:</p>
              (equal (vl-modelement-p res)
                     (not err))))
   :hints(("Goal" :in-theory (enable vl-parse-type-declaration))))
-
 
 (encapsulate nil
   (local (in-theory (enable vl-is-token?)))
@@ -286,6 +336,7 @@ rules:</p>
     :fails gracefully
     :count strong
     (b* ((tokens (vl-tokstream->tokens))
+         (edition (vl-loadconfig->edition config))
          ((when (atom tokens))
           (vl-parse-error "Unexpected EOF."))
          (type1 (vl-token->type (car tokens)))
@@ -332,14 +383,7 @@ rules:</p>
          ((when (eq type1 :vl-kwd-always))
           (vl-parse-always-construct atts))
 
-         ((when (and (vl-is-token? :vl-idtoken)
-                     (not (vl-parsestate-is-user-defined-type-p
-                           (vl-idtoken->name (car (vl-tokstream->tokens)))
-                           (vl-tokstream->pstate)))))
-          (vl-parse-udp-or-module-instantiation atts))
-
-
-         ((when (eq (vl-loadconfig->edition config) :verilog-2005))
+         ((when (eq edition :verilog-2005))
           (case type1
             (:vl-kwd-reg        (vl-parse-reg-declaration atts))
             (:vl-kwd-integer    (vl-parse-integer-declaration atts))
@@ -347,9 +391,13 @@ rules:</p>
             (:vl-kwd-time       (vl-parse-time-declaration atts))
             (:vl-kwd-realtime   (vl-parse-realtime-declaration atts))
             (:vl-kwd-event      (vl-parse-event-declaration atts))
+            (:vl-idtoken        (vl-parse-udp-or-module-instantiation atts))
             (t (vl-parse-error "Invalid module or generate item."))))
 
          ;; SystemVerilog extensions ----
+         ((when (eq type1 :vl-kwd-final))
+          (vl-parse-final-construct atts))
+
          ((when (eq type1 :vl-kwd-typedef))
           (seq tokstream
                 (typedef := (vl-parse-type-declaration atts))
@@ -367,13 +415,121 @@ rules:</p>
 
          ((when (eq type1 :vl-kwd-import))
           (seq tokstream
-               (imports := (vl-parse-package-import-declaration atts))
-               (return imports)))
+               (when (vl-plausible-start-of-package-import-p)
+                 (imports := (vl-parse-package-import-declaration atts))
+                 (return imports))
+               ;; Otherwise maybe it's a DPI import.
+               (dpiimport := (vl-parse-dpi-import atts))
+               (return (list dpiimport))))
+
+         ((when (eq type1 :vl-kwd-export))
+          (seq tokstream
+               (dpiexport := (vl-parse-dpi-export atts))
+               (return (list dpiexport))))
 
          ((when (or (eq type1 :vl-kwd-always_ff)
                     (eq type1 :vl-kwd-always_latch)
                     (eq type1 :vl-kwd-always_comb)))
-          (vl-parse-always-construct atts)))
+          (vl-parse-always-construct atts))
+
+         ((when (vl-plausible-start-of-assertion-item-p))
+          ;; These are for things like actual 'assert property ...' and
+          ;; similar, not for property/sequence declarations.
+          ;; BOZO -- Darn it, don't have anywhere to put the atts.
+          (vl-parse-assertion-item))
+
+         ;; assertion_item_declaration ::= property_declaration
+         ;;                              | sequence_declaration
+         ;;                              | let_declaration
+         ((when (eq type1 :vl-kwd-property))
+          ;; BOZO are these supposed to have atts?
+          (seq tokstream
+               (property := (vl-parse-property-declaration))
+               (return (list property))))
+
+         ((when (eq type1 :vl-kwd-sequence))
+          ;; BOZO are these supposed to have atts?
+          (seq tokstream
+               (sequence := (vl-parse-sequence-declaration))
+               (return (list sequence))))
+
+         ((when (eq type1 :vl-kwd-global))
+          (seq tokstream
+               (gclkdecl := (vl-parse-global-clocking-declaration atts))
+               (return (list gclkdecl))))
+
+         ((when (or (and (eq type1 :vl-kwd-default)
+                         (vl-lookahead-is-token? :vl-kwd-clocking (cdr tokens)))
+                    (eq type1 :vl-kwd-clocking)))
+          (seq tokstream
+               (clkdecl := (vl-parse-normal-clocking-declaration atts))
+               (return (list clkdecl))))
+
+         ((when (eq type1 :vl-kwd-default))
+          ;; Note that we already checked for 'default clocking' above
+          (seq tokstream
+               (disable := (vl-parse-defaultdisable atts))
+               (return (list disable))))
+
+         ((when (eq type1 :vl-kwd-let))
+          (vl-parse-error "BOZO not yet implemented: let declarations"))
+
+         ((when (eq type1 :vl-kwd-bind))
+          (seq tokstream
+               (bind := (vl-parse-bind-directive atts))
+               (return (list bind))))
+
+         ((when (eq type1 :vl-kwd-class))
+          (seq tokstream
+               (class := (vl-parse-class-declaration atts))
+               (return (list class))))
+
+         ((when (eq type1 :vl-kwd-covergroup))
+          (seq tokstream
+               (covergroup := (vl-parse-covergroup-declaration atts))
+               (return (list covergroup))))
+
+         ((when (eq type1 :vl-semi))
+          ;; SystemVerilog-2012 seems to allow allows empty items to occur most anywhere:
+          ;;
+          ;;    package_or_generate_item_declaration ::= .... | ';'
+          ;;
+          ;; And these are allowed all over, e.g., in module_or_generate_item,
+          ;; interface_or_generate_item.  We'll match these but just throw them
+          ;; away.  This maybe isn't quite right, as it throws away the attributes
+          ;; that are associated with the semicolon, but it seems unlikely that
+          ;; we will care about that.
+          (seq tokstream
+               (:= (vl-match))
+               (return nil)))
+
+         ((when (and (eq type1 :vl-sysidtoken)
+                     (vl-elaborate-system-task-function-p (car tokens))))
+          (seq tokstream
+               (task := (vl-parse-elaborate-system-task))
+               (return (list task))))
+
+         ((when (eq type1 :vl-idtoken))
+          ;; It's either a udp/module/interface instance, a variable decl, or a
+          ;; (non-ansi) interface port decl.  We'll backtrack to distinguish
+          ;; the first two, but we'll parse the interface portdecl as a vardecl
+          ;; and fix it up in annotate.
+          (b* ((backup (vl-tokstream-save))
+               ((mv err1 inst tokstream)
+                (vl-parse-udp-or-module-instantiation atts))
+               ((unless err1) (mv nil inst tokstream))
+               (pos1 (vl-tokstream->position))
+               (tokstream (vl-tokstream-restore backup))
+               ((mv err2 vardecl tokstream)
+                (vl-parse-block-item-declaration-noatts atts))
+               ((unless err2) (mv nil vardecl tokstream))
+               (pos2 (vl-tokstream->position))
+               ((mv pos err) (vl-choose-parse-error pos1 err1 pos2 err2))
+               (tokstream (vl-tokstream-restore backup))
+               (tokstream (vl-tokstream-update-position pos)))
+            (mv err nil tokstream))))
+
+
       ;; SystemVerilog -- BOZO haven't thought this through very thoroughly, but it's
       ;; probably a fine starting place.
       (vl-parse-block-item-declaration-noatts atts))))
@@ -420,7 +576,7 @@ rules:</p>
          (loc := (vl-current-loc))
          (:= (vl-match))
          (:= (vl-match-token :vl-lparen))
-         (:= (vl-maybe-match-token :vl-kwd-genvar)) ;; skip genvar
+         (genvar := (vl-maybe-match-token :vl-kwd-genvar)) ;; skip genvar
          (id := (vl-match-token :vl-idtoken))
          (:= (vl-match-token :vl-equalsign))
          (init := (vl-parse-expression))
@@ -434,7 +590,8 @@ rules:</p>
            (return-raw
             (vl-parse-error "For loop: the initialized variable differed from the incremented variable.")))
          (:= (vl-match-token :vl-rparen))
-         (return (make-vl-genloop :var (make-vl-id :name (vl-idtoken->name id))
+         (return (make-vl-genloop :var (vl-idtoken->name id)
+                                  :genvarp (and genvar t)
                                   :initval init
                                   :continue continue
                                   :nextval next
@@ -470,8 +627,8 @@ more than one, e.g. in the case of a netdeclaration with implicit
 assignment.)</li>
 
 <li>@('vl-parse-generate-block') parses a generate construct or modelement and
-returns a single genelement.  If multiple modelements are produced by parsing
-the one modelement, it consolidates them into an unnamed @('begin/end') block.</li>
+returns a @(see vl-genblock).</li>
+
 </ul>"
       :flag-local nil
       (defparser vl-parse-generate ()
@@ -494,10 +651,17 @@ the one modelement, it consolidates them into an unnamed @('begin/end') block.</
                  (blkname := (vl-match-token :vl-idtoken)))
                (elts := (vl-parse-genelements-until :vl-kwd-end))
                (:= (vl-match-token :vl-kwd-end))
-               (return (make-vl-genblock :name (and blkname
-                                                    (vl-idtoken->name blkname))
-                                         :elems elts
-                                         :loc loc)))
+               (when blkname
+                 ;; SystemVerilog-2012 extends generate_block with [ ':'
+                 ;; generate_block_identifier ] at the end.  We don't
+                 ;; have to check for SystemVerilog-2012 mode since
+                 ;; that's baked into vl-parse-endblock-name.
+                 (:= (vl-parse-endblock-name (vl-idtoken->name blkname) "begin/end")))
+               (return (make-vl-genbegin
+                        :block (make-vl-genblock :name (and blkname
+                                                            (vl-idtoken->name blkname))
+                                                 :elems elts
+                                                 :loc loc))))
              (return nil)))
 
       (defparser vl-parse-genelement ()
@@ -516,20 +680,46 @@ the one modelement, it consolidates them into an unnamed @('begin/end') block.</
              (items := (vl-parse-modelement))
              (return (vl-modelementlist->genelements items))))
 
-      (defparser vl-parse-generate-block ()
+      (defparser vl-parse-generate-block (directly-under-condp)
         :measure (two-nats-measure (vl-tokstream-measure) 6)
         :verify-guards nil
         (declare (xargs :measure-debug t))
+        ;; SystemVerilog-2012:
+        ;;
+        ;;    generate_block ::= generate_item
+        ;;                     | [ identifier ':' ] begin [ ':' identifier ]
+        ;;                          {generate_item}
+        ;;                       'end' [ ':' identifier ]
+        ;;
+        ;; BOZO we don't currently support pre-labels.
         (seq tokstream
              (loc := (vl-current-loc))
              (gen :w= (vl-parse-generate))
              (when gen
-               (return gen))
+               (return
+                ;; If what we parsed is already a block, just return that,
+                ;; otherwise wrap it as a singleton element in a block.
+                (if directly-under-condp
+                    (vl-genelement-case gen
+                      :vl-genbegin gen.block
+                      :vl-genif (make-vl-genblock :loc loc
+                                                   :elems (list gen)
+                                                   :condnestp t)
+                      :vl-gencase (make-vl-genblock :loc loc
+                                                    :elems (list gen)
+                                                    :condnestp t)
+                      :otherwise (make-vl-genblock :loc loc
+                                                   :elems (list gen)))
+                  (vl-genelement-case gen
+                    :vl-genbegin gen.block
+                    :otherwise (make-vl-genblock :loc loc
+                                                 :elems (list gen))))))
              (items := (vl-parse-modelement))
              (return (make-vl-genblock :loc loc
                                        :elems (vl-modelementlist->genelements items)))))
 
       (defparser vl-parse-genelements-until (endkwd)
+        :guard (symbolp endkwd)
         ;;:result (vl-genelementlist-p val)
         ;; :resultp-of-nil t
         ;; :true-listp t
@@ -571,7 +761,7 @@ the one modelement, it consolidates them into an unnamed @('begin/end') block.</
         ;;    | genvar_identifier inc_or_dec_operator
         (seq tokstream
              (header := (vl-parse-genloop-header))
-             (body := (vl-parse-generate-block))
+             (body := (vl-parse-generate-block nil))
              (return (change-vl-genloop header
                                         :body body))))
 
@@ -590,11 +780,11 @@ the one modelement, it consolidates them into an unnamed @('begin/end') block.</
              (:= (vl-match-token :vl-lparen))
              (test := (vl-parse-expression))
              (:= (vl-match-token :vl-rparen))
-             (then :w= (vl-parse-generate-block))
+             (then :w= (vl-parse-generate-block t))
              (when (and (consp (vl-tokstream->tokens))
                         (vl-is-token? :vl-kwd-else))
                (:= (vl-match))
-               (else := (vl-parse-generate-block)))
+               (else := (vl-parse-generate-block t)))
              (return (make-vl-genif
                       :test test
                       :then then
@@ -634,17 +824,20 @@ the one modelement, it consolidates them into an unnamed @('begin/end') block.</
         ;;                   (cdr val)))
         :measure (two-nats-measure (vl-tokstream-measure) 5)
         (seq tokstream
+             (when (vl-is-token? :vl-kwd-endcase)
+               (:= (vl-match))
+               (return (cons nil nil)))
              (when (vl-is-token? :vl-kwd-default)
                (:= (vl-match))
                (:= (vl-match-token :vl-colon))
-               (blk :w= (vl-parse-generate-block))
+               (blk :w= (vl-parse-generate-block t))
                ((rest . rdefault) := (vl-parse-gencaselist))
                (when rdefault
                  (return-raw (vl-parse-error "Multiple default cases in generate case")))
                (return (cons rest blk)))
              (exprs := (vl-parse-1+-expressions-separated-by-commas))
              (:= (vl-match-token :vl-colon))
-             (blk :w= (vl-parse-generate-block))
+             (blk :w= (vl-parse-generate-block t))
              ((rest . default) := (vl-parse-gencaselist))
              (return (cons (cons (cons exprs blk) rest) default))))))
 
@@ -652,7 +845,7 @@ the one modelement, it consolidates them into an unnamed @('begin/end') block.</
    `(defthm-vl-genelements-flag vl-parse-genelement-val-when-error
       ,(vl-val-when-error-claim vl-parse-genelement)
       ,(vl-val-when-error-claim vl-parse-generate)
-      ,(vl-val-when-error-claim vl-parse-generate-block)
+      ,(vl-val-when-error-claim vl-parse-generate-block :args (directly-under-condp))
       ,(vl-val-when-error-claim vl-parse-genelements-until :args (endkwd))
       ,(vl-val-when-error-claim vl-parse-genloop)
       ,(vl-val-when-error-claim vl-parse-genif)
@@ -669,7 +862,7 @@ the one modelement, it consolidates them into an unnamed @('begin/end') block.</
    `(defthm-vl-genelements-flag vl-parse-genelement-warning
       ,(vl-warning-claim vl-parse-genelement)
       ,(vl-warning-claim vl-parse-generate)
-      ,(vl-warning-claim vl-parse-generate-block)
+      ,(vl-warning-claim vl-parse-generate-block :args (directly-under-condp))
       ,(vl-warning-claim vl-parse-genelements-until :args (endkwd))
       ,(vl-warning-claim vl-parse-genloop)
       ,(vl-warning-claim vl-parse-genif)
@@ -696,7 +889,7 @@ the one modelement, it consolidates them into an unnamed @('begin/end') block.</
          (< (VL-TOKSTREAM-MEASURE :TOKSTREAM (MV-NTH 2 (VL-PARSE-GENERATE)))
             (VL-TOKSTREAM-MEASURE))))
        :RULE-CLASSES ((:REWRITE) (:LINEAR)))
-      ,(vl-progress-claim vl-parse-generate-block)
+      ,(vl-progress-claim vl-parse-generate-block :args (directly-under-condp))
       ,(vl-progress-claim vl-parse-genelements-until :args (endkwd) :strongp nil)
       ,(vl-progress-claim vl-parse-genloop)
       ,(vl-progress-claim vl-parse-genif)
@@ -723,16 +916,16 @@ the one modelement, it consolidates them into an unnamed @('begin/end') block.</
       ,(vl-genelement-claim vl-parse-genelement        vl-genelementlist-p)
       ,(vl-genelement-claim vl-parse-generate          (lambda (val)
                                                          (iff (vl-genelement-p val) val)))
-      ,(vl-genelement-claim vl-parse-generate-block    vl-genelement-p)
+      ,(vl-genelement-claim vl-parse-generate-block    vl-genblock-p :args (directly-under-condp))
       ,(vl-genelement-claim vl-parse-genelements-until vl-genelementlist-p :args (endkwd) :true-listp t)
-      ,(vl-genelement-claim vl-parse-genloop        vl-genelement-p)
-      ,(vl-genelement-claim vl-parse-genif          vl-genelement-p)
-      ,(vl-genelement-claim vl-parse-gencase        vl-genelement-p)
-      ,(vl-genelement-claim vl-parse-gencaselist    (lambda (val)
-                                                      (and (consp val)
-                                                           (vl-gencaselist-p (car val))
-                                                           (iff (vl-genelement-p (cdr val))
-                                                                (cdr val)))))
+      ,(vl-genelement-claim vl-parse-genloop           vl-genelement-p)
+      ,(vl-genelement-claim vl-parse-genif             vl-genelement-p)
+      ,(vl-genelement-claim vl-parse-gencase           vl-genelement-p)
+      ,(vl-genelement-claim vl-parse-gencaselist       (lambda (val)
+                                                         (and (consp val)
+                                                              (vl-gencaselist-p (car val))
+                                                              (iff (vl-genblock-p (cdr val))
+                                                                   (cdr val)))))
       :hints ('(:do-not '(preprocess))
               (flag::expand-calls-computed-hint
                acl2::clause
@@ -750,6 +943,57 @@ the one modelement, it consolidates them into an unnamed @('begin/end') block.</
 
 
 
+(define vl-modelement->short-kind-string ((x vl-modelement-p))
+  :parents (vl-modelement)
+  :short "Human-readable description of what kind of module element this is."
+  :returns (str stringp :rule-classes :type-prescription)
+  (case (tag x)
+    ;; Try to make sure these get properly pluralized by tacking on an "s"
+    (:vl-portdecl   "port declaration")
+    (:vl-assign     "continuous assignment")
+    (:vl-alias      "alias declaration")
+    (:vl-vardecl    "variable declaration")
+    (:vl-paramdecl  "parameter declaration")
+    (:vl-fundecl    "function declaration")
+    (:vl-taskdecl   "task declaration")
+    (:vl-modinst    "module instance")
+    (:vl-gateinst   "gate instance")
+    (:vl-always     "always statement")
+    (:vl-initial    "initial statement")
+    (:vl-final      "final statement")
+    (:vl-typedef    "typedef")
+    (:vl-fwdtypedef "forward typedef")
+    (:vl-import     "package import")
+    (:vl-modport    "modport declaration")
+    (:vl-genvar     "genvar declaration")
+    (:vl-assertion  "immediate assertion")
+    (:vl-cassertion "concurrent assertion")
+    (:vl-property   "property declaration")
+    (:vl-sequence   "sequence declaration")
+    (:vl-clkdecl    "clocking declaration")
+    (:vl-gclkdecl   "global clocking declaration")
+    (:vl-defaultdisable "default disable")
+    (:vl-dpiimport  "DPI import")
+    (:vl-dpiexport  "DPI export")
+    (:vl-bind       "bind declaration")
+    (:vl-class      "class declaration")
+    (:vl-covergroup "covergroup")
+    (:vl-elabtask   "elaborate (e.g., $fatal, ...) system task")
+    (otherwise      (progn$ (impossible)
+                            "invalid"))))
+
+(define vl-genelement->short-kind-string ((x vl-genelement-p))
+  :parents (vl-genelement)
+  :short "Human-readable description of what kind of module element this is."
+  :returns (str stringp :rule-classes :type-prescription)
+  (vl-genelement-case x
+    :vl-genbase (vl-modelement->short-kind-string x.item)
+    ;; Try to make sure these get properly pluralized by tacking on an "s"
+    :vl-genloop "generate loop"
+    :vl-genif "generate if statement"
+    :vl-gencase "generate case statement"
+    :vl-genbegin "generate"
+    :vl-genarray "generate loop"))
 
 (defines vl-genelement-findbad
   :parents (vl-genelement)
@@ -765,26 +1009,34 @@ contexts where some of the items aren't allowed.</p>"
     :returns (firstbad (iff (vl-genelement-p firstbad) firstbad))
     (b* ((x (vl-genelement-fix x)))
       (vl-genelement-case x
-        :vl-genloop (if (member :vl-generate allowed)
-                        (vl-genelement-findbad x.body allowed)
-                      x)
-        :vl-genif   (if (member :vl-generate allowed)
-                        (or (vl-genelement-findbad x.then allowed)
-                            (vl-genelement-findbad x.else allowed))
-                      x)
-        :vl-gencase (if (member :vl-generate allowed)
-                        (or (vl-gencaselist-findbad x.cases allowed)
-                            (vl-genelement-findbad x.default allowed))
-                      x)
         :vl-genbase (if (member (tag x.item) allowed)
                         nil
                       x)
-        :vl-genblock (if (member :vl-generate allowed)
-                         (vl-genelementlist-findbad x.elems allowed)
+        :vl-genbegin (if (member :vl-generate allowed)
+                         (vl-genblock-findbad x.block allowed)
                        x)
+        :vl-genloop (if (member :vl-generate allowed)
+                        (vl-genblock-findbad x.body allowed)
+                      x)
+        :vl-genif   (if (member :vl-generate allowed)
+                        (or (vl-genblock-findbad x.then allowed)
+                            (vl-genblock-findbad x.else allowed))
+                      x)
+        :vl-gencase (if (member :vl-generate allowed)
+                        (or (vl-gencaselist-findbad x.cases allowed)
+                            (vl-genblock-findbad x.default allowed))
+                      x)
         :vl-genarray (if (member :vl-generate allowed)
-                         (vl-genarrayblocklist-findbad x.blocks allowed)
+                         (vl-genblocklist-findbad x.blocks allowed)
                        x))))
+
+  (define vl-genblock-findbad ((x       vl-genblock-p)
+                               (allowed symbol-listp))
+    :measure (vl-genblock-count x)
+    :guard   (subsetp-equal allowed (cons :vl-generate *vl-modelement-tagnames*))
+    :returns (firstbad (iff (vl-genelement-p firstbad) firstbad))
+    (b* (((vl-genblock x)))
+      (vl-genelementlist-findbad x.elems allowed)))
 
   (define vl-genelementlist-findbad ((x vl-genelementlist-p)
                                      (allowed symbol-listp))
@@ -805,24 +1057,16 @@ contexts where some of the items aren't allowed.</p>"
          ((when (atom x))
           nil)
          ((cons (cons ?expr block) rest) x))
-      (or (vl-genelement-findbad block allowed)
+      (or (vl-genblock-findbad block allowed)
           (vl-gencaselist-findbad rest allowed))))
 
-  (define vl-genarrayblocklist-findbad ((x vl-genarrayblocklist-p)
+  (define vl-genblocklist-findbad ((x vl-genblocklist-p)
                                         (allowed symbol-listp))
-    :measure (vl-genarrayblocklist-count x)
+    :measure (vl-genblocklist-count x)
     :guard (subsetp-equal allowed (cons :vl-generate *vl-modelement-tagnames*))
     :returns (firstbad (iff (vl-genelement-p firstbad) firstbad))
     (if (atom x)
         nil
-      (or (vl-genarrayblock-findbad (car x) allowed)
-          (vl-genarrayblocklist-findbad (cdr x) allowed))))
-
-  (define vl-genarrayblock-findbad ((x vl-genarrayblock-p)
-                                    (allowed symbol-listp))
-    :measure (vl-genarrayblock-count x)
-    :guard (subsetp-equal allowed (cons :vl-generate *vl-modelement-tagnames*))
-    :returns (firstbad (iff (vl-genelement-p firstbad) firstbad))
-    (b* (((vl-genarrayblock x)))
-      (vl-genelementlist-findbad x.elems allowed))))
+      (or (vl-genblock-findbad (car x) allowed)
+          (vl-genblocklist-findbad (cdr x) allowed)))))
 

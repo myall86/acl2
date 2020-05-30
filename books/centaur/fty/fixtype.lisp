@@ -29,166 +29,11 @@
 ; Original author: Sol Swords <sswords@centtech.com>
 
 (in-package "FTY")
-
 (include-book "xdoc/top" :dir :system)
 (include-book "std/util/da-base" :dir :system)
 
 (program)
 (set-state-ok t)
-
-(defxdoc fty
-  :parents (acl2::macro-libraries)
-
-  :short "A library of utilities supporting a type discipline that minimizes
-the need for type hypotheses in theorems."
-
-  :long "<p>FTY is short for <i>fixtype</i>, a systematic way of using types in
-ACL2 that is intended to be easy to use and easy on prover and execution
-performance.</p>
-
-<p>Fixtype is one of several paradigms for \"type-safe\" programming in ACL2.
-In this discipline,</p>
-<ul>
-
-<li>Every type (predicate) @('q-p') has an associated fixing function
-@('q-fix') and equivalence relation @('q-equiv'), such that (for all @('x'), @('y'))
-@({
-    (q-p (q-fix x)),
-    (implies (q-p x) (equal (q-fix x) x)),
-    (equal (q-equiv x y) (equal (q-fix x) (q-fix y))).
- })</li>
-
-
-<li>If a function @('foo') takes an argument of the @('q') type, then it has an
-equality congruence with @('q-equiv') on that argument, i.e.:
-@({
- (implies (q-equiv x y) (equal (foo x) (foo y)))
- })</li>
-
-<li>If @('foo') is supposed to return a value of type @('q'), then it does so unconditionally:
-@({
- (q-p (foo x)).
- })</li>
-</ul>
-
-<p>Given types that have associated fixing functions and equivalence relations,
-the latter two requirements are easy to engineer: you can either build on
-existing functions that already satisfy these requirements, or you can fix each
-of the inputs to a function to appropriate types for free, using MBE:</p>
-@({
- (defun nat-add-5 (n)
-   (declare (xargs :guard (natp n)))
-   (let ((n (mbe :logic (nfix n) :exec n)))
-     (+ n 5)))
- })
-
-<p>Having unconditional return types and congruences are both beneficial in
-themselves.  But the main benefit of using the fixtype discipline is that
-reasoning about such functions does not require hypotheses constraining their
-inputs to the expected types, because they are fixed to that type (in a
-consistent manner) before being used.</p>
-
-<p>The @('FTY') library contains various utilities to support this typing discipline, notably:</p>
-<ul>
-<li>@(see deffixtype), associates a fixing function and equivalence relation
-with a type predicate (optionally defining the equivalence relation for
-you);</li>
-<li>@(see deffixequiv) and @(see deffixequiv-mutual) automate the (otherwise
-tedious) congruence proofs required for each function that follows the fixtype
-discipline;</li>
-<li>@(see deftypes) provides a set of type generating utilities that can be
-used with the fixtype discipline, supporting (recursive and mutually recursive)
-sum, product, list, and alist types;</li>
-<li>@(see basetypes) includes fixing function associations for many of the
-common ACL2 base types (numbers, symbols, strings).</li>
-</ul>")
-
-(defxdoc deffixtype
-  :parents (fty)
-  :short "Define a named type, associating a unary predicate, fixing function,
-and equivalence relation."
-  :long "<p>Part of an attempt to automate the proof discipline described at
-@(see fty).</p>
-
-<p>@('DEFFIXTYPE') simply associates a type name with an existing predicate,
-fixing function, and equivalence relation.  It stores this association in a
-table for later use by @(see deffixequiv) and @(see deffixequiv-mutual).</p>
-
-<p>Example usage:</p>
-
-@({
-  (fty::deffixtype nat :fix nfix :pred natp :equiv equal)
-})
-
-<p>General form:</p>
-@({
-  (deffixtype widget
-              :pred widget-p
-              :fix  widget-fix
-              :equiv widget-equiv
-  ;; optional:
-              :executablep nil    ;; t by default
-              :define t           ;; nil by default: define the equivalence as equal of fix
-              :inline inline-p    ;; t by default: use defun-inline for the equivalence
-              :equal {eq,eql,...} ;; equal by default: the comparison to use
-              :forward t          ;; nil by default: produce forward-chaining
-                                  ;;                 rules about the equivalence
-              :hints (...)        ;; hints for proving that the equivalence is canonical
-              :verbosep t         ;; nil by default: print verbose output
-              )
-})
-
-<p>The optional arguments:</p>
-
-<ul>
-
-<li>@(':executablep') should be set to NIL if either the fixing function or
-predicate are non-executable or especially expensive.  This mainly affects, in
-@('deffixequiv') and @('deffixequiv-mutual'), whether a theorem is introduced
-that normalizes constants by applying the fixing function to them.</li>
-
-<li>@(':define') is NIL by default; if set to T, then the equivalence relation
-is assumed not to exist yet, and is defined as equality of fix, with
-appropriate rules to rewrite the fix away under the equivalence and to
-propagate the congruence into the fix.</li>
-
-<li>@(':inline') only matters when @(':define') is T.  When @(':inline') is T,
-the new equivalence relation's function will be introduced using
-@(see defun-inline) instead of @(see defun).</li>
-
-<li>@(':equal') only matters when @('define') is T and defaults to @('equal').
-It allows you to say that the new equivalence relation should use some
-alternate equality predicate like @(see eq), @(see eql), etc., for added
-efficiency.</li>
-
-<li>@(':forward') only matters when @('define') is T.  When @(':forward') is T,
-four additional lemmas will be proved about the new equivalence relation and
-stored as forward chaining rules.  In particular, @('(equal (widget-fix x) y)'),
-@('(equal x (widget-fix y))'), @('(widget-equiv (widget-fix x) y)'), and
-@('(widget-equiv x (widget-fix y))') will all be forward-chained to
-@('(widget-equiv x y)').</li>
-
-<li>@(':hints') only matters when @('define') is NIL.  When @(':hints') is set,
-its value is used as a @(see acl2::hints) declaration for the theorem that the
-new equivalence relation is holds between some @('x') and @('y') exactly when
-@('(equal (widget-fix x) (widget-fix y))').
-
-When @('define') is T, the theorem need not be proved, because its statement is
-exactly the definition of the default equivalence relation defined when
-@('define') is specified.</li>
-
-<li>@(':verbosep') is NIL by default; if set to T, then output from the theorem
-prover will not be suppressed during the evaluation of the forms generated.</li>
-
-</ul>
-
-<p>We assume that the fixing function returns an object that satisfies the
-predicate, and if given an object satisfying the predicate, it returns the same
-object.  We also assume that equiv is an equivalence relation (see @(see
-defequiv)).</p>
-
-<p>Consider using book @('centaur/fty/basetypes.lisp') to include definitions
-for some basic ACL2 types.</p>")
 
 (def-primitive-aggregate fixtype
   (name               ;; foo  (not necessarily a function)
@@ -202,6 +47,7 @@ for some basic ACL2 types.</p>")
    equiv-means-fixes-equal ;; (implies (foo-equiv x y) (equal (foo-fix x) (foo-fix y)))  (or iff/equal)
    inline
    equal
+   topic    ;; preferred xdoc topic to link to this
    ))
 
 (table fixtypes)
@@ -209,9 +55,9 @@ for some basic ACL2 types.</p>")
 (defun get-fixtypes-alist (world)
   (cdr (assoc 'fixtype-alist (table-alist 'fixtypes world))))
 
-(defun deffixtype-fn (name predicate fix equiv execp definep inline equal verbosep hints forward)
+(defun deffixtype-fn (name predicate fix equiv execp definep inline equal topic verbosep hints forward)
   (if definep
-      `(with-output ,@(and (not verbosep) '(:off :all)) :stack :push
+      `(with-output ,@(and (not verbosep) '(:off :all :on acl2::error)) :stack :push
          (encapsulate nil
            (logic)
            (local (make-event
@@ -231,8 +77,8 @@ for some basic ACL2 types.</p>")
              (,equal (,fix x) (,fix y)))
            (local (in-theory '(,equiv tmp-deffixtype-idempotent
                                       booleanp-compound-recognizer)))
-           (defequiv ,equiv)
-           (defcong ,equiv equal (,fix x) 1)
+           (defequiv ,equiv :package :legacy)
+           (defcong ,equiv equal (,fix x) 1 :package :legacy)
            (defthm ,(intern-in-package-of-symbol
                      (concatenate 'string
                                   (symbol-name fix) "-UNDER-" (symbol-name equiv))
@@ -278,6 +124,7 @@ for some basic ACL2 types.</p>")
                                                        equiv)
                                                      :inline inline
                                                      :equal equal
+                                                     :topic topic
                                                      ))
                         (get-fixtypes-alist world)))))
     (b* ((thmname (intern-in-package-of-symbol
@@ -311,6 +158,7 @@ for some basic ACL2 types.</p>")
                                                    :equiv-means-fixes-equal thmname
                                                    :inline inline
                                                    :equal equal
+                                                   :topic topic
                                                    ))
                              (get-fixtypes-alist world))))))))
 
@@ -322,11 +170,14 @@ for some basic ACL2 types.</p>")
                            hints
                            forward
                            (inline 't)
-                           (equal 'equal))
+                           (equal 'equal)
+                           (topic 'nil topic-p))
 ; We contemplated making "equal" the default equivalence relation but decided
 ; against it.  See Github Issue 240 for relevant discussion.
   (declare (xargs :guard (and pred fix equiv)))
-  (deffixtype-fn name pred fix equiv execp define inline equal verbosep hints forward))
+  (deffixtype-fn name pred fix equiv execp define inline equal
+    (if topic-p topic name)
+    verbosep hints forward))
 
 (defun find-fixtype-for-pred (pred alist)
   (if (atom alist)
@@ -347,10 +198,14 @@ for some basic ACL2 types.</p>")
 (defun find-fixtype-for-typename (name alist)
   (cdr (assoc name alist)))
 
+(defun find-fixtype (typename alist)
+  (or (find-fixtype-for-typename typename alist)
+      (find-fixtype-for-pred typename alist)))
 
 (defconst *deffixequiv-basic-keywords*
   '(:hints
     :skip-const-thm
+    :skip-cong-thm
     :skip-ok
     :verbosep
     :out-equiv
@@ -399,7 +254,7 @@ for some basic ACL2 types.</p>")
        (hints (getarg :hints nil kwd-alist))
        (skip-const-thm (or (getarg :skip-const-thm nil kwd-alist)
                            (not (fixtype->executablep fixtype))))
-       (out-equiv (getarg :out-equiv 'equal kwd-alist))
+       (skip-cong-thm (getarg :skip-cong-thm nil kwd-alist))
        ((unless (and (consp form) (symbolp (car form))))
         (raise "Form should be a function call term, but it's ~x0" form))
        (basename (getarg :basename (car form) kwd-alist))
@@ -408,6 +263,12 @@ for some basic ACL2 types.</p>")
        (pkg (if (equal (symbol-package-name pkg) "COMMON-LISP")
                 'acl2::foo
               pkg))
+       (out-equiv (getarg :out-equiv 'equal kwd-alist))
+       (out-equiv-equiv-rune (acl2::equivalence-rune
+                              (acl2::deref-macro-name out-equiv (macro-aliases world))
+                              world))
+       ((unless out-equiv-equiv-rune)
+        (raise "Expected ~s0 to be a known equivalence relation" out-equiv))
        (under-out-equiv (if (eq out-equiv 'equal) ""
                           (concatenate 'string "-UNDER-" (symbol-name out-equiv))))
        (suffix (getarg :thm-suffix "" kwd-alist))
@@ -433,7 +294,7 @@ for some basic ACL2 types.</p>")
                        'string (symbol-name arg) "-EQUIV")
                       pkg)))
        ((mv err tr-form) (acl2::translate-cmp form t t nil 'deffixequiv-basic-parse
-                                              (w state) (acl2::default-state-vars t)))
+                                              world (acl2::default-state-vars t)))
        ((when err)
         (raise "Error translating form: ~@0" tr-form))
        (vars (all-vars tr-form))
@@ -451,18 +312,21 @@ for some basic ACL2 types.</p>")
                           (implies (syntaxp (and (quotep ,arg)
                                                  (not (,pred (cadr ,arg)))))
                                    (,out-equiv ,form
-                                               ,(subst `(,fix ,arg) arg form))))))
-       (cong-thm `(defthm ,congruence-thmname
-                    (implies (,equiv ,arg ,argequiv)
-                             (,out-equiv ,form
-                                         ,(subst argequiv arg form)))
-                    :hints (("Goal" :in-theory nil
-                             :do-not '(preprocess)
-                             :use ((:instance ,fix-thmname)
-                                   (:instance ,fix-thmname (,arg ,argequiv))
-                                   (:instance ,(fixtype->equiv-means-fixes-equal fixtype)
-                                    (x ,arg) (y ,argequiv)))))
-                    :rule-classes :congruence)))
+                                               ,(subst `(,fix ,arg) arg form)))
+                          :hints (("Goal" :in-theory
+                                   '(,out-equiv-equiv-rune ,fix-thmname))))))
+       (cong-thm (and (not skip-cong-thm)
+                      `(defthm ,congruence-thmname
+                         (implies (,equiv ,arg ,argequiv)
+                                  (,out-equiv ,form
+                                              ,(subst argequiv arg form)))
+                         :hints (("Goal" :in-theory nil
+                                  :do-not '(preprocess)
+                                  :use ((:instance ,fix-thmname)
+                                        (:instance ,fix-thmname (,arg ,argequiv))
+                                        (:instance ,(fixtype->equiv-means-fixes-equal fixtype)
+                                         (x ,arg) (y ,argequiv)))))
+                         :rule-classes :congruence))))
     (make-fixequiv
      :form form
      :arg arg
@@ -485,14 +349,15 @@ for some basic ACL2 types.</p>")
               `((with-output :on (error)
                   ,x.const-thm)))
 
-       (make-event
-        '(:or (with-output :on (error) ,x.cong-thm)
-          (with-output :on (error)
-            (value-triple
-             (er hard? 'fixequiv
-                 "The congruence theorem failed: this is unexpected because ~
+       ,@(and x.cong-thm
+              `((make-event
+                 '(:or (with-output :on (error) ,x.cong-thm)
+                   (with-output :on (error)
+                     (value-triple
+                      (er hard? 'fixequiv
+                          "The congruence theorem failed: this is unexpected because ~
                   this should be automatic once the fixing theorem succeeds.  ~
-                  Please try again with :verbosep t to diagnose the problem."))))))))
+                  Please try again with :verbosep t to diagnose the problem."))))))))))
 
 (defmacro deffixequiv-basic (fn arg type &rest keys)
   (b* ((verbosep (let ((lst (member :verbosep keys)))

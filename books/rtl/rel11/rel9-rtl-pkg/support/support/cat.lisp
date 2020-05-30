@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -114,7 +102,7 @@ Concatenate the M-bit value X onto the N-bit value Y.  X will occupy the high bi
                 (case-split (integerp n))
                 (case-split (integerp m))
                 (case-split (<= 0 m))
-                )		  
+                )
            (equal (cat 0 m y n) y)))
 
 ;BOZO just use this one??
@@ -123,7 +111,7 @@ Concatenate the M-bit value X onto the N-bit value Y.  X will occupy the high bi
                 (case-split (integerp n))
                 (case-split (integerp m))
                 (case-split (<= 0 m))
-                )		  
+                )
            (equal (cat 0 m y n) (bits y (1- n) 0))))
 
 ;We can rely on bits-tail to complete the simplification down to x if desired.
@@ -320,15 +308,15 @@ Concatenate the M-bit value X onto the N-bit value Y.  X will occupy the high bi
    (implies (and (case-split (<= 0 k))
                  (case-split (<= 0 n))
                  (case-split (<= 0 m))
-                 (case-split (integerp n)) 
-                 (case-split (integerp m)) 
-                 (case-split (integerp k)) 
+                 (case-split (integerp n))
+                 (case-split (integerp m))
+                 (case-split (integerp k))
                  )
             (equal (bvecp (cat x m y n) k)
                    (if (<= (+ m n) k)
                        t
                      (if (<= n k)
-                         (equal 0 (bits x (1- m) (+ k (* -1 n))))                      
+                         (equal 0 (bits x (1- m) (+ k (* -1 n))))
                        (and (equal 0 (bits x (1- m) 0))
                             (equal 0 (bits y (1- n) k))))))))
 
@@ -337,15 +325,15 @@ Concatenate the M-bit value X onto the N-bit value Y.  X will occupy the high bi
                 (case-split (<= 0 k))
                 (case-split (<= 0 n))
                 (case-split (<= 0 m))
-                (case-split (integerp n)) 
-                (case-split (integerp m)) 
-                (case-split (integerp k)) 
+                (case-split (integerp n))
+                (case-split (integerp m))
+                (case-split (integerp k))
                 )
            (equal (bvecp (cat x m y n) k)
                   (if (<= (+ m n) k)
                       t
                     (if (<= n k)
-                        (equal 0 (bits x (1- m) (+ k (* -1 n))))                      
+                        (equal 0 (bits x (1- m) (+ k (* -1 n))))
                       (and (equal 0 (bits x (1- m) 0))
                            (equal 0 (bits y (1- n) k))))))))
 
@@ -490,7 +478,7 @@ Concatenate the M-bit value X onto the N-bit value Y.  X will occupy the high bi
                     (if (>= j n)
                         (bits x (if (< i (+ m n))
                                     (- i n)
-                                  (1- m)) 
+                                  (1- m))
                               (- j n))
                       (cat (bits x (if (< i (+ m n))
                                         (- i n)
@@ -516,7 +504,7 @@ Concatenate the M-bit value X onto the N-bit value Y.  X will occupy the high bi
                     (if (>= j n)
                         (bits x (if (< i (+ m n))
                                     (- i n)
-                                  (1- m)) 
+                                  (1- m))
                               (- j n))
                       (cat (bits x (if (< i (+ m n))
                                        (- i n)
@@ -709,7 +697,7 @@ bits-dont-match can prove things like this:
               (NOT (EQUAL 3 (BITS x 15 6)))))
 |#
 
-(defthm bits-dont-match 
+(defthm bits-dont-match
   (implies (and (syntaxp (and (quotep i)
                               (quotep j)
                               (quotep k)))

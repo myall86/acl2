@@ -1,3 +1,4 @@
+; Induction Clause Processor
 ; Copyright (C) 2013 Centaur Technology
 ;
 ; Contact:
@@ -5,22 +6,27 @@
 ;   7600-C N. Capital of Texas Highway, Suite 300, Austin, TX 78731, USA.
 ;   http://www.centtech.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.  This program is distributed in the hope that it will be useful but
-; WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
-; FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
-; more details.  You should have received a copy of the GNU General Public
-; License along with this program; if not, write to the Free Software
-; Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA 02110-1335, USA.
+; License: (An MIT/X11-style license)
+;
+;   Permission is hereby granted, free of charge, to any person obtaining a
+;   copy of this software and associated documentation files (the "Software"),
+;   to deal in the Software without restriction, including without limitation
+;   the rights to use, copy, modify, merge, publish, distribute, sublicense,
+;   and/or sell copies of the Software, and to permit persons to whom the
+;   Software is furnished to do so, subject to the following conditions:
+;
+;   The above copyright notice and this permission notice shall be included in
+;   all copies or substantial portions of the Software.
+;
+;   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+;   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+;   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+;   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+;   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+;   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+;   DEALINGS IN THE SOFTWARE.
 ;
 ; Original author: Sol Swords <sswords@centtech.com>
-
-; Induction clause processor
-
-
-
 
 (in-package "ACL2")
 
@@ -29,7 +35,7 @@
 (include-book "unify-subst")
 (include-book "tools/def-functional-instance" :dir :system)
 (include-book "arithmetic/top-with-meta" :dir :system)
-(include-book "centaur/misc/arith-equivs" :dir :System)
+(include-book "std/basic/arith-equivs" :dir :System)
 
 (defevaluator-fast
   indev indev-lst
@@ -59,7 +65,7 @@
          (pseudo-termp (caar x))            ;; predicate
          (pseudo-term-alist-listp (cdar x)) ;; substitutions
          (induction-step-listp (cdr x)))))
-    
+
 
 
 ;; (defun pseudo-term-alist-list-listp (x)
@@ -74,7 +80,7 @@
             (alistp x))
    :hints(("Goal" :in-theory (enable pseudo-term-val-alistp)))
    :rule-classes :forward-chaining))
-  
+
 
 
 ;; Applies each substitution to the clause; returns the list of resulting clauses
@@ -117,24 +123,27 @@
                 clause)
           (induction-steps clause (cdr inductions)))))
 
-(defun measure-decrs-subs (meas pred subs)
+(defun measure-decrs-subs (meas pred subs orig-clause)
   (declare (xargs :guard (and (pseudo-termp meas)
                               (pseudo-termp pred)
-                              (pseudo-term-alist-listp subs))))
+                              (pseudo-term-alist-listp subs)
+                              (pseudo-term-listp orig-clause))))
   (if (atom subs)
       nil
-    (cons `((not ,pred)
+    (cons `(,@orig-clause
+            (not ,pred)
             (o< ,(substitute-into-term meas (car subs))
                 ,meas))
-          (measure-decrs-subs meas pred (cdr subs)))))
+          (measure-decrs-subs meas pred (cdr subs) orig-clause))))
 
-(defun measure-decrs (meas inductions)
+(defun measure-decrs (meas inductions orig-clause)
   (declare (xargs :guard (and (pseudo-termp meas)
-                              (induction-step-listp inductions))))
+                              (induction-step-listp inductions)
+                              (pseudo-term-listp orig-clause))))
   (if (atom inductions)
       nil
-    (append (measure-decrs-subs meas (caar inductions) (cdar inductions))
-            (measure-decrs meas (cdr inductions)))))
+    (append (measure-decrs-subs meas (caar inductions) (cdar inductions) orig-clause)
+            (measure-decrs meas (cdr inductions) orig-clause))))
 
 (local
  (progn
@@ -384,7 +393,7 @@
 ;;     (case flg
 ;;       (top
 ;;        ;; (top meas preds subs a)
-;;        ;; Iterate over 
+;;        ;; Iterate over
 ;;        (if (indev (disjoin preds) a)
 ;;            (induction-cp-ind nil meas 0 preds subs a)
 ;;          (list meas preds subs a))
@@ -414,8 +423,9 @@
                                         (nfix (- (len inductions) (nfix nstep)))))
                        (t     (make-ord o 1
                                         (nfix (- (len (cdr (nth nstep inductions)))
-                                                 (nfix nsub)))))))))
-   
+                                                 (nfix nsub)))))))
+                   :ruler-extenders (cons)))
+
    (case flg
      (steps
       ;; Iterating over the predicates.  When we find the predicate that
@@ -433,12 +443,12 @@
           (let* ((aa (indev-alist (nth nsub psubs) a))
                  (meas-eval (indev meas a))
                  (meas1-eval (indev meas aa)))
-            (and (o-p meas-eval)
-                 (o-p meas1-eval)
-                 (o< meas1-eval meas-eval)
-                 (list (induction-cp-ind 'steps meas 0 0 inductions aa)
-                       (induction-cp-ind 'subs meas nstep (+ 1 (nfix nsub)) inductions a))))))))))
-         
+            (list (and (o-p meas-eval)
+                       (o-p meas1-eval)
+                       (o< meas1-eval meas-eval)
+                       (induction-cp-ind 'steps meas 0 0 inductions aa))
+                  (induction-cp-ind 'subs meas nstep (+ 1 (nfix nsub)) inductions a)))))))))
+
 
 
 
@@ -451,18 +461,20 @@
 
 (defthm measure-decr-when-measure-decrs-subs
   (implies (and (indev-theoremp
-                 (conjoin-clauses (measure-decrs-subs meas pred subs)))
+                 (conjoin-clauses (measure-decrs-subs meas pred subs orig-clause)))
                 (< (nfix n) (len subs))
                 (indev pred a)
-                (pseudo-termp meas))
+                (pseudo-termp meas)
+                (not (indev (disjoin orig-clause) a)))
            (o< (indev meas (indev-alist (nth n subs) a))
                (indev meas a)))
   :hints (("goal" :induct (nth n subs)
            :in-theory (enable nth))
           (and stable-under-simplificationp
-               '(:expand ((measure-decrs-subs meas pred subs))
+               '(:expand ((measure-decrs-subs meas pred subs orig-clause))
                  :use ((:instance indev-falsify
-                        (x (disjoin `((not ,pred)
+                        (x (disjoin `(,@orig-clause
+                                      (not ,pred)
                                       (o< ,(substitute-into-term meas (car
                                                                        subs))
                                           ,meas))))
@@ -471,17 +483,29 @@
 
 (defthm measure-decr-when-measure-decrs
   (implies (and (indev-theoremp
-                 (conjoin-clauses (measure-decrs meas inductions)))
+                 (conjoin-clauses (measure-decrs meas inductions orig-clause)))
                 (< (nfix nstep) (len inductions))
                 (indev (car (nth nstep inductions)) a)
                 (< (nfix nsub) (len (cdr (nth nstep inductions))))
-                (pseudo-termp meas))
+                (pseudo-termp meas)
+                (not (indev (disjoin orig-clause) a)))
            (o< (indev meas (indev-alist (nth nsub (cdr (nth nstep inductions))) a))
                (indev meas a)))
   :hints (("Goal" :induct (nth nstep inductions)
            :in-theory (enable nth))
           (and stable-under-simplificationp
-               '(:expand ((measure-decrs meas inductions))))))
+               '(:expand ((measure-decrs meas inductions orig-clause))))))
+
+(defthm o-p-with-clause-when-theoremp
+  (implies (and (not (indev (disjoin clause) a))
+                (not (o-p (indev meas a))))
+           (and (not (indev (disjoin clause)
+                            (indev-falsify (disjoin (Append clause (list (list 'o-p meas)))))))
+                (not (o-p (indev meas
+                                 (indev-falsify (disjoin (Append clause (list (list 'o-p meas))))))))))
+  :hints (("goal" :use ((:instance indev-falsify
+                         (x (disjoin (Append clause (list (list 'o-p meas)))))
+                         (a a))))))
 
 
 (defthm induction-step-right
@@ -526,13 +550,13 @@
   (equal (nthcdr 0 x) x)
   :hints(("Goal" :in-theory (enable nthcdr))))
 
-(defthm induction-cp-correct-rec
+(defthm induction-cp-correct-rec-with-orig-clause
   (implies
-   (and (indev-theoremp `(o-p ,meas))
+   (and (indev-theoremp (disjoin (append clause `((o-p ,meas)))))
         (pseudo-termp meas)
         (pseudo-term-listp clause)
         (indev-theoremp (conjoin-clauses
-                         (measure-decrs meas inductions)))
+                         (measure-decrs meas inductions clause)))
         ;; this says that the base case holds, i.e. if no induction step
         ;; condition is true then the clause is true
         (indev-theoremp (disjoin (cons (disjoin (strip-cars inductions)) clause)))
@@ -542,6 +566,7 @@
        (implies (indev (disjoin (strip-cars (nthcdr nstep inductions))) a)
                 (indev (disjoin clause) a))
      (implies (and (indev (car (nth nstep inductions)) a)
+                   (not (indev (disjoin clause) a))
                    (< (nfix nstep) (len inductions)))
               (indev (conjoin-clauses (substitute-list-into-clause
                                        (nthcdr nsub (cdr (nth nstep inductions)))
@@ -558,30 +583,67 @@
           (and stable-under-simplificationp
                '(:use ((:instance indev-falsify
                         (x (disjoin (cons (disjoin (strip-cars inductions)) clause)))
-                        (a (indev-alist (nth nsub (cdr (nth nstep inductions))) a))))))
-          )
+                        (a (indev-alist (nth nsub (cdr (nth nstep inductions))) a)))))))
+  :rule-classes nil)
+
+(defthm induction-cp-correct-rec-without-orig-clause
+  (implies
+   (and (indev-theoremp `(o-p ,meas))
+        (pseudo-termp meas)
+        (pseudo-term-listp clause)
+        (indev-theoremp (conjoin-clauses
+                         (measure-decrs meas inductions nil)))
+        ;; this says that the base case holds, i.e. if no induction step
+        ;; condition is true then the clause is true
+        (indev-theoremp (disjoin (cons (disjoin (strip-cars inductions)) clause)))
+        (indev-theoremp (conjoin-clauses
+                         (induction-steps clause inductions))))
+   (if (eq flg 'steps)
+       (implies (indev (disjoin (strip-cars (nthcdr nstep inductions))) a)
+                (indev (disjoin clause) a))
+     (implies (and (indev (car (nth nstep inductions)) a)
+                   ;; (not (indev (disjoin clause) a))
+                   (< (nfix nstep) (len inductions)))
+              (indev (conjoin-clauses (substitute-list-into-clause
+                                       (nthcdr nsub (cdr (nth nstep inductions)))
+                                       clause))
+                     a))))
+  :hints (("goal" :induct (induction-cp-ind flg meas nstep nsub inductions a)
+           :in-theory (disable nth measure-decrs substitute-into-term
+                               indev-alist induction-steps
+                               substitute-list-into-clause
+                               pseudo-termp nthcdr))
+          '(:use ((:instance indev-falsify
+                   (x (disjoin (cons (disjoin (strip-cars inductions)) clause)))
+                   (a a))))
+          (and stable-under-simplificationp
+               '(:use ((:instance indev-falsify
+                        (x (disjoin (cons (disjoin (strip-cars inductions)) clause)))
+                        (a (indev-alist (nth nsub (cdr (nth nstep inductions))) a)))))))
   :rule-classes nil)
 
 
 
 (defun induction-cp (clause hint)
   (declare (xargs :guard (pseudo-term-listp clause)))
-  (b* (((mv ok meas inductions)
+  (b* (((mv ok meas inductions extra-args)
         (case-match hint
-          ((meas inductions) (mv t meas inductions))
-          (& (mv nil nil nil))))
+          ((meas inductions . extra-args) (mv t meas inductions extra-args))
+          (& (mv nil nil nil nil))))
+       (apply-orig-clause (equal extra-args '(t)))
        (ok (and ok
                 (pseudo-termp meas)
                 (induction-step-listp inductions)))
        ((unless ok)
         (cw "bad hints~%")
         (list clause)))
-    (list* `((o-p ,meas))
+    (list* `(,@(and apply-orig-clause clause)
+             (o-p ,meas))
            ;; base-case
            (cons (disjoin (strip-cars inductions)) clause)
            ;; induction steps
            (append (induction-steps clause inductions)
-                   (measure-decrs meas inductions)))))
+                   (measure-decrs meas inductions (and apply-orig-clause clause))))))
 
 (defthm disjoin-singleton
   (equal (disjoin (list x)) x)
@@ -606,7 +668,12 @@
                 (alistp a)
                 (indev-theoremp (conjoin-clauses (induction-cp clause hint))))
            (indev (disjoin clause) a))
-  :hints (("goal" :use ((:instance induction-cp-correct-rec
+  :hints (("goal" :use ((:instance induction-cp-correct-rec-with-orig-clause
+                         (meas (car hint))
+                         (inductions (cadr hint))
+                         (flg 'steps)
+                         (nstep 0))
+                        (:instance induction-cp-correct-rec-without-orig-clause
                          (meas (car hint))
                          (inductions (cadr hint))
                          (flg 'steps)
@@ -621,7 +688,9 @@
                                indev-disjoin-cons
                                indev-of-o-p-call
                                indev-of-variable
-                               indev-of-quote)
+                               indev-of-quote
+                               INDEV-DISJOIN-APPEND
+                               INDEV-THEOREMP-DISJOIN-CONS-UNLESS-THEOREMP)
            :do-not-induct t))
   :rule-classes :clause-processor
   :otf-flg t)
@@ -678,7 +747,7 @@ This object must be a two-element list containing:
 <li>a term specifying the measure that justifies the induction,</li>
 <li>a list of pairs (condition . substitutions), where condition is a term
 giving the ruler of an induction step, and substitutions are a list of
-(variable . term) alists giving the substitutions for that induction step.</li>
+ (variable . term) alists giving the substitutions for that induction step.</li>
 </ul></p>
 
 <p>For example, the following hint:
@@ -690,7 +759,11 @@ giving the ruler of an induction step, and substitutions are a list of
 
        ;; induction step: when x > 1, assume true of x-1, x-2
        (((< '1 (nfix x))     ((x . (binary-+ '-1 x)))
-                             ((x . (binary-+ '-2 x)))))))
+                             ((x . (binary-+ '-2 x)))))
+
+       ;; extra option: if t, weaken the measure proof obligations by
+       ;; disjoining them with the original clause
+       t))
  })
 will cause the current goal to be attempted with a base case in for x<=1, and
 an induction step for x > 1 where the property is assumed true of x-1 and

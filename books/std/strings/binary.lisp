@@ -34,7 +34,6 @@
 (include-book "std/util/deflist" :dir :system)
 (include-book "ihs/basic-definitions" :dir :system)
 (local (include-book "arithmetic"))
-(local (include-book "misc/assert" :dir :system))
 (local (include-book "centaur/bitops/ihsext-basics" :dir :system))
 (local (in-theory (disable unsigned-byte-p)))
 (local (in-theory (acl2::enable* acl2::arith-equiv-forwarding)))
@@ -149,21 +148,31 @@
 (define bit-digit-val
   :short "Coerces a @(see bit-digitp) character into a number, 0 or 1."
   ((x bit-digitp :type character))
+  :returns (bit bitp :rule-classes :type-prescription)
   :split-types t
-  :returns (val natp :rule-classes :type-prescription)
   :inline t
   (if (eql x #\1)
       1
     0)
   ///
   (local (in-theory (enable bit-digitp)))
+
   (defcong ichareqv equal (bit-digit-val x) 1
     :hints(("Goal" :in-theory (enable ichareqv downcase-char char-fix))))
-  (defthm bit-digit-val-upper-bound
-    (< (bit-digit-val x) 2)
-    :rule-classes ((:rewrite) (:linear)))
-  (defthm bitp-of-bit-digit-val
-    (acl2::bitp (bit-digit-val x)))
+
+  ;; [Jared] 2016-04-08: shouldn't be needed now that we have a bitp type-prescription
+  ;; :returns specifier.
+  ;;
+  ;; (defthm bit-digit-val-upper-bound
+  ;;   (< (bit-digit-val x) 2)
+  ;;   :rule-classes ((:rewrite) (:linear)))
+  ;;
+  ;; (defthm bitp-of-bit-digit-val
+  ;;   (acl2::bitp (bit-digit-val x))
+  ;;   :rule-classes :type-prescription)
+
+  ;; [Jared] this is kind of ugly, might be better to just have a global rule
+  ;; that bitp means unsigned-byte-p 1.
   (defthm unsigned-byte-p-of-bit-digit-val
     (unsigned-byte-p 1 (bit-digit-val x)))
   (defthm equal-of-bit-digit-val-and-bit-digit-val
@@ -172,8 +181,7 @@
              (equal (equal (bit-digit-val x) (bit-digit-val y))
                     (equal x y))))
   (defthm bit-digit-val-of-digit-to-char
-    (implies (and (natp n)
-                  (< n 2))
+    (implies (bitp n)
              (equal (bit-digit-val (digit-to-char n))
                     n))))
 
@@ -236,12 +244,7 @@ tolerate non-bit digits after the number.</p>"
   (defthm bit-digit-list-value-of-append
     (equal (bit-digit-list-value (append x (list a)))
            (+ (ash (bit-digit-list-value x) 1)
-              (bit-digit-val a))))
-  (local
-   (assert! (and (equal (bit-digit-list-value (explode "0")) #b0)
-                 (equal (bit-digit-list-value (explode "1")) #b1)
-                 (equal (bit-digit-list-value (explode "01")) #b01)
-                 (equal (bit-digit-list-value (explode "0101011101")) #b0101011101)))))
+              (bit-digit-val a)))))
 
 (define skip-leading-bit-digits
   :short "Skip over any leading 0-1 characters at the start of a character list."
@@ -251,8 +254,12 @@ tolerate non-bit digits after the number.</p>"
         ((bit-digitp (car x)) (skip-leading-bit-digits (cdr x)))
         (t                    x))
   ///
+  (local (defun ind (x y)
+           (if (or (atom x) (atom y))
+               (list x y)
+             (ind (cdr x) (cdr y)))))
   (defcong charlisteqv charlisteqv (skip-leading-bit-digits x) 1
-    :hints(("Goal" :in-theory (enable charlisteqv))))
+    :hints(("Goal" :induct (ind x x-equiv))))
   (defcong icharlisteqv icharlisteqv (skip-leading-bit-digits x) 1
     :hints(("Goal" :in-theory (enable icharlisteqv))))
   (defthm len-of-skip-leading-bit-digits
@@ -300,7 +307,9 @@ tolerate non-bit digits after the number.</p>"
    (n  natp                :type unsigned-byte)
    (xl (eql xl (length x)) :type unsigned-byte))
   :guard (<= n xl)
-  :measure (nfix (- (nfix xl) (nfix n)))
+; Removed after v7-2 by Matt K. since logically, the definition is
+; non-recursive:
+; :measure (nfix (- (nfix xl) (nfix n)))
   :split-types t
   :verify-guards nil
   :enabled t
@@ -719,9 +728,4 @@ characters other than 0 or 1, or is empty, we return @('nil').</p>"
               (eql len xl)
               val)))
   ///
-  (defcong istreqv equal (strval2 x) 1)
-  (local (assert! (equal (strval2 "") nil)))
-  (local (assert! (equal (strval2 "0") 0)))
-  (local (assert! (equal (strval2 "0101") #b0101))))
-
-
+  (defcong istreqv equal (strval2 x) 1))

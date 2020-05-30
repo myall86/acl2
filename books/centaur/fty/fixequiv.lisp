@@ -38,178 +38,8 @@
 ;; include-book, but all we really depend on is the DEFGUTS and
 ;; define-guts-alist definitions.
 (include-book "std/util/defines" :dir :system)
-
-
 (program)
 (set-state-ok t)
-
-(defxdoc deffixequiv
-  :parents (fty)
-  :short "Generates boilerplate theorems about fixing functions and equivalence relations."
-
-  :long "<p>Part of an attempt to automate the proof discipline described in
-@(see fty).  See also @(see deffixequiv-mutual) for a version that can be used
-on mutually recursive functions created using @(see defines).</p>
-
-<p>Deffixequiv generates theorems about typed arguments of a given function.
-There are two ways to invoke it:</p>
-
-@({
- (deffixequiv function-name
-              ;; optional:
-              :omit (a b)
-              :hints (...)) ;; applied to all arguments
- })
-
-<p>This form proves fixing and congruence theorems for each argument not
-present in @(':omit').  It tries to derive the type of each argument from the
-formal guard given to @(see define).  If the function was not created using
-@(see define), then this will fail.</p>
-
-<p>The following form may be used to explicitly specify what to do with each
-argument, or to give hints for each argument's proof.  If a type is given
-explicitly for each argument, then this can work on a function not created
-using @(see define):</p>
-
-@({
-  (deffixequiv function-name
-         :args (a                ;; derive type from DEFINE
-                (b :hints (...)) ;; derive type from DEFINE
-                (c natp ...))     ;; type given explicitly
-        :hints (...))   ;; applied to all arguments
- })
-
-<p>This uses the given @(':args') to determine which formals to generate
-theorems about.</p>
-
-<p>To summarize the two choices, you may either provide @(':omit'), @(':args'),
-or neither (equivalent to @(':omit nil')), but not both; generally, the
-argument types are derived from @('define'), but they may instead be given
-explicitly in the @(':args') case.</p>
-
-<h3>Theorems generated</h3>
-
-<p>In most cases, three theorems are generated for each argument.  Suppose our
-function is @('(foo a b c)'), where @('c') is @('nat-equiv') congruent.</p>
-
-@({
-  ;; Prerequisite:
-  (deffixtype nat :pred natp :fix nfix :equiv nat-equiv)
-
-  (deffixequiv foo :args ((c nat)))
- })
-<p>will generate the following theorems:</p>
-@({
- (defthm foo-of-nfix-c
-   (equal (foo a b (nfix c))
-          (foo a b c)))
-
- (defthm foo-of-nfix-c-normalize-const
-   (implies (syntaxp (and (quotep c)
-                          (not (natp (cadr c)))))
-            (equal (foo a b c)
-                   (foo a b (nfix c)))))
-
- (defthm foo-nat-equiv-congruence-on-c
-   (implies (nat-equiv c c-equiv)
-            (equal (foo a b c)
-                   (foo a b c-equiv)))
-   :rule-classes :congruence)
- })
-
-<p>Some fixtypes may have a predicate and/or fixing function that is either
-expensive to execute or not executable.  In this case the second theorem, which
-normalizes constant values by fixing them to the correct type, is not a good
-one and can be skipped by either:</p>
-
-<ul>
-<li>Declaring the fixtype using @(':executablep nil'):
-@({
-  (deffixtype nat :pred natp :fix nfix :equiv nat-equiv
-                  :executablep nil)
- })
-</li>
-<li>Or using @(':skip-const-thm t') among the keywords for the argument:
-@({
-  (deffixequiv foo :args ((c nat :skip-const-thm t)))
- })
-</li>
-</ul>
-")
-
-(defxdoc deffixequiv-mutual
-  :parents (fty)
-  :short "@(see deffixequiv) for mutually-recursive functions."
-  :long "<p>Part of an attempt to automate the proof discipline described in
-@(see fty).  Before reading this, please also read @(see deffixequiv).</p>
-
-<p>Important Note: @('deffixequiv-mutual') will not work if the mutual
-recursion in question was not created using @(see defines).</p>
-
-<p>@('deffixequiv-mutual') proves the same theorems as @('deffixequiv'), but
-using the mutual induction given by the flag function of some mutual recursion.
-A given @('deffixequiv-mutual') event proves one mutually-inductive theorem of
-which the individual @('function-of-fix-arg') theorems are corollaries, then
-uses these to prove the constant-normalization and congruence theorems.  (These
-three theorems are discussed in @(see deffixequiv).</p>
-
-<p>As with @(see deffixequiv), you have the choice of either providing
-@(':omit'), @('args'), or both.  However, for @('deffixequiv-mutual') the
-syntax of these parameters is extended, as shown in the following examples:</p>
-
-@({
- ;; Prerequisite: types defined by deffixtype
- (deffixtype nat :pred natp :fix nfix :equiv nat-equiv)
- (deffixtype nat-list :pred nat-listp :fix nat-list-fix :equiv nat-list-equiv)
- (deffixtype int :pred integerp :fix ifix :equiv int-equiv)
- (deffixtype string :pred stringp :fix string-fix :equiv string-equiv)
- 
- ;; Prerequisite: functions created using defines
- (defines foo-bar-mutual-rec
-   (define foo ((x integerp) y (z natp))
-     :flag f
-     ...)
-   (define bar ((x integerp) y (z nat-listp))
-     :flag b
-     ...))
-
- ;; Possible deffixequiv-mutual invocations:
-
- ;; Derives all argument types from guards and proves them all in one mutual
- ;; induction.
- (deffixequiv-mutual foo-bar-mutual-rec)
- ;; Note: use name of defines form -- foo-bar-mutual-rec
- ;;  -- not name of a function
-
-
- ;; Proves only things pertaining to the X argument of both functions
- (deffixequiv-mutual foo-bar-mutual-rec :args (x))
- ;; Same:
- (deffixequiv-mutual foo-bar-mutual-rec :omit (y z))
-
- ;; Proves string congruence of Y on both functions
- (deffixequiv-mutual foo-bar-mutual-rec :args ((y string)))
-
- ;; Proves string congruence of y in foo and string-listp in bar
- (deffixequiv-mutual foo-bar-mutual-rec
-                     :args ((foo (y stringp))
-                            (bar (y string-listp))))
-
- ;; Omit x in foo and y in bar
- (deffixequiv-mutual foo-bar-mutual-rec
-                     :omit ((foo x) (bar y)))
-
- ;; Various combinations of :args usages
- (deffixequiv-mutual foo-bar-mutual-rec
-    :args (x                       ;; all functions, automatic type
-           (z natp :hints (...))   ;; all functions, explicit type
-           (foo (y stringp :skip-const-thm t :hints (...)))
-                                   ;; foo only, explicit type
-           (bar (z nat-listp)))    ;; override non-function-specific entry
-    :hints (...))  ;; hints for the whole inductive proof
- })
-
-")
 
 (defun fixequiv-post-define-hook (guts user-args state)
   (declare (xargs :mode :program :stobjs state))
@@ -235,30 +65,32 @@ syntax of these parameters is extended, as shown in the following examples:</p>
       (find-formal-by-name varname (cdr formals)))))
 
 (defconst *deffixequiv-keywords*
-  '(:args :omit :hints :verbosep))
+  '(:args :omit :hints :verbosep :skip-const-thm :skip-cong-thm))
 
-(defun fixequiv-type-from-guard (guard)
+(defun fixequiv-type-from-guard (guard wrld)
   (and (std::tuplep 2 guard)
-       (car guard)))
+       (let ((type1 (car guard)))
+         (or (cdr (assoc type1 (table-alist 'fixequiv-guard-type-overrides wrld)))
+             type1))))
 
-(defun fixequiv-from-define-formal (fn formal hints state)
+(defun fixequiv-from-define-formal (fn formal hints opts state)
   (b* (((std::formal fm) formal)
-       (type (fixequiv-type-from-guard fm.guard))
+       (type (fixequiv-type-from-guard fm.guard (w state)))
        (stobjname (and (fgetprop fm.name 'acl2::stobj nil (w state))
                        (acl2::congruent-stobj-rep fm.name (w state))))
        (type (or type stobjname))
        ((unless type) nil)
        (formals (fgetprop fn 'acl2::formals :none (w state)))
        (event (deffixequiv-basic-parse (cons fn formals) fm.name type
-                `(:skip-ok t :hints ,hints) state)))
+                `(:skip-ok t :hints ,hints . ,opts) state)))
     (and event (list event))))
 
-(defun fixequivs-from-define-formals (fn omit formals hints state)
+(defun fixequivs-from-define-formals (fn omit formals hints opts state)
   (if (atom formals)
       nil
     (append (and (not (member (std::formal->name (car formals)) omit))
-                 (fixequiv-from-define-formal fn (car formals) hints state))
-            (fixequivs-from-define-formals fn omit (cdr formals) hints state))))
+                 (fixequiv-from-define-formal fn (car formals) hints opts state))
+            (fixequivs-from-define-formals fn omit (cdr formals) hints opts state))))
 
 (defun remove-key (key kwlist)
   (b* ((look (member key kwlist))
@@ -266,7 +98,7 @@ syntax of these parameters is extended, as shown in the following examples:</p>
        (pre (take (- (len kwlist) (len look)) kwlist)))
     (append pre (cddr look))))
 
-(defun fixequiv-from-explicit-arg (fn arg gutsformals formals hints state)
+(defun fixequiv-from-explicit-arg (fn arg gutsformals formals hints global-opts state)
   (b* ((__function__ 'deffixequiv)
        ((mv var type/opts) (if (atom arg) (mv arg nil) (mv (car arg) (cdr arg))))
        ((mv type opts) (if (keywordp (car type/opts))
@@ -280,7 +112,7 @@ syntax of these parameters is extended, as shown in the following examples:</p>
                          (raise "Can't derive argument types from ~x0 because it ~
                         wasn't created with DEFINE." fn)))
                       ((std::formal fm) formal)
-                      (type (or (fixequiv-type-from-guard fm.guard)
+                      (type (or (fixequiv-type-from-guard fm.guard (w state))
                                 (and (fgetprop fm.name 'acl2::stobj nil (w state))
                                      (acl2::congruent-stobj-rep fm.name (w state)))))
                       ((unless type)
@@ -289,18 +121,21 @@ syntax of these parameters is extended, as shown in the following examples:</p>
                    type)))
        (arg-hints (cadr (member :hints opts)))
        (opts-without-hints (remove-key :hints opts))
-       (opts (append `(:hints ,(append arg-hints hints)) opts-without-hints)))
+       (opts (append `(:hints ,(append arg-hints hints)) opts-without-hints global-opts)))
     (deffixequiv-basic-parse (cons fn formals)
       var type opts state)))
 
-(defun fixequivs-from-explicit-args (fn args gutsformals formals hints state)
+(defmacro set-fixequiv-guard-override (guard-fn type)
+  `(table fixequiv-guard-type-overrides ',guard-fn ',type))
+
+(defun fixequivs-from-explicit-args (fn args gutsformals formals hints global-opts state)
   (if (atom args)
       nil
-    (let ((event (fixequiv-from-explicit-arg fn (car args) gutsformals formals hints state)))
+    (let ((event (fixequiv-from-explicit-arg fn (car args) gutsformals formals hints global-opts  state)))
       (if event
           (cons event
-                (fixequivs-from-explicit-args fn (cdr args) gutsformals formals hints state))
-        (fixequivs-from-explicit-args fn (cdr args) gutsformals formals hints state)))))
+                (fixequivs-from-explicit-args fn (cdr args) gutsformals formals hints global-opts state))
+        (fixequivs-from-explicit-args fn (cdr args) gutsformals formals hints global-opts state)))))
 
 (defun deffixequiv-expand-hint-fn (fn stable-under-simplificationp id clause world)
   (b* ((forcing-roundp (not (eql 0 (acl2::access acl2::clause-id id :forcing-round))))
@@ -310,7 +145,7 @@ syntax of these parameters is extended, as shown in the following examples:</p>
        (single-inductionp (equal pool-lst '(1)))
        ((unless (or top-levelp single-inductionp))
         nil)
-       ((when (and top-levelp (acl2::recursivep fn world)))
+       ((when (and top-levelp (acl2::recursivep fn t world)))
         `(:computed-hint-replacement t
           :induct (,fn . ,(fgetprop fn 'acl2::formals t world))))
        ((unless stable-under-simplificationp)
@@ -363,7 +198,7 @@ syntax of these parameters is extended, as shown in the following examples:</p>
        ((mv kwd-alist rest)
         (extract-keywords 'deffixequiv *deffixequiv-keywords* kw-args nil))
        ((when rest) (raise "Error: extra arguments: ~x0" rest))
-       
+
        (guts-alist (std::get-define-guts-alist world))
        (guts (cdr (assoc fn guts-alist)))
        ;; It might be an error if there's no define table entry, but it doesn't
@@ -379,13 +214,15 @@ syntax of these parameters is extended, as shown in the following examples:</p>
                 which ~x0 does not." fn))
        (fn (if guts (std::defguts->name-fn guts) fn))
        (omit (cdr (assoc :omit kwd-alist)))
+       (global-opts `(:skip-const-thm  ,(cdr (assoc :skip-const-thm kwd-alist))
+                      :skip-cong-thm ,(cdr (assoc :skip-cong-thm kwd-alist))))
        ((when (and args omit))
         (raise "Why would you provide both :args and :omit?")))
     (if args
         (fixequivs-from-explicit-args
          fn args gutsformals
-         (fgetprop fn 'acl2::formals :none (w state)) hints state)
-      (fixequivs-from-define-formals fn omit gutsformals hints state))))
+         (fgetprop fn 'acl2::formals :none (w state)) hints global-opts state)
+      (fixequivs-from-define-formals fn omit gutsformals hints global-opts state))))
 
 (defmacro deffixequiv (fn &rest keys)
   (b* ((verbosep (let ((lst (member :verbosep keys)))
@@ -398,7 +235,7 @@ syntax of these parameters is extended, as shown in the following examples:</p>
 
 
 (defconst *deffixequiv-mutual-keywords*
-  '(:args :omit :verbosep :hints))
+  '(:args :omit :verbosep :hints :no-induction-hint))
 
 
 (defun find-define-guts-by-fn/flag-name (fn gutslist)
@@ -444,11 +281,11 @@ syntax of these parameters is extended, as shown in the following examples:</p>
                                                    (args->varnames fn-fn-args))))
        (args (append fn-fn-args fn-univ-args))
        (fixequivs (fixequivs-from-explicit-args
-                   guts.name-fn args guts.formals formal-names nil state)))
+                   guts.name-fn args guts.formals formal-names nil nil state)))
     (cons (cons guts.name fixequivs)
           (mutual-fixequivs-from-explicit-args fn-args univ-args (cdr gutslist) state))))
-             
-                 
+
+
 (defun mutual-fixequivs-from-defines (fn-omit univ-omit gutslist state)
   (b* (((when (atom gutslist)) nil)
        ((std::defguts guts) (car gutslist))
@@ -457,7 +294,7 @@ syntax of these parameters is extended, as shown in the following examples:</p>
                       (assoc (cdr (assoc :flag guts.kwd-alist)) fn-omit)))
        (fixequivs (fixequivs-from-define-formals
                    guts.name-fn (append univ-omit (cdr omit-look))
-                   guts.formals nil state)))
+                   guts.formals nil nil state)))
     (cons (cons guts.name fixequivs)
           (mutual-fixequivs-from-defines fn-omit univ-omit (cdr gutslist) state))))
 
@@ -466,7 +303,7 @@ syntax of these parameters is extended, as shown in the following examples:</p>
       nil
     (cons (append (fixequiv->fix-thm (car fixequivs)) `(:flag ,flag))
           (fixequivs->fix-thms-with-flags flag (cdr fixequivs)))))
-       
+
 (defun fn-mutual-fixequivs->inductive-fix-thms (fn fixequivs gutslist)
   (b* ((guts (find-define-guts-by-fn/flag-name fn gutslist))
        ((unless guts) (er hard? 'deffixequiv-mutual "function name not found?"))
@@ -489,7 +326,7 @@ syntax of these parameters is extended, as shown in the following examples:</p>
 
 
 (defun deffixequiv-mutual-default-default-hint (fnname id world)
-  (let ((fns (acl2::recursivep fnname world)))
+  (let ((fns (acl2::recursivep fnname t world)))
     (and (eql 0 (acl2::access acl2::clause-id id :forcing-round))
          (equal '(1) (acl2::access acl2::clause-id id :pool-lst))
          `(:computed-hint-replacement
@@ -522,8 +359,10 @@ syntax of these parameters is extended, as shown in the following examples:</p>
        (,thm-macro
         ,@(mutual-fixequivs->inductive-fix-thms
            fixequiv-al gutslist)
-        :hints ,hints))))
-  
+        :hints ,hints
+        :no-induction-hint ,(cdr (assoc :no-induction-hint kwd-alist))
+        :skip-others t))))
+
 (defun fixequivs->const/cong-thms (fixequivs)
   (if (atom fixequivs)
       nil
@@ -606,4 +445,3 @@ syntax of these parameters is extended, as shown in the following examples:</p>
        (make-event
         (cons 'progn
               (deffixequiv-mutual-fn ',name ',keys state))))))
-

@@ -30,11 +30,12 @@
 
 (in-package "ACL2")
 
-(include-book "centaur/misc/arith-equivs" :dir :system)
+(include-book "std/basic/arith-equivs" :dir :system)
 (include-book "std/basic/defs" :dir :system)
 (include-book "std/util/bstar" :dir :system)
 (include-book "xdoc/base" :dir :system)
-
+(include-book "centaur/fty/fixtype" :dir :system)
+(include-book "centaur/fty/basetypes" :dir :system)
 
 (encapsulate nil
   (local (in-theory (enable* arith-equiv-forwarding)))
@@ -315,9 +316,8 @@
               (,index (1- (lifix ,index)))
               (,returns (,iter . ,iter-formals)))
            ,step-call))
-       (defcong int-equiv equal (,iter . ,iter-formals) 1
-         :hints(("Goal" :expand ((,iter . ,iter-formals))
-                 :in-theory (enable ,iter))))
+       (fty::deffixcong int-equiv equal (,iter . ,iter-formals) ,index
+         :hints (("goal" :in-theory (enable ,iter))))
        (encapsulate nil
          (set-ignore-ok t)
          (defthm ,thmname
@@ -488,7 +488,7 @@ avoiding stack overflows.</p>
 
 (defstub listconstr-val (n formals) nil)
 (defstub listconstr-last (formals) nil)
-  
+
 (defiteration listconstr (formals)
   (declare (xargs :verify-guards nil))
   (let ((val (listconstr-val n formals)))
@@ -619,7 +619,7 @@ avoiding stack overflows.</p>
          . ,kwlist)
 
        (in-theory (disable ,name))
-       
+
        (defthmd ,nth-split-thmname
          (equal (nth ,index (,name . ,formals))
                 (let ((,index (nfix ,index)))

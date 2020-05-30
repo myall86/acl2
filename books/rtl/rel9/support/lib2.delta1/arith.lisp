@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -44,8 +32,8 @@
 (local (include-book "../lib2/top"))
 
 ;; these already have lib1.delta1's
-;; arith.lisp!!  deftheory??? 
-;; Why I can't do that?? 
+;; arith.lisp!!  deftheory???
+;; Why I can't do that??
 
 
 (set-inhibit-warnings "theory") ; avoid warning in the next event
@@ -149,7 +137,7 @@
   :rule-classes :linear)
 
 
-;replaced force with case-split                
+;replaced force with case-split
 ;later, drop the hyp completely
 (defthm a13
   (implies (case-split (rationalp x)) ;drop!
@@ -213,7 +201,7 @@
            (< (/ y+) (/ y)))
   :rule-classes
   ((:forward-chaining :trigger-terms ((/ y+) (/ y))) :linear))
-         
+
 (defthm *-weakly-monotonic
   (implies (and (<= y y+)
                 (<= 0 x)
@@ -517,7 +505,7 @@
                 (< 0 bmax))
            (and (< (- (* amax bmax)) (* a b))
                 (< (* a b) (* amax bmax))))
-  :rule-classes nil)  
+  :rule-classes nil)
 
 (defthm rearrange-negative-coefs-<
   (and (equal (< (* (- c) x) z)
@@ -725,7 +713,7 @@
            (equal (equal (* x (/ y)) 1)
                   (equal x y)))
   :rule-classes nil)
-                
+
 (defun point-right-measure (x)
   (floor (if (and (rationalp x) (< 0 x)) (/ x) 0) 1))
 

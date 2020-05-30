@@ -8,7 +8,7 @@
 
 ; cert_param: (non-acl2r)
 
-(include-book "misc/eval" :dir :system)
+(include-book "std/testing/eval" :dir :system)
 
 (defun nat-< (x y)
   (declare (xargs :guard t))
@@ -88,8 +88,10 @@
         (IMPLIES (AND (EXTRA-INFO '(:GUARD (:BODY F2-GUARD-DEBUG))
                                   '(ILLEGAL 'ASSERT$
                                             "Assertion failed:~%~x0"
-                                            '((#\0 ASSERT$ (< X (* 2 Y))
-                                                   (CONS X Y)))))
+                                            (LIST (CONS #\0
+                                                        '(ASSERT$
+                                                          (< X (* 2 Y))
+                                                          (CONS X Y))))))
                       (NAT-< X Y))
                  (< X (* 2 Y)))))
 
@@ -98,8 +100,8 @@
 
 (must-eval-to-t
  (mv-let
-  (erp val state)
-  (guard-obligation 'f2-guard-debug t 'top-level state)
+  (erp val)
+  (guard-obligation 'f2-guard-debug t t t 'top-level state)
   (value
    (and
     (not erp)

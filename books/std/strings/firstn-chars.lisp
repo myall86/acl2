@@ -33,10 +33,10 @@
 (local (include-book "arithmetic"))
 (local (include-book "std/lists/take" :dir :system))
 (local (include-book "std/lists/equiv" :dir :system))
-(local (in-theory (disable acl2::take-redefinition)))
+(local (in-theory (disable acl2::take)))
 
 (defsection firstn-chars
-  :parents (std/strings)
+  :parents (substrings)
   :short "Efficient way to take leading characters from a string."
 
   :long "<p>@(call firstn-chars) is logically equal to:</p>

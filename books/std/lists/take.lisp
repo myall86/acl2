@@ -29,72 +29,23 @@
 ;   DEALINGS IN THE SOFTWARE.
 ;
 ; Original author: Jared Davis <jared@kookamara.com>
+; Contributing author: Alessandro Coglio <coglio@kestrel.edu>
 ;
 ; take.lisp
 ; This file was originally part of the Unicode library.
 
 (in-package "ACL2")
+
 (include-book "list-fix")
 (include-book "equiv")
 (local (include-book "std/basic/inductions" :dir :system))
-
-(local (defthm commutativity-2-of-+
-         (equal (+ x (+ y z))
-                (+ y (+ x z)))))
-
-(local (defthm fold-consts-in-+
-         (implies (and (syntaxp (quotep x))
-                       (syntaxp (quotep y)))
-                  (equal (+ x (+ y z)) (+ (+ x y) z)))))
-
-(local (defthm distributivity-of-minus-over-+
-         (equal (- (+ x y)) (+ (- x) (- y)))))
-
-(defun simpler-take-induction (n xs)
-  ;; Not generally meant to be used; only meant for take-induction
-  ;; and take-redefinition.
-  (if (zp n)
-      nil
-    (cons (car xs)
-          (simpler-take-induction (1- n) (cdr xs)))))
-
-
-(in-theory (disable (:definition take)))
+;; Mihir M. mod: The following book is included to help with
+;; no-duplicatesp-of-take.
+(local (include-book "std/lists/sets" :dir :system))
 
 (defsection std/lists/take
   :parents (std/lists take)
   :short "Lemmas about @(see take) available in the @(see std/lists) library."
-
-  :long "<p>ACL2's built-in definition of @('take') is not especially good for
-reasoning since it is written in terms of the tail-recursive function
-@('first-n-ac').  We provide a much nicer @(see definition) rule:</p>
-
-  @(def take-redefinition)
-
-<p>And we also set up an analogous @(see induction) rule.  We generally
-recommend using @('take-redefinition') instead of @('(:definition take)').</p>"
-
-  (encapsulate
-    ()
-    (local (in-theory (enable take)))
-
-    (local (defthm equivalence-lemma
-             (implies (true-listp acc)
-                      (equal (first-n-ac n xs acc)
-                             (revappend acc (simpler-take-induction n xs))))))
-
-    (defthm take-redefinition
-      (equal (take n x)
-             (if (zp n)
-                 nil
-               (cons (car x)
-                     (take (1- n) (cdr x)))))
-      :rule-classes ((:definition :controller-alist ((TAKE T NIL))))))
-
-  (defthm take-induction t
-    :rule-classes ((:induction
-                    :pattern (take n x)
-                    :scheme (simpler-take-induction n x))))
 
   (defthm consp-of-take
     (equal (consp (take n xs))
@@ -179,6 +130,10 @@ recommend using @('take-redefinition') instead of @('(:definition take)').</p>"
     (equal (take a (take a x))
            (take a x)))
 
+  (defthm no-duplicatesp-of-take
+    (implies (and (no-duplicatesp-equal l)
+                  (<= (nfix n) (len l)))
+             (no-duplicatesp-equal (take n l))))
 
   (defcong list-equiv equal (take n x) 2
     :hints(("Goal"

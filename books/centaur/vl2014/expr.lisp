@@ -347,7 +347,7 @@ special @(':vl-valuerange') applied to the two arguments.</p>"
    (cons :vl-pattern-multi         (make-vl-opinfo :arity 2   :text nil)) ;;; '\{ expression \{ expression {, expression} \} \}, e.g. '{3{a,b}}
    (cons :vl-pattern-keyvalue      (make-vl-opinfo :arity nil :text nil)) ;;; '\{ structure_pattern_key : expression { , key : expression } \}
    (cons :vl-keyvalue              (make-vl-opinfo :arity 2   :text nil)) ;;; key : value  (within vl-pattern-keyvalue)
-   (cons :vl-pattern-type          (make-vl-opinfo :arity 2   :text nil)) ;;; type'{...}, first argument 
+   (cons :vl-pattern-type          (make-vl-opinfo :arity 2   :text nil)) ;;; type'{...}, first argument
 
    ;; Inside Operators
    (cons :vl-inside                (make-vl-opinfo :arity 2   :text "inside"))
@@ -1004,8 +1004,8 @@ instead.</p>"
         (atts       nil))
     ;; Black magic horrible thing -- make sure this agrees with the resulting
     ;; definition of vl-expr-p.
-    (cons :atom (cons (cons guts finalwidth)
-                      (cons finaltype atts)))))
+    (cons :atom (fty::prod-cons (fty::prod-cons guts finalwidth)
+                                (fty::prod-cons finaltype atts)))))
 
 (define vl-arity-fix ((op vl-op-p) (args))
   :inline t
@@ -1342,8 +1342,7 @@ place; these annotations can be useful in error messages.</li>
               (implies (and (vl-exprlist-p x)
                             (< (nfix n) (len x)))
                        (vl-exprlist-p (take n x)))
-              :hints(("Goal" :in-theory (enable acl2::take-redefinition
-                                                acl2::take-induction)))))
+              :hints(("Goal" :in-theory (enable acl2::take)))))
      (local (defthm vl-exprlist-p-of-append-tmp
               (implies (and (vl-exprlist-p x)
                             (vl-exprlist-p y))
@@ -1810,14 +1809,14 @@ fairly easily solve the HIDEXPR problem.</p>"
                (vl-exprlist-fix (take n x))
              (append (vl-exprlist-fix x)
                      (replicate (- (nfix n) (len x)) nil))))
-    :hints(("Goal" :in-theory (enable acl2::take-redefinition))))
+    :hints(("Goal" :in-theory (enable acl2::take))))
 
   (defcong vl-exprlist-equiv vl-exprlist-equiv (list-fix x) 1)
   (defcong vl-exprlist-equiv vl-exprlist-equiv (append x y) 1)
   (defcong vl-exprlist-equiv vl-exprlist-equiv (append x y) 2)
   (defcong vl-exprlist-equiv vl-exprlist-equiv (rev x) 1)
   (defcong vl-exprlist-equiv vl-exprlist-equiv (take n x) 2
-    :hints(("Goal" :in-theory (enable acl2::take-redefinition))))
+    :hints(("Goal" :in-theory (enable acl2::take))))
   (defcong vl-exprlist-equiv vl-exprlist-equiv (nthcdr n x) 2))
 
 

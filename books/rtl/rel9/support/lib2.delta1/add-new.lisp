@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -58,7 +46,7 @@
                 (bvecp v 1)
                 (bvecp w 1))
            (equal (+ u v w)
-                  (cat_alt (logior (logand u v) (logior (logand u w) (logand v w))) 1 
+                  (cat_alt (logior (logand u v) (logior (logand u w) (logand v w))) 1
                        (logxor u (logxor v w)) 1)))
   :rule-classes ())
 
@@ -301,7 +289,7 @@
 	     (equal (bits_alt (+ 1 x y) i j)
 		    (bits_alt (+ (bits_alt x i j)
 			     (bits_alt y i j)
-			     (logior (prop_alt x y (1- j) 0) 
+			     (logior (prop_alt x y (1- j) 0)
 				     (gen_alt x y (1- j) 0) ))
 			  (- i j) 0)))
   :rule-classes ()
@@ -358,8 +346,8 @@
                                    (y y)
                                    (i k)
                                    (j 0))))))
-                                   
-           
+
+
 
 (defthmd gen_alt-extend-3
     (implies (and (natp i)
@@ -368,7 +356,7 @@
 		  (natp x)
 		  (natp y)
 		  (bvecp z (1+ j))
-		  (= (logand y z) 0))		  
+		  (= (logand y z) 0))
 	     (equal (gen_alt (+ x y) z i 0)
 		    (logand (prop_alt x y i (1+ j))
 			    (gen_alt (+ x y) z j 0))))
@@ -433,7 +421,7 @@
 		 (= (expo (- a b)) (1- (expo lambda)))))
   :rule-classes ()
   :hints (("Goal" :use ((:instance lop-thm-1)))))
-                        
+
 
 
 (defun lamt_alt (a b e)
@@ -450,7 +438,7 @@
 
 
 (defun lam1_alt (a b e)
-  (logand (bits_alt (lamt_alt a b e) e 2) 
+  (logand (bits_alt (lamt_alt a b e) e 2)
 	  (logand (bits_alt (lamg_alt a b e) (1- e) 1)
 		  (bits_alt (lognot (lamz_alt a b e)) (- e 2) 0))))
 
@@ -462,7 +450,7 @@
 
 
 (defun lam3_alt (a b e)
-  (logand (bits_alt (lamt_alt a b e) e 2) 
+  (logand (bits_alt (lamt_alt a b e) e 2)
 	  (logand (bits_alt (lamz_alt a b e) (1- e) 1)
 		  (bits_alt (lognot (lamg_alt a b e)) (- e 2) 0))))
 
@@ -479,7 +467,7 @@
 		  (logior (lam3_alt a b e)
 			  (lam4_alt a b e)))))
 
-           
+
 
 (defun lamb_alt (a b e)
   (+ (* 2 (lam0_alt a b e))
@@ -515,7 +503,7 @@
            (equal (equal (bits_alt (+ a b 1) k 0) 0)
 		  (equal (bits_alt (lognot (logxor a b)) k 0) 0)))
   :rule-classes ())
-                                                      
+
 
 (defthm top-thm-2-alt
   (implies (and (natp n)
@@ -525,8 +513,8 @@
                 (< k n)
                 (or (equal c 0) (equal c 1)))
            (equal (equal (bits_alt (+ a b c) k 0) 0)
-                  (equal (bits_alt (logxor (logxor a b) 
+                  (equal (bits_alt (logxor (logxor a b)
                                        (cat_alt (logior a b) n c 1))
-                               k 0) 
+                               k 0)
                          0)))
   :rule-classes ())

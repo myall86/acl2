@@ -27,8 +27,9 @@
 ;   DEALINGS IN THE SOFTWARE.
 ;
 ; Original author: Jared Davis <jared@centtech.com>
-; 10/29/2013, 12/2013: Mods made by Matt Kaufmann to support Emacs-based
-;   ACL2-Doc browser
+
+; 10/29/2013, 12/2013, 5/2016: Mods made by Matt Kaufmann to support
+; Emacs-based ACL2-Doc browser
 
 (in-package "XDOC")
 (include-book "xdoc/display" :dir :system)
@@ -54,12 +55,130 @@
       (substitute new old seq)
     seq))
 
+; Comment from Matt K.
+
+; Some of the complexity below first arose from an attempt by me to deal with a
+; new topic name that contained the square-bracket character: SV::4VEC-[= .
+; That name was breaking the acl2-doc Emacs browser.  My thought was to escape
+; the square bracket, "...\[..."; but that got messy to handle for both Common
+; Lisp and Emacs Lisp, in particular because Common Lisp was escaping the "\",
+; and "\\[" didn't help Emacs.  So in part, I'm taking the easy way out
+; instead, simply replacing [ and ] by { and }, respectively.  I'm not happy
+; that rendered-name-acl2-doc already replaces ( and ) by those characters, but
+; { and } seem less likely to cause confusion; in particular, there are topics
+; SV::4VEC-< and SV::4VEC-[= that don't seem much related, so it would be sad
+; to convert the latter to SV::4VEC-<=.
+
+; But on 9/26/2018 I noticed a new problem, caused by the following topic
+; (presumably added recently) in community book books/centaur/sv/vl/trunc.lisp.
+
+; VL::|VL-EXPR-IS-{'0,_...}-P|
+
+; Both the single-quote and the comma caused problems, and I see no obvious way
+; to replace each by a character that suggests it (as I did for square
+; brackets, described above).  So I'll replace ' by {{quote}} and , by
+; {{comma}}.
+
+(encapsulate
+ ()
+
+ (local
+  (defthm character-listp-first-n-ac
+    (implies (and (character-listp x)
+                  (character-listp ac)
+                  (force (natp n))
+                  (force (<= n (len x))))
+             (character-listp (first-n-ac n x ac)))
+    :hints (("Goal" :induct (first-n-ac n x ac)))))
+
+ (local
+  (defthm len-revappend
+    (equal (len (revappend x y))
+           (+ (len x) (len y)))))
+
+; Mihir M. mod, 04/2019: Adapt to the new definition of take.
+ (local
+  (defthm len-of-take
+    (equal (len (take n x))
+           (nfix n))))
+
+ (local
+  (defthm character-listp-nthcdr
+    (implies (character-listp x)
+             (character-listp (nthcdr n x)))))
+
+ (local
+  (defthm character-listp-cdr
+    (implies (character-listp x)
+             (character-listp (cdr x)))))
+
+ (local
+  (defthm position-equal-ac-upper-bound
+    (implies (position-equal-ac c lst n)
+             (< (position-equal-ac c lst n)
+                (+ (len lst) n)))
+    :rule-classes :linear))
+
+ (local
+  (defthm len-nthcdr
+    (implies (and (natp n)
+                  (true-listp x))
+             (equal (len (nthcdr n x))
+                    (if (<= n (len x))
+                        (- (len x) n)
+                      0)))))
+
+ (local (include-book "std/strings/coerce" :dir :system))
+
+ ;; (local (defthm character-listp-of-take
+ ;;          (implies (and (character-listp x)
+ ;;                        (<= (nfix n) (len x)))
+ ;;                   (character-listp (take n x)))
+ ;;          :hints(("Goal" :in-theory (enable take)))))
+
+ ;; (local (defthm character-listp-of-nthcdr
+ ;;          (implies (character-listp x)
+ ;;                   (character-listp (nthcdr n x)))
+ ;;          :hints(("Goal" :in-theory (enable nthcdr)))))
+
+ ;; (local (in-theory (disable len position-equal-ac take nfix)))
+
+ (defun escape-char (c replacement name)
+   (declare (xargs :guard (and (characterp c)
+                               (stringp replacement)
+                               (stringp name))))
+   (let ((pos (position c name)))
+     (cond ((not (mbt (stringp name)))
+            "")
+           ((null pos)
+            name)
+           (t
+            (concatenate 'string
+                         (subseq name 0 pos)
+                         replacement
+                         (escape-char c
+                                      replacement
+                                      (subseq name (1+ pos) nil))))))))
+
 (defun rendered-name-acl2-doc (name)
   (declare (xargs :guard (stringp name)))
-  (substitute? #\_ #\Space
-               (substitute? #\{ #\(
-                            (substitute? #\} #\)
-                                         name))))
+  (substitute?
+   #\_ #\Space
+   (substitute?
+    #\{ #\(
+    (substitute?
+     #\} #\)
+     (substitute?
+      #\{ #\[
+      (substitute?
+       #\} #\]
+       (escape-char
+        #\' "<<quote>>"
+        (escape-char
+         #\` "<<backquote>>"
+         (escape-char
+          #\, "<<comma>>"
+          name)))))))))
 
 (defattach rendered-name rendered-name-acl2-doc)
 
@@ -90,16 +209,25 @@
                          t ;; disable autolinking to avoid auto links in text mode
                          state))
        ((mv err tokens) (parse-xml text))
-
-       ((when err)
-        (cw "Error rendering xdoc topic ~x0:~%~%" name)
-        (b* ((state (princ$ err *standard-co* state))
-             (state (newline *standard-co* state))
-             (state (newline *standard-co* state)))
-          (er hard? 'make-topic-text "Failed to process topic ~x0.~%" name)
-          (mv nil state)))
-
-       (merged-tokens (reverse (merge-text tokens nil 0 nil)))
+       ((mv tokens state)
+        (if (not err)
+            (mv tokens state)
+          (b* ((- (cw "Error rendering xdoc topic ~x0:~%~%" name))
+               (state (princ$ err *standard-co* state))
+               (state (newline *standard-co* state))
+               (state (newline *standard-co* state))
+               ((mv & tokens) (parse-xml "Error rendering topic")))
+            (mv tokens state))))
+       ((mv err topic-to-rendered-table state)
+        (topic-to-rendered-table-init state))
+       ((when err) ; impossible?
+        (mv (er hard 'render-topic
+                "Unexpected implementation error!")
+            state))
+       (merged-tokens
+        (reverse (merge-text tokens nil 0 nil
+                             topic-to-rendered-table
+                             (f-get-global 'xdoc-tag-elide-alist state))))
        (acc (tokens-to-terminal merged-tokens 70 nil nil nil))
        (terminal (str::trim (str::rchars-to-string acc))))
 
@@ -128,8 +256,18 @@
     (mv (cons first rest) state)))
 
 (defun render-topics (x all-topics state)
-  (b* ((topics-fal (topics-fal all-topics))
-       ((mv ans state) (render-topics1 x all-topics topics-fal state)))
+  (b* ((prev-event-table-binding
+        ;; save the previous binding (or lack) of xdoc-get-event-table, set it
+        ;; to one generated from the current world, and restore at the end
+        (and (acl2::f-boundp-global 'xdoc-get-event-table state)
+             (list (f-get-global 'xdoc-get-event-table state))))
+       (state (f-put-global 'xdoc-get-event-table (make-get-event*-table (w state) nil) state))
+       (topics-fal (topics-fal all-topics))
+       ((mv ans state) (render-topics1 x all-topics topics-fal state))
+        (- (fast-alist-free (@ xdoc-get-event-table)))
+        (state (if prev-event-table-binding
+                   (f-put-global 'xdoc-get-event-table (car prev-event-table-binding) state)
+                 (makunbound-global 'xdoc-get-event-table state))))
     (fast-alist-free topics-fal)
     (mv ans state)))
 

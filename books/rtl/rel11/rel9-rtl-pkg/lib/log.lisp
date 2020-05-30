@@ -1,30 +1,18 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
 (in-package "RTL")
 
-(set-enforce-redundancy t) ; for some reason, acl2 4.3 complains about  logand-natp 
+(set-enforce-redundancy t) ; for some reason, acl2 4.3 complains about  logand-natp
 
 (local (include-book "../support/top/top"))
 
@@ -275,7 +263,7 @@
 		  (natp k))
 	     (equal (logior x (expt 2 k))
 		    (+ x
-		       (* (expt 2 k) 
+		       (* (expt 2 k)
 			  (- 1 (bitn x k)))))))
 
 (defthmd logand-expt-3
@@ -285,15 +273,6 @@
 		  (< k n))
 	     (equal (logand x (- (expt 2 n) (expt 2 k)))
 		    (* (expt 2 k) (bits x (1- n) k)))))
-
-(defthmd logand-expt-4
-    (implies (and (natp n)
-		  (natp k)
-		  (natp l)
-		  (< l k)
-		  (<= k n))
-	     (equal (logand (- (1- (expt 2 n)) (expt 2 l)) (- (expt 2 n) (expt 2 k)))
-		    (- (expt 2 n) (expt 2 k)))))
 
 (defthmd logand-shift
     (implies (and (integerp x)
@@ -364,7 +343,7 @@
 (defthmd logand-bitn-lognot-1
   (implies (and (integerp n)
                 (integerp x)
-                (integerp y))                
+                (integerp y))
            (equal (logand (bitn (lognot x) n) (bitn y n))
                   (logand (lognot (bitn x n)) (bitn y n)))))
 

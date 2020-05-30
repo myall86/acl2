@@ -87,7 +87,15 @@
          (wrld  (acl2::w state))
          ;; Call ACL2's function that checks whether the rule is okay or not.
          ((mv msg ?eqv ?lhs ?rhs ?ttree)
-          (acl2::interpret-term-as-rewrite-rule name nil concl ens wrld))
+          (acl2::interpret-term-as-rewrite-rule name nil
+
+; Matt K. mod, 8/22/2016: Interpret-term-as-rewrite-rule now expects its term
+; argument to have had remove-guard-holders applied.
+
+                                                (acl2::remove-guard-holders
+                                                 concl
+                                                 wrld)
+                                                ens wrld))
          ((when msg)
           ;; Not okay!  Don't submit the theorem.
           (value '(value-triple :invisible))))
@@ -120,7 +128,7 @@
 
    ;; Some basic tests
 
-   (include-book "misc/assert" :dir :system)
+   (include-book "std/testing/assert" :dir :system)
 
    (maybe-defthm-as-rewrite foo (equal (car (cons x y)) x))
    (maybe-defthm-as-rewrite bar (equal (not 'nil) 't))

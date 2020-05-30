@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 8.3 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2020, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -407,7 +407,7 @@
 
 (defvar *resource-and-timing-based-serializations*
   0
-  "Tracks the number of times that we do not parallize execution when
+  "Tracks the number of times that we do not parallelize execution when
   waterfall-parallelism is set to :resource-and-timing-based")
 
 (defvar *resource-based-parallelizations*
@@ -417,7 +417,7 @@
 
 (defvar *resource-based-serializations*
   0
-  "Tracks the number of times that we do not parallize execution when
+  "Tracks the number of times that we do not parallelize execution when
   waterfall-parallelism is set to :resource-based")
 
 (defun reset-future-queue-length-history ()
@@ -564,7 +564,7 @@
 ; performance, however, is that we avoid the cost of locks to try to remove
 ; bottlenecks.
 
-; In summary, it is unneccessary to acquire a lock, because we just don't care
+; In summary, it is unnecessary to acquire a lock, because we just don't care
 ; if we miss a few chances to parallelize, or parallelize a few extra times.
 
   (and (f-get-global 'parallel-execution-enabled *the-live-state*)
@@ -1208,7 +1208,7 @@
 
 ; Parallelism no-fix: we have considered causing child threads to inherit
 ; ld-specials from their parents, or even other state globals such as
-; *ev-shortcut-okp* and *raw-guard-warningp*, as the following comment from
+; *ev-shortcut-okp* and raw-guard-warningp, as the following comment from
 ; David Rager suggests.  But this now seems too difficult to justify that
 ; effort, and we do not feel obligated to do so; see the "IMPORTANT NOTE" in
 ; :doc parallelism.
@@ -1260,7 +1260,7 @@
 
 ; Return a future whose closure, when executed, will execute the given form, x.
 ; Note that (future x) macroexpands to (mt-future x).
-  
+
   `(cond
     (#-skip-resource-availability-test
      (not (futures-resources-available))

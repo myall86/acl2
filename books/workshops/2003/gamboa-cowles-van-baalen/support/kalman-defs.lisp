@@ -88,8 +88,8 @@
 		    acl2::m-unary-- acl2::m-binary-* acl2::s-* acl2::m-/ acl2::m-trans
 		    acl2::m-singularp acl2::m-=))
 
-(encapsulate 
- (((x-0) => *)				; initial value of x 
+(encapsulate
+ (((x-0) => *)				; initial value of x
   ((phi *) => *)			; steps through an iteration of x
   ((ww *) => *)				; iteration step noise
   ((q *) => *)				; covariance of step noise
@@ -114,6 +114,10 @@
  (local
   (defun m ()
     1))
+
+; Addition by Matt K. April 2016 to accommodate addition of type-set bit for
+; the set {1}.
+ (local (in-theory (disable (:t n) (:t m))))
 
  (local
   (defun phi (k)
@@ -348,7 +352,7 @@
  (defthm mean-of-v-vtrans
    (m-= (m-mean (m-* (v k) (m-trans (v k))))
 	(r k)))
- 
+
  (defthm mean-of-w-wtrans
    (m-= (m-mean (m-* (ww k) (m-trans (ww k))))
 	(q k)))
@@ -424,8 +428,8 @@
 			     (m-* (gain k)
 				  (h k)))
 			(pminus k))))
-   :hints (("Goal" 
-	    :in-theory (disable x (x) 
+   :hints (("Goal"
+	    :in-theory (disable x (x)
 				h (h)
 				phi (phi)
 				q (q)
@@ -445,8 +449,8 @@
 			     (m-* (pplus (1- k))
 				  (m-trans (phi (1- k)))))
 			(q (1- k)))))
-   :hints (("Goal" 
-	    :in-theory (disable x (x) 
+   :hints (("Goal"
+	    :in-theory (disable x (x)
 				h (h)
 				phi (phi)
 				q (q)
@@ -457,7 +461,7 @@
 		   :controller-alist ((pplus t)
 				      (pminus t)
 				      (gain t)))))
-	     
+
  (defthm gain-recdef
    (implies (and (integerp k)
 		 (<= 0 k))
@@ -468,8 +472,8 @@
 					      (m-* (pminus k)
 						   (m-trans (h k))))
 					 (r k)))))))
-   :hints (("Goal" 
-	    :in-theory (disable x (x) 
+   :hints (("Goal"
+	    :in-theory (disable x (x)
 				h (h)
 				phi (phi)
 				q (q)
@@ -520,7 +524,7 @@
 		   :clique (xhat xhatmin)
 		   :controller-alist ((xhat t)
 				      (xhatmin t)))))
-  
+
 
  (in-theory (disable (:definition xhatmin)))
 
@@ -563,7 +567,7 @@
 			      (acl2::n (m))))
 	     :in-theory (disable acl2::matrix-inv))))
 
-  (local 
+  (local
    (defthm lemma-3
      (implies (zp k)
 	      (m-matrixp (n) (n) (pplus k)))
@@ -630,7 +634,7 @@
 
   (defthm matrix-gain
     (m-matrixp (n) (m) (gain k)))
-  
+
   (defthm numrows-cols-gain
     (and (equal (l (gain k)) (n))
 	 (equal (c (gain k)) (m)))
@@ -643,7 +647,7 @@
 
   (defthm matrix-pminus
     (m-matrixp (n) (n) (pminus k)))
-  
+
   (defthm numrows-cols-pminus
     (and (equal (l (pminus k)) (n))
 	 (equal (c (pminus k)) (n)))
@@ -697,7 +701,7 @@
 
   (defthm matrix-xhat
     (m-matrixp (n) 1 (xhat k))
-    :hints (("Goal" 
+    :hints (("Goal"
 	     :induct (natural-induction k))
 	    ("Subgoal *1/2"
 	     :by (:instance lemma-8))

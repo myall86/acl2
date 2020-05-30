@@ -32,11 +32,11 @@
 (include-book "std/util/defines" :dir :system)
 (include-book "std/strings/cat" :dir :system)
 (include-book "std/strings/decimal" :dir :system)
-(include-book "std/misc/two-nats-measure" :dir :system)
+(include-book "std/basic/two-nats-measure" :dir :system)
 (local (include-book "std/strings/explode-atom" :dir :system))
 (local (include-book "std/strings/strtok" :dir :system))
 (local (include-book "centaur/bitops/ihsext-basics" :dir :system))
-(local (include-book "misc/assert" :dir :system))
+(local (include-book "std/testing/assert" :dir :system))
 (local (include-book "std/typed-lists/character-listp" :dir :system))
 
 

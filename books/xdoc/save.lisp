@@ -1,5 +1,5 @@
 ; XDOC Documentation System for ACL2
-; Copyright (C) 2009-2011 Centaur Technology
+; Copyright (C) 2009-2015 Centaur Technology
 ;
 ; Contact:
 ;   Centaur Technology Formal Verification Group
@@ -36,6 +36,7 @@
 (include-book "import-acl2doc")
 (include-book "defxdoc-raw")
 (include-book "save-fancy")
+(include-book "xdoc-error")
 (include-book "oslib/mkdir" :dir :system)
 (include-book "oslib/copy" :dir :system)
 (include-book "oslib/rmtree" :dir :system)
@@ -44,6 +45,7 @@
 #|
 (include-book "topics")  ;; Fool dependency scanner, since we may include it
 |#
+
 
 (defun collect-multiply-defined-topics (x seen-fal)
   (b* (((when (atom x))
@@ -77,23 +79,29 @@
    x))
 
 (defmacro save (dir &key
-                    (import    't)
-                    (redef-okp 'nil)
-                    (zip-p     't))
+                    (redef-okp  'nil)
+                    (zip-p      't)
+                    (logo-image 'nil)
+                    (error      'nil)
+                    (broken-links-limit 'nil))
+  (declare (xargs :guard (booleanp error))) ; probably incomplete
   `(progn
      ;; ugh, stupid stupid writes-ok stupidity
      (defttag :xdoc)
      (remove-untouchable acl2::writes-okp nil)
-     ,@(and import
-            `((include-book
-               "xdoc/topics" :dir :system)
-              #+acl2-legacy-doc
-              (import-acl2doc)))
      ;; b* should have been included by the above includes
      (make-event
-      (b* (((mv all-xdoc-topics state) (all-xdoc-topics state))
+      (b* ((- (initialize-xdoc-errors ,error))
+           ((mv ? all-xdoc-topics state) (all-xdoc-topics state))
            (- (cw "(len all-xdoc-topics): ~x0~%" (len all-xdoc-topics)))
-           (redef-report (redef-errors (mergesort all-xdoc-topics)))
+           (redef-report
+            ;; To support special cases (for instance, "locally" including a
+            ;; book to extract its documentation, then perhaps later
+            ;; re-including that book), it seems pretty reasonable not to warn
+            ;; or complain about topics that are exact duplicates of one
+            ;; another.  So, we create our redefinition report from sorted
+            ;; topics.
+            (redef-errors (mergesort all-xdoc-topics)))
            (- (or (not redef-report)
                   (cw "Redefined topics report: ~x0.~%" redef-report)))
            (- (or ,redef-okp
@@ -103,6 +111,11 @@
                        report may help you to fix these errors.  Or, you can ~
                        just call XDOC::SAVE with :REDEF-OKP T to bypass this ~
                        error (and use the most recent version of each topic.)")))
+
+           ;; Now remove all shadowed topics before doing anything more.
            ((mv & & state) (assign acl2::writes-okp t))
-           (state (save-fancy all-xdoc-topics ,dir ',zip-p state)))
+           (- (acl2::tshell-ensure))
+           (state (save-fancy all-xdoc-topics ,dir ,zip-p ,logo-image
+                              ,broken-links-limit state))
+           (- (report-xdoc-errors 'save)))
         (value '(value-triple :invisible))))))

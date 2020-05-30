@@ -14,28 +14,28 @@
 
 ; Proof of bits-sum-swallow:
 
-; Proof:  Since y < 2^(k+1), y[i:k+1] = 0.  
-; 
+; Proof:  Since y < 2^(k+1), y[i:k+1] = 0.
+;
 ; Since x[k] = 0, x[k:0] = x[k-1:0] < 2^k.
-; 
-; Hence, 
-; 
-;   x[k:0] + y[k:0] < 2^k + 2^k = 2^(k+1) 
-; 
-; and 
-; 
+;
+; Hence,
+;
+;   x[k:0] + y[k:0] < 2^k + 2^k = 2^(k+1)
+;
+; and
+;
 ;   (x[k:0] + y[k:0])[k+1] = 0.
-; 
+;
 ; By BITS-SUM,
-; 
+;
 ;   (x+y)[i:k+1] = (x[i:k+1] + y[i:k+1] + (x[k:0] + y[k:0])[k+1])[i-k-1:0]
 ;                = (x[i:k+1])[i-k-1:0]
 ;                = x[i:k+1] {by BITS-BITS}.
-; 
+;
 ; By BITS-BITS,
-; 
-;   (x+y)[i:j] = (x+y)[i:k+1][i-k-1:j-k-1] 
-;              = x[i:k+1][i-k-1:j-k-1] 
+;
+;   (x+y)[i:j] = (x+y)[i:k+1][i-k-1:j-k-1]
+;              = x[i:k+1][i-k-1:j-k-1]
 ;              = x[i:j].
 
 (local-defthm bits<expt
@@ -237,42 +237,84 @@
                y
                n)
          (lior x y n))
-  :hints (("Goal" :in-theory (e/d (lior) (logior lior-commutative)))))
+  :hints (("Goal" :in-theory (e/d (lior)
+                                  (logior
+                                   lior-commutative
+
+; Matt K. mod for assume-true-false improvement for calls of the form (integerp
+; (+ k term)).
+
+                                   (force))))))
 
 (defthmd lior-bits-2
   (equal (lior x
                (bits y (1- n) 0)
                n)
          (lior x y n))
-  :hints (("Goal" :in-theory (e/d (lior) (logior lior-commutative)))))
+  :hints (("Goal" :in-theory (e/d (lior)
+                                  (logior
+                                   lior-commutative
+
+; Matt K. mod for assume-true-false improvement for calls of the form (integerp
+; (+ k term)).
+
+                                   (force))))))
 
 (defthmd land-bits-1
   (equal (land (bits x (1- n) 0)
                y
                n)
          (land x y n))
-  :hints (("Goal" :in-theory (e/d (land) (logior land-commutative)))))
+  :hints (("Goal" :in-theory (e/d (land)
+                                  (logior
+                                   land-commutative
+
+; Matt K. mod for assume-true-false improvement for calls of the form (integerp
+; (+ k term)).
+
+                                   (force))))))
 
 (defthmd land-bits-2
   (equal (land x
                (bits y (1- n) 0)
                n)
          (land x y n))
-  :hints (("Goal" :in-theory (e/d (land) (logior land-commutative)))))
+  :hints (("Goal" :in-theory (e/d (land)
+                                  (logior
+                                   land-commutative
+
+; Matt K. mod for assume-true-false improvement for calls of the form (integerp
+; (+ k term)).
+
+                                   (force))))))
 
 (defthmd lxor-bits-1
   (equal (lxor (bits x (1- n) 0)
                y
                n)
          (lxor x y n))
-  :hints (("Goal" :in-theory (e/d (lxor) (logior lxor-commutative)))))
+  :hints (("Goal" :in-theory (e/d (lxor)
+                                  (logior
+                                   lxor-commutative
+
+; Matt K. mod for assume-true-false improvement for calls of the form (integerp
+; (+ k term)).
+
+                                   (force))))))
 
 (defthmd lxor-bits-2
   (equal (lxor x
                (bits y (1- n) 0)
                n)
          (lxor x y n))
-  :hints (("Goal" :in-theory (e/d (lxor) (logior lxor-commutative)))))
+  :hints (("Goal" :in-theory (e/d (lxor)
+                                  (logior
+                                   lxor-commutative
+
+; Matt K. mod for assume-true-false improvement for calls of the form (integerp
+; (+ k term)).
+
+                                   (force))))))
 
 ; Proof of lior-slice:
 
@@ -339,7 +381,7 @@
                        0                     j)
                   (- (expt 2 i) (expt 2 j))))
   ;; The following hint is very weird!!  It can't be on Goal or Goal'.  The
-  ;; idea came from a proof-checker proof.  I should investigate....
+  ;; idea came from a proof-builder proof.  I should investigate....
   :hints (("Goal''" :in-theory (enable cat expt)))
   :rule-classes nil)
 
@@ -528,7 +570,7 @@
                                      (acl2::k (1- (expt 2 (- i (1+ j)))))
                                      (acl2::m (1+ j))
                                      (acl2::n j))))))))
-                                   
+
 (local-defun prop-as-lxor-thm (i j x y)
   (implies (and (natp i)
                 (natp j)

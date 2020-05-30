@@ -1,7 +1,7 @@
 (in-package "ACL2")
 
 #|
- 
+
 require-book.lisp
 -----------------
 
@@ -25,7 +25,7 @@ Basically, instead of
 (include-book <name> ...)
 
 you can write
-   
+
 (require-book <name> ...)
 
 and that will fail only in one of these cases:
@@ -154,7 +154,7 @@ to give more specific messages for each recommended book.
     (make-event
      (er-progn
       (state-global-let*
-       ((inhibit-output-lst (car (@ inhibit-output-lst-stack))))
+       ((inhibit-output-lst (caar (@ inhibit-output-lst-stack))))
        (maybe-chk-for-included-book-fn
         ',user-book-name
         ',dir
@@ -181,7 +181,7 @@ to give more specific messages for each recommended book.
                           ;; special for recommend-book:
                           for
                           ;; these are mostly ignored, but included for easy
-                          ;; transition to/from include-book: 
+                          ;; transition to/from include-book:
                           load-compiled-file uncertified-okp
                           defaxioms-okp skip-proofs-okp
                           ttags doc)
@@ -190,7 +190,7 @@ to give more specific messages for each recommended book.
     (make-event
      (er-progn
       (state-global-let*
-       ((inhibit-output-lst (car (@ inhibit-output-lst-stack))))
+       ((inhibit-output-lst (caar (@ inhibit-output-lst-stack))))
        (maybe-chk-for-included-book-fn
         ',user-book-name
         ',dir

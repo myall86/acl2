@@ -324,8 +324,8 @@ to override it.</p>")
                                ,inst-thm
                                . ,fn-subst))))
         :rule-classes ,rule-classes))))
-       
-       
+
+
 (defun defalist-instantiate-table-thms-aux
   (table key val name formals kwd-alist x
          req-alist fn-subst world)
@@ -343,9 +343,6 @@ to override it.</p>")
        (fn-subst (defalist-substitution name formals key val kwd-alist x))
        (req-alist (defalist-requirement-alist kwd-alist formals key val)))
     (defalist-instantiate-table-thms-aux table key val name formals kwd-alist x req-alist fn-subst world)))
-
-
-
 
 (defun defalist-fn (name formals kwd-alist other-events state)
   (declare (xargs :mode :program))
@@ -431,21 +428,33 @@ to override it.</p>")
        (short (getarg :short nil kwd-alist))
        (long  (getarg :long nil kwd-alist))
        (parents-p (assoc :parents kwd-alist))
-       (parents (if parents-p
-                    (cdr parents-p)
-                  (or (xdoc::get-default-parents world)
-                      '(acl2::undocumented))))
-       (short (or short
-                  (and parents
-                       (concatenate 'string "@(call " (symbol-package-name
-                                                       name) "::" (symbol-name name) ") recognizes association lists where every key
-satisfies @(see? " (xdoc::full-escape-symbol keyp) ") and
-each value satisfies @(see? " (xdoc::full-escape-symbol valp) ")."))))
 
-       (long (or long
-                 (and parents
-                      (concatenate 'string "<p>This is an ordinary @(see std::defalist).</p>"
-                                   "@(def " (xdoc::full-escape-symbol name) ")"))))
+       (squelch-docs-p (and already-definedp
+                            (not short)
+                            (not long)
+                            (not (cdr parents-p))))
+
+       (parents (and (not squelch-docs-p)
+                     (if parents-p
+                         (cdr parents-p)
+                       (or (xdoc::get-default-parents world)
+                           '(acl2::undocumented)))))
+
+       (short (and (not squelch-docs-p)
+                   (or short
+                       (and parents
+                            (concatenate 'string
+                                         "@(call " (xdoc::full-escape-symbol name)
+                                         ") recognizes association lists where every key satisfies @(see? "
+                                         (xdoc::full-escape-symbol keyp)
+                                         ") and each value satisfies @(see? "
+                                         (xdoc::full-escape-symbol valp) ").")))))
+
+       (long (and (not squelch-docs-p)
+                  (or long
+                      (and parents
+                           (concatenate 'string "<p>This is an ordinary @(see std::defalist).</p>"
+                                        "@(def " (xdoc::full-escape-symbol name) ")")))))
 
        (rest (append (getarg :rest nil kwd-alist)
                      other-events))
@@ -476,9 +485,10 @@ each value satisfies @(see? " (xdoc::full-escape-symbol valp) ")."))))
 
        ((when (eq mode :program))
         `(defsection ,name
-           ,@(and parents `(:parents ,parents))
+           ,@(and (or squelch-docs-p parents-p parents) `(:parents ,parents))
            ,@(and short   `(:short ,short))
            ,@(and long    `(:long ,long))
+           ,@(and squelch-docs-p '(:no-xdoc-override t))
            (program)
            ,@def
            ,@rest))
@@ -535,7 +545,7 @@ each value satisfies @(see? " (xdoc::full-escape-symbol valp) ")."))))
                                :rule-classes nil))))
 
              (local (in-theory nil))
-             
+
              ,@(and (not (eq key t))
                     `((defthm ,(mksym 'booleanp-of- keyp '-for- name '-key)
                         (or (equal (,keyp ,@key-formals) t)
@@ -590,15 +600,15 @@ each value satisfies @(see? " (xdoc::full-escape-symbol valp) ")."))))
           ,@(defalist-instantiate-table-thms name formals key val kwd-alist x world))))
 
     `(defsection ,name
-       ,@(and parents `(:parents ,parents))
+       ,@(and (or squelch-docs-p parents-p parents) `(:parents ,parents))
        ,@(and short   `(:short ,short))
        ,@(and long    `(:long ,long))
-       
+       ,@(and squelch-docs-p '(:no-xdoc-override t))
        (encapsulate ()
          . ,events)
-       
+
        . ,(and rest
-               `((value-triple (cw "Deflist: submitting /// events.~%"))
+               `((value-triple (cw "Defalist: submitting /// events.~%"))
                  (with-output
                    :stack :pop
                    (progn

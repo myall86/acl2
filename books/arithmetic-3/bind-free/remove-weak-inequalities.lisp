@@ -1,19 +1,5 @@
-; Arithmetic-3 Library
-; Copyright (C) 2004 Robert Krug <rkrug@cs.utexas.edu>
-;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT
-; ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-; FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
-; details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; if not, write to the Free Software Foundation, Inc., 51
-; Franklin Street, Suite 500, Boston, MA 02110-1335, USA.
+; See the top-level arithmetic-3 LICENSE file for authorship,
+; copyright, and license information.
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
@@ -36,7 +22,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defun present-in-goal (term goal)
-  
+
   ;; Present-in-goal is 'positive if term appears as a literal
   ;; of goal, and 'negative if term appears negated.  It is NIL
   ;; otherwise.  Note that due to ACL2's internal representation
@@ -45,7 +31,7 @@
   ;; sees.  Thus, a hypothesis such as (<= x y) will appear
   ;; as (< y x) in the clause, while (< x y) will appear as
   ;; (not (< x y)).
-  
+
   (cond ((endp goal)
          nil)
         ((equal term (car goal))
@@ -67,7 +53,7 @@
   ;; (thm (implies (and (< x y) (<= x y)) (equal a b)))
   ;; (thm (implies (and (< (+ 1 x) y) (<= x y)) (equal a b)))
   ;; (thm (implies (and (<= (+ 1 x) y) (<= x y)) (equal a b)))
-  
+
   (if (eq (present-in-goal `(< ,y ,x) (mfc-clause mfc))
           'positive)
       (let ((contradictionp (mfc-ap `(< ,y ,x) mfc state)))
@@ -93,7 +79,7 @@
 
   ;; (thm (implies (and (< (+ 1 x) y) (< x y)) (equal a b)))
   ;; (thm (implies (and (<= (+ 1 x) y) (< x y)) (equal a b)))
-  
+
   (if (eq (present-in-goal `(< ,x ,y) (mfc-clause mfc))
           'negative)
       (let ((contradictionp (mfc-ap `(NOT (< ,x ,y)) mfc state)))

@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 8.3 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2020, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -24,6 +24,104 @@
 ; cannot code in ACL2 because they require constructs not in ACL2, such
 ; as calling the compiler.
 
+; We start with a section that was originally in acl2-fns.lisp, but was moved
+; here when sharp-atsign-read started using several functions defined in the
+; sources, to avoid compiler warnings.
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;                            SUPPORT FOR #@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defmacro sharp-atsign-read-er (str &rest format-args)
+  `(progn (loop (when (null (read-char-no-hang stream nil nil t))
+                  (return)))
+          (error (concatenate 'string ,str ".  See :DOC set-iprint.")
+                 ,@format-args)))
+
+(defun sharp-atsign-read (stream char n &aux (state *the-live-state*))
+  (declare (ignore char n))
+  (let (ch
+        bad-ch
+        (zero-code (char-code #\0))
+        (index 0)
+        (iprint-last-index (iprint-last-index state)))
+    (loop
+     (when (eql (setq ch (read-char stream t nil t))
+                #\#)
+       (return))
+     (let ((digit (- (char-code ch) zero-code)))
+       (cond ((or (< digit 0)
+                  (> digit 9))
+              (when (not bad-ch)
+                (setq bad-ch ch))
+              (return))
+             (t
+              (setq index (+ digit (* 10 index)))))))
+    (cond
+     (bad-ch
+      (sharp-atsign-read-er
+       "Non-digit character ~s following #@~s"
+       bad-ch index))
+     ((symbol-value (f-get-global 'certify-book-info state))
+      (sharp-atsign-read-er
+       "Illegal reader macro during certify-book, #@~s#"
+       index))
+     ((iprint-ar-illegal-index index state)
+      (sharp-atsign-read-er
+       "Out-of-bounds index in #@~s#"
+       index))
+     (t
+      (let ((old-read-state ; bind special
+             *iprint-read-state*))
+        (cond
+         ((eq old-read-state nil)
+          (iprint-ar-aref1 index state))
+         (t
+          (let ((new-read-state-order (if (<= index iprint-last-index)
+                                          '<=
+                                        '>)))
+            (cond
+             ((eq old-read-state t)
+              (setq *iprint-read-state*
+                    (cons index new-read-state-order))
+              (iprint-ar-aref1 index state))
+             ((eq (cdr old-read-state)
+                  new-read-state-order) ; both > or both <=
+              (iprint-ar-aref1 index state))
+             (t
+              (multiple-value-bind
+               (index-before index-after)
+               (cond
+                ((eq (cdr old-read-state) '<=)
+                 (values index (car old-read-state)))
+                (t ; (eq (cdr old-read-state) '>)
+                 (values (car old-read-state) index)))
+               (sharp-atsign-read-er
+                "Attempt to read a form containing both an index~%~
+                 created before the most recent rollover (#@~s#) and~%~
+                 an index created after that rollover (#@~s#)"
+                index-before index-after))))))))))))
+
+(defun define-sharp-atsign ()
+  (set-new-dispatch-macro-character
+   #\#
+   #\@
+   #'sharp-atsign-read))
+
+(eval-when
+
+; Note: CMUCL build breaks without the check below for a compiled function.
+
+ #-cltl2
+ (load eval)
+ #+cltl2
+ (:load-toplevel :execute)
+ (when (compiled-function-p! 'sharp-atsign-read)
+   (let ((*readtable* *acl2-readtable*))
+     (define-sharp-atsign))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 ;          EVALUATION
 
 ; Essay on Evaluation in ACL2
@@ -44,14 +142,14 @@
 ; Evaluation in ACL2, which takes place in the ACL2 loop and during theorem
 ; proving, is based on the way evaluation was done in Nqthm.  The idea is to
 ; "oneify" the body of a definition by replacing functions by their so-called
-; "executable counterparts," sometimes called "*1* functions."  The primitives
-; have *1* functions that reflect their logical definitions, so that for
-; example (*1*car x), or more precisely (acl2_*1*_lisp::car x), returns nil
-; when x is an atom -- except that an error occurs if we are checking guards
-; (or are in so-called safe mode, as explained below).  Defined functions have
-; *1* function counterparts that are defined, roughly speaking, by replacing
-; each function call in their bodies by a call of the corresponding *1*
-; function.
+; "executable counterparts," sometimes called "*1* functions."  Also see :doc
+; evaluation.  The primitives have *1* functions that reflect their logical
+; definitions, so that for example (*1*car x), or more precisely
+; (acl2_*1*_lisp::car x), returns nil when x is an atom -- except that an error
+; occurs if we are checking guards (or are in so-called safe mode, as explained
+; below).  Defined functions have *1* function counterparts that are defined,
+; roughly speaking, by replacing each function call in their bodies by a call
+; of the corresponding *1* function.
 
 ; The evaluation mechanism in ACL2 changed radically in v1-8, when guards were
 ; removed from the logic.  It has changed again in Version_2.6, due to a hole
@@ -378,7 +476,7 @@
 ;   (declare (xargs :mode :logic :guard (true-listp x)))
 ;   (if (endp x) 3 (+ 1 (foo (cdr x)))))
 
-; Here is the executable counterpart in Version_2.5, in gcl:
+; Here is the executable-counterpart in Version_2.5, in gcl:
 
 ; ACL2>(symbol-function 'ACL2_*1*_ACL2::FOO) ; in gcl, ACL2 Version_2.5
 ; (LISP:LAMBDA-BLOCK ACL2_*1*_ACL2::FOO (X)
@@ -641,7 +739,7 @@
 ; Remark 2.  Consider, in the body of *1*fn, the case that <guard-checking-on>
 ; holds.  If we were to replace it with (or guard-checking-on program) then we
 ; would always check guards when in program mode, which would give backward
-; compatability: this scheme would behave exactly as the scheme from
+; compatibility: this scheme would behave exactly as the scheme from
 ; Version_2.5 for and before did when the new scheme is used in other than safe
 ; mode.  But we have decided that starting with Version_2.6, we will no longer
 ; check guards for :program mode functions when 'guard-checking-on has value
@@ -837,7 +935,7 @@
 
 ; The following should never happen.
 
-         (error "We have called (the executable counterpart of) bad-atom<= on ~
+         (error "We have called (the executable-counterpart of) bad-atom<= on ~
                  ~s and ~s, but bad-atom<= has no Common Lisp definition."
                 x y))
         (t (gv bad-atom<= (x y) nil))))
@@ -880,7 +978,8 @@
 (defun-*1* complex-rationalp (x)
   (complexp x))
 
-;; RAG - I added this function to recognize the complex numbers.
+;; Historical Comment from Ruben Gamboa:
+;; I added this function to recognize the complex numbers.
 
 #+:non-standard-analysis
 (defun-*1* complexp (x)
@@ -917,7 +1016,8 @@
 #+:non-standard-analysis
 (defun-*1* floor1 (x)
 
-;; RAG - I added this function to evaluate the special floor1
+;; Historical Comment from Ruben Gamboa:
+;; I added this function to evaluate the special floor1
 ;; function, which computes floor with a modulus of 1.
 
   (if (rationalp x)
@@ -926,7 +1026,7 @@
 
 (defun-*1* if (x y z)
   (error "We just can't stand having a non-lazy IF around.  But we attempted ~%~
-          to call the executable counterpart of IF on argument list ~s."
+          to call the executable-counterpart of IF on argument list ~s."
          (list x y z)))
 
 (defun-*1* imagpart (x)
@@ -961,7 +1061,8 @@
 (defun-*1* rationalp (x)
   (rationalp x))
 
-;; RAG - I added realp to recognize real numbers.
+;; Historical Comment from Ruben Gamboa:
+;; I added realp to recognize real numbers.
 
 #+:non-standard-analysis
 (defun-*1* realp (x)
@@ -989,7 +1090,15 @@
 (defun-*1* symbolp (x)
   (symbolp x))
 
-;; RAG - I added *1*-defns for the non-standard predicates.  Note,
+(defun-*1* apply$-lambda (fn args)
+  (declare (ftype (function (t t) (values t))
+                  ev$))
+  (if (apply$-lambda-guard fn args) ; guard
+      (apply$-lambda fn args)
+    (gv apply$-lambda (fn args) (apply$-lambda-logical fn args))))
+
+;; Historical Comment from Ruben Gamboa:
+;; I added *1*-defns for the non-standard predicates.  Note,
 ;; however, that the non-standard predicates do NOT have an executable
 ;; counterpart.  (Actually, that's too hasty.  Standard-part could be
 ;; defined as "identity" and standardp could be "t".
@@ -1029,41 +1138,6 @@
           (macroexpand1 x 'oneify *the-live-state*)
           (declare (ignore erp state))
           val))
-
-(defvar *ignore-invariant-risk*
-
-; In oneify-cltl-code we handle an "invariant-risk" that stobj invariants
-; aren't violated upon ill-guarded calls of stobj updaters.  The idea is to
-; force evaluation to use *1* functions down to those primitives, which always
-; check their guards.  See also the comment in **1*-as-raw*.  Note that this
-; is a separate issue from the lack of atomicity of some defabsstobj exports
-; (which is implemented using *inside-absstobj-update*).
-
-; There may be cases where this use of *1* functions may be slower than one
-; likes.  By setting *ignore-invariant-risk* to any non-nil value, one defeats
-; that behavior.  This could be unsound, but since one needs to slip into raw
-; Lisp to set this global, we take the position that setting it is much like
-; redefining prove so that one always gets the "Q.E.D."
-
-; Perhaps we will consider avoiding this use of *1* functions when the only
-; danger of invariant violations is from local stobjs.  Since only :program
-; mode functions are at issue (because a :logic mode function call only slips
-; into raw Lisp when the function has been guard-verified and the call is
-; guard-checked, and because raw-ev-fncall binds **1*-as-raw* to nil for
-; :logic mode functions), it seems plausible that we can provide this
-; optimization for local stobjs.  After all, local stobjs are let-bound rather
-; than global; so it seems that during proofs, any local stobj encountered will
-; either be created and destroyed during a computed hint or else will be
-; modified only by :logic mode functions manipulated by the prover.  (Trusted
-; clause processors might provide an exception, but then trust tags are
-; involved, so it's their responsibility to do the right thing.)
-
-; But we'll leave that for another day, if at all, as it seems risky and
-; error-prone to implement.  In particular, we would likely need to track risk
-; on a per-stobj basis, and built-ins (see initialize-invariant-risk) might not
-; be associated with stobjs at all.
-
-  nil)
 
 (mutual-recursion
 
@@ -1167,7 +1241,7 @@
 ; program-p = t when attempting to approximate raw Lisp behavior.
 
   (cond
-   ((or (atom x) (eq (car x) 'quote))
+   ((atom x)
     (cond ((keywordp x)
            (kwote x))
           ((symbolp x)
@@ -1180,6 +1254,60 @@
            x)
           ((atom x) (kwote x))
           (t x)))
+   ((eq (car x) 'quote)
+    (cond ((and ; (consp (cdr x)) ; always true
+                  (consp (cadr x))
+                  (eq (car (cadr x)) 'lambda))
+
+; Just as we apply hons-copy when translating lambda objects in
+; translate11-lambda-object, we hons-copy here as well, to support fast lookup
+; by fetch-cl-cache-line.
+
+           (hons-copy x))
+          (t x)))
+   ((eq (car x) 'lambda$)
+    (mv-let (flg tx bindings)
+      (translate11-lambda-object x
+                                 '(nil) ; stobjs-out
+                                 nil    ; bindings
+                                 nil    ; known-stobjs
+                                 nil    ; flet-alist
+                                 x
+                                 'oneify
+                                 w
+                                 *default-state-vars*
+                                 nil)
+      (declare (ignore bindings))
+      (if flg
+          (interface-er "Implementation error: Translate11-lambda-object in ~
+                         oneify encountered an untranslatable LAMBDA$, ~x0, ~
+                         even though it was supposedly translated ~
+                         successfully earlier.  Please contact the ACL2 ~
+                         implementors."
+                        x)
+          tx)))
+   ((eq (car x) 'loop$)
+    (mv-let (flg tx bindings)
+      (translate11-loop$
+       x
+       '(nil) ; stobjs-out
+       nil    ; bindings
+       nil    ; known-stobjs
+       nil    ; flet-alist
+       x
+       'oneify
+       w
+       *default-state-vars*)
+      (declare (ignore bindings))
+      (if flg
+          `(interface-er "Implementation error: translate11-loop$ in oneify ~
+                          encountered an untranslatable LOOP$, ~x0.  We ~
+                          thought that this could only happen under a call of ~
+                          non-exec, in which case we should never be ~
+                          executing this code!  Please contact the ACL2 ~
+                          implementors."
+                         ',x)
+        (oneify tx fns w program-p))))
    ((not (symbolp (car x)))
     (oneify
      (list* 'let (listlis (cadr (car x))
@@ -1190,15 +1318,14 @@
 
 ; Warning: Keep this in sync with stobj-let-fn and the handling of stobj-let in
 ; this function, in particular the case in which stobj-let-fn generates a call
-; of prog2$.
+; of prog2$ (or perhaps progn$).
 
     (let* ((qfn (and (consp (cdr x))
                      (cadr x)))
-           (fn (or (and (consp qfn)
-                        (eq (car qfn) 'quote)
-                        (consp (cdr qfn))
-                        (cadr qfn))
-                   'progn)))
+           (return-last-fn (return-last-fn qfn))
+           (fn (or return-last-fn 'progn))
+           (arg2 (return-last-arg2 return-last-fn
+                                   (oneify (caddr x) fns w program-p))))
       (cond ((eq fn 'ec-call1-raw)
 
 ; In the case of ec-call1-raw, we are already oneifying the last argument -- we
@@ -1254,11 +1381,10 @@
 ; Otherwise, translate11 guarantees that if (car form) is f, then it is an
 ; abbreviation for f$inline.
 
-                               (assert$ (getprop (car x) 'macro-body
-                                                 nil
-                                                 'current-acl2-world w)
-                                        (*1*-symbol (add-suffix (car form)
-                                                                *inline-suffix*))))
+                               (assert$
+                                (getpropc (car form) 'macro-body nil w)
+                                (*1*-symbol (add-suffix (car form)
+                                                        *inline-suffix*))))
                            args))))))
             ((eq fn 'mbe1-raw)
 
@@ -1294,6 +1420,8 @@
 ;     (declare (xargs :mode :program
 ;                     :stobjs st))
 ;     (lgc st))
+;
+;   (pgm st) ; no "@@@" in output
 
 ; Note that we do not give similar treatment to our evaluator (in particular,
 ; in ev-rec-return-last), since at the top level, we are not inside a function
@@ -1302,26 +1430,34 @@
 ; level, thus also not being sensitive to **1*-as-raw* for lexically
 ; apparent calls.  That's OK.
 
-             (let ((oneified-logic (oneify (cadddr x) fns w program-p))
-                   (oneified-exec (oneify (caddr x) fns w program-p)))
-               `(cond
-                 ((f-get-global 'safe-mode *the-live-state*)
-                  (,(*1*-symbol 'return-last)
-                   ,qfn
-                   ,oneified-exec
-                   ,oneified-logic))
-                 (t ,(if program-p
-                         oneified-exec
-                       `(if **1*-as-raw*
-                            ,oneified-exec
-                          ,oneified-logic))))))
+             (let* ((oneified-logic-body (oneify (cadddr x) fns w program-p))
+                    (oneified-exec-body arg2)
+                    (logic-fn (and (not program-p) ; optimization
+                                   (acl2-gentemp "ONEIFY")))
+                    (exec-fn (acl2-gentemp "ONEIFY"))
+                    (logic-body (if program-p
+                                    oneified-logic-body
+                                  (list logic-fn))))
+               `(flet (,@(and (not program-p)
+                              `((,logic-fn () ,oneified-logic-body)))
+                       (,exec-fn () ,oneified-exec-body))
+                  (cond
+                   ((f-get-global 'safe-mode *the-live-state*)
+                    (,(*1*-symbol 'return-last)
+                     ,qfn
+                     (,exec-fn)
+                     ,logic-body))
+                   (t ,(if program-p
+                           `(,exec-fn)
+                         `(if **1*-as-raw*
+                              (,exec-fn)
+                            ,logic-body)))))))
             (t
 
 ; Since fn is not 'ec-call1-raw, the guard of return-last is automatically met
 ; for the arguments.
 
-             (let ((args (oneify-lst (cddr x) fns w program-p)))
-               (cons fn args))))))
+             (list fn arg2 (oneify (cadddr x) fns w program-p))))))
    ((or (member-eq (car x) *oneify-primitives*)
 
 ; Note that safe-mode for make-event will require addition of the following two
@@ -1376,12 +1512,7 @@
    ((eq (car x) 'stobj-let)
 
 ; Stobj-let is rather complicated, so we prefer to take advantage of the logic
-; code for that macro.  However, bindings of live stobjs vars may be necessary
-; so that when we call a traced function on a live stobj that was stobj-let
-; bound, then stobj-print-symbol can print the "{instance}" suffix, as it
-; should.  The easiest way to code that seems to be to go ahead and use the
-; logical macroexpansion of stobj-let, and then fix it up with suitable
-; bindings.
+; code for that macro.
 
     (let ((temp (oneify (stobj-let-fn x)
                         fns w program-p)))
@@ -1390,9 +1521,7 @@
 ; Warning: Keep these cases in sync with stobj-let-fn.
 
         (('let bindings . rest)
-         `(let* ,(append bindings
-                         (the-maybe-live-var-bindings (strip-cars bindings)))
-            ,@rest))
+         `(let* ,bindings ,@rest))
         (('progn conjoined-no-dups-exprs
                  ('let bindings . rest))
 
@@ -1401,10 +1530,7 @@
 ; form by oneify.
 
          `(progn ,conjoined-no-dups-exprs
-                 (let* ,(append bindings
-                                (the-maybe-live-var-bindings
-                                 (strip-cars bindings)))
-                   ,@rest)))
+                 (let* ,bindings ,@rest)))
         (& (interface-er "Implementation error: unexpected form of stobj-let ~
                           encountered by ~
                           oneify!.~|~%Input:~|~y0~%Output:~|~y1~%Please ~
@@ -1451,13 +1577,13 @@
     (interface-er
      "Implementation error: Unexpected call of throw-or-attach in oneify:~%~x0"
      x))
-   ((and (getprop (car x) 'macro-body nil 'current-acl2-world w)
+   ((and (getpropc (car x) 'macro-body nil w)
          (not (member-eq (car x) fns)))
     (oneify (macroexpand1! x) fns w program-p))
    ((eq (car x) 'wormhole-eval)
 
 ; We know that in a well-formed term (wormhole-eval x y z), x is a quoted
-; constant naming the wormhole, y is a quoted lambda of either the form (lambda
+; constant naming the wormhole, y is a lambda object of either the form (lambda
 ; (whs) body) or (lambda () body) that will be applied to the wormhole status,
 ; and z is some well-formed (irrelevant) term.  The oneify of a quote is
 ; itself, so we don't have to do anything to x.  But with y, we oneify the
@@ -1475,8 +1601,12 @@
    (t
     (let ((arg-forms (oneify-lst (cdr x) fns w program-p))
           (fn (cond ((and (eq program-p 'invariant-risk)
-                          (not (getprop (car x) 'invariant-risk nil
-                                        'current-acl2-world w)))
+                          (not (getpropc (car x) 'invariant-risk nil w)))
+
+; Oneify was called at the top level with program-p 'invariant-risk.  There is
+; no need for sub-functions with no invariant-risk to be called using their *1*
+; functions.
+
                      (car x))
                     (t (*1*-symbol (car x))))))
       (cons fn arg-forms)))))
@@ -1537,17 +1667,14 @@
                            (t nil))))
               (get-declared-stobjs (cdr edcls)))))
 
-(defun-one-output warn-for-guard-body (fn)
-  (assert$ (boundp '*raw-guard-warningp*)
-           (setq *raw-guard-warningp* nil))
-  (let ((state *the-live-state*))
-    (warning$ 'top-level "Guards"
-              "Guard-checking will be inhibited on recursive calls of the ~
-               executable counterpart (i.e., in the ACL2 logic) of ~x0.  To ~
-               check guards on all recursive calls:~%  (set-guard-checking ~
-               :all)~%To leave behavior unchanged except for inhibiting this ~
-               message:~%  (set-guard-checking :nowarn)"
-              fn)))
+(defun maybe-warn-for-guard-body (fn state)
+  (assert$ (f-get-global 'raw-guard-warningp state)
+           (pprogn (f-put-global 'raw-guard-warningp nil state)
+                   (warning$ 'top-level "Guards"
+                             "Guard-checking will be inhibited for some ~
+                              recursive calls, including ~x0; see :DOC ~
+                              guard-checking-inhibited."
+                             fn))))
 
 (defun-one-output create-live-user-stobjp-test (stobjs)
   (if (endp stobjs)
@@ -1560,14 +1687,11 @@
             (t `(and ,tst ,rst))))))
 
 (defun labels-form-for-*1* (fn *1*fn formals *1*body
-                               declare-stobj-special
                                ignore-vars ignorable-vars
                                super-stobjs-in super-stobjs-chk
                                guard wrld)
   (let ((*1*fn-binding `(,*1*fn
                          ,formals
-                         ,@(and declare-stobj-special
-                                (list declare-stobj-special))
                          ,@(and ignore-vars
                                 `((declare (ignore ,@ignore-vars))))
                          ,@(and ignorable-vars
@@ -1688,9 +1812,9 @@
 ; this case, so that appropriate live stobj checks can be made.
 
                            (not (and stobj-flag
-; But is it an abstract concrete stobj?
-                                     (getprop stobj-flag 'absstobj-info nil
-                                              'current-acl2-world wrld)))))
+; But is it an abstract stobj?
+                                     (getpropc stobj-flag 'absstobj-info nil
+                                               wrld)))))
           (fn (car def))
           (*1*fn (*1*-symbol fn))
           (cl-compliant-p-optimization
@@ -1745,7 +1869,6 @@
                              defstobj-fn defabsstobj-fn
                              defpkg-fn
                              deflabel-fn
-                             #+acl2-legacy-doc defdoc-fn
                              deftheory-fn
                              defchoose-fn
                              verify-guards-fn
@@ -1780,8 +1903,10 @@
          ,formals
          ,(cons fn formals)))
       (t
-       (let* ((invariant-risk
-               (getprop fn 'invariant-risk nil 'current-acl2-world wrld))
+       (let* ((program-p (eq defun-mode :program))
+              (invariant-risk
+               (and program-p
+                    (getpropc fn 'invariant-risk nil wrld)))
               (super-stobjs-in ; At a "leaf" of a stobj-based computation?
                (if stobj-flag
 
@@ -1808,10 +1933,14 @@
 
                (and (not super-stobjs-in) (ignore-vars dcls)))
               (ignorable-vars (ignorable-vars dcls))
-              (program-p (eq defun-mode :program))
-              (*1*guard (oneify guard nil wrld program-p))
+              (declared-stobjs (if stobj-flag
+                                   (list stobj-flag)
+                                 (get-declared-stobjs dcls)))
+              (user-stobj-is-arg (and declared-stobjs
+                                      (not (equal declared-stobjs '(state)))))
+              (live-stobjp-test (create-live-user-stobjp-test declared-stobjs))
 
-; We throw away most declararations and the doc string, keeping only ignore and
+; We throw away most declarations and the doc string, keeping only ignore and
 ; ignorable declarations.  Note that it is quite reasonable to ignore
 ; declarations when constructing ``slow'' functions.
 
@@ -1910,27 +2039,6 @@
                      `(live-stobjp ,first-non-nil))
                  `(live-state-p
                    ,(select-stobj 'state super-stobjs-in formals))))
-              (declared-stobjs (if stobj-flag
-                                   (list stobj-flag)
-                                 (get-declared-stobjs dcls)))
-              (user-stobj-is-arg (and declared-stobjs
-                                      (not (equal declared-stobjs '(state)))))
-              (live-stobjp-test (create-live-user-stobjp-test declared-stobjs))
-              (declare-stobj-special
-
-; Without a special declaration for the live stobj, a defstobj or defabsstobj
-; event will introduce *1* functions in add-trip, via a defuns trip, before the
-; defstobj or defabsstobj trip introduces the live stobj variable as special.
-; This might not be a big deal unless we compile, by which time (at the end of
-; processing the defstobj or defabsstobj trip) the live stobj variable has been
-; introduced with defparameter, thus globally declaring it special.  However,
-; CCL complains because compilation is done when the *1* function is first
-; introduced.  It seems appropriate to declare the live stobj variable special
-; as soon as it is referenced, in such *1* functions, even though CCL might be
-; the only Lisp that could need this done.
-
-               (and stobj-flag
-                    `(declare (special ,(the-live-var stobj-flag)))))
               (guarded-primitive-p
 
 ; We want to check guards on the "leaves" of a computation in safe-mode, for
@@ -1971,7 +2079,11 @@
                (and trace-rec-for-none
                     logic-recursive-p
                     (eq defun-mode :logic)))
-              (program-only (and program-p ; optimization
+              (program-only (and program-p
+
+; Note that because of state global verify-termination-on-raw-program-okp, the
+; test for program-p above is not merely an optimization.
+
                                  (member-eq fn
 
 ; If this test becomes an issue, we might consider reimplementing the
@@ -1982,7 +2094,7 @@
                                             (f-get-global
                                              'program-fns-with-raw-code
                                              *the-live-state*))))
-              (fail_program-only-safe
+              (fail_program-only
 
 ; At one time we put down a form here that throws to the tag 'raw-ev-fncall:
 
@@ -1999,37 +2111,42 @@
 ; example the use of program-fns-with-raw-code in
 ; workshops/2007/dillinger-et-al/code/hacker.lisp), and in general we'd have to
 ; add yet another event and deal with whether the event should be local to
-; books.  Instead, we have decided to cause a raw Lisp error, which is always
-; legitimate (after all, Lisp might cause a resource error).
+; books.  Instead, we have decided to cause a hard error, which is always
+; legitimate (after all, Lisp might cause a resource error).  Note that we are
+; dealing only with :program mode functions here, so we don't need to be
+; concerned about the kind of error produced when evaluating terms on behalf of
+; the rewriter.  Nevertheless, we use hard! to minimize the chance that
+; somehow, in a way we don't currently envision, this call of fn will be
+; considered to have a value of nil.  If we become truly paranoid about this
+; issue, we could follow (er hard! ...) below with a call of error.
 
-               `(error "~%~a~%"
-                       (fms-to-string
-                        "~@0~%~@1"
-                        (list (cons #\0 (program-only-er-msg
-                                         ',fn (list ,@formals) t))
-                              (cons #\1 "~%Note: If you have a reason to ~
-                                        prefer an ACL2 error here instead of ~
-                                        a hard Lisp error, please contact the ~
-                                        ACL2 implementors."))
-                        :evisc-tuple
-                        (abbrev-evisc-tuple *the-live-state*)
-                        :fmt-control-alist
-                        (list (cons 'fmt-hard-right-margin
-                                    (f-get-global 'fmt-hard-right-margin
-                                                  *the-live-state*))
-                              (cons 'fmt-soft-right-margin
-                                    (f-get-global 'fmt-soft-right-margin
-                                                  *the-live-state*))))))
+               `(progn
+                  (save-ev-fncall-guard-er ',fn
+                                           ',guard
+                                           (stobjs-in ',fn (w *the-live-state*))
+                                           (list ,@formals))
+                  (er hard! 'program-only
+                    "~@0"
+                    (program-only-er-msg ',fn
+                                         (list ,@formals)
+                                         ,safe-form))))
               (early-exit-code-main
-               (let ((cl-compliant-code-guard-not-t
+               (let* ((*1*guard
+                       (cond
+                        ((and cl-compliant-p-optimization
+                              (not live-stobjp-test))
+                         (assert$ (not guard-is-t) ; already handled way above
+                                  :unused))        ; optimization
+                        (t (oneify guard nil wrld program-p))))
+                      (cl-compliant-code-guard-not-t
+                       (and (not program-only) ; optimization
 
 ; We lay down code for the common-lisp-compliant case that checks the guard and
 ; acts accordingly: if the guard checks, then it returns the result of calling
 ; fn, and if not, then it fails if appropriate and otherwise falls through.
 
-                      (and
-                       (not guard-is-t)       ; optimization for code below
-                       (eq defun-mode :logic) ; optimization for code below
+                            (not guard-is-t) ; optimization for code below
+                            (eq defun-mode :logic) ; optimization for code below
 
 ; NOTE: we have to test for live stobjs before we evaluate the guard, since the
 ; Common Lisp guard may assume all stobjs are live.  We actually only need
@@ -2038,14 +2155,14 @@
 ; check that all stobjs are live before evaluating the raw Lisp guard.  After
 ; all, the cost of that check is only some eq tests.
 
-                       `(cond
-                         ,(cond
-                           ((eq live-stobjp-test t)
-                            `(,guard
-                              (return-from ,*1*fn (,fn ,@formals))))
-                           (t
-                            `((if ,live-stobjp-test
-                                  ,(if stobj-flag
+                            `(cond
+                              ,(cond
+                                ((eq live-stobjp-test t)
+                                 `(,guard
+                                   (return-from ,*1*fn (,fn ,@formals))))
+                                (t
+                                 `((if ,live-stobjp-test
+                                       ,(if stobj-flag
 
 ; Essay on Stobj Guard Attachments
 
@@ -2122,42 +2239,46 @@
 ; not yet been put into wrld.  But as of this writing, the test seems to apply
 ; only to stobj updaters and resize functions.
 
-                                       (let ((stobjs-out
-                                              (getprop
-                                               fn
-                                               'stobjs-out
-                                               nil
-                                               'current-acl2-world
-                                               wrld)))
-                                         (cond
-                                          ((and stobjs-out ; property is there
-                                                (all-nils stobjs-out))
-                                           guard)
-                                          (t `(let ((*aokp* nil))
-                                                ,guard))))
-                                     guard)
-                                ,*1*guard)
-                              ,(assert$
+                                            (let ((stobjs-out
+                                                   (getpropc fn 'stobjs-out nil
+                                                             wrld)))
+                                              (cond
+                                               ((and stobjs-out ; property is there
+                                                     (all-nils stobjs-out))
+                                                guard)
+                                               (t `(let ((*aokp* nil))
+                                                     ,guard))))
+                                          guard)
+                                     ,*1*guard)
+                                   ,(assert$
 
 ; No user-stobj-based functions are primitives for which we need to give
 ; special consideration to safe-mode.
 
-                                (not guarded-primitive-p)
-                                `(cond (,live-stobjp-test
-                                        (return-from ,*1*fn
-                                                     (,fn ,@formals))))))))
-                         ,@(cond (super-stobjs-in
-                                  `((t ,fail_guard)))
-                                 (guarded-primitive-p
-                                  `(((or ,guard-checking-is-really-on-form
-                                         ,safe-form)
-                                     ,fail_safe)))
-                                 (t
-                                  `((,guard-checking-is-really-on-form
-                                     ,fail_guard))))))))
-                 (if cl-compliant-p-optimization
-                     (assert$ (not guard-is-t) ; already handled way above
-                              (list cl-compliant-code-guard-not-t))
+                                     (not guarded-primitive-p)
+                                     `(cond (,live-stobjp-test
+                                             (return-from ,*1*fn
+                                                          (,fn ,@formals))))))))
+                              ,@(cond (super-stobjs-in
+                                       `((t ,fail_guard)))
+                                      (guarded-primitive-p
+                                       `((,safe-form
+                                          ,fail_safe)
+                                         (,guard-checking-is-really-on-form
+                                          ,fail_guard)))
+                                      (t
+                                       `((,guard-checking-is-really-on-form
+                                          ,fail_guard))))))))
+                 (cond
+                  (cl-compliant-p-optimization
+                   (assert$ (not guard-is-t) ; already handled way above
+                            (list cl-compliant-code-guard-not-t)))
+                  (program-only
+                   (list `(when (or ,safe-form
+                                    ,@(and (not guard-is-t)
+                                           `((not ,*1*guard))))
+                            ,fail_program-only)))
+                  (t
                    (let ((cond-clauses
                           `(,@(and (eq defun-mode :logic)
 
@@ -2168,7 +2289,8 @@
 ; we do so in *1*-body-forms below.
 
                                    (not guard-is-t)
-                                   `(((eq (symbol-class ',fn (w *the-live-state*))
+                                   `(((eq (symbol-class ',fn
+                                                        (w *the-live-state*))
                                           :common-lisp-compliant)
                                       ,cl-compliant-code-guard-not-t)))
                             ,@(and (not guard-is-t)
@@ -2180,7 +2302,9 @@
                                      `(((and (or ,safe-form
                                                  ,guard-checking-is-really-on-form)
                                              (not ,*1*guard))
-                                        ,fail_safe)))
+                                        (if ,safe-form
+                                            ,fail_safe
+                                          ,fail_guard))))
                                     (t
                                      `(((and ,guard-checking-is-really-on-form
                                              (not ,*1*guard))
@@ -2210,27 +2334,17 @@
                                (cond
                                 (boot-strap-p
                                  `((,safe-form
-                                    ,(cond
-                                      (program-only
-                                       fail_program-only-safe)
-                                      (t
-                                       `(return-from ,*1*fn ,*1*body))))
+                                    (return-from ,*1*fn ,*1*body))
                                    ,@(and
                                       invariant-risk
                                       `((t (return-from ,*1*fn ,*1*body))))))
-                                (program-only
-                                 `((,safe-form
-                                    ,fail_program-only-safe)
-                                   ((member-eq ,guard-checking-on-form
-                                               '(:none :all))
-                                    (return-from ,*1*fn ,*1*body))))
                                 (t `(((or (member-eq
                                            ,guard-checking-on-form
                                            '(:none :all))
                                           ,safe-form)
                                       (return-from ,*1*fn ,*1*body)))))))))
                      (and cond-clauses
-                          (list (cons 'cond cond-clauses)))))))
+                          (list (cons 'cond cond-clauses))))))))
               (early-exit-code
                (and early-exit-code-main
                     (cond ((and invariant-risk
@@ -2238,14 +2352,14 @@
 
 ; If we are under **1*-as-raw*, then our intention is that code executes just
 ; as it would in raw Lisp (i.e., without forcing execution via *1* function),
-; except that guards are checked for stobj primitives.  This speial treatment
-; is only required in the invariant-risk case; see **1*-as-raw* and
-; *ignore-invariant-risk*.  Moreover, we want the normal flow in the *1*
+; except that guards are checked for stobj primitives.  This special treatment
+; is only required in the invariant-risk case; see **1*-as-raw* and state
+; global 'check-invariant-risk.  Moreover, we want the normal flow in the *1*
 ; function for stobj primitives, so we don't give this special treatment when
 ; super-stobjs-in is true.  It would be sound to make other exceptions as well,
-; but that would cause unnecessary guard-checking.  Indeed, unnecessary
-; extra guard-checking was done through Version_7.0, which resulted in
-; slowdowns to user code that led us to remove that extra guard-checking.
+; but that would cause unnecessary guard-checking.  Indeed, unnecessary extra
+; guard-checking was done through Version_7.0, which resulted in slowdowns to
+; user code that led us to remove that extra guard-checking.
 
                            `((when (not **1*-as-raw*)
                                ,@early-exit-code-main)))
@@ -2281,19 +2395,64 @@
                            (return-from ,*1*fn ,*1*body)))))
                 (and (and labels-can-miss-guard
                           (not trace-rec-for-none)) ; else skip labels form
-                     `((when (and *raw-guard-warningp*
+                     `((when (and (f-get-global 'raw-guard-warningp
+                                                *the-live-state*)
                                   (eq ,guard-checking-on-form t))
-                         (warn-for-guard-body ',fn))))))
+                         (maybe-warn-for-guard-body ',fn *the-live-state*))))))
               (*1*-body-forms
                (cond ((eq defun-mode :program)
                       (append
                        main-body-before-final-call
                        (cond
-                        ((and invariant-risk
-                              (eq defun-mode :program))
-                         `((cond
-                            (*ignore-invariant-risk* (,fn ,@formals))
-                            (t (let ((**1*-as-raw* t))
+                        (invariant-risk ; and (eq defun-mode :program)
+                         (let ((check-invariant-risk-sym
+
+; The serialize code seems to cause errors for a symbol with no package.
+
+                                (gentemp))
+                               (cont-p (gentemp)))
+                           `((let ((,check-invariant-risk-sym
+                                    (get-check-invariant-risk
+                                     *the-live-state*))
+                                   (,cont-p nil))
+                               (cond
+                                ((and
+                                  ,check-invariant-risk-sym
+                                  (not (f-get-global 'boot-strap-flg
+                                                     *the-live-state*)))
+                                 (cond
+                                  ((eq ,check-invariant-risk-sym :ERROR)
+                                   (state-free-global-let*
+                                    ((debugger-enable t))
+                                    (cerror
+                                     "~%     Continue with invariant-risk ~
+                                      mode of T~%     (that is, with state ~
+                                      global 'check-invariant-risk bound to ~
+                                      T)~%     to complete the current call ~
+                                      of ~s.~%     See :DOC invariant-risk."
+                                     "Invariant-risk has been detected for a ~
+                                      call of function ~s~%(as possibly ~
+                                      leading to an ill-guarded call of ~
+                                      ~s);~%see :DOC invariant-risk."
+                                     ',fn ',invariant-risk))
+                                   (setq ,cont-p t))
+                                  ((eq ,check-invariant-risk-sym :WARNING)
+                                   (warning$ ',fn
+                                             "Invariant-risk"
+                                             "Invariant-risk has been ~
+                                              detected for a call of function ~
+                                              ~x0 (as possibly leading to an ~
+                                              ill-guarded call of ~x1); see ~
+                                              :DOC invariant-risk."
+                                             ',fn ',invariant-risk)
+                                   (setq ,cont-p t))
+                                  (t ; 'check-invariant-risk has value t
+                                   t))
+
+; Now that we have perhaps caused a continuable error or a warning for
+; invariant-risk, produce the result if an error didn't abort this computation.
+
+                                 (let ((**1*-as-raw* t))
 
 ; One reason that we bind **1*-as-raw* above and use labels below is to helps
 ; compilers remove tail recursions, since we believe that special variable
@@ -2301,13 +2460,20 @@
 ; of recursion, simply because that is simplest and we expect, or at least,
 ; hope, that there is only trivial impact on performance.)
 
-                                 ,(labels-form-for-*1*
-                                   fn *1*fn formals
-                                   (oneify body nil wrld 'invariant-risk)
-                                   declare-stobj-special
-                                   ignore-vars ignorable-vars
-                                   super-stobjs-in super-stobjs-chk
-                                   guard wrld))))))
+                                   ,(let ((labels-form
+                                          (labels-form-for-*1*
+                                           fn *1*fn formals
+                                           (oneify body nil wrld
+                                                   'invariant-risk)
+                                           ignore-vars ignorable-vars
+                                           super-stobjs-in super-stobjs-chk
+                                           guard wrld)))
+                                     (if cont-p
+                                         `(state-free-global-let*
+                                           ((check-invariant-risk t))
+                                           ,labels-form)
+                                       labels-form))))
+                                (t (,fn ,@formals)))))))
                         (t `((,fn ,@formals))))))
                      (trace-rec-for-none
                       main-body-before-final-call)
@@ -2317,15 +2483,11 @@
                        (list
                         (labels-form-for-*1*
                          fn *1*fn formals *1*body
-                         declare-stobj-special
                          ignore-vars ignorable-vars
                          super-stobjs-in super-stobjs-chk
                          guard wrld)))))))
-         (let ((*1*dcls (and declare-stobj-special
-                             (list declare-stobj-special))))
-           `(,*1*fn
-             ,formals
-             ,@*1*dcls
+         `(,*1*fn
+           ,formals
 
 ; At one time we attempted to do some code-sharing using a macro call, by using
 ; *1*body-call in place of *1*body in the code above, where *1*body-call was
@@ -2365,7 +2527,7 @@
 ;                     ,@*1*-body-forms))
 ;               *1*-body-forms)
 
-             ,@*1*-body-forms))))))))
+           ,@*1*-body-forms)))))))
 
 
 ;          PROMPTS
@@ -2666,7 +2828,7 @@
                       (nth-update " the result of the nth/update rewriter")
                       (multiply-alists2 " the product of two polys")
                       (forced-assumption " a forced assumption")
-                      (proof-checker " proof-checker top level")
+                      (proof-builder " proof-builder top level")
                       (otherwise (er hard 'tilde-@-bkptr-string
                                      "When ~x0 calls ~x1 we get an unrecognized ~
                                       bkptr, ~x2."
@@ -2798,8 +2960,8 @@
     (setq *deep-gstack* nil)
     (return-from dmr-string *dmr-delete-string*))
   (setf (fill-pointer *dmr-reusable-string*) 0)
-  (let* ((pstk-tokens (loop for x in *pstk-stack*
-                            with result = nil
+  (let* ((pstk-tokens (loop with result = nil
+                            for x in *pstk-stack*
                             do (push (cond ((eq (car x) 'waterfall)
                                             (car (nthcdr 8 x))) ; ctx
                                            ((eq (car x) 'ev-fncall)
@@ -2934,7 +3096,7 @@
 ; EXTENDING AND RETRACTING PROPERTY LIST WORLDS
 
 ; We here sketch the entire world management scheme before diving into
-; the details.  The software archeologist might think these summaries
+; the details.  The software archaeologist might think these summaries
 ; were written just for his use but that is wrong.  In fact, these are
 ; design sketches and refresher courses to bring to mind the salient
 ; details before getting back down to work.  This particular one
@@ -3039,7 +3201,7 @@
 ; package.  This is what eventually drove us to implement the restric-
 ; tion described in :DOC package-reincarnation-import-restrictions.
 
-; Because of the possiblity of user interrupts, it is possible that we
+; Because of the possibility of user interrupts, it is possible that we
 ; can have effected some but not all of changes necessary to achieve a
 ; new state and then have the computation aborted.  To handle this,
 ; extend-world1 and retract-world1 both save the current world alist
@@ -3073,6 +3235,9 @@
             this problem.")))
 
 (defun-one-output maybe-push-undo-stack (fn name &optional extra)
+
+; This function is evaluated only for side-effect; its return value is
+; irrelevant.
 
 ; See add-trip below for context.  Fn is one of the raw Lisp function names
 ; secretly spawned by CLTL-COMMAND forms, e.g., DEFUN, DEFMACRO, DEFCONST,
@@ -3195,15 +3360,29 @@
               (push `(defpkg ,name ',(package-entry-imports temp))
                     (get (packn (cons name '("-PACKAGE"))) '*undo-stack*))))))
         (attachment
-         (let ((at-sym (attachment-symbol name)))
-           (push `(progn #+hons (push ',name *defattach-fns*)
-                         ,(set-attachment-symbol-form
-                           name
+         (cond
+          #+hons ; else this branch will be impossible
+          ((eq name *special-cltl-cmd-attachment-mark-name*)
 
-; Note that at-sym is bound when name is introduced; see throw-or-attach-call.
+; This case arises from a call of table-cltl-cmd for (table badge-table ...);
+; so in this case we should not call set-attachment-symbol-form.  Just below,
+; we optimize ever so slightly, to avoid making *defattach-fns* really long in
+; the case that there are many such badges being added but not many defattach
+; events.
 
-                           (symbol-value at-sym)))
-                 (get name '*undo-stack*))))
+           (push `(unless (eq ',name (car *defattach-fns*))
+                    (push ',name *defattach-fns*))
+                 (get name '*undo-stack*)))
+          (t (push `(progn
+                      #+hons (push ',name *defattach-fns*)
+                      ,(set-attachment-symbol-form
+                        name
+
+; Note that (attachment-symbol name) is bound when name is introduced; see
+; throw-or-attach-call.
+
+                        (symbol-value (attachment-symbol name))))
+                   (get name '*undo-stack*)))))
         #+hons
         (memoize
          (push `(unmemoize-fn ',name)
@@ -3272,7 +3451,7 @@
 ; We start with pushing a new value onto the stack for a given key.
 ; Complicating things is our decision to order the keys in the alists by (a
 ; priori) frequency of access.  The aim is to speed up getprop.  We record
-; the results of many experiments below.
+; the results of many early experiments below.
 
 ; Recall that the current-acl2-world is implemented so that the logical
 ; properties are stored in an alist which is obtained via a raw lisp get of the
@@ -3281,23 +3460,23 @@
 ; encountered by the raw lisp get and the order of the keys encountered by the
 ; assoc :test #'eq.
 
-; The basic experiment addressed one particular proof in the Nqthm package.  To
-; set the stage, the Nqthm package was loaded and then undone back through
-; NQTHM-COUNT-SYMBOL-IS-COUNT-FN-UNPACK, a theorem whose reported proof time is
-; 35.23 by the current Version 1.8.  Then that theorem was proved again while a
-; patch was in place inside of fgetprop.  The patch collected together an alist
-; recording the calls of fgetprop.  In particular the alist entries were of the
-; form (symb (key1 . cnt1) ... (keyk . cntk)) indicating that (fgetprop symb
-; keyi <some-default> <current-acl2-world>) was called cnti times during the
-; proof.  We then wrote and compiled a program that swept the alist and
-; repeated every call of fgetprop simply to allow us to measure the total time
-; spent in fgetprop.  There were a total of 102781 calls.  To sweep the alist
-; with a no-op function of the same arity as fgetprop required 0.25 seconds.
-; We therefore consider that to be the overhead of the sweep itself.  To sweep
-; with fgetprop required 0.75 seconds, indicating that a "net" 0.50 seconds
-; were actually spent in fgetprop on the actual calls in the sample theorem.
-; (We will use "net" henceforth to mean the measured time minus 0.25.)  This
-; gives an expected "per call" time of 4.86E-6.
+; An early basic experiment addressed one particular proof in the Nqthm
+; package.  To set the stage, the Nqthm package was loaded and then undone back
+; through NQTHM-COUNT-SYMBOL-IS-COUNT-FN-UNPACK, a theorem whose reported proof
+; time is 35.23 by the current Version 1.8.  Then that theorem was proved again
+; while a patch was in place inside of fgetprop.  The patch collected together
+; an alist recording the calls of fgetprop.  In particular the alist entries
+; were of the form (symb (key1 . cnt1) ... (keyk . cntk)) indicating that
+; (fgetprop symb keyi <some-default> <current-acl2-world>) was called cnti
+; times during the proof.  We then wrote and compiled a program that swept the
+; alist and repeated every call of fgetprop simply to allow us to measure the
+; total time spent in fgetprop.  There were a total of 102781 calls.  To sweep
+; the alist with a no-op function of the same arity as fgetprop required 0.25
+; seconds.  We therefore consider that to be the overhead of the sweep itself.
+; To sweep with fgetprop required 0.75 seconds, indicating that a "net" 0.50
+; seconds were actually spent in fgetprop on the actual calls in the sample
+; theorem.  (We will use "net" henceforth to mean the measured time minus
+; 0.25.)  This gives an expected "per call" time of 4.86E-6.
 
 ; For what it is worth, a noop that calls get has an overhead of 0.267 for
 ; a net of 0.017 or a per call time of 1.65E-7 seconds.  Thus an fgetprop
@@ -3313,7 +3492,7 @@
 ; We now move on to ordering the keys seen by assoc :test #'eq.  In prior
 ; experiments we had determined the frequency with which the various keys are
 ; accessed (during the entire Nqthm package proof).  For what it is worth, here
-; is the key list, in order from most frequently accessed to least:
+; is the key list we found, in order from most frequently accessed to least:
 
 ;   '(COARSENINGS GLOBAL-VALUE CONGRUENCES SYMBOL-CLASS TYPE-PRESCRIPTIONS
 ;     LEMMAS RUNIC-MAPPING-PAIRS MULTIPLICITY STATE-IN
@@ -3343,7 +3522,7 @@
 ; a net time of 0.50.
 
 ; From this experiment one can make the following conclusions: (a) In this
-; theorem, fgetprop is reponsible for less than 2% of the proof time.  Making
+; theorem, fgetprop is responsible for less than 2% of the proof time.  Making
 ; fgetprop instantaneous would reduce the 35.23 seconds to 34.73 seconds.
 
 ; By ordering the properties (in both senses) we can speed fgetprop up from
@@ -3354,16 +3533,16 @@
 ; end of the essay).  The lesson learned is that it may not be worth mucking
 ; around further with *current-acl2-world-key-ordering*.
 
-; In July 2002, during the development of Version_2.7, we modifed the use of
+; In July 2002, during the development of Version_2.7, we modified the use of
 ; the fnstack (specifically, being-openedp) so that for recursive functions we
 ; look up the representative of a clique, thus avoiding the need to look
 ; through all members every clique for the function at hand.  (A
 ; mutual-recursion nest with 4,786 defuns at AMD prompted this change.)  As a
 ; result we saw a 1.8% slowdown in the regression suite, reduced to 0.9% with
-; some optimizations.  Presumably the slowdown was due to the more frequest use
+; some optimizations.  Presumably the slowdown was due to the more frequent use
 ; of the RECURSIVEP property.  So we ran experiments using community books
 ; files books/certify-numbers.lisp and books/rtl/rel2/support/cert.lsp, though
-; we aborted the latter partway through lop3.lisp (during the proof of
+; we aborted the latter part way through lop3.lisp (during the proof of
 ; BITN-LAM0, which seemed to be bogging down).  The results using
 ; analyze-fgetprop-stats were as follows.
 
@@ -3421,9 +3600,9 @@
 ; ...
 
 ; As a result, we revised the ordering of keys.  We also noticed that although
-; GLOBAL-VALUE is high on the list, most of that is accounted for by looking it
-; up for symbols RECOGNIZER-ALIST and UNTOUCHABLES, which do not have other
-; properties:
+; GLOBAL-VALUE is high on the list, most of that was accounted for by looking
+; it up for symbols RECOGNIZER-ALIST (which is no longer a world global, after
+; Version_8.2) and UNTOUCHABLES, which do not have other properties:
 
 ; books/certify-numbers.lisp:
 ;
@@ -3451,7 +3630,7 @@
 
 ; March 2006: Here are some new numbers, listing in each case down to about 2
 ; orders of magnitude below the most-used property.  All were obtained with all
-; outpu inhibited.
+; output inhibited.
 
 ; ============================================================
 ;
@@ -3558,6 +3737,39 @@
 ;
 ; ============================================================
 
+; In December 2019 we did several experiments to improve
+; *current-acl2-world-key-ordering*, since it had probably been many years
+; since that was attempted and also because RECOGNIZER-ALIST had recently been
+; added as a new property (with property GLOBAL-VALUE therefore being accessed
+; less often).  Several community books were included or LDed, as follows, in
+; each case after adding the commented-out call of update-fgetprop-stats to the
+; definition of fgetprop (together with the commented-out definitions,
+; including the one for update-fgetprop-stats, just above fgetprop's definition
+; in axioms.lisp).
+
+;   (include-book "centaur/sv/top" :dir :system)
+
+;   (ld "proof-by-generalization-mult.lisp") ; in workshops/2004/legato/support/
+
+;   (include-book "centaur/gl/gl" :dir :system)
+
+;   (ld "centaur/aignet/cert.acl2" :dir :system)
+;   (ld "centaur/aignet/cuts4.lisp" :dir :system)
+
+;   (ld "centaur/bitops/cert.acl2" :dir :system)
+;   (ld "centaur/bitops/ihsext-basics.lisp" :dir :system)
+
+;   (include-book "centaur/bitops/ihsext-basics" :dir :system)
+
+;   (include-book "projects/x86isa/top" :dir :system)
+
+;   (ld "projects/x86isa/proofs/popcount/cert.acl2" :dir :system)
+;   (ld "projects/x86isa/proofs/popcount/popcount.lisp" :dir :system)
+
+; We then called analyze-fgetprop-stats in each case to get suitable
+; statistics.  Finally, we modified *current-acl2-world-key-ordering* by
+; inspecting the results.
+
 ; End of Experimental Results.
 
 ; Below we list the most important property keys according to the results
@@ -3568,21 +3780,20 @@
 ; system are in this list (see below).
 
 (defparameter *current-acl2-world-key-ordering*
-  '(COARSENINGS
-    GLOBAL-VALUE ; mostly looked up for RECOGNIZER-ALIST and UNTOUCHABLES,
-                 ; which do not have other properties
-    RUNIC-MAPPING-PAIRS
-    DEF-BODIES
+  '(COARSENINGS ; during proofs more than include-book
+    GLOBAL-VALUE ; largely for untouchables when including a book
+    RECOGNIZER-ALIST ; during proofs more than include-book
+    RUNIC-MAPPING-PAIRS ; during proofs more than include-book
+    DEF-BODIES ; during proofs more than include-book
+    SYMBOL-CLASS
+    STOBJS-OUT
     TYPE-PRESCRIPTIONS
     TABLE-ALIST
+    LEMMAS
     CONGRUENCES
     PEQUIVS
-    SYMBOL-CLASS
-    LEMMAS
-    STOBJS-OUT
-    MACRO-BODY
-    FORMALS
-    FORWARD-CHAINING-RULES
+    MACRO-BODY ; during include-book more than proofs
+    FORMALS ; during include-book more than proofs
 
 ; Note: As of this writing there are many properties not included above, all of
 ; which fall into the low priority category.  We have omitted keys simply to
@@ -3705,6 +3916,11 @@
 ; (maybe-introduce-empty-pkg "MY-PKG")
 ;;; Save some information about the fni:
 ; (setq *hcomp-fn-alist* '((fn1 ..) (fn2 ..) ..))
+;;; Support compilation of loop$ forms (see Part 3 below):
+; (when (eq *readtable* *reckless-acl2-readtable*)
+;   (setq *set-hcomp-loop$-alist* t))
+; (when *set-hcomp-loop$-alist*
+;   (setq *hcomp-loop$-alist* '..))
 ;;; Build a hash table associating each fni with its pre-existing
 ;;; symbol-function or special *unbound* mark:
 ; (hcomp-init)
@@ -4078,21 +4294,6 @@
 ; :load-compiled-file, where by "effective value" we mean the value after
 ; accounting for state global 'compiler-enabled.
 
-; A stobj may be defined during evaluation of the raw Lisp definition of
-; include-book.  In that case, the-live-name for that stobj is an add-trip
-; symbol, and hence its value is stored in *hcomp-const-ht*.  However, the raw
-; Lisp definition of defstobj or defabsstobj also assigns to
-; *user-stobj-alist*, which we expect will associate the-live-name of a stobj
-; with its Lisp relevant value.  Now imagine subsequent processing of events by
-; the same include-book.  When defstobj or defabsstobj is encountered, add-trip
-; obtains the value of the-live-name of that stobj from *hcomp-const-ht*, and
-; uses that value to update *user-stobj-alist* just as it would if it were
-; updating without benefit of *hcomp-const-ht*.  The only tricky bit here is
-; that we need to ensure that add-trip, along with undo-trip and flush-trip,
-; are the only functions that update *user-stobj-alist*.  Therefore, we bind
-; *user-stobj-alist* to itself when doing an early load of the compiled file or
-; expansion file; see include-book-raw.
-
 ; If the compiled file or certificate is missing, or else if the compiled file
 ; is older than the certificate, we may print a warning and go on, assigning
 ; 'incomplete status to that book in *hcomp-book-ht* -- but there are a couple
@@ -4164,7 +4365,7 @@
 ; Hyperspec does not seem to specify fully which side effects may be caused by
 ; DEFUN.  Thus, although our approach will install symbol-functions, there
 ; seems to be no guarantee that it will allow other side-effects caused by
-; DEFUN.  No such side-effect is critical for ACL2.  Nevetheless, it is
+; DEFUN.  No such side-effect is critical for ACL2.  Nevertheless, it is
 ; fortunate that some such side-effects may still be handled, as illustrated by
 ; the following experiment in CCL.  First, load a compiled definition of
 ; function foo from a compiled file, save the symbol-function of foo in
@@ -4378,7 +4579,7 @@
 ; tables are populated during early include-books performed in raw Lisp.
 
 ; Note that we take a conservative approach, where memoization can make a
-; symbol unqualfied.  The consequence seems small, since as of this writing,
+; symbol unqualified.  The consequence seems small, since as of this writing,
 ; memoization is only done in the #+hons version, which is only for ACL2 built
 ; on CCL, and CCL compiles on-the-fly; so the marking of an add-trip symbol as
 ; unqualified will not result in interpreted code.  A future optimization might
@@ -4413,7 +4614,7 @@
 ;   form, thus avoiding a warning from GCL that can occur unless all defpackage
 ;   forms immediately follow the initial in-package form.  The
 ;   maybe-introduce-empty-pkg-2 forms use special variable *defpkg-virgins* to
-;   let ACL2 know to accept subsequent corressponding defpkg forms.
+;   let ACL2 know to accept subsequent corresponding defpkg forms.
 
 ; - Setq forms for the *hcomp-xxx-alist* variables as described above
 ;   (hcomp-init)
@@ -4429,6 +4630,33 @@
 
 ; Note that some of these are wrapped together in a progn to maximize sharing
 ; using #n# syntax.
+
+; Note added February, 2019: We have extended the expansion file to support the
+; macroexpansion of loop$ in raw Lisp.  The main idea is to mirror the world
+; global, 'loop$-alist, in a Lisp special variable to be consulted during the
+; early load of compiled files: *hcomp-loop$-alist*.  See loop$.  The
+; discussion below outlines how the expansion file supports the macroexpansion
+; of loop$ in raw Lisp.
+
+; The loop$-alist -- whether the value of world global 'loop$-alist or the
+; value of special variable *hcomp-loop$-alist* -- needs to distinguish entries
+; added for the current book during its certification, because these are the
+; only ones that are placed directly in that book's expansion file.  Thus the
+; loop$-alist-entry record has a field, :flg, that is usually nil but is t when
+; adding an entry during certification and not under include-book (i.e., under
+; a sub-book).  The variable *hcomp-loop$-alist* is set to nil in
+; include-book-raw-top and then populated in expansion files.  Then each
+; expansion file overwrites that variable to the list of loop$-alist-entry
+; records appropriate for loop$ forms introduced in that book, not in
+; sub-books.  But upon exit from the expansion file, the value of that variable
+; from before that overwrite is extended by the final value from the expansion
+; file, using the macro wrapper, handle-hcomp-loop$-alist.
+
+; An optimizbation is that *set-hcomp-loop$-alist* is only true when under some
+; load of an expansion file (where (eq *readtable* *reckless-acl2-readtable*)).
+; In particular, in the normal case that compiled files are loaded,
+; *hcomp-loop$-alist* will remain nil, which is fine since the loop$ macros
+; will have already been expanded.
 
 ; End of Essay on Hash Table Support for Compilation
 
@@ -4689,7 +4917,7 @@
 ; loaded (not the compiled file), then we return TO-BE-COMPILED in that case.
 ; Otherwise we return INCOMPLETE, that is, either no load is attempted for the
 ; compiled or expansion file (because they don't exist or are out of date), or
-; else such a load but is aborted partway through, which can happen because of
+; else such a load but is aborted part way through, which can happen because of
 ; an incomplete load of a subsidiary include-book's compiled or expansion file.
 
 ; As suggested above, we may allow the corresponding expansion file to take the
@@ -4699,16 +4927,17 @@
 
   (assert load-compiled-file)
   (mv-let
-   (cfile state)
+   (acl2-cfile state)
    (certificate-file file state)
-   (let* ((os-file (pathname-unix-to-os file state))
+   (let* ((cfile (and acl2-cfile (pathname-unix-to-os acl2-cfile state)))
+          (os-file (pathname-unix-to-os file state))
           (cfile-date (and cfile (file-write-date cfile)))
           (ofile (convert-book-name-to-compiled-name os-file state))
           (ofile-exists (probe-file ofile))
           (ofile-date (and ofile-exists (file-write-date ofile)))
           (ofile-p (and ofile-date cfile-date (>= ofile-date cfile-date)))
           (efile (and (not (eq load-compiled-file t))
-                      (expansion-filename file t state)))
+                      (expansion-filename os-file)))
           (efile-exists (and efile (probe-file efile)))
           (file-is-older-str
            "the file-write-date of ~x0 is less than that of ~x1"))
@@ -4735,9 +4964,9 @@
         ctx
         file
         (msg "~x0 is ~x1 (which is odd since file ~x2 exists)"
-             `(file-write-date ,cfile)
+             `(file-write-date$ ,acl2-cfile state)
              nil
-             cfile)
+             acl2-cfile)
         load-compiled-file
         state))
       ((not (or ofile-p
@@ -4756,7 +4985,9 @@
           ctx
           file
           (msg "the compiled file does not exist and ~@0"
-               (msg file-is-older-str efile cfile))
+               (msg file-is-older-str
+                    (expansion-filename file)
+                    acl2-cfile))
           load-compiled-file
           state))))
       ((and (not ofile-p) ; hence efile is suitable to load, except:
@@ -4783,14 +5014,16 @@
 ; include-book-fn, either that compilation will succeed or there will be an
 ; error -- either way, there is no need to warn here.
 
-           (warning$ ctx "Compiled file"
-                     "Loading expansion file ~x0 in place of compiled file ~
-                      ~x1, because ~@2."
-                     efile ofile
-                     (cond (ofile-exists
-                            (msg file-is-older-str ofile cfile))
-                           (t
-                            (msg "the compiled file is missing")))))
+           (let ((acl2-ofile (convert-book-name-to-compiled-name file state)))
+             (warning$ ctx "Compiled file"
+                       "Loading expansion file ~x0 in place of compiled file ~
+                        ~x1, because ~@2."
+                       (expansion-filename file)
+                       acl2-ofile
+                       (cond (ofile-exists
+                              (msg file-is-older-str acl2-ofile acl2-cfile))
+                             (t
+                              (msg "the compiled file is missing"))))))
          (catch 'missing-compiled-book
 ; bogus compiler warning in LispWorks 6.0.1, gone in LispWorks 6.1
            (state-global-let*
@@ -4841,8 +5074,39 @@
              (assert$ (member-eq status '(to-be-compiled complete incomplete))
                       status)))))))))
 
+(defvar *set-hcomp-loop$-alist* nil)
+
+(defun extend-hcomp-loop$-alist (new old full-book-name)
+
+; Extend old by new, checking that we never change an existing value.
+
+  (let ((result old))
+    (loop for pair in new
+          when (let ((old-pair (assoc-equal (car pair) old)))
+                 (cond ((null old-pair) t)
+                       ((equal (cdr pair) (cdr old-pair)) nil)
+                       (t (er hard 'extend-hcomp-loop$-alist
+                              "Implementation error: unexpected ~
+                               incompatibility in loop$-alists when ~
+                               processing the book ~x0.~%new:~%~x1~%old~%~x2"
+                              full-book-name new old))))
+          do (push pair result)
+          finally (return result))))
+
+(defmacro handle-hcomp-loop$-alist (form full-book-name)
+  (let ((saved-hcomp-loop$-alist (gensym)))
+    `(let ((,saved-hcomp-loop$-alist *hcomp-loop$-alist*))
+       (prog1 ,form
+         (setq *hcomp-loop$-alist*
+               (extend-hcomp-loop$-alist *hcomp-loop$-alist*
+                                         ,saved-hcomp-loop$-alist
+                                         ,full-book-name))))))
+
 (defun include-book-raw (book-name directory-name load-compiled-file dir ctx
-                                   state)
+                                   state
+                                   &aux ; protect global value
+                                   (*set-hcomp-loop$-alist*
+                                    *set-hcomp-loop$-alist*))
 
 ; This function is generally called on behalf of include-book-fn.  No load
 ; takes place if load-compiled-file is effectively nil (either nil or else
@@ -4921,7 +5185,9 @@
      (cond
       ((let ((true-full-book-name (our-truename full-book-name :safe)))
          (and true-full-book-name
-              (assoc-equal true-full-book-name
+              (assoc-equal (pathname-os-to-unix true-full-book-name
+                                                (os (w state))
+                                                state)
                            (global-val 'include-book-alist (w state)))))
 
 ; In ACL2 Version_4.1 running on Allegro CL, we got an error when attempting to
@@ -4958,7 +5224,7 @@
 ; described in the Essay on Hash Table Support for Compilation.
 
            (null *hcomp-book-ht*))
-       (state-free-global-let*
+       (state-free-global-let*-safe
         ((connected-book-directory directory-name))
         (let* ((os-file (pathname-unix-to-os full-book-name state))
                (ofile (convert-book-name-to-compiled-name os-file state))
@@ -4968,8 +5234,8 @@
                (ofile-date (and ofile-exists (file-write-date ofile))))
           (cond ((not os-file-exists)
                  (er hard ctx
-                     "File ~x0 does not exist."
-                     os-file))
+                     "The file named ~x0 does not exist."
+                     full-book-name))
                 ((null load-compiled-file)
                  (assert$ raw-mode-p ; otherwise we already returned above
 
@@ -4981,7 +5247,9 @@
                 ((and book-date
                       ofile-date
                       (<= book-date ofile-date))
-                 (load-compiled ofile t))
+                 (handle-hcomp-loop$-alist
+                  (load-compiled ofile t)
+                  full-book-name))
                 (t (let ((reason (cond (ofile-exists
                                         "the compiled file is not at least as ~
                                          recent as the book")
@@ -4991,8 +5259,7 @@
                                 "The compiled file for ~x0 was not loaded ~
                                  because ~@1."
                                 reason))
-                           (t (let* ((efile (expansion-filename
-                                             full-book-name t state))
+                           (t (let* ((efile (expansion-filename os-file))
                                      (efile-date (and (probe-file efile)
                                                       (file-write-date efile)))
                                      (efile-p (and book-date
@@ -5022,7 +5289,10 @@
                                                lfile)
                                           reason)
                                 (cond (efile-p
-                                       (with-reckless-read (load efile)))
+                                       (with-reckless-read
+                                        (handle-hcomp-loop$-alist
+                                         (load efile)
+                                         full-book-name)))
                                       (raw-mode-p (load os-file))))))))))))
       ((let* ((entry (assert$ *hcomp-book-ht* ; not raw mode, e.g.
                               (gethash full-book-name *hcomp-book-ht*)))
@@ -5079,12 +5349,13 @@
 ; Our intention is that the call of load-compiled-book below has no effect on
 ; the state other than to define some packages and populate *hcomp-xxx-ht* hash
 ; tables.  We therefore protect the one global managed by add-trip that is not
-; managed by those hash tables: *user-stobj-alist*.  See the Essay on Hash
-; Table Support for Compilation.
+; managed by those hash tables: *user-stobj-alist*.
 
                       *user-stobj-alist*))
-                 (load-compiled-book full-book-name directory-name
-                                     load-compiled-file ctx state))))
+                 (handle-hcomp-loop$-alist
+                  (load-compiled-book full-book-name directory-name
+                                      load-compiled-file ctx state)
+                  full-book-name))))
           (setf (gethash full-book-name *hcomp-book-ht*)
                 (make hcomp-book-ht-entry
                       :status   status
@@ -5101,8 +5372,21 @@
 
 (defun include-book-raw-top (full-book-name directory-name load-compiled-file
                                             dir ctx state)
-  (let ((*hcomp-fn-macro-restore-ht* (make-hash-table :test 'eq))
-        (*hcomp-const-restore-ht* (make-hash-table :test 'eq)))
+  (handler-bind
+
+; Without this handler-bind, CCL produces redefinition warnings when we attempt
+; to include a book.  To see such warnings: certify the following two books,
+; remove this handler-bind, and include "book1" and then (to see redefinition
+; warnings) "book2".
+
+; book1 has (defmacro foo (x) x)
+; book2 has (defun foo (x) x)
+
+   ((warning (lambda (c)
+               (declare (ignore c))
+               (invoke-restart 'muffle-warning))))
+   (let ((*hcomp-fn-macro-restore-ht* (make-hash-table :test 'eq))
+         (*hcomp-const-restore-ht* (make-hash-table :test 'eq)))
 
 ; We need to be careful about handling interrupts.  On the one hand, we want to
 ; take advantage of the "idempotency" provided by acl2-unwind-protect that is
@@ -5114,27 +5398,41 @@
 ; then for acl2-unwind-protect to do the actual cleanup using those saved
 ; values.
 
-    (setq *saved-hcomp-restore-hts* nil)
-    (acl2-unwind-protect
-     "include-book-raw"
-     (unwind-protect
-         (state-global-let*
-          ((raw-include-book-dir!-alist
-            (assert$ (not (raw-include-book-dir-p state))
-                     (table-alist 'include-book-dir!-table (w state)))))
-          (progn (include-book-raw
-                  full-book-name directory-name
-                  load-compiled-file dir ctx state)
-                 (value nil)))
-       (setq *saved-hcomp-restore-hts*
-             (list* *hcomp-fn-macro-restore-ht*
-                    *hcomp-const-restore-ht*)))
-     (progn (hcomp-restore-defs)
-            (setq *saved-hcomp-restore-hts* nil)
-            state)
-     (progn (hcomp-restore-defs)
-            (setq *saved-hcomp-restore-hts* nil)
-            state))))
+     (setq *saved-hcomp-restore-hts* nil
+           *hcomp-loop$-alist* nil)
+     (acl2-unwind-protect
+      "include-book-raw"
+      (unwind-protect
+          (state-global-let*
+           ((ld-skip-proofsp
+
+; We have seen information about redundant add-include-book-dir! forms
+; generated by this code.  We avoid such output by binding ld-skip-proofs here
+; to 'include-book.  That seems harmless enough here, where we know we are
+; including a certified book; and it is done anyhow by the
+; process-embedded-events call under include-book-fn1.
+
+             'include-book)
+            (raw-include-book-dir!-alist
+             (assert$ (not (raw-include-book-dir-p state))
+                      (table-alist 'include-book-dir!-table (w state)))))
+           (progn (include-book-raw
+                   full-book-name directory-name
+                   load-compiled-file dir ctx state)
+                  (value nil)))
+        (setq *saved-hcomp-restore-hts*
+              (list* *hcomp-fn-macro-restore-ht*
+                     *hcomp-const-restore-ht*)
+              *hcomp-loop$-alist*
+              nil))
+      (progn (hcomp-restore-defs)
+             (setq *saved-hcomp-restore-hts* nil)
+             (setq *hcomp-loop$-alist* nil)
+             state)
+      (progn (hcomp-restore-defs)
+             (setq *saved-hcomp-restore-hts* nil)
+             (setq *hcomp-loop$-alist* nil)
+             state)))))
 
 (defmacro hcomp-ht-from-type (type ctx)
   `(case ,type
@@ -5509,14 +5807,9 @@
                                          wrld t nil)))
           ((defstobj defabsstobj)
             (let ((name (nth 1 cltl-cmd))
-                  (the-live-name (nth 2 cltl-cmd))
-                  (init (nth 3 cltl-cmd))
                   (raw-defs (nth 4 cltl-cmd))
                   (ax-defs (nth 6 cltl-cmd))
                   (new-defs nil))
-              (install-for-add-trip `(defparameter ,the-live-name ,init)
-                                    nil
-                                    nil)
               (dolist
                 (def raw-defs)
                 (push (cond ((eq (car cltl-cmd) 'defabsstobj)
@@ -5542,12 +5835,16 @@
           (attachment ; (cddr trip) is produced by attachment-cltl-cmd
            (dolist (x (cdr cltl-cmd))
              (let ((name (if (symbolp x) x (car x))))
-               (install-for-add-trip
-                (cond ((symbolp x)
-                       (set-attachment-symbol-form x nil))
-                      (t (set-attachment-symbol-form name (cdr x))))
-                nil
-                nil))))
+               (unless (eq name *special-cltl-cmd-attachment-mark-name*)
+
+; See maybe-push-undo-stack for relevant discussion of the condition above.
+
+                 (install-for-add-trip
+                  (cond ((symbolp x)
+                         (set-attachment-symbol-form x nil))
+                        (t (set-attachment-symbol-form name (cdr x))))
+                  nil
+                  nil)))))
 
 ; There is nothing to do for memoize or unmemoize.
 
@@ -5615,6 +5912,12 @@
 
 ; This concludes development of code for early loading of compiled files
 ; (though other related such code may be found elsewhere).
+
+(defconst *boot-strap-pass-2-acl2-loop-only-fns*
+
+; Every function in this list must have a custom *1* function.
+
+  '(apply$-prim apply$-lambda))
 
 (defun-one-output add-trip (world-name world-key trip)
 
@@ -5775,6 +6078,9 @@
 ; *1* def; see the next comment about ignorep.
 
                      (maybe-push-undo-stack 'defun (car def) ignorep))
+                    ((and boot-strap-flg
+                          (member-eq (car def)
+                                     *boot-strap-pass-2-acl2-loop-only-fns*)))
                     (t (maybe-push-undo-stack 'defun (car def) ignorep)
 
 ; Note: If ignorep is '(defstobj . stobj), we save both the current def and the
@@ -5797,15 +6103,6 @@
                                               (cdr ignorep)
                                             nil))
                                    new-*1*-defs)))))
-            #+acl2-legacy-doc
-            (dolist (def new-defs)
-
-; Remove the documentation string potentially stored in raw Lisp, if a copy is
-; already around in our documentation database, just to save space.
-
-              (when (and (eq (car def) 'defun)
-                         (doc-stringp (documentation (cadr def) 'function)))
-                (setf (documentation (cadr def) 'function) nil)))
             (setq new-defs (nconc new-defs new-*1*-defs))
             (install-defs-for-add-trip new-defs
                                        (eq ignorep 'reclassifying)
@@ -5883,15 +6180,7 @@
 ; in the previous case.
 
                  nil))
-            (maybe-push-undo-stack 'defconst the-live-name)
             (maybe-push-undo-stack 'defconst '*user-stobj-alist*)
-
-; See the comment below, just above where we formerly set the symbol-value of
-; name.  If we re-install that code, then the next line of code also needs to
-; be re-installed.
-
-;           (maybe-push-undo-stack 'defconst name)
-            (install-for-add-trip `(defparameter ,the-live-name ,init) nil t)
 
 ; Memoize-flush expects the variable (st-lst name) to be bound.  We take care
 ; of that directly here.  We see no need to involve install-for-add-trip or the
@@ -5924,13 +6213,6 @@
                                   (access defstobj-template template-or-event
                                           :non-memoizable)))))
 
-; At one point we executed the following form.  But now we see that this is not
-; necessary, since trans-eval binds stobj names anyhow using *user-stobj-alist*
-; and even acl2-raw-eval uses *user-stobj-alist* to bind stobj names.  If the
-; following code is re-installed (uncommented), then also re-install the code
-; (maybe-push-undo-stack 'defconst name) above.
-;           (setf (symbol-value name) (symbol-value the-live-name))
-
 ; The following assignment to *user-stobj-alist* is structured to keep
 ; new ones at the front, so we can more often exploit the optimization
 ; in put-assoc-eq-alist.
@@ -5941,9 +6223,9 @@
 ; This is a redefinition!  We'll just replace the old entry.
 
                          (put-assoc-eq name
-                                       (symbol-value the-live-name)
+                                       (eval init)
                                        *user-stobj-alist*))
-                        (t (cons (cons name (symbol-value the-live-name))
+                        (t (cons (cons name (eval init))
                                  *user-stobj-alist*))))
 
 ; We eval and compile the raw lisp definitions first, some of which may be
@@ -6024,7 +6306,7 @@
 ; CMUCL versions 18e and 19e cannot seem to compile macros at the top level.
 ; Email from Raymond Toy on June 9, 2004 suggests that this appears to be a bug
 ; that exists in CMUCL 18e sources.  We'll thus give special treatment to any
-; version 18 or 19 of CMUCL, but we'll avod that for CMUCL version 20, since
+; version 18 or 19 of CMUCL, but we'll avoid that for CMUCL version 20, since
 ; 20D at least can compile macros.
 
                    #+(and cmu (or cmu18 cmu19))
@@ -6044,7 +6326,7 @@
 ; defparameter and then changed to defconst.  As things stand now,
 ; ACL2 supports defconst, which has the same effect at the raw lisp
 ; level (i.e., the cltl-command) as defparameter, and in addition
-; causes proclaim-file to exectute an appropriate proclamation for the
+; causes proclaim-file to execute an appropriate proclamation for the
 ; parameter, knowing as we do that it is really constant.  Here are
 ; some historical remarks that explain why we have gone down this
 ; path.
@@ -6064,7 +6346,7 @@
 ; says that it's illegal to redefine a Common Lisp function (as we did
 ; using setf, macro-function, and unwind-protect).
 
-; Another possibilty is to change defconstant-fn so that it really
+; Another possibility is to change defconstant-fn so that it really
 ; does create defconstants.  But the reason we use defparameter now is
 ; that when we undo we need to unbind (because we're always checking
 ; to see if something is already bound), and we can't unbind a
@@ -6107,11 +6389,28 @@
           (cond (boot-strap-flg
                  (or (boundp (cadr (cddr trip)))
                      (interface-er "~x0 is not boundp!"
-                                   (cadr (cddr trip)))))
+                                   (cadr (cddr trip))))
+
+; In the boot-strap, there are constants that will not get the necessary
+; 'redundant-raw-lisp-discriminator proprerty without the following code.  In
+; particular, the constant *badge-prim-falist* is defined under when-pass-2, so
+; its defconst form is not processed in raw Lisp.  As a result, without the
+; following code we get an error: "The following raw Lisp error occurred when
+; loading file <path>/apply-prim.dx64fsl: Illegal attempt to redeclare the
+; constant *BADGE-PRIM-FALIST*."  That error prevents loading of the compiled
+; file.
+
+                 (or (get (cadr (cddr trip))
+                          'redundant-raw-lisp-discriminator)
+                     (setf (get (cadr (cddr trip))
+                                'redundant-raw-lisp-discriminator)
+                           (list* 'defconst
+                                  (caddr (cddr trip)) ; form
+                                  (cadddr (cddr trip))))))
                 ((equal *main-lisp-package-name*
                         (symbol-package-name (cadr (cddr trip))))
-                 (interface-er "It is illegal to redefine a defconst in ~
-                                    the main Lisp package, such as ~x0!"
+                 (interface-er "It is illegal to redefine a defconst in the ~
+                                main Lisp package, such as ~x0!"
                                (cadr (cddr trip))))
                 (t (maybe-push-undo-stack 'defconst (cadr (cddr trip)))
 
@@ -6126,15 +6425,16 @@
                    (install-for-add-trip `(defparameter ,(cadr (cddr trip))
                                             ',(cadddr (cddr trip)))
                                          nil
-                                         t)))
-          #+acl2-legacy-doc
-          (cond ((doc-stringp (and (cadr (cddr trip))
-                                   (documentation (cadr (cddr trip))
-                                                  'variable)))
-                 (setf (documentation (cadr (cddr trip)) 'variable)
-                       nil))))
+                                         t))))
         (defmacro
-          (cond (boot-strap-flg
+          (cond ((and boot-strap-flg
+                      (not (global-val 'boot-strap-pass-2 wrld)))
+
+; During the first pass of initialization, we insist that every function
+; defined already be defined in raw lisp.  During pass two we can't expect this
+; because there may be LOCAL defuns that got skipped during compilation and the
+; first pass.
+
                  (or (fboundp (cadr (cddr trip)))
                      (interface-er "~x0 is not fboundp!"
                                    (cadr (cddr trip)))))
@@ -6144,22 +6444,22 @@
                                 main Lisp package, such as ~x0!"
                                (cadr (cddr trip))))
                 (t (maybe-push-undo-stack 'defmacro (cadr (cddr trip)))
-                   (install-for-add-trip (cddr trip) nil t)))
-          #+acl2-legacy-doc
-          (cond ((doc-stringp (documentation (cadr (cddr trip)) 'function))
-                 (setf (documentation (cadr (cddr trip)) 'function)
-                       nil))))
+                   (install-for-add-trip (cddr trip) nil t))))
         (attachment ; (cddr trip) is produced by attachment-cltl-cmd
          (dolist (x (cdr (cddr trip)))
            (let ((name (if (symbolp x) x (car x))))
-             #+hons (push name *defattach-fns*)
              (maybe-push-undo-stack 'attachment name)
-             (install-for-add-trip
-              (cond ((symbolp x)
-                     (set-attachment-symbol-form x nil))
-                    (t (set-attachment-symbol-form name (cdr x))))
-              nil
-              t))))
+             (unless (eq name *special-cltl-cmd-attachment-mark-name*)
+
+; See maybe-push-undo-stack for relevant discussion of the condition above.
+
+               #+hons (push name *defattach-fns*)
+               (install-for-add-trip
+                (cond ((symbolp x)
+                       (set-attachment-symbol-form x nil))
+                      (t (set-attachment-symbol-form name (cdr x))))
+                nil
+                t)))))
         #+hons
         (memoize
          (maybe-push-undo-stack 'memoize (cadr (cddr trip)))
@@ -6217,17 +6517,15 @@
 ; even though they correspond to macros in raw Lisp (defined by defabbrev and
 ; defmacro, respectively).  We are relying on the fact that
 ; maybe-push-undo-stack handled defun and defmacro the same, so that the form
-; eveluated by maybe-pop-undo-stack will be appropriate even though the
+; evaluated by maybe-pop-undo-stack will be appropriate even though the
 ; "function" is actually a macro.
 
             (dolist (tuple (cdddr (cddr trip)))
                     (maybe-pop-undo-stack (car tuple))))
           ((defstobj defabsstobj)
-            (let ((name (nth 1 (cddr trip)))
-                  (the-live-name (nth 2 (cddr trip))))
+            (let ((name (nth 1 (cddr trip))))
               (maybe-pop-undo-stack name)
-              (maybe-pop-undo-stack '*user-stobj-alist*)
-              (maybe-pop-undo-stack the-live-name)))
+              (maybe-pop-undo-stack '*user-stobj-alist*)))
           (defpkg nil)
           ((defconst defmacro #+hons memoize #+hons unmemoize)
             (maybe-pop-undo-stack (cadr (cddr trip))))
@@ -6253,11 +6551,9 @@
             (dolist (tuple (cdddr (cddr trip)))
                     (flush-undo-stack (car tuple))))
           ((defstobj defabsstobj)
-            (let ((name (nth 1 (cddr trip)))
-                  (the-live-name (nth 2 (cddr trip))))
+            (let ((name (nth 1 (cddr trip))))
               (flush-undo-stack name)
-              (flush-undo-stack '*user-stobj-alist*)
-              (flush-undo-stack the-live-name)))
+              (flush-undo-stack '*user-stobj-alist*)))
           (defpkg nil)
           ((defconst defmacro #+hons memoize #+hons unmemoize)
             (flush-undo-stack (cadr (cddr trip))))
@@ -6290,14 +6586,41 @@
 
 (defparameter *known-worlds* nil)
 
+(defvar *saved-user-stobj-alist* nil)
+
 (defun update-wrld-structures (wrld state)
   (install-global-enabled-structure wrld state)
   (recompress-global-enabled-structure
    'global-arithmetic-enabled-structure
    wrld)
-  (recompress-stobj-accessor-arrays
-   (strip-cars *user-stobj-alist*)
-   wrld)
+  (when (not (eq *saved-user-stobj-alist* *user-stobj-alist*))
+
+; On 12/12/2019 we found, using CCL on a Mac, that the time for (include-book
+; "centaur/sv/top" :dir :system) was reduced by 2.6% by adding the test above
+; before calling recompress-stobj-accessor-arrays.  The time reduction however
+; was only 0.2% for (include-book "projects/x86isa/top" :dir :system).  The
+; former book involved many more stobjs: 27 after including it, vs. only 4 for
+; the latter book.  So this change seems important mainly for scalability.
+
+    (recompress-stobj-accessor-arrays
+     (strip-cars *user-stobj-alist*)
+     wrld)
+    (setq *saved-user-stobj-alist* *user-stobj-alist*))
+  (when (let ((i (f-get-global 'certify-book-info state)))
+          (and i
+               (not (access certify-book-info i :include-book-phase))
+               (not ; not inside include-book
+                (global-val 'include-book-path wrld))))
+
+; The world global 'translate-cert-data is only updated during book
+; certification, and not during include-book (especially, not during the
+; include-book pass of certify-book); hence the guard above.  The following
+; preservation of fast-alist status might only be necessary because of changes
+; to translate-cert-data made during make-event expansion.  But we protect the
+; fast-alist status of that world global against any change to the world made
+; (especially) by xtrans-eval.
+
+    (make-fast-alist (global-val 'translate-cert-data wrld)))
   #+hons
   (update-memo-entries-for-attachments *defattach-fns* wrld state)
   nil)
@@ -6388,7 +6711,7 @@
 ; add world-key properties just to symbols in wrld); and (b): every
 ; symbol in old-wrld is a symbol in wrld (because wrld is an extension
 ; of old-wrld).  (Of course, by "symbol in" here we mean "symbol
-; occuring as the car of an element".)
+; occurring as the car of an element".)
 
           (dolist (trip new-trips)
             (add-trip name world-key trip))
@@ -6406,7 +6729,7 @@
 ; add world-key properties just to symbols in wrld); and (b): every
 ; symbol in old-wrld is a symbol in wrld (because wrld is an extension
 ; of old-wrld).  (Of course, by "symbol in" here we mean "symbol
-; occuring as the car of an element".)
+; occurring as the car of an element".)
 
        state)
 
@@ -6561,7 +6884,7 @@
 
 ; (a) at the time of any abort during the critical section, each symbol having
 ; the world-key property occurs as the car of some pair in universe, and (b)
-; each symbol occuring as the car of some pair in old-wrld occurs as the car of
+; each symbol occurring as the car of some pair in old-wrld occurs as the car of
 ; a pair in universe.
 
 ; The latter property is necessary to ensure that we can recover from an
@@ -6670,19 +6993,20 @@
            (not (boundp name))
          t)))
 
-(defun-one-output chk-virgin2 (name new-type wrld)
+(defun-one-output chk-virgin-msg2 (name new-type wrld state)
   (cond ((virginp name new-type) nil)
-        ((f-get-global 'boot-strap-flg *the-live-state*)
+        ((f-get-global 'boot-strap-flg state)
 
 ; The test above is equivalent to (global-val 'boot-strap-flg wrld).
 
-         (setf (get name '*predefined*) t))
+         (setf (get name '*predefined*) t)
+         nil)
 
 ; A name regains its true virginity the moment we decide to give it a
 ; 'redefined property, which only happens just after the user has said that
 ; it's OK to redefine it.
 
-        ((getprop name 'redefined nil 'current-acl2-world wrld)
+        ((getpropc name 'redefined nil wrld)
          nil)
         (t
          (let ((reason
@@ -6724,7 +7048,7 @@
                         (t ; (member-eq new-type '(const stobj
 ;                       stobj-live-var t))
                          str)))))
-           (interface-er
+           (msg
             "It is illegal to define ~x0 because ~@1 in raw Common Lisp.~@2"
             name
             reason
@@ -6748,8 +7072,9 @@
 ; restrictions, which axiomatically always returns t but may cause this hard
 ; error (which can be thought of as a resource error).
 
-; Note: The "2" in the name stems from chk-virgin2, which plays a similar role
-; in chk-virgin.  Chk-virgin1 has been lost in the mist of time, but
+; Note: The "2" in the name stems from chk-virgin2, which formerly played a
+; similar role in chk-virgin but has been replaced by chk-virgin-msg.
+; Chk-virgin1 has been lost in the mist of time, but
 ; chk-package-reincarnation-import-restrictions1 has never existed!
 
   (let ((pkg (find-package name))
@@ -6834,17 +7159,24 @@
 ; (needed by pathname-os-to-unix).
 
   (cond (system-books-dir
-         (let ((dir (unix-full-pathname
-                     (cond
-                      ((symbolp system-books-dir)
-                       (symbol-name system-books-dir))
-                      ((stringp system-books-dir)
-                       system-books-dir)
-                      (t (er hard 'initialize-acl2
-                             "Unable to complete initialization, because the ~
-                              supplied system books directory, ~x0, is not a ~
-                              string."
-                             system-books-dir))))))
+         (let* ((dir (unix-full-pathname
+                      (cond
+                       ((symbolp system-books-dir)
+                        (symbol-name system-books-dir))
+                       ((stringp system-books-dir)
+                        system-books-dir)
+                       (t (er hard 'initialize-acl2
+                              "Unable to complete initialization, because ~
+                                the supplied system books directory, ~x0, is ~
+                                not a string."
+                              system-books-dir)))))
+                (msg (bad-lisp-stringp dir)))
+           (when msg
+             (interface-er
+              "The value of the system-books-dir argument of ~
+               ENTER-BOOT-STRAP-MODE, which is ~x0, is not a legal ACL2 ~
+               string.~%~@1"
+              dir msg))
            (f-put-global 'system-books-dir
                          (canonical-dirname! (maybe-add-separator dir)
                                              'enter-boot-strap-mode
@@ -6962,6 +7294,11 @@
   (defun-overrides mfc-ap-fn (term mfc state forcep)
     (mfc-ap-raw term mfc state forcep)))
 
+#+ccl
+(defun stack-access-defeat-hook-default (fn)
+  (declare (xargs :guard (symbolp fn)))
+  (*1*-symbolp fn))
+
 (defun-one-output exit-boot-strap-mode ()
 
 ; We need not unwind the *acl2-unwind-protect-stack* because it must be nil for
@@ -6987,7 +7324,14 @@
   (checkpoint-world1 t (w *the-live-state*) *the-live-state*)
   #+hons
   (progn (initialize-never-memoize-ht)
-         (acl2h-init-memoizations)))
+         (acl2h-init-memoizations))
+  #+ccl
+  (when (boundp 'ccl::*stack-access-defeat-hook*)
+    (locally (declare (special ccl::*stack-access-defeat-hook*))
+             (setq ccl::*stack-access-defeat-hook*
+                   'stack-access-defeat-hook-default)))
+  (setq *hard-error-is-error* nil)
+  nil)
 
 (defun-one-output ld-alist-raw (standard-oi ld-skip-proofsp ld-error-action)
   `((standard-oi . ,standard-oi)
@@ -7010,7 +7354,8 @@
     (ld-error-triples . t)
     (ld-error-action . ,ld-error-action)
     (ld-query-control-alist . t)
-    (ld-verbose . t)))
+    (ld-verbose . t)
+    (ld-user-stobjs-modified-warning . nil)))
 
 (defun enter-boot-strap-pass-2 ()
 ; We must provide set-w a frame on which to push its undo forms.
@@ -7019,7 +7364,7 @@
          (global-set 'boot-strap-pass-2 t (w *the-live-state*))
          *the-live-state*)
   (acl2-unwind *ld-level* nil)
-  #+hons (memoize-init) ; for memoize calls in boot-strap-pass-2.lisp
+  #+hons (memoize-init) ; for memoize calls in boot-strap-pass-2-b.lisp
 
 ; We use an explicit call of LD-fn to change the defun-mode to :logic just to
 ; lay down an event in the pre-history, in case we someday want to poke around
@@ -7043,23 +7388,38 @@
     "memoize"
     "hons"
     "serialize"
-    "boot-strap-pass-2"
+    "boot-strap-pass-2-a"
+    "apply-prim"
+    "apply-constraints"
+    "apply"
+    "boot-strap-pass-2-b"
     ))
 
-; Next we define fns-different-wrt-acl2-loop-only, used below in
-; check-built-in-constants.  We base our code loosely on
-; functions-defined-in-file in hons-raw.lisp.
+(assert (subsetp-equal *acl2-pass-2-files* *acl2-files*))
 
-(defun our-update-ht (key val ht)
-  (let ((old (gethash key ht)))
+; Next we define fns-different-wrt-acl2-loop-only, used below in
+; check-built-in-constants.
+
+(defun our-update-ht (key val ht when-pass-2-p)
+
+; We aim to store in ht all definitions associated with key, and here we add
+; one definition, val.  Perhaps it is only necessary to store the most recent
+; definition, but here we store them all, even though that is probably
+; needlessly conservative for our purpose of finding where logical and raw Lisp
+; definitions differ.
+
+  (let ((old (gethash key ht))
+        (val (if when-pass-2-p
+                 (list :when-pass-2-p val)
+               val)))
     (setf (gethash key ht)
           (cond ((and (consp old)
                       (eq (car old) :multiple))
                  (list* (car old) val (cdr old)))
-                (old (list :multiple val))
+                (old (list :multiple val old))
                 (t val)))))
 
-(defun note-fns-in-form (form ht)
+(defun note-fns-in-form (form ht when-pass-2-p)
 
 ; For every macro and every function defined by form, associate its definition
 ; with its name in the given hash table, ht.  See note-fns-in-files.
@@ -7067,44 +7427,63 @@
   (and (consp form)
        (case (car form)
          ((defun defund defn defproxy defun-nx defun-one-output defstub
-            defmacro defabbrev defun@par defmacro-last defun-overrides
-            defun-with-guard-check)
-          (our-update-ht (cadr form) form ht))
+            defmacro defmacro-untouchable defabbrev
+            defun@par defmacro-last defun-overrides
+            defun-with-guard-check defun-sk)
+          (our-update-ht (cadr form) form ht when-pass-2-p))
          (save-def
-          (note-fns-in-form (cadr form) ht))
+          (note-fns-in-form (cadr form) ht when-pass-2-p))
          (defun-for-state
-           (our-update-ht (defun-for-state-name (cadr form)) form ht))
+           (our-update-ht (defun-for-state-name (cadr form)) form ht when-pass-2-p))
          (define-global
-           (our-update-ht (define-global-name (cadr form)) form ht)
-           (our-update-ht (cadr form) form ht))
-         ((define-pc-atomic-macro define-pc-bind define-pc-help define-pc-macro
-            define-pc-meta define-pc-primitive)
+           (our-update-ht (define-global-name (cadr form)) form ht when-pass-2-p)
+           (our-update-ht (cadr form) form ht when-pass-2-p))
+         ((define-pc-atomic-macro define-pc-bind* define-pc-help
+            define-pc-macro define-pc-meta define-pc-primitive)
           (let ((name (make-official-pc-command
                        (if (eq (car form) 'define-pc-meta-or-macro-fn)
                            (nth 2 form)
                          (nth 1 form)))))
-            (our-update-ht name form ht)))
+            (our-update-ht name form ht when-pass-2-p)))
          ((mutual-recursion mutual-recursion@par progn)
           (loop for x in (cdr form)
-                do (note-fns-in-form x ht)))
+                do (note-fns-in-form x ht when-pass-2-p)))
+         ((when-pass-2)
+
+; When inside when-pass-2, since the #-acl2-loop-only definition of when-pass-2
+; is nil, #-acl2-loop-only code is ignored.  So as we collect definitions
+; inside when-pass-2, we add a special when-pass-2 marker to help us to cause
+; an error (see fns-different-wrt-acl2-loop-only) when such #-acl2-loop-only
+; code is detected.  Note also that merely being in a pass-2 file like
+; apply.lisp may not be a problem: that is, putting the #-acl2-loop-only
+; outside when-pass-2 is enough to get the raw lisp code to be noticed.
+
+          (loop for x in (cdr form)
+                do (note-fns-in-form x ht t)))
          ((encapsulate when)
           (loop for x in (cddr form)
-                do (note-fns-in-form x ht)))
+                do (note-fns-in-form x ht when-pass-2-p)))
+         (partial-encapsulate
+          (loop for x in (cdddr form)
+                do (note-fns-in-form x ht when-pass-2-p)))
          ((skip-proofs local)
-          (note-fns-in-form (cadr form) ht))
+          (note-fns-in-form (cadr form) ht when-pass-2-p))
          (defrec ; pick just one function introduced
-           (our-update-ht (record-changer-function-name (cadr form)) form ht))
+           (our-update-ht (record-changer-function-name (cadr form)) form ht
+                          when-pass-2-p))
          ((add-custom-keyword-hint
            add-macro-alias
            add-macro-fn
+           assert
            #+ccl ccl:defstatic
            declaim
            def-basic-type-sets
+           defwarrant
            defattach
            defaxiom
            defconst
            defconstant
-           defdoc
+           defequiv
            defg
            define-@par-macros
            define-atomically-modifiable-counter
@@ -7129,24 +7508,37 @@
            in-theory
            initialize-state-globals
            let ; could be arbitrarily complex, but we can only do so much!
-           #+acl2-legacy-doc link-doc-to
-           #+acl2-legacy-doc link-doc-to-keyword
            logic
            make-waterfall-parallelism-constants
            make-waterfall-printing-constants
            memoize
            push
            reset-future-parallelism-variables
+           set-duplicate-keys-action
            set-guard-msg
            set-invisible-fns-table
            set-tau-auto-mode
            set-waterfall-parallelism
            setq
+           system-events
            system-verify-guards
            table
            value
            verify-guards
-           verify-termination-boot-strap)
+           verify-termination-boot-strap
+
+; We are generally unlikely to see make-event in our source files, since
+; compilation is so restricted for them.  An exception is the make-event form
+; in source file apply-prim.lisp, which is local and hence not compiled.  We
+; make things easy on ourselves here and avoid trying to check make-event
+; forms.
+
+           make-event
+           make-apply$-prim-body-fn-raw
+           set-raw-mode
+           set-compile-fns
+           set-ignore-ok
+           set-irrelevant-formals-ok)
           nil)
          (t
           (error "Unexpected type of form, ~s.  See note-fns-in-form."
@@ -7165,7 +7557,7 @@
      (loop while (not (eq (setq x (read str nil avrc))
                           avrc))
            do
-           (note-fns-in-form x ht)))))
+           (note-fns-in-form x ht nil)))))
 
 (defun note-fns-in-files (filenames ht loop-only-p)
 
@@ -7193,33 +7585,43 @@
 
 ; For each file in acl2-files we collect up all definitions of functions and
 ; macros, reading each file both with and without feature :acl2-loop-only.  We
-; return (mv macro-result program-mode-result logic-mode-result), where each of
-; macro-result, program-mode-result, and logic-mode-result is a list of
-; symbols.  Each symbol is the name of a macro, program-mode function, or
-; logic-mode function (respectively) defined with feature :acl2-loop-only,
+; return (mv when-pass-2-result macro-result program-mode-result
+; logic-mode-result), where each return value is a list of symbols unless debug
+; variable *check-built-in-constants-debug* is true.  Each symbol is the name
+; of a macro, program-mode function, or logic-mode function (respectively, for
+; results other than when-pass-2-result) defined with feature :acl2-loop-only,
 ; which has a different (or absent) definition without feature :acl2-loop-only.
+; However, when such a symbol has a definition (raw Lisp, logical, or both)
+; under when-pass-2, it is put into the list when-pass-2-result rather than the
+; other three.
 
 ; This function is typically called with acl2-files equal to *acl2-files*, in
 ; the build directory.  See the comment about redundant definitions in
 ; chk-acceptable-defuns-redundancy for a pertinent explanation.
 
-  (let ((logic-filenames (loop for x in acl2-files
-                               when (not (raw-source-name-p x))
+  (flet ((when-pass-2-p (val)
+                        (and (consp val)
+                             (if (eq (car val) :multiple)
+                                 (assoc-eq :when-pass-2-p (cdr val))
+                               (eq (car val) :when-pass-2-p)))))
+    (let ((logic-filenames (loop for x in acl2-files
+                                 when (not (raw-source-name-p x))
+                                 collect (concatenate 'string x ".lisp")))
+          (raw-filenames (loop for x in acl2-files
                                collect (concatenate 'string x ".lisp")))
-        (raw-filenames (loop for x in acl2-files
-                             collect (concatenate 'string x ".lisp")))
-        (ht-raw (make-hash-table :test 'eq))
-        (ht-logic (make-hash-table :test 'eq))
-        (macro-result nil)
-        (program-mode-result nil)
-        (logic-mode-result nil)
-        (wrld (w *the-live-state*)))
-    (note-fns-in-files raw-filenames ht-raw nil)
-    (note-fns-in-files logic-filenames ht-logic t)
-    (maphash (lambda (key logic-val)
-               (progn
-                 (assert (symbolp key))
-                 (let ((raw-val (gethash key ht-raw)))
+          (ht-raw (make-hash-table :test 'eq))
+          (ht-logic (make-hash-table :test 'eq))
+          (when-pass-2-result nil)
+          (macro-result nil)
+          (program-mode-result nil)
+          (logic-mode-result nil)
+          (wrld (w *the-live-state*)))
+      (note-fns-in-files raw-filenames ht-raw nil)
+      (note-fns-in-files logic-filenames ht-logic t)
+      (maphash (lambda (key logic-val)
+                 (progn
+                   (assert (symbolp key))
+                   (let ((raw-val (gethash key ht-raw)))
 
 ; We use equalp rather than equal below because in August, 2014 using SBCL
 ; 1.2.2 (and this might happen with other Lisps in the future), backquote was
@@ -7233,42 +7635,70 @@
 ; (SB-INT:QUASIQUOTE #S(SB-IMPL::COMMA :EXPR X :KIND 0))
 ; *
 
-                   (or (equalp logic-val raw-val)
-                       (let ((x
-                              (if *check-built-in-constants-debug*
-                                  (list key :logic logic-val :raw raw-val)
+                     (or (equalp logic-val raw-val)
+                         (let ((x (if *check-built-in-constants-debug*
+                                      (list key :logic logic-val :raw raw-val)
+                                    key))
+                               (when-pass-2-p
+                                (or (when-pass-2-p logic-val)
+                                    (when-pass-2-p raw-val))))
+                           (cond ((and when-pass-2-p
+
+; Our approach makes it impossible to recognize exactly those cases in which
+; #-acl2-loop-only code appears under a when-pass-2 call, which are the cases
+; that we want to catch (since such code is always ignored, because when-pass-2
+; calls expand to nil in raw Lisp).  A conservative approach is to cause an
+; error whenever there is a discrepancy between the logic and raw values, but
+; here we exempt one safe situation: there is no raw value inside when-pass-2.
+; In that exceptional case, we fall through to the other branches of this COND.
+
+                                       (not ; the exception is as follows:
+                                        (and
+                                         (eq (car logic-val) :when-pass-2-p)
+                                         (consp raw-val)
+                                         (if (eq (car raw-val) :multiple)
+                                             (loop for form in (cdr raw-val)
+                                                   always
+                                                   (not
+                                                    (and
+                                                     (consp (car form))
+                                                     (eq (car form)
+                                                         :when-pass-2-p))))
+                                           (not (eq (car raw-val)
+                                                    :when-pass-2-p))))))
+                                  (push x when-pass-2-result))
+                                 ((getpropc key 'macro-body nil wrld)
+                                  (push x macro-result))
+                                 ((eq (symbol-class key wrld)
+                                      :program)
+                                  (push x program-mode-result))
+                                 (t
+                                  (push x logic-mode-result))))))))
+               ht-logic)
+      (maphash (lambda (key raw-val)
+                 (progn
+                   (assert (symbolp key))
+                   (when (not (gethash key ht-logic))
+                     (let ((x (if *check-built-in-constants-debug*
+                                  (list key :raw raw-val)
                                 key)))
-                         (cond ((getprop key 'macro-body nil
-                                         'current-acl2-world wrld)
-                                (push x macro-result))
-                               ((eq (symbol-class key wrld)
-                                    :program)
-                                (push x program-mode-result))
-                               (t
-                                (push x logic-mode-result))))))))
-             ht-logic)
-    (maphash (lambda (key raw-val)
-               (progn
-                 (assert (symbolp key))
-                 (when (not (or (gethash key ht-logic)
-                                (assoc key *primitive-formals-and-guards* :test
-                                       'eq)))
-                   (cond ((getprop key 'macro-body nil
-                                   'current-acl2-world wrld)
-                          (push key macro-result))
-                         (t (let ((c ; avoid symbol-class (defaults to :program)
-                                   (getprop key 'symbol-class nil
-                                            'current-acl2-world wrld)))
-                              (when c
-                                (let ((x
-                                       (if *check-built-in-constants-debug*
-                                           (list key :raw raw-val)
-                                         key)))
-                                  (if (eq c :program)
-                                      (push x program-mode-result)
-                                    (push x logic-mode-result))))))))))
-             ht-raw)
-    (mv macro-result program-mode-result logic-mode-result)))
+                       (cond ((when-pass-2-p raw-val)
+                              (push x when-pass-2-result))
+                             ((assoc key *primitive-formals-and-guards*
+                                     :test 'eq))
+                             ((getpropc key 'macro-body nil wrld)
+                              (push x macro-result))
+                             (t (let ((c ; avoid symbol-class (defaults to :program)
+                                       (getpropc key 'symbol-class nil wrld)))
+                                  (when c
+                                    (if (eq c :program)
+                                        (push x program-mode-result)
+                                      (push x logic-mode-result))))))))))
+               ht-raw)
+      (mv when-pass-2-result
+          macro-result
+          program-mode-result
+          logic-mode-result))))
 
 (defun collect-monadic-booleans (fns ens wrld)
   (cond ((endp fns) nil)
@@ -7337,13 +7767,13 @@
                (set-difference-eq bad
                                   *boot-strap-invariant-risk-symbols*)))))
 
-(defun check-built-in-constants ()
+(defun check-built-in-constants (&aux (state *the-live-state*))
 
 ; Certain defconsts are problematic because they build in values that one
 ; cannot know until the system is built!  Getting their values right requires
 ; some thought or experiment and even then subsequent changes to the system can
 ; render the values incorrect.  To guard against incorrect (obsolete) values
-; for these contants, this function causes an error if doesn't like what it
+; for these constants, this function causes an error if doesn't like what it
 ; sees.  We document only one such constant, *force-xnume*, which more or less
 ; describes the situation suffered by all of them.
 
@@ -7376,111 +7806,105 @@
               check-built-in-constants."))
     (cond
      ((not (equal *force-xrune*
-                  (fn-rune-nume 'force nil t (w *the-live-state*))))
+                  (fn-rune-nume 'force nil t (w state))))
       (interface-er str
                     '*force-xrune*
                     *force-xrune*
-                    (fn-rune-nume 'force nil t (w *the-live-state*)))))
+                    (fn-rune-nume 'force nil t (w state)))))
     (cond
-     ((not (equal *force-xnume* (fn-rune-nume 'force t t (w *the-live-state*))))
+     ((not (equal *force-xnume* (fn-rune-nume 'force t t (w state))))
       (interface-er str
                     '*force-xnume*
                     *force-xnume*
-                    (fn-rune-nume 'force t t (w *the-live-state*)))))
+                    (fn-rune-nume 'force t t (w state)))))
     (cond
      ((not
        (equal *immediate-force-modep-xnume*
-              (fn-rune-nume 'immediate-force-modep t t (w *the-live-state*))))
+              (fn-rune-nume 'immediate-force-modep t t (w state))))
       (interface-er str
                     '*immediate-force-modep-xnume*
                     *immediate-force-modep-xnume*
-                    (fn-rune-nume 'immediate-force-modep t t (w *the-live-state*)))))
+                    (fn-rune-nume 'immediate-force-modep t t (w state)))))
     (cond
      ((not
        (equal *tau-system-xnume*
-              (fn-rune-nume 'tau-system t t (w *the-live-state*))))
+              (fn-rune-nume 'tau-system t t (w state))))
       (interface-er str
                     '*tau-system-xnume*
                     *tau-system-xnume*
-                    (fn-rune-nume 'tau-system t t (w *the-live-state*)))))
+                    (fn-rune-nume 'tau-system t t (w state)))))
     (cond
      ((not
        (equal *tau-acl2-numberp-pair*
-              (getprop 'acl2-numberp 'tau-pair nil
-                       'current-acl2-world (w *the-live-state*))))
+              (getpropc 'acl2-numberp 'tau-pair)))
       (interface-er str
                     '*tau-acl2-numberp-pair*
                     *tau-acl2-numberp-pair*
-                    (getprop 'acl2-numberp 'tau-pair nil
-                             'current-acl2-world (w *the-live-state*)))))
+                    (getpropc 'acl2-numberp 'tau-pair))))
     (cond
      ((not
        (equal *tau-integerp-pair*
-              (getprop 'integerp 'tau-pair nil
-                       'current-acl2-world (w *the-live-state*))))
+              (getpropc 'integerp 'tau-pair)))
       (interface-er str
                     '*tau-integerp-pair*
                     *tau-integerp-pair*
-                    (getprop 'integerp 'tau-pair nil
-                             'current-acl2-world (w *the-live-state*)))))
+                    (getpropc 'integerp 'tau-pair))))
     (cond
      ((not
        (equal *tau-rationalp-pair*
-              (getprop 'rationalp 'tau-pair nil
-                       'current-acl2-world (w *the-live-state*))))
+              (getpropc 'rationalp 'tau-pair)))
       (interface-er str
                     '*tau-rationalp-pair*
                     *tau-rationalp-pair*
-                    (getprop 'rationalp 'tau-pair nil
-                             'current-acl2-world (w *the-live-state*)))))
+                    (getpropc 'rationalp 'tau-pair))))
     (cond
      ((not
        (equal *tau-natp-pair*
-              (getprop 'natp 'tau-pair nil
-                       'current-acl2-world (w *the-live-state*))))
+              (getpropc 'natp 'tau-pair)))
       (interface-er str
                     '*tau-natp-pair*
                     *tau-natp-pair*
-                    (getprop 'natp 'tau-pair nil
-                             'current-acl2-world (w *the-live-state*)))))
+                    (getpropc 'natp 'tau-pair))))
+    (cond
+     ((not
+       (equal *tau-bitp-pair*
+              (getpropc 'bitp 'tau-pair)))
+      (interface-er str
+                    '*tau-bitp-pair*
+                    *tau-bitp-pair*
+                    (getpropc 'bitp 'tau-pair))))
     (cond
      ((not
        (equal *tau-posp-pair*
-              (getprop 'posp 'tau-pair nil
-                       'current-acl2-world (w *the-live-state*))))
+              (getpropc 'posp 'tau-pair)))
       (interface-er str
                     '*tau-posp-pair*
                     *tau-posp-pair*
-                    (getprop 'posp 'tau-pair nil
-                             'current-acl2-world (w *the-live-state*)))))
+                    (getpropc 'posp 'tau-pair))))
     (cond
      ((not
        (equal *tau-minusp-pair*
-              (getprop 'minusp 'tau-pair nil
-                       'current-acl2-world (w *the-live-state*))))
+              (getpropc 'minusp 'tau-pair)))
       (interface-er str
                     '*tau-minusp-pair*
                     *tau-minusp-pair*
-                    (getprop 'minusp 'tau-pair nil
-                             'current-acl2-world (w *the-live-state*)))))
+                    (getpropc 'minusp 'tau-pair))))
     (cond
      ((not
        (equal *tau-booleanp-pair*
-              (getprop 'booleanp 'tau-pair nil
-                       'current-acl2-world (w *the-live-state*))))
+              (getpropc 'booleanp 'tau-pair)))
       (interface-er str
                     '*tau-booleanp-pair*
                     *tau-booleanp-pair*
-                    (getprop 'booleanp 'tau-pair nil
-                             'current-acl2-world (w *the-live-state*)))))
+                    (getpropc 'booleanp 'tau-pair))))
     (cond
      ((not
        (and (equal
              *min-type-set*
-             #-:non-standard-analysis -8192 #+:non-standard-analysis -65536)
+             #-:non-standard-analysis -16384 #+:non-standard-analysis -131072)
             (equal
              *max-type-set*
-             #-:non-standard-analysis 8191 #+:non-standard-analysis 65535)))
+             #-:non-standard-analysis 16383 #+:non-standard-analysis 131071)))
       (interface-er
        "The minimal and maximal type-sets are incorrectly built into the ~
         definition of type-alist-entryp.  These type-sets get generated by ~
@@ -7492,22 +7916,22 @@
        (equal *primitive-monadic-booleans*
               (collect-monadic-booleans
                (strip-cars *primitive-formals-and-guards*)
-               (ens *the-live-state*)
-               (w *the-live-state*))))
+               (ens state)
+               (w state))))
       (interface-er str
                     '*primitive-monadic-booleans*
                     *primitive-monadic-booleans*
                     (collect-monadic-booleans
                      (strip-cars *primitive-formals-and-guards*)
-                     (ens *the-live-state*)
-                     (w *the-live-state*)))))
+                     (ens state)
+                     (w state)))))
     (cond
-     ((not (getprop 'booleanp 'tau-pair nil 'current-acl2-world (w *the-live-state*)))
+     ((not (getpropc 'booleanp 'tau-pair))
       (interface-er
        "Our code for tau-term assumes that BOOLEANP is a tau predicate.  But ~
         it has no tau-pair property!")))
     (let ((good-lst (chk-initial-built-in-clauses *initial-built-in-clauses*
-                                                  (w *the-live-state*) nil nil)))
+                                                  (w state) nil nil)))
       (cond
        (good-lst
         (interface-er
@@ -7522,47 +7946,75 @@
          `(defconst *initial-built-in-clauses*
             (list ,@good-lst))
          nil))))
-    (mv-let
-     (macros-found program-found logic-found)
-     (fns-different-wrt-acl2-loop-only *acl2-files*)
-     (flet ((my-diff (x y)
-                     (if *check-built-in-constants-debug*
-                         (loop for tuple in x
-                               when (not (member (car tuple) y :test 'eq))
-                               collect tuple)
-                       (set-difference-eq x y))))
-       (let ((bad-macros (my-diff macros-found
-                                  *primitive-macros-with-raw-code*))
-             (bad-program (my-diff program-found
-                                   *primitive-program-fns-with-raw-code*))
-             (bad-logic (my-diff logic-found
-                                 *primitive-logic-fns-with-raw-code*)))
-         (when (or bad-macros bad-program bad-logic)
-           (format t "Failed check for coverage of functions with acl2-loop-only code
-differences!  Please send this error message to the ACL2 implementors.
-Missing functions (use *check-built-in-constants-debug* = t for verbose report):
-  ~s
-~s;
-  ~a
-~s:
-  ~a"
-
-; We need to update *primitive-macros-with-raw-code*,
-; *primitive-program-fns-with-raw-code*, or
-; *primitive-logic-fns-with-raw-code*, respectively according to the non-nil
-; fields in the error message.
-
-                   (list (list '*primitive-macros-with-raw-code*
-                               bad-macros)
-                         (list '*primitive-program-fns-with-raw-code*
-                               bad-program)
-                         (list '*primitive-logic-fns-with-raw-code*
-                               bad-logic))
-                   '(lisp-implementation-type)
-                   (lisp-implementation-type)
-                   '(lisp-implementation-version)
-                   (lisp-implementation-version))
-           (error "Check failed!")))))
+    (cond ((not (equal *definition-minimal-theory-alist*
+                       (merge-sort-lexorder
+                        (loop for f in *definition-minimal-theory* collect
+                              (cons f (body f t (w *the-live-state*)))))))
+           (interface-er
+            "There is a discrepancy between the value of ~
+             *definition-minimal-theory-alist* and its expected ~
+             value.~%Actual value of ~
+             *definition-minimal-theory-alist*:~%~X01~%Expected value of ~
+             *definition-minimal-theory-alist*:~X21"
+            *definition-minimal-theory-alist*
+            nil
+            (merge-sort-lexorder
+             (loop for f in *definition-minimal-theory* collect
+                   (cons f (body f t (w *the-live-state*))))))))
+    (mv-let (when-pass-2-result macros-found program-found logic-found)
+      (fns-different-wrt-acl2-loop-only *acl2-files*)
+      (flet ((my-diff (x y)
+                      (if *check-built-in-constants-debug*
+                          (loop for tuple in x
+                                when (not (member (car tuple) y :test 'eq))
+                                collect tuple)
+                        (set-difference-eq x y))))
+        (let ((bad-macros (my-diff macros-found
+                                   *initial-macros-with-raw-code*))
+              (bad-program (my-diff program-found
+                                    *initial-program-fns-with-raw-code*))
+              (bad-logic (my-diff logic-found
+                                  *initial-logic-fns-with-raw-code*)))
+          (when (or when-pass-2-result bad-macros bad-program bad-logic)
+            (format t
+                    "~%ERROR: Failed check for coverage of functions with~%~
+                    acl2-loop-only code differences!  Please send this~%~
+                    error message to the ACL2 implementors. Problems are~%~
+                    as shown below; use *check-built-in-constants-debug* = t~%~
+                    for a verbose report.~%~
+                    Note: (lisp-implementation-type) =~%~
+                    ~6t~s~%~
+                    Note: (lisp-implementation-version) =~%~
+                    ~6t~s~%~%"
+                    (lisp-implementation-type)
+                    (lisp-implementation-version))
+            (when when-pass-2-result
+              (format t
+                      "The following have #-acl2-loop-only code within ~
+                       (when-pass-2 ...):~%~s~%~%"
+                      when-pass-2-result))
+            (when bad-macros
+              (format t
+                      "The following macros differ in their #+acl2-loop-only~%~
+                       and #-acl2-loop-only code:~%~s~%~
+                       They probably should be added to ~s.~%~%"
+                      bad-macros
+                      '*initial-macros-with-raw-code*))
+            (when bad-program
+              (format t
+                      "The following program-mode functions differ in their~%~
+                       #+acl2-loop-only and #-acl2-loop-only code:~%~s~%~
+                       They probably should be added to ~s.~%~%"
+                      bad-program
+                      '*initial-program-fns-with-raw-code*))
+            (when bad-logic
+              (format t
+                      "The following logic-mode functions differ in their~%~
+                       #+acl2-loop-only and #-acl2-loop-only code:~%~s~%~
+                       They probably should be added to ~s.~%~%"
+                      bad-logic
+                      '*initial-logic-fns-with-raw-code*))
+            (error "Check failed!")))))
 
 ; The following is a start on checking that we don't have superfluous symbols
 ; in the list values of certain constants.  But in fact there can be such
@@ -7571,37 +8023,37 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
 ; when such features are present.  We may think more about this later.
 
 ;   (let ((undefined-macros
-;          (loop for x in *primitive-macros-with-raw-code*
+;          (loop for x in *initial-macros-with-raw-code*
 ;                when (not (or (macro-function x) (symbol-function x)))
 ;                collect x))
 ;         (undefined-program-fns
-;          (loop for x in *primitive-program-fns-with-raw-code*
+;          (loop for x in *initial-program-fns-with-raw-code*
 ;                when (not (fboundp x))
 ;                collect x))
 ;         (undefined-logic-fns
-;          (loop for x in *primitive-logic-fns-with-raw-code*
+;          (loop for x in *initial-logic-fns-with-raw-code*
 ;                when (not (fboundp x))
 ;                collect x)))
 ;     (when undefined-macros
 ;       (format
 ;        t
-;        "Undefined macros in *primitive-macros-with-raw-code*:~%~s~%"
+;        "Undefined macros in *initial-macros-with-raw-code*:~%~s~%"
 ;        undefined-macros))
 ;     (when undefined-program-fns
 ;       (format
 ;        t
-;        "Undefined macros in *primitive-program-fns-with-raw-code*:~%~s~%"
+;        "Undefined macros in *initial-program-fns-with-raw-code*:~%~s~%"
 ;        undefined-program-fns))
 ;     (when undefined-logic-fns
 ;       (format
 ;        t
-;        "Undefined macros in *primitive-logic-fns-with-raw-code*:~%~s~%"
+;        "Undefined macros in *initial-logic-fns-with-raw-code*:~%~s~%"
 ;        undefined-logic-fns))
 ;     (when (or undefined-macros undefined-program-fns undefined-logic-fns)
 ;       (error "Check failed!")))
     ))
 
-(defun-one-output check-none-ideal (trips acc)
+(defun-one-output check-none-ideal (trips acc &aux (state *the-live-state*))
   (cond
    ((null trips)
     (cond ((null acc) nil)
@@ -7609,34 +8061,24 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
                  "The following are :ideal mode functions that are not ~
                   non-executable.  We rely in oneify-cltl-code on the absence ~
                   of such functions in the boot-strap world (see the comment ~
-                  on check-none-ideal there).  These functions should have ~
-                  their guards verified: ~&0."
+                  on check-none-ideal there); moreover, we want system ~
+                  functions to execute efficiently, which might not be the ~
+                  case for an :ideal mode function.  These functions should ~
+                  have their guards verified: ~&0."
                  acc))))
    (t
     (let* ((trip (car trips))
-           (fn
-
-; We need to rule out triples such as the following (but for :ideal mode)
-
-;  (EVENT-LANDMARK GLOBAL-VALUE 5054
-;                  (DEFUN EVENS . :COMMON-LISP-COMPLIANT)
-;                  DEFUN EVENS (L)
-;                  (DECLARE (XARGS :GUARD (TRUE-LISTP L)))
-;                  (COND ((ENDP L) NIL)
-;                        (T (CONS (CAR L) (EVENS (CDDR L))))))
-
-            (and (eq (car trip) 'event-landmark)
-                 (true-listp trip)
-                 (eq (cadr trip) 'global-value)
-                 (eq (nth 4 trip) 'defun)
-                 (nth 5 trip))))
+           (fn (and (eq (car trip) 'event-landmark)
+                    (eq (cadr trip) 'global-value)
+                    (case (access-event-tuple-type (cddr trip))
+                      (defun (access-event-tuple-namex (cddr trip)))
+                      (defuns (car (access-event-tuple-namex (cddr trip))))
+                      (otherwise nil)))))
       (cond ((and fn
-                  (symbolp fn)
-                  (eq (symbol-class fn
-                                    (w *the-live-state*))
+                  (symbolp fn) ; always true?
+                  (eq (symbol-class fn (w state))
                       :ideal)
-                  (not (eq (getprop fn 'non-executablep nil
-                                    'current-acl2-world (w *the-live-state*))
+                  (not (eq (getpropc fn 'non-executablep)
                            t)))
              (check-none-ideal (cdr trips) (cons fn acc)))
             (t (check-none-ideal (cdr trips) acc)))))))
@@ -7658,11 +8100,72 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
         be added to *initial-global-table*:~%~s~%"
        bad))))
 
+(defun check-slashable ()
+
+; First check that certain obviously slashable characters are marked as such.
+
+  (let ((bad
+         (loop for char in
+               '(#\Newline #\Page #\Space #\Tab #\" #\# #\' #\( #\) #\, #\:
+                 #\; #\\ #\`
+                 #\a #\b #\c #\d #\e #\f #\g #\h #\i #\j #\k #\l #\m #\n
+                 #\o #\p #\q #\r #\s #\t #\u #\v #\w #\x #\y #\z #\|)
+               when (not (svref *slashable-array* (char-code char)))
+               collect (char-code char))))
+    (when bad
+      (interface-er
+       "The character code~#0~[~/s~] ~&0 must be associated with T in ~
+        *slashable-array*."
+       bad)))
+
+; Next check that *slashable-chars* and *slashable-array* specify the same set
+; of slashable characters.
+
+  (let ((bad ; quadratic below, but 256^2 isn't big
+         (loop for i from 0 to 255
+               when (not (iff (member (code-char i) *slashable-chars*)
+                              (svref *slashable-array* i)))
+               collect i)))
+    (when bad
+      (interface-er
+       "Each character code in the list ~x0 is marked as slashable in exactly ~
+        one of *slashable-array* and *slashable-chars*; but those two ~
+        structures are supposed to represent the same set of slashable ~
+        characters."
+       bad)))
+
+; Finally, check that the set specified in *slashable-array* is sufficient for
+; the current host Lisp.  See *slashable-array* for a comment on why this check
+; is appropriate.
+
+  (let ((bad
+         (loop for i from 0 to 255
+               when (let ((str (coerce (list (code-char i)
+                                             #\A #\B
+                                             (code-char i)
+                                             #\U #\V
+                                             (code-char i))
+                                       'string)))
+                      (and (not (eq (ignore-errors (read-from-string str))
+                                    (intern str "ACL2")))
+                           (not (svref *slashable-array* i))))
+               collect i)))
+    (when bad
+      (interface-er
+       "Each character code in the list ~x0 needs to be marked as slashable ~
+        in both *slashable-array* and *slashable-chars*."
+       bad))))
+
 (defun-one-output check-acl2-initialization ()
   (check-built-in-constants)
   (check-out-instantiablep (w *the-live-state*))
   (check-none-ideal (w *the-live-state*) nil)
-  (check-state-globals-initialized))
+  (check-state-globals-initialized)
+  (or (plist-worldp-with-formals (w *the-live-state*))
+      (error "The initial ACL2 world does not satisfy ~
+              plist-worldp-with-formals!"))
+  (check-slashable)
+  nil)
 
 (defun set-initial-cbd ()
   (let ((state *the-live-state*))
@@ -7706,10 +8209,10 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
 ; Note: if system-books-dir is supplied, it should be a Unix-style
 ; pathname (either absolute or not [doesn't matter which]).
 
-; This function first lds all of the *acl2-files* except boot-strap-pass-2.lisp
-; and *-raw.lisp in default-defun-mode :program (which is the default
-; default-defun-mode).  It then loads the files in acl2-pass-2-files in :logic
-; mode.
+; This function first lds all of the *acl2-files*, except
+; boot-strap-pass-2-*.lisp and *-raw.lisp, in default-defun-mode :program
+; (which is the default default-defun-mode).  It then loads the files in
+; acl2-pass-2-files in :logic mode.
 
 ; During the first pass, ld-skip-proofsp is 'initialize-acl2, which is like the
 ; setting t (doing syntactic checks but skipping proofs and LOCALs) but omits a
@@ -7861,7 +8364,8 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
              ans))
      (dolist
        (fl *acl2-files*)
-       (when (not (or (equal fl "boot-strap-pass-2")
+       (when (not (or (equal fl "boot-strap-pass-2-a")
+                      (equal fl "boot-strap-pass-2-b")
                       (raw-source-name-p fl)))
          (mv-let (er val st)
                  (ld-fn
@@ -7950,8 +8454,9 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
 ; The next token, :INITIALIZED, is used in GNUmakefile; keep in sync.
 
                                :INITIALIZED))))
-; If you want the final image to have infixp = t, then put the following
-; form here:
+
+; If you want the final image to have infixp = t (and have feature :acl2-infix
+; set), then put the following form here:
 ;    (f-put-global 'infixp t *the-live-state*)
 
      t)))
@@ -7966,18 +8471,21 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
 
 ; We use Unix-style pathnames everywhere in ACL2 except when interfacing with
 ; the operating system.  Functions defined in this file, interface-raw.lisp,
-; generally use real pathname strings for the host operating system.
-; (Exceptions are clearly labeled, including compile-uncompiled-defuns and
-; compile-uncompiled-*1*-defuns.)  Functions defined outside this file
-; (interface-raw.lisp) pass around ACL2 (Unix-style) pathname strings.  Here
-; are some functions that take pathnames whose form is based on (os (w state))
-; rather than on Unix.
+; generally use real pathname strings for the host operating system, which we
+; call "OS filenames".  (Exceptions are clearly labeled, including
+; compile-uncompiled-defuns and compile-uncompiled-*1*-defuns.)  Functions
+; defined outside this file (interface-raw.lisp) pass around what we call "ACL2
+; filenames", which are Unix-style pathname strings that consist solely of
+; legal ACL2 characters, as checked by bad-lisp-stringp.
+
+; Here are some examples of functions that take OS pathnames.
 
 ; acl2-compile-file [but see comment there]
 ; compile-file
-; convert-book-name-to-compiled-name [Unix pathname is OK too]
+; convert-book-name-to-compiled-name [ACL2 pathname is OK too]
 ; delete-file
 ; delete-compiled-file
+; expansion-filename [ACL2 pathname is OK too]
 ; load
 ; probe-file
 ; proclaim-file
@@ -8035,17 +8543,45 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
              (format t
                      "~&************ ABORTING from raw Lisp ***********")
              (format t
-                     "~&Error:  ~A"
-                     condition)))
+                     "~&********** (see :DOC raw-lisp-error) **********")
+
+; In CCL we can get information about the function currently being executed.
+; Consider for example what happens if, during a computation, the evaluation of
+; (ash 1 (expt 2 48)) causes the error "Memory allocation request failed".
+; That is not very helpful, but it could be helpful to see the following extra
+; information about when this occurred:
+
+; "While executing: CCL::BIGNUM-ASHIFT-LEFT-DIGITS."
+
+; This extra information is a bit dodgy, since it comes from the low-level
+; definition of function ccl::%break-message in CCL source file
+; level-1/l1-readloop-lds.lisp (circa late 2017).  It is also may be unhelpful
+; in many cases, or not ideal; for example, the same function as above,
+; CCL::BIGNUM-ASHIFT-LEFT-DIGITS, is reported when attempting to evaluate (expt
+; 2 (expt 2 48)).  However, you get what you get with raw Lisp errors, and we
+; are happy to make them a bit more useful in some cases.
+
+             (cond
+              #+ccl
+              ((and (fboundp 'ccl::%real-err-fn-name)
+                    (boundp 'ccl::*top-error-frame*))
+               (format t
+                       "~&Error:  ~A~&While executing: ~S"
+                       condition
+                       (ccl::%real-err-fn-name ccl::*top-error-frame*)))
+              (t
+               (format t
+                       "~&Error:  ~A"
+                       condition)))))
            (when btp (format t "~%NOTE: See above for backtrace.~%"))
            (format t
                    "~&***********************************************~&")
            (when *acl2-error-msg*
              (format t *acl2-error-msg*))
-           (when (not (member-eq 'set-debugger-enable-fn
-;                                (global-val 'untouchable-fns (w state))
-                                 (getprop 'untouchable-fns 'global-value nil
-                                          'current-acl2-world (w state))))
+           (when (not (untouchable-fn-p 'set-debugger-enable-fn
+                                        (w state)
+                                        (f-get-global 'temp-touchable-fns
+                                                      state)))
              (format t
                      "~%To enable breaks into the debugger (also see :DOC ~
                       acl2-customization):~&~s~&"
@@ -8082,7 +8618,11 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
   (setq ccl::*break-hook* 'our-abort))
 
 (defun initial-customization-filename ()
-  (let* ((cfb00 (getenv$-raw "ACL2_CUSTOMIZATION"))
+
+; Every value returned by this function is either :none, nil, or a legal ACL2
+; string.
+
+  (let* ((cfb00 (getenv$-raw "ACL2_CUSTOMIZATION")) ; nil or legal ACL2 string
          (cfb0 (if (equal cfb00 "NONE")
                    :none
                  (and cfb00
@@ -8192,6 +8732,80 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
 
   (lw:start-tty-listener))
 
+(#+allegro
+
+; Builds with Allegro CL warn that this constant is redefined, when using
+; defconstant.  We could probably use defparameter in all Lisps, but we really
+; want this to be a constant; in particular, there is no reason to let-bind
+; it.  In order to avoid the warning in Allegro CL, we conditionalize here.
+
+ defparameter
+ #-allegro
+ defconstant
+ *our-standard-io*
+
+; We bind *debug-io* to this constant inside LP to ensure that when the
+; debugger is invoked, it will write to the standard output rather than to the
+; terminal (unless *debug-io* is rebound, as in community books file
+; books/centaur/vl2014/server/server-raw.lsp).  Formerly we bound *debug-io* to
+; *standard-output* in LP, which would cause an infinite loop in the SBCL
+; debugger as described below.  We thank Keshav Kini for the current approach,
+; and for bringing this problem to our attention.  As described below, this
+; approach ensures that debugger output is printed to standard output, not to
+; the terminal, but without binding *debug-io* to an output-only stream.
+
+; Below is some discussion showing how we formerly got this wrong and
+; progressed towards the current solution.  Before making changes
+; related to this constant, be sure to understand the issues raised in
+; that discussion.
+
+; (1) Git commit 26013676ec22cd68e29be0a43f9cbf2aeee2114e on Feb 5, 2016
+;     provided a fix for problem described in the following quote from :doc
+;     note-7-3.
+
+;       It was possible for a backtrace to be printed to the terminal by SBCL
+;       and CMUCL, even when output is redirected to a file. This has been
+;       fixed.
+
+;     The fix was for ACL2 function print-call-history to print backtraces to
+;     *standard-output*, rather than to the default stream, *debug-io*.
+;
+; BUT that fix caused a problem:
+;
+; (2) Commit 6d7ad53ecdaaec9dcf3e3d05c19832b97fa7062a on Aug 26, 2016 provided
+;     a fix for GitHub Issue 634 (https://github.com/acl2/acl2/issues/634),
+;     namely, printing of a backtrace to the terminal.  The problem had been
+;     that for SBCL (and CMUCL), print-call-history was sending its output to
+;     *standard-output* instead of *debug-io*, so the rebinding of *debug-io*
+;     in community books file books/centaur/vl2014/server/server-raw.lsp had no
+;     effect on where print-call-history sent its output: that output was going
+;     to *standard-output*, hence to a .cert.out file.  The fix was to avoid
+;     the use of *standard-output* in print-call-history, instead binding
+;     *debug-io* to *standard-output* in LP.  That solution still handles (1)
+;     by sending backtraces to *standard-output* by default; but now, the
+;     redirection in server-raw.lsp, by rebinding *debug-io*, works as
+;     intended.
+
+; BUT that fix caused a problem: with *debug-io* bound to *standard-output*, a
+; horrible infinite loop could occur in SBCL when trying to read from
+; *debug-io*, as shown in this item, formerly in community books file
+; books/system/to-do.txt, for obtaining that infinite loop in ACL2 but not in
+; pure SBCL:
+
+; (value :q)
+; (LP!) ; only in ACL2
+; #+acl2-loop-only (program)
+; (defun foo (x) (declare (optimize (safety 0))) (car x))
+; #+acl2-loop-only (set-debugger-enable t)
+; (foo 3)
+;
+; So now, in LP we bind *debug-io* to *our-standard-io* instead of
+; *standard-output*, thus guaranteeing that debugger output is sent to standard
+; output rather than the terminal, without the mistake of binding *debug-io* to
+; an output-only stream.
+
+  (make-two-way-stream *standard-input* *standard-output*))
+
 (defun lp (&rest args)
 
 ; This function can only be called from within raw lisp, because no ACL2
@@ -8216,7 +8830,7 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
 
 ; Remark for #+acl2-par.  Here we set the gc-threshold to a high number.  If
 ; the Lisps support it, this threshold could be based off the actual memory in
-; the system.  We peform this setting of the threshold in lp, because Lispworks
+; the system.  We perform this setting of the threshold in lp, because Lispworks
 ; doesn't save the GC configuration as part of the Lisp image.
 
 ; Parallelism no-fix: the threshold below may cause problems for machines with
@@ -8241,7 +8855,8 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
    (f-put-global 'parallel-execution-enabled t *the-live-state*)
    (let ((state *the-live-state*)
          #+(and gcl (not cltl2))
-         (system::*break-enable* (debugger-enabledp *the-live-state*)))
+         (system::*break-enable* (debugger-enabledp *the-live-state*))
+         (*debug-io* *our-standard-io*))
      (cond
       ((> *ld-level* 0)
        (when (raw-mode-p *the-live-state*)
@@ -8252,6 +8867,8 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
               nil (standard-co *the-live-state*) *the-live-state* nil))
        (return-from lp nil))
       ((not *lp-ever-entered-p*)
+       (f-put-global 'saved-output-reversed nil state)
+       (push-current-acl2-world 'saved-output-reversed *the-live-state*)
        (set-initial-cbd)
        (eval `(in-package ,*startup-package-name*)) ;only changes raw Lisp pkg
 
@@ -8265,27 +8882,30 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
        #-(and gcl (not cltl2))
        (setq *debugger-hook* 'our-abort)
 
-; Even with the setting of *stack-overflow-behaviour* to nil or :warn in
-; acl2-init.lisp, we cannot eliminate the following form for LispWorks.  (We
-; tried with LispWorks 6.0 and Lispworks 6.0.1 with *stack-overflow-behaviour*
-; = nil and without the following form, but we got segmentation faults when
-; certifying community books books/concurrent-programs/bakery/stutter2 and
-; books/unicode/read-utf8.lisp.)
+; We have found it necessary to extend the LispWorks stack size, in particular
+; for community books books/concurrent-programs/bakery/stutter2 and
+; books/unicode/read-utf8.lisp.
 
        #+lispworks (hcl:extend-current-stack 400)
 
-       #+(and lispworks acl2-par)
-       (when (< (hcl:current-stack-length)
+; David Rager agrees that the following block of code is fine to delete (note
+; that as of 11/2017 (hcl:current-stack-length) is 399998 when ACL2 comes up,
+; built on 64-bit LispWorks), though he wonders if it is needed for 32-bit
+; LispWorks.  We'll leave it as a comment in case something like it is useful
+; in the future.
 
-; Keep the below number (currently 80000) in sync with the value given to
-; *sg-default-size* (set elsewhere in our code).
-
-                80000)
-         (hcl:extend-current-stack
-
-; this calculation sets the current stack length to be within 1% of 80000
-
-          (- (round (* 100 (/ (hcl:current-stack-length) 80000))) 100)))
+;;;        #+(and lispworks acl2-par)
+;;;        (when (< (hcl:current-stack-length)
+;;;
+;;; ; Keep the below number (currently 80000) in sync with the value given to
+;;; ; *sg-default-size* (set elsewhere in our code).
+;;;
+;;;                 80000)
+;;;          (hcl:extend-current-stack
+;;;
+;;; ; this calculation sets the current stack length to be within 1% of 80000
+;;;
+;;;           (- (round (* 100 (/ (hcl:current-stack-length) 80000))) 100)))
 
        #+sbcl
        (define-our-sbcl-putenv) ; see comment on this in acl2-fns.lisp
@@ -8293,40 +8913,63 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
 ; Acl2-default-restart isn't enough in Allegro, at least, to get the new prompt
 ; when we start up:
 
-       (let* ((system-dir (let ((str (getenv$-raw "ACL2_SYSTEM_BOOKS")))
-                            (and str
-                                 (maybe-add-separator str))))
-              (save-expansion (let ((s (getenv$-raw "ACL2_SAVE_EXPANSION")))
+       (let* ((save-expansion (let ((s (getenv$-raw "ACL2_SAVE_EXPANSION")))
                                 (and s
                                      (not (equal s ""))
                                      (not (equal (string-upcase s)
                                                  "NIL")))))
-              (user-home-dir-path (our-user-homedir-pathname))
-              (user-home-dir0 (and user-home-dir-path
-                                   (our-truename user-home-dir-path
-                                                 "Note: Calling ~
-                                                    OUR-TRUENAME from LP.")))
-              (user-home-dir (and user-home-dir0
-                                  (if (eql (char user-home-dir0
-                                                 (1- (length user-home-dir0)))
-                                           *directory-separator*)
-                                      (subseq user-home-dir0
-                                              0
-                                              (1- (length user-home-dir0)))
-                                    user-home-dir0))))
-         (when system-dir
-           (f-put-global 'system-books-dir
-                         (canonical-dirname!
-                          (unix-full-pathname system-dir)
-                          'lp
-                          *the-live-state*)
-                         *the-live-state*))
-         (when (and save-expansion
-                    (not (equal (string-upcase save-expansion)
-                                "NIL")))
+              (book-hash-alistp-env
+
+; A non-nil value of this variable indicates that we are to use the "book-hash"
+; mechanism of storing an alist in the .cert file, instead of a numeric
+; checksum.  Starting in June 2016, storing such an alist is the default.  That
+; default is defeated when the indicated environment variable is empty or (up
+; to case) "NIL".
+
+               (let ((s (getenv$-raw "ACL2_BOOK_HASH_ALISTP")))
+                 (or (null s) ; default case
+                     (not (equal (string-upcase s)
+                                 "NIL")))))
+              (os-user-home-dir-path (our-user-homedir-pathname))
+              (os-user-home-dir0 (and os-user-home-dir-path
+                                      (our-truename os-user-home-dir-path
+                                                    "Note: Calling OUR-TRUENAME ~
+                                                  from LP.")))
+              (os-user-home-dir (and os-user-home-dir0
+                                     (if (eql (char os-user-home-dir0
+                                                    (1- (length os-user-home-dir0)))
+                                              *directory-separator*)
+                                         (subseq os-user-home-dir0
+                                                 0
+                                                 (1- (length os-user-home-dir0)))
+                                       os-user-home-dir0)))
+              (user-home-dir (and os-user-home-dir
+                                  (pathname-os-to-unix
+                                   os-user-home-dir
+                                   (os (w *the-live-state*))
+                                   *the-live-state*)))
+              (system-dir0 (let ((str (getenv$-raw "ACL2_SYSTEM_BOOKS")))
+                             (and str
+                                  (maybe-add-separator str)))))
+         (when save-expansion
            (f-put-global 'save-expansion-file t *the-live-state*))
+         (when book-hash-alistp-env
+           (f-put-global 'book-hash-alistp t *the-live-state*))
          (when user-home-dir
-           (f-put-global 'user-home-dir user-home-dir *the-live-state*)))
+           (f-put-global 'user-home-dir user-home-dir *the-live-state*))
+         (when system-dir0 ; needs to wait for user-homedir-pathname
+           (f-put-global
+            'system-books-dir
+            (canonical-dirname!
+             (unix-full-pathname
+              (expand-tilde-to-user-home-dir
+               system-dir0 ; from getenv$-raw, hence a legal ACL2 string
+               (os (w *the-live-state*))
+               'lp
+               *the-live-state*))
+             'lp
+             *the-live-state*)
+            *the-live-state*)))
        (set-gag-mode-fn :goals *the-live-state*)
        #-hons
 ; Hons users are presumably advanced enough to tolerate the lack of a
@@ -8363,26 +9006,89 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
 ; If the ACL2 customization file exists (and we are not booting) then it hasn't
 ; been included yet, and we include it now.
 
-           (fms "Customizing with ~x0.~%"
-                (list (cons #\0 customization-full-file-name))
-                *standard-co*
-                state
-                nil)
-           (let ((old-infixp (f-get-global 'infixp *the-live-state*)))
-             (f-put-global 'infixp nil *the-live-state*)
-             (with-suppression ; package locks, not just warnings, for read
-              (state-free-global-let*
-               ((connected-book-directory
-                 (f-get-global 'connected-book-directory state)))
-               (ld-fn (put-assoc-eq
-                       'standard-oi
-                       customization-full-file-name
-                       (put-assoc-eq
-                        'ld-error-action :return
-                        (f-get-ld-specials *the-live-state*)))
-                      *the-live-state*
-                      nil)))
-             (f-put-global 'infixp old-infixp *the-live-state*)))))
+           (let ((quietp (let ((s (getenv$-raw "ACL2_CUSTOMIZATION_QUIET")))
+                           (and s
+                                (not (equal s ""))
+                                (not (string-equal s "NIL"))
+                                (if (string-equal s "ALL") :all t)))))
+             (when (not quietp)
+               (fms "Customizing with ~x0.~%"
+                    (list (cons #\0 customization-full-file-name))
+                    *standard-co*
+                    state
+                    nil))
+             (let ((ld-alist (put-assoc-eq
+                              'standard-oi
+                              customization-full-file-name
+                              (put-assoc-eq
+                               'ld-error-action :return
+                               (f-get-ld-specials *the-live-state*))))
+                   #+acl2-infix (old-infixp
+                                 (f-get-global 'infixp *the-live-state*)))
+               #+acl2-infix (f-put-global 'infixp nil *the-live-state*)
+               (with-suppression ; package locks, not just warnings, for read
+                (state-free-global-let*
+                 ((connected-book-directory
+                   (f-get-global 'connected-book-directory state)))
+                 (cond (quietp
+
+; We avoid using with-output!, since it generates a call of state-global-let*,
+; which isn't allowed outside the loop -- which we haven't yet entered!
+
+                        (state-free-global-let*
+                         ((inhibit-output-lst *valid-output-names*)
+                          (gag-mode nil)
+                          (print-clause-ids nil))
+                         (let ((quiet-alist ld-alist))
+                           (loop for pair in
+; Warning: Keep quiet-alist in sync with the state-free-global-let* bindings
+; below.
+                                 '((ld-verbose . nil)
+                                   (ld-pre-eval-print . :never)
+                                   (ld-post-eval-print . nil)
+                                   (ld-prompt . nil))
+                                 do (setq quiet-alist
+                                          (put-assoc-eq (car pair)
+                                                        (cdr pair)
+                                                        quiet-alist)))
+                           (cond
+                            ((eq quietp :all)
+                             (ld-fn quiet-alist *the-live-state* nil))
+                            (t
+                             (state-free-global-let*
+; Warning: Keep these bindings in sync with quiet-alist.
+                              ((ld-verbose nil)
+                               (ld-pre-eval-print :never)
+                               (ld-post-eval-print nil)
+                               (ld-prompt nil))
+                              (ld-fn quiet-alist *the-live-state* nil)))))))
+                       (t (ld-fn ld-alist *the-live-state* nil)))))
+               #+acl2-infix
+               (f-put-global 'infixp old-infixp *the-live-state*))))))
+       (let ((val (getenv$-raw "ACL2_CHECK_INVARIANT_RISK")))
+         (when (and val (not (equal val "")))
+           (let* ((val1 (string-upcase val))
+                  (val2 (cond
+                         ((equal val1 "NIL") nil)
+                         ((equal val1 "T") t)
+                         ((member-equal val1 '(":ERROR" "ERROR"))
+                          :ERROR)
+                         ((member-equal val1 '(":WARNING" "WARNING"))
+                          :WARNING)
+                         (t (error "Error detected in ~
+                                    initialize-state-globals:~%Illegal value, ~
+                                    ~s, for environment variable ~
+                                    ACL2_CHECK_INVARIANT_RISK.~%See :DOC ~
+                                    invariant-risk."
+                                   val1)))))
+             (ld-fn (put-assoc-eq
+                     'standard-oi
+                     `((set-check-invariant-risk ,val2))
+                     (put-assoc-eq 'ld-pre-eval-print
+                                   t
+                                   (f-get-ld-specials *the-live-state*)))
+                    *the-live-state*
+                    t))))
        (f-put-global 'ld-error-action :continue *the-live-state*)))
      (with-suppression ; package locks, not just warnings; to read 'cl::foo
       (cond ((and *return-from-lp*
@@ -8403,8 +9109,7 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
                (f-put-global 'standard-oi *standard-oi* *the-live-state*)
                (cond
                 (*lp-init-forms*
-                 (let ((standard-oi (append *lp-init-forms*
-                                            *standard-oi*)))
+                 (let ((standard-oi (append *lp-init-forms* *standard-oi*)))
                    (setq *lp-init-forms* nil)
                    (ld-fn (put-assoc-eq 'standard-oi
                                         standard-oi
@@ -8427,12 +9132,47 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
 
 ;                   COMPILING, SAVING, AND RESTORING
 
+#+ccl
+(defun stack-access-defeat-hook-cert-ht ()
+
+; This function either returns nil or, if ccl::*stack-access-winners* is bound
+; to a hash-table, a hash-table whose keys are names of currently-known
+; "winners".  Each such name is the name of a function FN that is a key of
+; ccl::*stack-access-winners* such that FN is the current symbol-function of
+; FN.
+
+  (let ((ccl-ht
+         (and (boundp 'ccl::*stack-access-winners*)
+              (symbol-value 'ccl::*stack-access-winners*))))
+    (and (hash-table-p ccl-ht)
+         (let ((ht (make-hash-table :test 'eq)))
+           (maphash (lambda (key val)
+                      (when (and val
+                                 (symbolp val)
+                                 (fboundp val)
+                                 (eq key (symbol-function val)))
+                        (setf (gethash val ht) t)))
+                    ccl-ht)
+           ht))))
+
+#+ccl
+(defvar *stack-access-defeat-hook-cert-ht* nil)
+
+#+ccl
+(defun stack-access-defeat-hook-cert (fn)
+
+; This function assumes that *stack-access-defeat-hook-cert-ht* is bound to a
+; hash-table of names of "winners"; see function
+; stack-access-defeat-hook-cert-ht.
+
+  (and (symbolp fn)
+       (not (gethash fn *stack-access-defeat-hook-cert-ht*))))
+
 (defun acl2-compile-file (full-book-name os-expansion-filename)
 
-; Full-book-name is a Unix-style pathname.  Os-expansion-filename is a pathname
-; for the current operating system of the file we want to compile.  We compile
-; os-expansion-filename but into the compiled filename corresponding to
-; full-book-name.
+; Full-book-name is an ACL2 pathname, while os-expansion-filename is an OS
+; pathname; see the Essay on Pathnames.  We compile os-expansion-filename but
+; into the compiled filename corresponding to full-book-name.
 
 ; To compile os-expansion-filename, we need to make sure that uses in the file
 ; of backquote and comma conform in meaning to those that were in effect during
@@ -8463,14 +9203,19 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
 ; example where this binding reduced the .dx64fsl size from 13696271 to 24493.
 
            #+ccl (ccl::*save-source-locations* nil))
-       (compile-file os-expansion-filename :output-file ofile))
+       (cond
+        #+ccl
+        (*stack-access-defeat-hook-cert-ht*
+         (let ((ccl::*stack-access-defeat-hook*
+                'stack-access-defeat-hook-cert))
+           (declare (special ccl::*stack-access-defeat-hook*))
+           (compile-file os-expansion-filename :output-file ofile)))
+        (t (compile-file os-expansion-filename :output-file ofile))))
 
 ; Warning: Keep the following "compile on the fly" readtime conditional in sync
 ; with the one in initialize-state-globals.  Here, we avoid loading the
 ; compiled file when compiling a certified book, because all functions are
-; already compiled.  Thus, the code dealing with hons-enabledp below is
-; irrelevant as long as under-the-hood hons/memoize code is only used in CCL
-; (or SBCL) builds.
+; already compiled.
 
      #-(or ccl sbcl)
      (let ((*compiling-certified-file*
@@ -8486,7 +9231,7 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
                              collect (cons (car pair)
                                            (symbol-function (car pair)))))))
        (load-compiled ofile t)
-       (loop for pair in alist ; nil if not hons-enabledp
+       (loop for pair in alist
              when (not (eq (symbol-function (car pair))
                            (cdr pair)))
              do (setf (symbol-function (car pair))
@@ -8499,7 +9244,7 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
 (defun-one-output delete-auxiliary-book-files (full-book-name)
   (let* ((file (pathname-unix-to-os full-book-name *the-live-state*))
          (ofile (convert-book-name-to-compiled-name file *the-live-state*))
-         (efile (expansion-filename file nil *the-live-state*))
+         (efile (expansion-filename file))
          (err-string "A file created for book ~x0, namely ~x1, exists and ~
                       cannot be deleted with Common Lisp's delete-file.  We ~
                       do not know for sure whether this file was produced by ~
@@ -8529,12 +9274,18 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
                    err-string
                    full-book-name efile))))))
 
-(defun delete-expansion-file (expansion-filename state)
-  (delete-file expansion-filename)
+(defun delete-expansion-file (os-expansion-filename full-book-name state)
+
+; Os-expansion-filename is, as the name suggests, an OS filename; see the Essay
+; on Pathnames.  Since that pathname could contain characters that are not ACL2
+; characters, we print the message using the ACL2 string for the corresponding
+; book, full-book-name.
+
+  (delete-file os-expansion-filename)
   (io? event nil state
-       (expansion-filename)
-       (fms "Note: Deleting book expansion file,~%~s0.~|"
-            (list (cons #\0 expansion-filename))
+       (full-book-name)
+       (fms "Note: Deleting expansion file for the book,~%~s0.~|"
+            (list (cons #\0 full-book-name))
             (proofs-co state) state nil)))
 
 (defun compile-uncompiled-defuns (file &optional (fns :some) gcl-flg
@@ -8562,6 +9313,16 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
   (let ((os-file (pathname-unix-to-os file state)))
     (state-global-let*
      ((print-circle (f-get-global 'print-circle-files state))
+
+; The use of with-output-object-channel-sharing below will fail in Lisps that
+; allow compilation, like Allegro CL and unlike CCL, when we are inside a
+; binding of writes-okp to nil, as within a call of
+; protect-system-state-globals (e.g., when inside make-event expansion or
+; perhaps evaluation of a clause-processor hint).  It's sad to see an event
+; fail for that reason, such as (make-event (er-progn (comp t) (value
+; '(value-triple nil)))).  So here we bind writes-okp to t.
+
+      (writes-okp t)
       (serialize-character (f-get-global 'serialize-character-system state)))
      (with-print-controls
       :defaults
@@ -8666,7 +9427,7 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
                                          chan state))))))
                    ((eq (cadr trip) 'redefined)
 
-; This case avoids redefining a macro back to an overritten function in the
+; This case avoids redefining a macro back to an overwritten function in the
 ; following example provided by Eric Smith.
 
 ; (defun foo (x) x)
@@ -8748,6 +9509,7 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
   (let ((os-file (pathname-unix-to-os file state)))
     (state-global-let*
      ((print-circle (f-get-global 'print-circle-files state))
+      (writes-okp t) ; see comment on this binding in compile-uncompiled-defuns
       (serialize-character (f-get-global 'serialize-character-system state)))
      (with-print-controls
       :defaults
@@ -8865,7 +9627,7 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
 ; (creating very large TMP1.lisp file):
 ; 9893.870u 150.240s 2:54:22.62 95.9%   0+0k 0+0io 14528555pf+0w
 ;
-; Moroever, the saved_acl2.gcl file went from 43 MB, for the first two, to 104
+; Moreover, the saved_acl2.gcl file went from 43 MB, for the first two, to 104
 ; MB for the last.  So let's not write :program mode *1* functions to
 ; TMP1.lisp.  See the long comment about *fast-acl2-gcl-build* in add-trip.
 
@@ -8882,11 +9644,8 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
                                            (oneify-cltl-code
                                             (cadr (cddr trip)) ; defun-mode
                                             x
-                                            (getprop (car x)
-                                                     'stobj-function
-                                                     nil
-                                                     'current-acl2-world
-                                                     wrld)
+                                            (getpropc (car x) 'stobj-function
+                                                      nil wrld)
                                             wrld))))
                                 (cond (chan0 (push *1*def defs))
                                       (t (print-object$ *1*def chan
@@ -8953,19 +9712,24 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
         (value nil))))
     os-file))
 
-(defun compile-certified-file (expansion-filename full-book-name state)
+(defun compile-certified-file (os-expansion-filename full-book-name state)
 
-; Warning: File full-book-name should already have been included in order that
-; macros have been defined.  But more than that, expansion-filename must
-; already have been written.
+; Warning: full-book-name should be the full book name of a book that has
+; already have been included, so that its macro definitions have been evaluated
+; before we compile.  Moreover, os-expansion-filename must already have been
+; written.  As the names suggest, os-expansion-filename is an OS pathname and
+; full-book-name is an ACL2 pathname; see the Essay on Pathnames.
 
   (let* ((os-full-book-name (pathname-unix-to-os full-book-name state))
          (os-full-book-name-compiled
-          (convert-book-name-to-compiled-name os-full-book-name state)))
+          (convert-book-name-to-compiled-name os-full-book-name state))
+         #+ccl
+         (*stack-access-defeat-hook-cert-ht*
+          (stack-access-defeat-hook-cert-ht)))
     (when (probe-file os-full-book-name-compiled)
       (delete-file os-full-book-name-compiled))
-    (acl2-compile-file full-book-name expansion-filename)
-    state))
+    (acl2-compile-file full-book-name os-expansion-filename)
+    os-full-book-name-compiled))
 
 (defun compile-for-include-book (full-book-name certified-p ctx state)
   (cond
@@ -8983,7 +9747,8 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
                       full-book-name)
             (value nil)))
    (t
-    (let* ((efile (expansion-filename full-book-name t state))
+    (let* ((efile (pathname-unix-to-os (expansion-filename full-book-name)
+                                       state))
            (entry (and *hcomp-book-ht*
                        (gethash full-book-name *hcomp-book-ht*)))
            (status (and entry
@@ -9092,21 +9857,15 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
             x)))
 
 (defun-one-output stobj-print-symbol (x user-stobj-alist-tail)
-
-; Finds the (first) name of a pair (name . val) in user-stobj-alist-tail such
-; that x is the symbol-value of that name's live var, and returns the symbol to
-; print when encountering x during tracing.
-
-  (and user-stobj-alist-tail
-       (let ((pair (car user-stobj-alist-tail)))
-         (if (eq x (symbol-value (the-live-var (car pair))))
-             (let ((name (stobj-print-name (car pair))))
-               (intern-in-package-of-symbol
-                (cond ((eq x (cdr pair)) name)
-                      (t (concatenate 'string name
-                                      "{instance}")))
-                (car pair)))
-           (stobj-print-symbol x (cdr user-stobj-alist-tail))))))
+  (and (live-stobjp x)
+       (loop for pair in user-stobj-alist-tail
+             when (eq x (cdr pair))
+             do (return (intern-in-package-of-symbol
+                         (stobj-print-name (car pair))
+                         (car pair)))
+             finally (return (intern "<some-stobj>"
+                                     (find-package-fast
+                                      (current-package *the-live-state*)))))))
 
 (defun-one-output trace-hide-world-and-state (l)
 
@@ -9175,8 +9934,8 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
                         stobjs-out for ~x0."
                        fn))
         (t (let ((w (w *the-live-state*)))
-             (or (getprop fn 'stobjs-out nil 'current-acl2-world w)
-                 (and (getprop fn 'symbol-class nil 'current-acl2-world w)
+             (or (getpropc fn 'stobjs-out nil w)
+                 (and (getpropc fn 'symbol-class nil w)
                       '(nil)))))))
 
 ; The definition of fix-trace and its subfunction fix-trace-untrace can go
@@ -9216,7 +9975,7 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
 ; ; new:
 ; 33931.460u 1017.070s 1:43:24.28 563.2%	0+0k 392+1931656io 0pf+0w
 ; After restoring (start-sol-gc) in function acl2h-init, we regained the old
-; level of performance for a UT CS ACL2(h) regression, with the new memoizaion
+; level of performance for a UT CS ACL2(h) regression, with the new memoization
 ; code.
 
 (defun mf-looking-at (str1 str2 &key (start1 0) (start2 0))
@@ -9249,8 +10008,8 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
 
 (defun our-uname ()
 
-; Returns nil or else a keyword, currently :darwin or :linux, to indicate the
-; result of shell command "uname".
+; Returns nil or else a keyword -- currently :darwin, :linux, or :freebsd -- to
+; indicate the result of shell command "uname".
 
   (multiple-value-bind
    (exit-code val)
@@ -9259,7 +10018,8 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
         (stringp val)
         (<= 6 (length val))
         (cond ((string-equal (subseq val 0 6) "Darwin") :darwin)
-              ((string-equal (subseq val 0 5) "Linux") :linux)))))
+              ((string-equal (subseq val 0 5) "Linux") :linux)
+              ((string-equal (subseq val 0 7) "FreeBSD") :freebsd)))))
 
 (defun meminfo (&optional arg)
 
@@ -9298,13 +10058,32 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
                  (and (integerp ans)
                       (equal (mod ans 1024) 0)
                       (/ ans 1024)))))))
+      (:freebsd
+       (let* ((arg (or arg
+
+; Gary Byers suggests hw.usermem instead of hw.physmem, to avoid including
+; memory that seems to be reserved for kernel drivers.
+
+                       "hw.usermem"))
+              (len (length arg)))
+         (multiple-value-bind
+          (exit-code val)
+          (system-call+ "sysctl" (list arg))
+          (and (eql exit-code 0)
+               (mf-looking-at arg val)
+               (mf-looking-at arg ": " :start1 len)
+               (let ((ans (read-from-string val nil nil :start (+ 2 len))))
+                 (and (integerp ans)
+                      (equal (mod ans 1024) 0)
+                      (/ ans 1024)))))))
       (t nil)))
    0))
 
 (defg *max-mem-usage*
 
-; This global is set in start-sol-gc.  It is an upper bound, in bytes of memory
-; used, that when exceeded results in certain garbage collection actions.
+; This global is set in ccl-initialize-gc-strategy.  It is an upper bound, in
+; bytes of memory used, that when exceeded results in certain garbage
+; collection actions.
 
 ; See also the centaur/misc/memory-mgmt books.
 
@@ -9312,11 +10091,15 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
 
 (defg *gc-min-threshold*
 
-; This is set in start-sol-gc.
+; This is set in ccl-initialize-gc-strategy.
 
 ; See also the centaur/misc/memory-mgmt books.
 
-  (expt 2 30))
+  (min (expt 2 30)
+
+ ; CCL requires a fixnum for ccl::lisp-heap-gc-threshold.
+
+       most-positive-fixnum))
 
 (let ((physical-memory-cached-answer nil))
 (defun physical-memory () ; in KB
@@ -9328,10 +10111,11 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
 #+ccl
 (defun set-and-reset-gc-thresholds ()
 
-; See start-sol-gc for a full discussion.  The comments here summarize how that
-; works out if, for example, there are 8G bytes of physical memory, just to
-; make the concepts concrete -- so it might be helpful to read the comments in
-; this function before reading the more general discussion in start-sol-gc.
+; See set-gc-strategy-builtin-delay (formerly start-sol-gc) for a full
+; discussion.  The comments here summarize how that works out if, for example,
+; there are 8G bytes of physical memory, just to make the concepts concrete --
+; so it might be helpful to read the comments in this function before reading
+; the more general discussion in set-gc-strategy-builtin-delay.
 
   (let ((n
 
@@ -9341,8 +10125,12 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
 ; bytes before the next GC, unless the current memory usage is more than
 ; (3/4)G, in which case we allocate the minimum of (1/4)G.
 
-         (max (- *max-mem-usage* (ccl::%usedbytes))
-              *gc-min-threshold*)))
+         (min (max (- *max-mem-usage* (ccl::%usedbytes))
+                   *gc-min-threshold*)
+
+; CCL requires a fixnum for ccl::lisp-heap-gc-threshold.
+
+              most-positive-fixnum)))
 
 ; Now set the "threshold" to the number of bytes computed above (unless that
 ; would be a no-op).
@@ -9356,7 +10144,7 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
 
   (ccl::use-lisp-heap-gc-threshold)
 
-; Finally, still assuming 8G bytes of phyical memory, set the "threshold" to
+; Finally, still assuming 8G bytes of physical memory, set the "threshold" to
 ; (1/4)G.  This is how much the next GC will set aside as free memory -- at
 ; least initially, but then the post-gc hook will call this function.  As
 ; explained above, in the case that the current memory usage is less than
@@ -9367,12 +10155,38 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
     (ccl::set-lisp-heap-gc-threshold *gc-min-threshold*)))
 
 #+ccl
+(defun ccl-initialize-gc-strategy (&optional threshold)
+  (let* ((phys (physical-memory))                   ; in KB
+         (memsize (cond ((> phys 0) (* phys 1024))  ; to bytes
+                        (t (expt 2 32)))))
+    (setq *max-mem-usage* ; no change if we were here already
+          (min (floor memsize 8)
+               (expt 2 31)))
+    (setq *gc-min-threshold* ; no change if we were here already
+          (min (cond ((null threshold)
+                      (floor *max-mem-usage* 4))
+                     ((posp threshold) threshold)
+                     (t (error "The GC threshold must be a positive integer, ~
+                                but ~s is not!"
+                               threshold)))
+
+ ; CCL requires a fixnum for ccl::lisp-heap-gc-threshold.
+
+               most-positive-fixnum))
+    (ccl::set-lisp-heap-gc-threshold *gc-min-threshold*)
+    (ccl::use-lisp-heap-gc-threshold)
+    nil))
+
+#+ccl
 (defun set-gc-strategy-builtin-delay ()
 
 ; This function was called start-sol-gc through ACL2 Version_7.1.  It should
 ; undo the effects of set-gc-strategy-builtin-egc, by turning off EGC and
 ; enabling the delay strategy.  The list ccl::*post-gc-hook-list* should
 ; contain the symbol set-and-reset-gc-thresholds after this call succeeds.
+
+; The function ccl-initialize-gc-strategy should be called before this function
+; is called.
 
 ; This function should probably not be invoked in recent versions of CCL,
 ; instead relying on EGC for memory management, except perhaps in
@@ -9452,14 +10266,6 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
 ; a reasonable assumption we think for anyone using ACL2 in 2015 or beyond.
 
   (without-interrupts ; leave us in a sane state
-   (let* ((phys (physical-memory))
-          (memsize (cond ((> phys 0) (* phys 1024)) ; to bytes
-                         (t (expt 2 32)))))
-     (setq *max-mem-usage* ; no change if we were here already
-           (min (floor memsize 8)
-                (expt 2 31)))
-     (setq *gc-min-threshold* ; no change if we were here already
-           (floor *max-mem-usage* 4)))
    (ccl:egc nil)
    (ccl::add-gc-hook
 

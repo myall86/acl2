@@ -37,9 +37,10 @@
   :parents (transforms warnings)
   :short "A transform to clean up all the warnings in a design."
 
-  :long "<p>See @(see vl-clean-warnings), which sorts warnings and eliminates
-duplicates.  This transform just extends @('vl-clean-warnings') throughout a
-design.</p>")
+  :long "<p>The top-level function here is @(see vl-design-clean-warnings).
+This function simply applies @('vl-clean-warnings'), which sorts a list of
+warnings and eliminates duplicate warnings, to all of the warnings lists
+throughout the design.</p>")
 
 (local (xdoc::set-default-parents clean-warnings))
 
@@ -76,6 +77,11 @@ design.</p>")
   :returns (new-x vl-programlist-p)
   (vl-program-clean-warnings x))
 
+(def-vl-clean-warnings vl-class)
+(defprojection vl-classlist-clean-warnings ((x vl-classlist-p))
+  :returns (new-x vl-classlist-p)
+  (vl-class-clean-warnings x))
+
 (def-vl-clean-warnings vl-package)
 (defprojection vl-packagelist-clean-warnings ((x vl-packagelist-p))
   :returns (new-x vl-packagelist-p)
@@ -105,6 +111,7 @@ redundant warnings.</p>"
                       :udps       (vl-udplist-clean-warnings x.udps)
                       :interfaces (vl-interfacelist-clean-warnings x.interfaces)
                       :programs   (vl-programlist-clean-warnings x.programs)
+                      :classes    (vl-classlist-clean-warnings x.classes)
                       :packages   (vl-packagelist-clean-warnings x.packages)
                       :configs    (vl-configlist-clean-warnings x.configs))))
 

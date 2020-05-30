@@ -40,6 +40,7 @@
 (include-book "../osets/conversions")
 (include-book "../osets/extras")
 (include-book "../osets/map")
+(include-book "../osets/listsets-base")
 (include-book "../bags/basic") ;bzo is this okay - can records depend on bags?
 
 (local (include-book "../util/iff"))
@@ -52,6 +53,22 @@
 (local (in-theory (disable SET::SUBSET)))
 
 (local (in-theory (disable mod floor))) ;bzo make non-local?
+
+
+;; [Jared] Previously this book did its own (set::quantify-predice (true-listp
+;; set)).  But that was incompatible with coi/osets/listsets.lisp because, it
+;; turns out, set::quantify-predicate forms can't be redundant due to the use
+;; of deftheory forms.  What a pain.  Anyway, moved the quantify-predicate form
+;; to coi/osets/listsets-base, leaving only these (unfortunately non-local)
+;; disables...
+
+(in-theory (disable SET::ALL<NOT-TRUE-LISTP>))
+(in-theory (disable SET::ALL<TRUE-LISTP>))
+(in-theory (disable SET::ALL-IN-2-NOT<TRUE-LISTP>))
+(in-theory (disable SET::ALL-IN-2<TRUE-LISTP>))
+
+
+
 
 ;bzo make a bunch of the stuff in this file local?
 
@@ -409,7 +426,7 @@
        (set::all<natp-less-than-size> (mem::mem-tree-domain (caar mem) (caddr mem)) (cadr mem))
        (set::all<not-natp-less-than-size> (set::rkeys (cdddr mem)) (cadr mem))
 
-       (equal (signed-byte-p 30 (caddr mem))
+       (equal (signed-byte-p 29 (caddr mem))
               (cdar mem))
 
 ;bzo drop?
@@ -609,12 +626,8 @@
   :hints (("Goal" :in-theory (enable MEM::DOMAIN-AUX)
            :do-not '(generalize eliminate-destructors))))
 
-; The definition of bitp here was changed 11/10/2012 by Matt K. to match the
-; definition of bitp in books/ihs/basic-definitions.lisp (which has changed).
-(defun-inline bitp (b)
-  (declare (xargs :guard t))
-  (or (eql b 0)
-      (eql b 1)))
+; The definition of bitp here was deleted April 2016 by Matt K. now that
+; bitp is defined in ACL2.
 
 (defun bit-listp (lst)
   (declare (xargs :guard t))
@@ -669,12 +682,6 @@
 
 ;(in-theory (disable SET::FILTER-IN-NOT<NATP-LESS-THAN-SIZE>))
 
-(set::quantify-predicate (true-listp set))
-
-(in-theory (disable SET::ALL<NOT-TRUE-LISTP>))
-(in-theory (disable SET::ALL<TRUE-LISTP>))
-(in-theory (disable SET::ALL-IN-2-NOT<TRUE-LISTP>))
-(in-theory (disable SET::ALL-IN-2<TRUE-LISTP>))
 
 (defthm len-of-CONVERT-INTEGER-TO-REVERSED-BIT-LIST
   (equal (LEN (CONVERT-INTEGER-TO-REVERSED-BIT-LIST A len))

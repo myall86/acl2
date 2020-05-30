@@ -42,9 +42,12 @@
   (vl-pretty-import x))
 
 (encapsulate nil
-  (local (in-theory (enable vl-is-token? vl-lookahead-is-token?)))
+  (local (in-theory (enable vl-is-token?
+                            vl-lookahead-is-token?
+                            )))
   (defparser-top vl-parse-package-import-declaration
     :guard (and (vl-lookahead-is-token? :vl-kwd-import tokens)
+                (vl-lookahead-is-token? :vl-idtoken (cdr tokens))
                 (vl-atts-p atts))))
 
 (defmacro test-import (&key input expect (successp 't) atts)
@@ -85,17 +88,18 @@
                        (import "foo" "baz" nil)))
 
 (test-import :input "import foo::*, foo::bar;"
-             :atts (list (cons "myatt" (vl-idexpr "myval" nil nil)))
+             :atts (list (cons "myatt" (vl-idexpr "myval")))
              :expect '((import "foo" :vl-import* (("myatt" <- (id "myval"))))
                        (import "foo" "bar"       (("myatt" <- (id "myval"))))))
 
 
+;; These are now ruled out by our guard due to adding DPI stuff.
 
-(test-import :input "import"  ;; sanity check early eof
-             :successp nil)
+;; (test-import :input "import"  ;; sanity check early eof
+;;              :successp nil)
 
-(test-import :input "import ;"  ;; need at least one item
-             :successp nil)
+;; (test-import :input "import ;"  ;; need at least one item
+;;              :successp nil)
 
 (test-import :input "import foo::*" ;; missing semicolon
              :successp nil)

@@ -68,8 +68,7 @@
 (defaggregate vl-paramdecltest
   ((input   stringp)
    (expect  "pretty paramdecls that we expect.")
-   (successp booleanp :default t)
-   (pre-usertypes string-listp "pre-defined user types")))
+   (successp booleanp :default t)))
 
 (deflist vl-paramdecltestlist-p (x)
   (vl-paramdecltest-p x))
@@ -79,11 +78,6 @@
       nil
     (cons (change-vl-paramdecltest (car x) :successp nil)
           (make-paramdecltests-fail (cdr x)))))
-
-(local (defthm crock
-         (implies (string-listp x)
-                  (vl-usertypes-p (make-lookup-alist x)))
-         :hints(("Goal" :in-theory (enable make-lookup-alist)))))
 
 (defparser-top vl-parse-param-or-localparam-declaration
   :guard (and (vl-atts-p atts)
@@ -96,13 +90,11 @@
                               (config vl-loadconfig-p))
   (b* (((vl-paramdecltest test) test)
        (tokens   (make-test-tokens test.input))
-       (pstate   (make-vl-parsestate :warnings 'blah-warnings
-                                     :usertypes (make-lookup-alist test.pre-usertypes)))
+       (pstate   (make-vl-parsestate :warnings 'blah-warnings))
        (atts     '(("blah")))
        (- (cw "~|-----~%Parsing as ~x0: ~s1~%" (vl-loadconfig->edition config) test.input))
        ((mv err val ?tokens (vl-parsestate pstate))
         (vl-parse-param-or-localparam-declaration-top atts '(:vl-kwd-parameter :vl-kwd-localparam)))
-       (- (vl-parsestate-free pstate))
        ((when err)
         (if test.successp
             (raise "Expected successful test but got error: ~s0" err)
@@ -124,8 +116,6 @@
   (or (atom tests)
       (and (vl-run-paramdecltest (car tests) config)
            (vl-run-paramdecltests (cdr tests) config))))
-
-
 
 
 (progn
@@ -187,8 +177,8 @@
                             :successp nil)
 
      (make-vl-paramdecltest :input "localparam signed [7:8] a = 1, b = 1 : 2 : 3"
-                            :expect '(("a" :local :implicit :vl-signed (range 7 8) = 1)
-                                      ("b" :local :implicit :vl-signed (range 7 8) = (:vl-mintypmax nil 1 2 3))))
+                            :expect '(("a" :local :implicit :vl-signed (:range 7 8) = 1)
+                                      ("b" :local :implicit :vl-signed (:range 7 8) = (:vl-mintypmax nil 1 2 3))))
 
      (make-vl-paramdecltest :input "localparam [7:8] signed a = 1, b = 1 : 2 : 3" ;; signed must come before range
                             :successp nil)
@@ -198,12 +188,12 @@
 
 
      (make-vl-paramdecltest :input "parameter [7:8] a = 1, b = 1 : 2 : 3"
-                            :expect '(("a" :implicit (range 7 8) = 1)
-                                      ("b" :implicit (range 7 8) = (:vl-mintypmax nil 1 2 3))))
+                            :expect '(("a" :implicit (:range 7 8) = 1)
+                                      ("b" :implicit (:range 7 8) = (:vl-mintypmax nil 1 2 3))))
 
      (make-vl-paramdecltest :input "localparam [7:8] a = 1, b = 1 : 2 : 3"
-                            :expect '(("a" :local :implicit (range 7 8) = 1)
-                                      ("b" :local :implicit (range 7 8) = (:vl-mintypmax nil 1 2 3))))
+                            :expect '(("a" :local :implicit (:range 7 8) = 1)
+                                      ("b" :local :implicit (:range 7 8) = (:vl-mintypmax nil 1 2 3))))
 
 
      ;; Special types that are supported in both Verilog-2005 and SystemVerilog-2012.
@@ -223,16 +213,16 @@
                             :expect '(("a" :explicit (:vl-real unsigned) = 1)
                                       ("b" :explicit (:vl-real unsigned) = 2)))
 
-     (make-vl-paramdecltest :input "parameter real [7:0] a = 1, b = 2"  ;; no ranges on real
+     (make-vl-paramdecltest :input "parameter real [7:0] a = 1, b = 2" ;; no ranges on real
                             :successp nil)
 
-     (make-vl-paramdecltest :input "parameter [7:0] real a = 1, b = 2"  ;; no ranges on real
+     (make-vl-paramdecltest :input "parameter [7:0] real a = 1, b = 2" ;; no ranges on real
                             :successp nil)
 
-     (make-vl-paramdecltest :input "parameter real signed a = 1, b = 2"  ;; no signed for real
+     (make-vl-paramdecltest :input "parameter real signed a = 1, b = 2" ;; no signed for real
                             :successp nil)
 
-     (make-vl-paramdecltest :input "parameter signed real a = 1, b = 2"  ;; no signed for real
+     (make-vl-paramdecltest :input "parameter signed real a = 1, b = 2" ;; no signed for real
                             :successp nil)
 
 
@@ -241,10 +231,10 @@
                             :expect '(("a" :explicit (:vl-time unsigned) = 1)
                                       ("b" :explicit (:vl-time unsigned) = 2)))
 
-     (make-vl-paramdecltest :input "parameter time [7:0] a = 1, b = 2"  ;; no ranges on time
+     (make-vl-paramdecltest :input "parameter time [7:0] a = 1, b = 2" ;; no ranges on time
                             :successp nil)
 
-     (make-vl-paramdecltest :input "parameter [7:0] time a = 1, b = 2"  ;; no ranges on time
+     (make-vl-paramdecltest :input "parameter [7:0] time a = 1, b = 2" ;; no ranges on time
                             :successp nil)
 
 
@@ -252,15 +242,13 @@
                             :expect '(("a" :explicit (:vl-realtime unsigned) = 1)
                                       ("b" :explicit (:vl-realtime unsigned) = 2)))
 
-     (make-vl-paramdecltest :input "parameter realtime [7:0] a = 1, b = 2"  ;; no ranges on realtime
+     (make-vl-paramdecltest :input "parameter realtime [7:0] a = 1, b = 2" ;; no ranges on realtime
                             :successp nil)
 
-     (make-vl-paramdecltest :input "parameter [7:0] realtime a = 1, b = 2"  ;; no ranges on realtime
+     (make-vl-paramdecltest :input "parameter [7:0] realtime a = 1, b = 2" ;; no ranges on realtime
                             :successp nil)
 
-
-    (make-vl-paramdecltest :input "parameter foo_t = 1"
-                            :pre-usertypes nil
+     (make-vl-paramdecltest :input "parameter foo_t = 1"
                             :expect '(("foo_t" :implicit = 1)))
 
      ))
@@ -278,9 +266,16 @@
      (make-vl-paramdecltest :input "parameter a"
                             :expect '(("a" :implicit)))
 
+     (make-vl-paramdecltest :input "parameter a [1:0]"
+                            :expect '(("a" :explicit (:vl-logic unsigned :udims (:range 1 0)))))
+
      (make-vl-paramdecltest :input "parameter a, b"
                             :expect '(("a" :implicit)
                                       ("b" :implicit)))
+
+     (make-vl-paramdecltest :input "parameter a, b [1:0][2:0]"
+                            :expect '(("a" :implicit)
+                                      ("b" :explicit (:vl-logic unsigned :udims (:range 1 0) (:range 2 0)))))
 
      (make-vl-paramdecltest :input "parameter a = 1, b"
                             :expect '(("a" :implicit = 1)
@@ -296,15 +291,20 @@
                                       ("c" :implicit :vl-signed)
                                       ("b" :implicit :vl-signed = (:vl-mintypmax nil 1 2 3))))
 
-     (make-vl-paramdecltest :input "parameter [7:8] a = 1, c, b = 1 : 2 : 3"
-                            :expect '(("a" :implicit (range 7 8) = 1)
-                                      ("c" :implicit (range 7 8))
-                                      ("b" :implicit (range 7 8) = (:vl-mintypmax nil 1 2 3))))
+     (make-vl-paramdecltest :input "parameter signed a = 1, c[1:0], b = 1 : 2 : 3"
+                            :expect '(("a" :implicit :vl-signed = 1)
+                                      ("c" :explicit (:vl-logic signed :udims (:range 1 0)))
+                                      ("b" :implicit :vl-signed = (:vl-mintypmax nil 1 2 3))))
+
+     (make-vl-paramdecltest :input "parameter [7:8] a = 1, c[1:0], b = 1 : 2 : 3"
+                            :expect '(("a" :implicit (:range 7 8) = 1)
+                                      ("c" :explicit (:vl-logic unsigned (:range 7 8) :udims (:range 1 0)))
+                                      ("b" :implicit (:range 7 8) = (:vl-mintypmax nil 1 2 3))))
 
      (make-vl-paramdecltest :input "parameter signed [7:8] a = 1, c, b = 1 : 2 : 3"
-                            :expect '(("a" :implicit :vl-signed (range 7 8) = 1)
-                                      ("c" :implicit :vl-signed (range 7 8))
-                                      ("b" :implicit :vl-signed (range 7 8) = (:vl-mintypmax nil 1 2 3))))
+                            :expect '(("a" :implicit :vl-signed (:range 7 8) = 1)
+                                      ("c" :implicit :vl-signed (:range 7 8))
+                                      ("b" :implicit :vl-signed (:range 7 8) = (:vl-mintypmax nil 1 2 3))))
 
      (make-vl-paramdecltest :input "parameter integer a = 1, b = 2, c"
                             :expect '(("a" :explicit (:vl-integer signed) = 1)
@@ -318,11 +318,18 @@
                             :expect '(("a" :implicit :vl-unsigned)))
 
      (make-vl-paramdecltest :input "parameter unsigned [7:0] a"
-                            :expect '(("a" :implicit :vl-unsigned (range 7 0))))
+                            :expect '(("a" :implicit :vl-unsigned (:range 7 0))))
+
+     (make-vl-paramdecltest :input "parameter unsigned [7:0] a [1:0]"
+                            :expect '(("a" :explicit (:vl-logic unsigned (:range 7 0) :udims (:range 1 0)))))
 
      (make-vl-paramdecltest :input "parameter unsigned [7:0] a, b = 3"
-                            :expect '(("a" :implicit :vl-unsigned (range 7 0))
-                                      ("b" :implicit :vl-unsigned (range 7 0) = 3)))
+                            :expect '(("a" :implicit :vl-unsigned (:range 7 0))
+                                      ("b" :implicit :vl-unsigned (:range 7 0) = 3)))
+
+     (make-vl-paramdecltest :input "parameter unsigned [7:0] a, b[1:0] = 3"
+                            :expect '(("a" :implicit :vl-unsigned (:range 7 0))
+                                      ("b" :explicit (:vl-logic unsigned (:range 7 0) :udims (:range 1 0)) = 3)))
 
 
      ;; In SystemVerilog the rhs can be a dollar sign.
@@ -332,18 +339,15 @@
 
      ;; In SystemVerilog the parameters can be of arbitrary data types.
 
-     (make-vl-paramdecltest :input "parameter foo_t = 1"  ;; don't allow shadowed params to avoid ambiguity
-                            :pre-usertypes '("foo_t")
-                            :successp nil)
-
      (make-vl-paramdecltest :input "parameter foo_t a = 1"
-                            :expect '(("a" :explicit (:vl-usertype (type "foo_t")) = 1))
-                            :pre-usertypes '("foo_t"))
+                            :expect '(("a" :explicit (:vl-usertype "foo_t") = 1)))
+
+     (make-vl-paramdecltest :input "parameter foo_t a[1:0] = 1"
+                            :expect '(("a" :explicit (:vl-usertype "foo_t" :udims (:range 1 0)) = 1)))
 
      (make-vl-paramdecltest :input "parameter foo_t a = 1, b"
-                            :expect '(("a" :explicit (:vl-usertype (type "foo_t")) = 1)
-                                      ("b" :explicit (:vl-usertype (type "foo_t"))))
-                            :pre-usertypes '("foo_t"))
+                            :expect '(("a" :explicit (:vl-usertype "foo_t") = 1)
+                                      ("b" :explicit (:vl-usertype "foo_t"))))
 
      (make-vl-paramdecltest :input "parameter struct { int field; } a = 1"
                             :expect '(("a" :explicit (:vl-struct ("field" :vl-int signed)) = 1)))

@@ -37,11 +37,12 @@
 (local (include-book "tools/mv-nth" :dir :system))
 (local (include-book "centaur/bitops/ihsext-basics" :dir :system))
 (local (include-book "centaur/bitops/signed-byte-p" :dir :system))
+(local (include-book "std/lists/take" :dir :system))
 (set-state-ok t)
 
 (local (in-theory (disable signed-byte-p)))
 
-(local (in-theory (disable take-redefinition)))
+(local (in-theory (disable take)))
 
 (local (defthm signed-byte-p-resolver
          (implies (and (integerp n)
@@ -76,7 +77,7 @@
                (read-byte$ channel state)
                (if (not x1)
                    (mv (reverse acc) state)
-                 (let ((len1 (utf8-table35-expected-length x1)))
+                 (let ((len1 (utf8-table36-expected-length x1)))
                    (if (not len1)
                        (mv 'fail state)
                      (mv-let (x2-x4 state)
@@ -104,7 +105,7 @@
 
        ((in-range? (the-fixnum x1) 194 223)
         ;; Expected length 2.  (We excluded 192,193 because they are not
-        ;; permitted under Table 3-6.)
+        ;; permitted under Table 3-7.)
         (mv-let (x2 state) (read-byte$ channel state)
            (if (and x2 (in-range? (the-fixnum x2) 128 191))
                ;; Manually-inlined utf8-combine2 operation.
@@ -146,7 +147,7 @@
              (mv 'fail state)))))
 
        ((in-range? (the-fixnum x1) 240 244)
-        ;; Expected length 4.  (We only accept 240-244 because of Table 3-6;
+        ;; Expected length 4.  (We only accept 240-244 because of Table 3-7;
         ;; i.e., we exclude 245, 246, and 247.
         (mv-let (x2 state) (read-byte$ channel state)
          (mv-let (x3 state) (read-byte$ channel state)
@@ -182,9 +183,9 @@
 
        ;; This is a little obscure.  As an optimization above, we did not
        ;; consider cases for first byte = 192, 193, 245, 246, and 247, because
-       ;; these are not allowed under Table 3-6.
+       ;; these are not allowed under Table 3-7.
        ;;
-       ;; However, utf8-table35-expected-length predics the lengths of these
+       ;; However, utf8-table36-expected-length predics the lengths of these
        ;; as 2, 2, 4, 4, and 4, respectively.  So, for our MBE equivalence, we
        ;; need to make sure to advance the stream just like we do in the
        ;; :logic mode.
@@ -285,7 +286,7 @@
                                       acc)))
   :hints(("Goal"
           :in-theory (e/d (read-utf8-fast utf8=>ustring-fast
-                                          take-redefinition)
+                                          take)
                           (nthcdr-bytes-2
                            nthcdr-bytes-3
                            nthcdr-bytes-4))
@@ -302,7 +303,7 @@
 
 (encapsulate
   ()
-  (local (in-theory (enable take-redefinition)))
+  (local (in-theory (enable take)))
 
   (local (defthm terrible-lemma-1
            (implies (and (integerp x)
@@ -324,8 +325,8 @@
            :hints(("Goal"
                    :in-theory (enable utf8-combine2-guard
                                       utf8-combine2
-                                      utf8-table35-bytes
-                                      utf8-table36-bytes)
+                                      utf8-table36-bytes
+                                      utf8-table37-bytes)
                    :use ((:instance uchar?-of-utf8-combine2))))))
 
   (local (defthm terrible-lemma-3
@@ -340,8 +341,8 @@
            :hints(("Goal"
                    :in-theory (enable utf8-combine3-guard
                                       utf8-combine3
-                                      utf8-table35-bytes
-                                      utf8-table36-bytes)
+                                      utf8-table36-bytes
+                                      utf8-table37-bytes)
                    :use ((:instance uchar?-of-utf8-combine3
                                     (x1 224)))))))
 
@@ -363,8 +364,8 @@
            :hints(("Goal"
                    :in-theory (enable utf8-combine3-guard
                                       utf8-combine3
-                                      utf8-table35-bytes
-                                      utf8-table36-bytes)
+                                      utf8-table36-bytes
+                                      utf8-table37-bytes)
                    :use ((:instance uchar?-of-utf8-combine3))))))
 
   (local (defthm terrible-lemma-5
@@ -379,8 +380,8 @@
            :hints(("Goal"
                    :in-theory (enable utf8-combine3-guard
                                       utf8-combine3
-                                      utf8-table35-bytes
-                                      utf8-table36-bytes)
+                                      utf8-table36-bytes
+                                      utf8-table37-bytes)
                    :use ((:instance uchar?-of-utf8-combine3
                                     (x1 237)))))))
 
@@ -400,8 +401,8 @@
            :hints(("Goal"
                    :in-theory (enable utf8-combine4-guard
                                       utf8-combine4
-                                      utf8-table35-bytes
-                                      utf8-table36-bytes)
+                                      utf8-table36-bytes
+                                      utf8-table37-bytes)
                    :use ((:instance uchar?-of-utf8-combine4
                                     (x1 240)))))))
 
@@ -427,8 +428,8 @@
            :hints(("Goal"
                    :in-theory (enable utf8-combine4-guard
                                       utf8-combine4
-                                      utf8-table35-bytes
-                                      utf8-table36-bytes)
+                                      utf8-table36-bytes
+                                      utf8-table37-bytes)
                    :use ((:instance uchar?-of-utf8-combine4))))))
 
   (local (defthm terrible-lemma-8
@@ -447,8 +448,8 @@
            :hints(("Goal"
                    :in-theory (enable utf8-combine4-guard
                                       utf8-combine4
-                                      utf8-table35-bytes
-                                      utf8-table36-bytes)
+                                      utf8-table36-bytes
+                                      utf8-table37-bytes)
                    :use ((:instance uchar?-of-utf8-combine4
                                     (x1 244)))))))
 
@@ -586,8 +587,8 @@
 
   (local (in-theory (e/d (unsigned-byte-listp
                           utf8-char=>uchar
-                          utf8-table35-bytes
                           utf8-table36-bytes
+                          utf8-table37-bytes
                           utf8-combine2
                           utf8-combine3
                           utf8-combine4

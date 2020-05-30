@@ -51,20 +51,21 @@
     ihs-ext-disabled-rules
 
     ;; basic arith equiv stuff we want to import
-    lnfix lifix lbfix
-    int-equiv nat-equiv bit-equiv
+    lnfix lifix lbfix lposfix pos-fix
+    int-equiv nat-equiv bit-equiv pos-equiv
     bit->bool bool->bit
     negp zbp
     arith-equiv-forwarding
 
     ;; basic bit definitions from ihs we want to import
-    logbitp logbit logior logand lognot logxor
+    logbitp logbit logior logand lognot logxor logite
     logcons logcar logcdr loghead logtail
     logext logapp logrev logrev1 logcount
     logmask logmaskp bitmaskp
     b-eqv b-nand b-nor b-andc1 b-andc2 b-orc1 b-orc2
-    b-not b-and b-ior b-xor bfix bitp
-    binary-logand binary-logior binary-logxor
+    b-not b-and b-ior b-xor b-ite bfix bitp
+    binary-logand binary-logior binary-logxor binary--
+    maybe-bitp maybe-bit-fix
 
     ;; induction schemes to import
     logcdr-induction-1
@@ -84,8 +85,8 @@
     bitmaskp** logext**
 
     ;; new definitions we want to export
-    nth-slice2 nth-slice8 nth-slice16
-    nth-slice32 nth-slice64 nth-slice128
+    nth-slice2 nth-slice4 nth-slice8 nth-slice16
+    nth-slice32 nth-slice64 nth-slice128 nth-slice256 nth-slice512 nth-slice nth-slice$
     negate-slice8 negate-slice16
     negate-slice32 negate-slice64
     abs-diff
@@ -100,13 +101,17 @@
     fast-logrev-u8 fast-logrev-u16 fast-logrev-u32 fast-logrev-u64
     signed-saturate signed-saturate-fn
     unsigned-saturate unsigned-saturate-fn
-    merge-8-u2s
+    merge-2-bits  merge-4-bits merge-8-bits merge-16-bits
+    merge-2-u2s   merge-4-u2s   merge-8-u2s
+    merge-2-u4s   merge-4-u4s
     merge-2-u8s   merge-4-u8s   merge-8-u8s  merge-16-u8s  merge-32-u8s
     merge-2-u16s  merge-4-u16s  merge-8-u16s merge-16-u16s
     merge-2-u32s  merge-4-u32s  merge-8-u32s merge-16-u32s
     merge-2-u64s  merge-4-u64s  merge-8-u64s
     merge-2-u128s merge-4-u128s
     merge-2-u256s
+    parity fast-parity
+    logrepeat fast-logrepeat fast-logrepeat!
 
     ;; selected theorems, hints, etc
     right-shift-to-logtail
@@ -135,7 +140,6 @@
     unsigned-byte-p-of-logrev
 
     ))
-
 
 (defpkg "BITOPS"
   (union-eq *standard-acl2-imports*
@@ -206,3 +210,51 @@
               )))
 
 (assign acl2::verbose-theory-warning nil)
+
+#!bitops
+(defconst *sparseint-exports*
+  '(sparseint
+    sparseint-p
+    sparseint-fix
+    sparseint-equiv
+    int-to-sparseint
+    sparseint-val
+    sparseint-concatenate
+    sparseint-rightshift
+    sparseint-ash
+    sparseint-bit
+    sparseint-bitnot
+    sparseint-bitand
+    sparseint-bitor
+    sparseint-bitxor
+    sparseint-biteqv
+    sparseint-bitandc1
+    sparseint-bitandc2
+    sparseint-bitnand
+    sparseint-bitorc1
+    sparseint-bitorc2
+    sparseint-bitnor
+    sparseint-test-bitand
+    sparseint-test-bitor
+    sparseint-test-bitxor
+    sparseint-test-biteqv
+    sparseint-test-bitandc1
+    sparseint-test-bitandc2
+    sparseint-test-bitnand
+    sparseint-test-bitorc1
+    sparseint-test-bitorc2
+    sparseint-test-bitnor
+    sparseint-equal
+    sparseint-length
+    sparseint-plus
+    sparseint-unary-minus
+    sparseint-binary-minus
+    sparseint-compare
+    sparseint-<
+    sparseint-binary-bitop
+    sparseint-trailing-0-count
+    sparseint-trailing-0-count-from
+    sparseint-trailing-1-count
+    sparseint-trailing-1-count-from
+    sparseint-bitcount
+    sparseint-bitcount-from))

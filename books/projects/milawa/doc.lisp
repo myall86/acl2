@@ -87,9 +87,7 @@ correctness of a heuristic, Boyer-Moore style theorem prover, all the way down
 to the x86 machine code that runs it.</p>
 
 <p>Milawa is <a href='http://www.gnu.org/philosophy/free-sw.html'>free
-software</a> released under the <a
-href='http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt'>GNU General Public
-License</a>, \"version 2 or later.\"</p>
+software</a> released under an MIT/X11 style license.</p>
 
 <p>See @(see build) for information about how to obtain and build Milawa.</p>
 
@@ -569,14 +567,14 @@ Books, because building it:</p>
 <ul>
 <li>takes several hours</li>
 <li>requires a lot of memory and hard disk space, and</li>
-<li>requires both Clozure Common Lisp (CCL) and ACL2(h).</li>
+<li>requires Clozure Common Lisp (CCL).</li>
 </ul>
 
 <p>Instead, to build Milawa, you should:</p>
 
 <ol>
 
-<li>Build CCL and ACL2(h) according to the instructions in
+<li>Build CCL and ACL2 according to the instructions in
 @('books/centaur/README.html').</li>
 
 <li>Then run these commands:
@@ -709,7 +707,7 @@ successful runs Linux machines, I use a ulimit of 65535.</p>
 <h5><a href='http://www.franz.com/products/allegrocl/'>Allegro</a> -- commercial, fast, NOT KNOWN TO WORK</h5>
 
 <p>Instructions:</p>
-<ul> 
+<ul>
   <li>After installing, add a symlink named @('acl') to your $PATH</li>
 </ul>
 
@@ -721,11 +719,11 @@ function to create a copy of Allegro with a larger Lisp heap size, e.g.,</p>
 
 @({
   (build-lisp-image \"big-acl.dxl\"
-                    :lisp-heap-start \"500M\" 
+                    :lisp-heap-start \"500M\"
                     :c-heap-start \"3000M\")
 })
 
-<p>Then, I used <tt>acl -I big-acl.dxl</tt> when building the base Milawa program, but this 
+<p>Then, I used <tt>acl -I big-acl.dxl</tt> when building the base Milawa program, but this
 is still not successful.  It may be that a more recent version of Allegro or more powerful
 computer will be successful.</p>
 
@@ -739,8 +737,8 @@ NOT KNOWN TO WORK</h5>
 </ul>
 
 <p>I have not been able to get <tt>scl</tt> to complete the proofs, as it
-segfaults on me during the proofs in the utilities directory.  I have not spent much 
-effort to debug this, and perhaps the problem is specific to my platform (Linux x86-64) 
+segfaults on me during the proofs in the utilities directory.  I have not spent much
+effort to debug this, and perhaps the problem is specific to my platform (Linux x86-64)
 or fixed in a more recent version.</p>
 
 <h5>Other Lisps?</h5>

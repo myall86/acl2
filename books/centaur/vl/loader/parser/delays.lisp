@@ -34,7 +34,6 @@
 (local (include-book "../../util/arithmetic"))
 
 
-
 ;                            PARSING DELAYS
 ;
 ; See Section 7.14 for the rules for computing delays.  Three delay expressions
@@ -55,10 +54,21 @@
 ;
 ; When no delay is given, all three are treated as zero.
 
-; delay_value ::=
-;    unsigned_number
-;  | real_number
-;  | identifier
+; Verilog-2005:
+;
+;   delay_value ::=
+;      unsigned_number
+;    | real_number
+;    | identifier
+;
+; SystemVerilog-2012:
+;
+;   delay_value ::=
+;      unsigned_number
+;    | real_number
+;    | ps_identifier
+;    | time_literal
+;    | '1step'
 
 (defparser vl-parse-delay-value ()
   :result (vl-expr-p val)
@@ -77,20 +87,37 @@
          (int := (vl-match))
          (when (member #\' (vl-echarlist->chars (vl-token->etext int)))
            (return-raw (vl-parse-error "Illegal delay value.")))
-         (return (make-vl-atom :guts (vl-make-guts-from-inttoken int))))
+         (return (make-vl-literal :val (vl-make-guts-from-inttoken int))))
 
        (when (vl-is-token? :vl-realtoken)
          (ans := (vl-parse-primary))
          (return ans))
 
+       ;; BOZO this doesn't yet support ps_identifier for SystemVerilog-2012.
        (when (vl-is-token? :vl-idtoken)
          (id := (vl-match))
-         (return (make-vl-atom :guts (make-vl-id :name (vl-idtoken->name id)))))
+         (return (make-vl-index :scope
+                                (make-vl-scopeexpr-end
+                                 :hid (make-vl-hidexpr-end :name (vl-idtoken->name id)))
+                                :part (make-vl-partselect-none))))
+
+       (when (eq (vl-loadconfig->edition config) :verilog-2005)
+         (return-raw
+          (vl-parse-error "Illegal delay value.")))
+
+       ;; SystemVerilog-2012 adds time_literal and 1step
+       (when (vl-is-token? :vl-timetoken)
+         (time := (vl-match))
+         (return (b* (((vl-timetoken time)))
+                   (make-vl-literal :val (make-vl-time :quantity time.quantity
+                                                       :units time.units)))))
+
+       (when (vl-is-token? :vl-1step)
+         (:= (vl-match))
+         (return (make-vl-special :key :vl-1step :atts nil)))
 
        (return-raw
         (vl-parse-error "Illegal delay value."))))
-
-
 
 ; delay2 ::=
 ;    '#' delay_value

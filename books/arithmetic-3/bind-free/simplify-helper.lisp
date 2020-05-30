@@ -1,19 +1,5 @@
-; Arithmetic-3 Library
-; Copyright (C) 2004 Robert Krug <rkrug@cs.utexas.edu>
-;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT
-; ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-; FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
-; details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; if not, write to the Free Software Foundation, Inc., 51
-; Franklin Street, Suite 500, Boston, MA 02110-1335, USA.
+; See the top-level arithmetic-3 LICENSE file for authorship,
+; copyright, and license information.
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -22,7 +8,7 @@
 ;;
 ;; Nothing in this book is directly available to the user.
 ;; It is an irritating little book whose only purpose is to
-;; allow one to prove a couple of theorems about multiplying 
+;; allow one to prove a couple of theorems about multiplying
 ;; (or dividing) both sides of an inequality by a rational
 ;; number.  Previously one had to know that the other terms
 ;; of the inequality were rational also.  See cancel-terms or
@@ -42,7 +28,7 @@
 (local
  (include-book "default-hint"))
 
-(set-default-hints '((nonlinearp-default-hint stable-under-simplificationp 
+(set-default-hints '((nonlinearp-default-hint stable-under-simplificationp
                                               hist pspv)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -133,7 +119,7 @@
 	   ("Subgoal 3.1'4'" :use ((:instance completion-of-<
 					       (x (COMPLEX 0 (* A R)))
 					       (y 0))))
-           
+
            ("Subgoal 2.4'5'" :use ((:instance completion-of-<
 					      (x (COMPLEX (* A R) (* A S)))
                                               (y (COMPLEX (* A I) (* A J))))))
@@ -146,7 +132,7 @@
            ("Subgoal 2.1'6'" :use ((:instance completion-of-<
 					      (x (COMPLEX (* A R) (* A S)))
                                               (y (COMPLEX (* A R) (* A I))))))
-           
+
            ("Subgoal 1.4'5'" :use ((:instance completion-of-<
 					      (x (COMPLEX (* A I) (* A J)))
                                               (y (COMPLEX (* A R) (* A S))))))

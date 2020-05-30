@@ -39,16 +39,13 @@
 ; about general concepts which the ordinary ACL2 user may have written
 ; other, conflicting theorems about.
 
+(include-book "centaur/fty/deftypes" :dir :system)
 (include-book "std/util/top" :dir :system)
-(include-book "std/misc/two-nats-measure" :dir :system)
-(include-book "std/lists/list-defuns" :dir :system)
+(include-book "std/basic/two-nats-measure" :dir :system)
 (include-book "centaur/misc/alist-equiv" :dir :system)
-(include-book "centaur/misc/hons-extra" :dir :system)
 (include-book "std/strings/top" :dir :system)
-(include-book "std/strings/fast-cat" :dir :system)
-(include-book "misc/assert" :dir :system)
-(include-book "misc/definline" :dir :system) ;; bozo
 (include-book "std/system/non-parallel-book" :dir :system)
+(include-book "centaur/misc/starlogic" :dir :system)
 (local (include-book "arithmetic/top-with-meta" :dir :system))
 (local (include-book "data-structures/list-defthms" :dir :system))
 
@@ -123,19 +120,6 @@ typical example is:</p>
      (implies (and (not (member-equal nil x))
                    (vl-maybe-nat-listp x))
               (nat-listp x)))))
-
-
-(deflist vl-maybe-string-listp (x)
-  (maybe-stringp x)
-  :elementp-of-nil t
-  :parents (utilities)
-  :rest
-  ((defrule string-listp-when-no-nils-in-vl-maybe-string-listp
-     (implies (and (not (member-equal nil x))
-                   (vl-maybe-string-listp x))
-              (equal (string-listp x)
-                     (true-listp x))))))
-
 
 
 (defsection debuggable-and
@@ -215,7 +199,10 @@ fast-alist-free).</p>"
 
 
 
-(define fast-memberp (a x (alist (equal alist (make-lookup-alist x))))
+(define fast-memberp (a
+                      x
+                      (alist (set-equiv (alist-keys alist)
+                                        (list-fix x))))
   :parents (utilities)
   :short "Fast list membership using @(see make-lookup-alist)."
 
@@ -356,27 +343,6 @@ from @('alist')."
         (acl2-count x))
     :rule-classes ((:rewrite) (:linear))
     :enable acl2-count))
-
-
-(define redundant-list-fix (x)
-  :parents (utilities)
-  :short "@(call redundant-list-fix) is the same as @('(list-fix x)'), but
-avoids consing when @('x') is already a true-listp."
-
-  :long "<p>I sometimes want to @('list-fix') something that I know is almost
-certainly already a @('true-listp') in practice.  In such cases,
-@('redundant-list-fix') may be a better choice than @('list-fix'), because
-checking @('true-listp') is much cheaper than re-consing the a list.</p>
-
-<p>I leave this function enabled.  Logically it is just an alias for
-@('list-fix'), so you should never need to reason about it.</p>"
-
-  :enabled t
-
-  (mbe :logic (list-fix x)
-       :exec (if (true-listp x)
-                 x
-               (list-fix x))))
 
 
 (deflist string-list-listp (x)
@@ -736,59 +702,6 @@ behavior in cases like:</p>
                  (not (atom (cdr x))))))
 
 
-(defsection and*
-  :parents (utilities)
-  :short "@('and*') is like @('and') but is a (typically disabled) function."
-
-  :long "<p>This is occasionally useful for avoiding case-splitting in
-theorems.</p>"
-
-  (defund binary-and* (x y)
-    (declare (xargs :guard t))
-    (if x y nil))
-
-  (defund and*-macro (x)
-    (declare (xargs :guard t))
-    (cond ((atom x)
-           t)
-          ((atom (cdr x))
-           (car x))
-          (t
-           `(binary-and* ,(car x)
-                         ,(and*-macro (cdr x))))))
-
-  (defmacro and* (&rest args)
-    (and*-macro args))
-
-  (add-binop and* binary-and*))
-
-
-
-(defsection or*
-  :parents (utilities)
-  :short "@('or*') is like @('or') but is a (typically disabled) function."
-
-  :long "<p>This is occasionally useful for avoiding case-splitting in
-theorems.</p>"
-
-  (defund binary-or* (x y)
-    (declare (xargs :guard t))
-    (if x x y))
-
-  (defund or*-macro (x)
-    (declare (xargs :guard t))
-    (cond ((atom x)
-           nil)
-          ((atom (cdr x))
-           (car x))
-          (t
-           `(binary-or* ,(car x)
-                        ,(or*-macro (cdr x))))))
-
-  (defmacro or* (&rest args)
-    (or*-macro args))
-
-  (add-binop or* binary-or*))
 
 
 (defsection not*
@@ -835,4 +748,49 @@ versions of the standard.  We currently have some support for:</p>
 <li>@(':verilog-2005') corresponds to IEEE Std 1364-2005.</li>
 <li>@(':system-verilog-2012') corresponds to IEEE Std 1800-2012.</li>
 </ul>")
+
+
+
+
+;; (defoption maybe-string stringp :pred acl2::maybe-stringp$inline
+;;   ;; BOZO misplaced, also has documentation issues
+;;   :parents nil
+;;   :fix maybe-string-fix
+;;   :equiv maybe-string-equiv)
+
+(define maybe-string-fix ((x maybe-stringp))
+  :returns (xx maybe-stringp)
+  :hooks nil
+  (mbe :logic (and x (str-fix x))
+       :exec x)
+  ///
+  (defthm maybe-string-fix-when-maybe-stringp
+    (implies (maybe-stringp x)
+             (equal (maybe-string-fix x) x)))
+
+  (defthm maybe-string-fix-under-iff
+    (iff (maybe-string-fix x) x))
+
+  (fty::deffixtype maybe-string :pred maybe-stringp :fix maybe-string-fix
+    :equiv maybe-string-equiv :define t :forward t)
+
+  (defrefinement maybe-string-equiv streqv
+    :hints ((and stable-under-simplificationp
+                 '(:in-theory (enable streqv))))))
+
+(fty::deflist vl-maybe-string-list
+  :elt-type maybe-string
+  :elementp-of-nil t
+  :parents (utilities)
+  ///
+  ;; BOZO backward-compatibility hack for the pre-FTY name
+  (defmacro vl-maybe-string-listp (x) `(vl-maybe-string-list-p ,x))
+
+  (add-macro-alias vl-maybe-string-listp vl-maybe-string-list-p)
+
+  (defrule string-listp-when-no-nils-in-vl-maybe-string-listp
+    (implies (and (not (member-equal nil x))
+                  (vl-maybe-string-listp x))
+             (equal (string-listp x)
+                    (true-listp x)))))
 

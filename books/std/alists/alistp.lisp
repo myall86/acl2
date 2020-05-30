@@ -113,15 +113,15 @@ Accordingly, you may not really need to reason about @('alistp') at all.</p>"
     (implies (alistp x)
              (equal (alistp (take n x))
                     (<= (nfix n) (len x))))
-    :hints(("Goal" :in-theory (enable take-redefinition))))
+    :hints(("Goal" :in-theory (enable take))))
 
   (defthm alistp-of-nthcdr
     (implies (alistp x)
              (alistp (nthcdr n x))))
 
-  (defthm alistp-of-delete-assoc-equal
+  (defthm alistp-of-remove1-assoc-equal
     (implies (alistp x)
-             (alistp (delete-assoc-equal key x))))
+             (alistp (remove1-assoc-equal key x))))
 
   (defthm alistp-of-pairlis$
     (alistp (pairlis$ x y))))

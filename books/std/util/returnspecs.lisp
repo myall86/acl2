@@ -31,7 +31,6 @@
 (in-package "STD")
 (include-book "da-base")
 (include-book "look-up")
-(local (include-book "misc/assert" :dir :system))
 (program)
 
 (defxdoc returns-specifiers
@@ -137,6 +136,9 @@ other @(see acl2::rule-classes), then you will want to override this default.</d
 <dt>@(':name name')</dt>
 
 <dd>This allows you to control the name of the associated theorem.</dd>
+
+<dd>The default value of @('name') is <it>type</it>-of-<it>your-function</it>.
+For example, @('natp-of-foo').</dd>
 
 </dl>")
 
@@ -416,16 +418,7 @@ other @(see acl2::rule-classes), then you will want to override this default.</d
            (cons (second x)
                  (untranslate-and (third x))))
           (t
-           (list x))))
-
-  (local
-   (progn
-     (assert! (equal (untranslate-and 'x) '(x)))
-     (assert! (equal (untranslate-and 't) '(t)))
-     (assert! (equal (untranslate-and '(if x y z)) '((if x y z))))
-     (assert! (equal (untranslate-and '(if x y 'nil)) '(x y)))
-     (assert! (equal (untranslate-and '(if x (if a b c) 'nil)) '(x (if a b c))))
-     (assert! (equal (untranslate-and '(if x (if a b 'nil) 'nil)) '(x a b))))))
+           (list x)))))
 
 (defun force-each (x)
   (declare (xargs :guard t))
@@ -509,7 +502,7 @@ other @(see acl2::rule-classes), then you will want to override this default.</d
      name)))
 
 (defun returnspec-default-default-hint (fnname id world)
-  (and (eql (len (acl2::recursivep fnname world)) 1) ;; singly recursive
+  (and (eql (len (acl2::recursivep fnname t world)) 1) ;; singly recursive
        (let* ((pool-lst (acl2::access acl2::clause-id id :pool-lst)))
          (and (eql 0 (acl2::access acl2::clause-id id :forcing-round))
               (cond ((not pool-lst)
@@ -532,7 +525,31 @@ other @(see acl2::rule-classes), then you will want to override this default.</d
 (set-returnspec-default-hints
  ((returnspec-default-default-hint 'fnname acl2::id world)))
 
-(defun returnspec-single-thm (name name-fn x badname-okp world)
+
+(defun returnspec-sublis (subst str-subst x)
+  "Like sublis, but only substitutes symbols, and looks them up both by value and by name."
+  (if (atom x)
+      (if (symbolp x)
+          (let ((look (assoc-equal x subst)))
+            (if look
+                (cdr look)
+              (let ((look (assoc-equal (symbol-name x) subst)))
+                (if look
+                    (cdr look)
+                  (let ((subst (dumb-str-sublis str-subst (symbol-name x))))
+                    (if (equal subst (symbol-name x))
+                        x
+                      (intern-in-package-of-symbol subst x)))))))
+        x)
+    (cons-with-hint (returnspec-sublis subst str-subst (car x))
+                    (returnspec-sublis subst str-subst (cdr x))
+                    x)))
+
+(defun returnspec-strsubst (fnname fnname-fn)
+  `(("<FN>" . ,(symbol-name fnname))
+    ("<FN!>" . ,(symbol-name fnname-fn))))
+
+(defun returnspec-single-thm (name name-fn x body-subst hint-subst badname-okp world)
   "Returns EVENTS"
   ;; Only valid to call AFTER the function has been submitted, because we look
   ;; up the guard/formals from the world.
@@ -543,33 +560,36 @@ other @(see acl2::rule-classes), then you will want to override this default.</d
   (b* (((returnspec x) x)
        (formals (look-up-formals name-fn world))
        (binds `(,x.name (,name-fn . ,formals)))
-       (formula (returnspec-thm-body name-fn binds x world))
+       (formula (returnspec-sublis body-subst nil (returnspec-thm-body name-fn binds x world)))
        ((when (eq formula t)) nil)
-       (hints (if x.hintsp x.hints
+       (strsubst (returnspec-strsubst name name-fn))
+       (hints (if x.hintsp
+                  (returnspec-sublis hint-subst strsubst x.hints)
                 (returnspec-default-hints name-fn world))))
     `((defthm ,(returnspec-generate-name name x t badname-okp)
         ,formula
         :hints ,hints
-        :rule-classes ,x.rule-classes))))
+        :rule-classes ,(returnspec-sublis hint-subst nil x.rule-classes)))))
 
-(defun returnspec-multi-thm (name name-fn binds x badname-okp world)
+(defun returnspec-multi-thm (name name-fn binds x body-subst hint-subst badname-okp world)
   "Returns EVENTS"
   (declare (xargs :guard (and (symbolp name)
                               (symbolp name-fn)
                               (returnspec-p x)
                               (plist-worldp world))))
   (b* (((returnspec x) x)
-       (formula (returnspec-thm-body name-fn binds x world))
+       (formula (returnspec-sublis body-subst nil (returnspec-thm-body name-fn binds x world)))
        ((when (equal formula t)) nil)
+       (strsubst (returnspec-strsubst name name-fn))
        (hints (if x.hintsp
-                  x.hints
+                  (returnspec-sublis hint-subst strsubst x.hints)
                 (returnspec-default-hints name-fn world))))
     `((defthm ,(returnspec-generate-name name x nil badname-okp)
         ,formula
         :hints ,hints
-        :rule-classes ,x.rule-classes))))
+        :rule-classes ,(returnspec-sublis hint-subst nil x.rule-classes)))))
 
-(defun returnspec-multi-thms (name name-fn binds x badname-okp world)
+(defun returnspec-multi-thms (name name-fn binds x body-subst hint-subst badname-okp world)
   "Returns EVENTS"
   (declare (xargs :guard (and (symbolp name)
                               (symbolp name-fn)
@@ -577,8 +597,8 @@ other @(see acl2::rule-classes), then you will want to override this default.</d
                               (plist-worldp world))))
   (if (atom x)
       nil
-    (append (returnspec-multi-thm name name-fn binds (car x) badname-okp world)
-            (returnspec-multi-thms name name-fn binds (cdr x) badname-okp world))))
+    (append (returnspec-multi-thm name name-fn binds (car x) body-subst hint-subst badname-okp world)
+            (returnspec-multi-thms name name-fn binds (cdr x) body-subst hint-subst badname-okp world))))
 
 
 
@@ -595,6 +615,43 @@ other @(see acl2::rule-classes), then you will want to override this default.</d
     (cons (make-symbol-ignorable (car x))
           (make-symbols-ignorable (cdr x)))))
 
+(defun returnspec-mv-nth-subst (names idx call)
+  (if (atom names)
+      nil
+    (cons (cons (car names) `(mv-nth ,idx ,call))
+          (returnspec-mv-nth-subst (cdr names) (1+ idx) call))))
+
+(defun returnspec-symbol-packages (syms)
+  (if (atom syms)
+      nil
+    (add-to-set-equal (symbol-package-name (car syms))
+                      (returnspec-symbol-packages (cdr syms)))))
+
+(defun returnspec-call-sym-pairs (packages call)
+  (if (atom packages)
+      nil
+    (cons (cons (intern$ "<CALL>" (car packages)) call)
+          (returnspec-call-sym-pairs (cdr packages) call))))
+
+
+
+
+(defun returnspec-return-value-subst (name name-fn formals names)
+  (declare (xargs :guard (and (symbolp name)
+                              (symbol-listp names))))
+  ;; NOTE: These are intended for use with returnspec-sublis, which only
+  ;; replaces symbols, but will also look up the name of a symbol.  So a
+  ;; binding whose key is a string affects all symbols with that name, whereas
+  ;; bindings of symbols only affect those exact symbols.
+  (b* ((call (cons name-fn formals))
+       (both-subst `(("<CALL>" . ,call)
+                     ("<FN>" . ,name)
+                     ("<FN!>" . ,name-fn)
+                     ("<VALUES>" . ,names)))
+       ((when (eql (len names) 1))
+        (mv both-subst (cons (cons (car names) call) both-subst))))
+    (mv both-subst (append both-subst (returnspec-mv-nth-subst names 0 call)))))
+
 (defun returnspec-thms (name name-fn specs world)
   "Returns EVENTS"
   (declare (xargs :guard (and (symbolp name)
@@ -605,13 +662,11 @@ other @(see acl2::rule-classes), then you will want to override this default.</d
        ((unless specs)
         nil)
        (badname-okp t)
-       ((when (equal (len specs) 1))
-        (returnspec-single-thm name name-fn (car specs) badname-okp world))
        (names   (returnspeclist->names specs))
-       (ignorable-names (make-symbols-ignorable names))
        (formals (look-up-formals name-fn world))
+       ((mv body-subst hint-subst) (returnspec-return-value-subst name name-fn formals names))
+       ((when (equal (len specs) 1))
+        (returnspec-single-thm name name-fn (car specs) body-subst hint-subst badname-okp world))
+       (ignorable-names (make-symbols-ignorable names))
        (binds   `((mv . ,ignorable-names) (,name-fn . ,formals))))
-    (returnspec-multi-thms name name-fn binds specs badname-okp world)))
-
-
-
+    (returnspec-multi-thms name name-fn binds specs body-subst hint-subst badname-okp world)))

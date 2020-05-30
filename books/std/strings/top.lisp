@@ -40,6 +40,7 @@
 (include-book "hexify")
 (include-book "hex")
 (include-book "html-encode")
+(include-book "url-encode")
 (include-book "ieqv")
 (include-book "iprefixp")
 (include-book "iless")
@@ -62,6 +63,7 @@
 (include-book "subseq")
 (include-book "suffixp")
 (include-book "symbols")
+(include-book "strrange-equiv")
 
 (defxdoc std/strings
   :parents (std acl2::strings)

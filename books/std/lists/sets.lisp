@@ -383,8 +383,11 @@ heavier-weight (but not necessarily recommended) alternative is to use the
     (implies (set-equiv x y)
              (set-equiv (elementlist-projection x)
                         (elementlist-projection y)))
-    :rule-classes :congruence))
+    :rule-classes :congruence)
 
+  (defthm set-equiv-of-nil
+    (equal (set-equiv nil x)
+           (atom x))))
 
 (defsection set-equiv-congruences
   :parents (set-equiv)
@@ -566,22 +569,22 @@ about set equivalence.</p>"
 
 (defthm commutativity-of-append-under-set-equiv
   (set-equiv (append x y)
-              (append y x))
+             (append y x))
   :hints(("Goal" :in-theory (enable set-equiv))))
 
 (defthm commutativity-2-of-append-under-set-equiv
   (set-equiv (append x (append y z))
-              (append y (append x z)))
+             (append y (append x z)))
   :hints(("Goal" :in-theory (enable set-equiv))))
 
 (defthm cancel-append-self-under-set-equiv
   (set-equiv (append x x)
-              x)
+             x)
   :hints(("Goal" :in-theory (enable set-equiv))))
 
 (defthm cancel-append-self-2-under-set-equiv
   (set-equiv (append x x y)
-              (append x y))
+             (append x y))
   :hints(("Goal" :in-theory (enable set-equiv))))
 
 (encapsulate
@@ -750,8 +753,3 @@ about set equivalence.</p>"
     (equal (element-list-p (union-equal x y))
            (and (element-list-p (list-fix x))
                 (element-list-p (double-rewrite y))))))
-
-(defthm set-equiv-of-nil
-  (equal (set-equiv nil x)
-         (atom x))
-  :hints(("Goal" :in-theory (enable set-equiv))))

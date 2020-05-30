@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -253,7 +241,7 @@
                        (< B A)
                        (< A (EXPT 2 N))
                        (< B (EXPT 2 N)))
-                  (= (LOP0 A B 0 N) 
+                  (= (LOP0 A B 0 N)
                      (1- n)))
          :rule-classes ()
          :hints (("Goal"  :expand ((LOP0 A B 1 (1- N)))
@@ -576,17 +564,17 @@
 		  (< B (EXPT 2 N)))
 	     (OR (= (LOP0 (+ A (- (EXPT 2 (+ -2 N))))
 			 (+ B (- (EXPT 2 (+ -2 N))))
-			 0 
+			 0
 			 (+ -1 N))
 		    (EXPO (+ A (- B))))
 		 (= (LOP0 (+ A (- (EXPT 2 (+ -2 N))))
 			 (+ B (- (EXPT 2 (+ -2 N))))
-			 0 
+			 0
 			 (+ -1 N))
 		    (+ 1 (EXPO (+ A (- B)))))))
   :rule-classes ()
   :hints (("Goal" :in-theory (disable expt)
-		  :use (lop0-1-7 
+		  :use (lop0-1-7
 			lop0-1-17
 			lop0-1-19
 			(:instance expt-split (r 2) (i (- n 1)) (j 1))
@@ -685,7 +673,7 @@
 			(:instance lop0-mod
 				   (a (- a (expt 2 (- n 2))))
 				   (b (- b (expt 2 (- n 2))))
-				   (d 1) 
+				   (d 1)
 				   (j (- n 2))
 				   (k (- n 2))))))))
 

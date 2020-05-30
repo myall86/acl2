@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 8.3 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2020, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -107,13 +107,6 @@
       state)))
 
 (defun waterfall-printing-value-for-parallelism-value (value)
-
-; Warning: We assume the the value of this function on input nil is :full.  If
-; that changes, then we will need to replace the definition of
-; waterfall-printing-full in front of the defproxy event below for
-; waterfall-printing, as well as the corresponding defattach event in
-; boot-strap-pass-2.lisp.
-
   (declare (xargs :guard (member-eq value *waterfall-parallelism-values*)))
   (cond ((eq value nil)
          :full)
@@ -133,7 +126,7 @@
 ; error-in-parallelism-mode@par in waterfall-step, it seems that they might not
 ; be; yet, regressions may have passed with them.  One possible outcome: If
 ; tests fail for contributed book directory books/bdd/, you might just modify
-; translate-bdd-hint to cause a nice error if watefall parallelism is enabled,
+; translate-bdd-hint to cause a nice error if waterfall parallelism is enabled,
 ; and also mention that (once again) in :doc
 ; unsupported-waterfall-parallelism-features.  Note that bdd-clause might be
 ; the function that actually performs the bdd hint, and that bdd-clause doesn't
@@ -201,7 +194,7 @@
           "Before changing the status of waterfall-parallelism, either (1) ~
            override hints must be removed from the default-hints-table or (2) ~
            waterfall-parallelism hacks must be enabled.  (1) can be achieved ~
-           by calling ~x0.  (2) can be achived by calling ~x1."
+           by calling ~x0.  (2) can be achieved by calling ~x1."
           '(set-override-hints nil)
           '(set-waterfall-parallelism-hacks-enabled t)))
      (t (value nil)))))
@@ -244,12 +237,17 @@
               (er soft ctx
                   "Parallel execution must be enabled before enabling ~
                    waterfall parallelism.  See :DOC set-parallel-execution"))
+             ((and val (f-get-global 'gstackp state))
+              (er soft ctx
+                  "You must disable brr (e.g., with :BRR NIL) before turning ~
+                   on waterfall-parallelism.  See :DOC ~
+                   unsupported-waterfall-parallelism-features."))
              (t
               (pprogn
 
 ; One might be tempted to insert (mf-multiprocessing val) here.  However, in
 ; ACL2(hp) -- which is where this code is run -- we really want to keep
-; multiprocessing on, since one can do mulithreaded computations (e.g., with
+; multiprocessing on, since one can do multithreaded computations (e.g., with
 ; pand) even with waterfall-parallelism disabled.
 
                (f-put-global 'waterfall-parallelism val state)
@@ -906,7 +904,7 @@
 ; occurs (but this costs performance).  Kaufmann suggests that we should also
 ; catch this particular Lisp error and instead cause an ACL2 error, similar to
 ; the error in function not-too-many-futures-already-in-existence.  This may be
-; harder than one might intially think, because our current mechanism for
+; harder than one might initially think, because our current mechanism for
 ; catching errors in child threads involves catching thrown tags and then
 ; rethrowing them in the thread who is that child's parent.
 

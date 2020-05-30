@@ -37,6 +37,7 @@
 (local (include-book "base"))
 (local (include-book "arithmetic/top" :dir :system))
 (local (include-book "tools/mv-nth" :dir :system))
+(local (include-book "std/lists/take" :dir :system))
 (set-state-ok t)
 
 (defsection take-bytes
@@ -81,7 +82,7 @@ and also returns the updated state.</p>"
              (equal (mv-nth 0 (take-bytes n channel state))
                     (take n (mv-nth 0 (read-byte$-all channel state)))))
     :hints(("Goal"
-            :in-theory (enable take-redefinition read-byte$-all repeat)
+            :in-theory (enable take read-byte$-all repeat)
             :induct (take-bytes n channel state))))
 
   (defthm mv-nth1-of-take-bytes$

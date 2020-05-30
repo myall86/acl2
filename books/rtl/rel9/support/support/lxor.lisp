@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -32,7 +20,7 @@
 (local (include-book "top1")) ; for lxor0-bits-1 and lxor0-bits-2
 
 (defun binary-lxor (x y n)
-  (declare (xargs :guard (and (natp x) 
+  (declare (xargs :guard (and (natp x)
                               (natp y)
                               (integerp n)
                               (< 0 n))
@@ -58,7 +46,7 @@
                               (consp (cddr x)))))
   (cond ((endp (cdddr x)) ;(lxor x y n) -- the base case
          `(binary-lxor ,@x))
-        (t         
+        (t
          `(binary-lxor ,(car x)
                        (lxor ,@(cdr x))
                        ,(car (last x))))))
@@ -187,8 +175,8 @@
                 (case-split (integerp n))
                 )
            (equal (bits (lxor x y n) i j)
-                  (lxor (bits x i j) 
-                        (bits y i j) 
+                  (lxor (bits x i j)
+                        (bits y i j)
                         (+ 1 i (- j))))))
 
 (defthmd bits-lxor-2
@@ -197,8 +185,8 @@
                 (case-split (integerp n))
                 )
            (equal (bits (lxor x y n) i j)
-                  (lxor (bits x i j) 
-                        (bits y i j) 
+                  (lxor (bits x i j)
+                        (bits y i j)
                         (+ n (- j))))))
 
 ;notice the call to MIN in the conclusion
@@ -208,8 +196,8 @@
                 (case-split (integerp i))
                 )
            (equal (bits (lxor x y n) i j)
-                  (lxor (bits x i j) 
-                        (bits y i j) 
+                  (lxor (bits x i j)
+                        (bits y i j)
                         (+ (min n (+ 1 i)) (- j))))))
 
 (defthmd bitn-lxor-1
@@ -218,8 +206,8 @@
                 (case-split (integerp n))
                 )
            (equal (bitn (lxor x y n) m)
-                  (lxor (bitn x m) 
-                        (bitn y m) 
+                  (lxor (bitn x m)
+                        (bitn y m)
                         1))))
 (defthmd bitn-lxor-2
   (implies (and (<= n m)
@@ -237,8 +225,8 @@
                 )
            (equal (bitn (lxor x y n) k)
                   (if (< k n)
-                      (lxor (bitn x k) 
-                            (bitn y k) 
+                      (lxor (bitn x k)
+                            (bitn y k)
                             1)
                     0))))
 
@@ -302,7 +290,7 @@
                 (not (zp n))
                 )
            (= (bitn (lxor x y n) 0)
-              (bitn (+ x y) 0)))		
+              (bitn (+ x y) 0)))
   :rule-classes ()
   :hints (("Goal" :use bitn-lxor0-0)))
 
@@ -318,7 +306,7 @@
 		  (< n m)
 		  (case-split (integerp m))
 		  )
-	     (equal (lxor x y m) 
+	     (equal (lxor x y m)
                     (lxor x y n))))
 
 (defthm lxor-upper-bound

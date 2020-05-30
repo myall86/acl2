@@ -1,0 +1,77 @@
+; Kestrel Books
+;
+; Copyright (C) 2020 Kestrel Institute (http://www.kestrel.edu)
+;
+; License: A 3-clause BSD license. See the LICENSE file distributed with ACL2.
+;
+; Author: Alessandro Coglio (coglio@kestrel.edu)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(in-package "ACL2")
+
+(include-book "abnf/top")
+(include-book "abnf/examples") ; they have XDOC topics for the manual
+(include-book "apt/top")
+(include-book "auto-termination/top") ; omits some books (see file for why)
+(include-book "bitcoin/top")
+(include-book "built-in-theorems-doc")
+(include-book "crypto/top")
+(include-book "event-macros/top")
+(include-book "hdwallet/top")
+(include-book "ethereum/top")
+(include-book "fty/top")
+(include-book "java/top")
+(include-book "prime-fields/top")
+(include-book "simpl-imp/top")
+(include-book "soft/top")
+(include-book "std/top")
+(include-book "utilities/top")
+
+; (depends-on "images/kestrel-logo.png")
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defxdoc kestrel-books
+
+  :parents (software-verification)
+
+  :short "A collection of ACL2 books contributed mainly by Kestrel Institute."
+
+  :long
+
+  (xdoc::topstring
+
+   (xdoc::img :src "res/kestrel-images/kestrel-logo.png")
+
+   (xdoc::p
+    "The <b>Kestrel Books</b> are a collection of ACL2 books
+     contributed mainly by "
+    (xdoc::a :href "http://www.kestrel.edu" "Kestrel Institute")
+    ". The Kestrel Books are freely available under a liberal license.
+     Specific copyright, author, and license information
+     is provided in the individual files and subdirectories.")
+
+   (xdoc::p
+    "As they become more stable,
+     parts of the Kestrel Books may be moved
+     to other locations in the "
+    (xdoc::seetopic "community-books" "Community Books")
+    ". For example, "
+    (xdoc::seetopic "std" "STD")
+    " and "
+    (xdoc::seetopic "x86isa" "X86ISA")
+    " include some Kestrel contributions.")
+
+   (xdoc::p
+    "Many of the Kestrel Books build upon,
+     and are meant to extend and be compatible with,
+     the ACL2 system code
+     and various existing libraries such as "
+    (xdoc::seetopic "std" "STD") ", "
+    (xdoc::seetopic "fty" "FTY") ", "
+    (xdoc::seetopic "seq" "Seq") ", and others.")))
+
+(xdoc::add-resource-directory "kestrel-images" "images")
+
+(xdoc::add-resource-directory "kestrel-design-notes" "design-notes")

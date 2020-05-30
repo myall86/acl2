@@ -1,3 +1,5 @@
+; Copyright (C) 2009-2015, Regents of the University of Texas
+; License: A 3-clause BSD license.  See the LICENSE file distributed with ACL2.
 ; Defsum: a macro for defining recursive data types
 ; by Sol Swords & William Cook
 
@@ -1014,6 +1016,9 @@
         )
   `(encapsulate
     nil
+; The use of set-bogus-measure-ok was added by Matt K. 2/20/2016, because ACL2
+; started disallowing measures on non-recursive functions by default.
+    (set-bogus-measure-ok t)
     (deflabel ,before-label)
     (local (in-theory (enable product-type (:executable-counterpart
                                             product-type))))

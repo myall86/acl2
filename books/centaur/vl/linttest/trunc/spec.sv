@@ -100,3 +100,56 @@ module m1 ;
   wire [3:0] trunc1 = 16;
 
 endmodule
+
+
+module m2 ;
+
+   parameter width = 0;
+
+   output [width-1:0] foo0, foo1;
+   input [width-1:0] bar;
+
+   assign foo0 = bar;
+   assign foo0[width-1:0] = bar[width-1:0];
+
+endmodule
+
+module m3;
+
+   input [32'd4294967295:0] bar ;
+   output [32'd4294967295:0] foo ;
+   assign bar = foo ;
+
+endmodule
+
+
+module a0 ;
+
+   wire [3:0] w;
+
+   wire       mod1 = w % 2;  // no warning, compatible with wire range
+   wire [1:0] mod2 = w % 3;  // no warning, compatible with wire range
+   wire [1:0] mod3 = w % 4;  // no warning, compatible with wire range
+
+   wire       mod4 = w % 3;  // warn because it's bigger than the wire range
+   wire       mod5 = w % 4;  // warn because it's bigger than the wire range
+
+endmodule
+
+module a1;
+
+   wire [3:0] w;
+
+   wire [3:0] xx0 = {3{1'b0}}; // no warning, fits
+   wire [3:0] xx1 = {4{1'b0}}; // no warning, fits
+   wire [3:0] xx2 = {5{1'b0}}; // no warning, still getting all zeroes
+
+   wire [3:0] yy0 = {3{1'b1}}; // warn, extension
+   wire [3:0] yy1 = {4{1'b1}}; // no warning, correct
+   wire [3:0] yy2 = {5{1'b1}}; // warn, truncating a 1
+
+   wire [3:0] zz0 = $countones(w);  // no warning, integer-valued system function
+   wire [3:0] zz1 = $bits(w);       // no warning, integer-valued system function
+   wire [2:0] zz2 = $unsigned(w);   // warn, wrong size
+
+endmodule

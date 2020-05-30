@@ -32,7 +32,10 @@
 (ld "cert.acl2")
 (in-package "VL")
 (include-book "top")
+(include-book "oslib/file-types" :dir :system)
+(include-book "oslib/top" :dir :system)
 (set-deferred-ttag-notes t state)
+(set-slow-alist-action :break)
 (set-gag-mode :goals)
 
 ; Initialize xdoc stuff so all of its books are pre-loaded and we're ready to
@@ -51,6 +54,11 @@
 ;; Set up our program NOT try to read the any customization files.
 (defun initial-customization-filename () :none)
 
+;; the default defs of these screw up the server's scanner thread
+(defun acl2::bad-lisp-objectp (x) nil)
+(defun acl2::chk-bad-lisp-object (x) nil)
+
 (save-exec "../bin/vl" "VL Verilog Toolkit"
            :inert-args ""
+           #+CCL :host-lisp-args #+CCL "-Z 256M"
            :return-from-lp '(vl::vl-main))

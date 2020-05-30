@@ -77,33 +77,39 @@
 		 (implies ,(fourth tuple) (stringp ,(fourth tuple))))
 	      :rule-classes nil))))
 
-   
+
 (defun defword-struct-typecheck-thms (struct)
   (if (endp struct) nil
       (cons (defword-tuple-typecheck-thms (car struct))
 	    (defword-struct-typecheck-thms (cdr struct)))))
 
 (defun type-check-thms
-    (name struct conc-name set-conc-name keyword-updater doc) 
-  (append     
+    (name struct conc-name set-conc-name keyword-updater doc)
+; Matt K. mods: :doc is no longer supported for defthm after v7-1
+  (append
    (list
     `(local (defthm defword-symbolp-name (symbolp ',name)
 	      :rule-classes nil
-	      :doc "Defword name should be a symbol."))
+	      ;; :doc "Defword name should be a symbol."
+              ))
     `(local (defthm defword-symbolp-conc-name (symbolp ',conc-name)
 	      :rule-classes nil
-	      :doc "Defword conc-name should be a symbol."))
+	      ;; :doc "Defword conc-name should be a symbol."
+              ))
     `(local (defthm defword-symbolp-set-conc-name (symbolp ',set-conc-name)
 	      :rule-classes nil
-	      :doc "Defword set-conc-name should be a symbol."))
+	      ;; :doc "Defword set-conc-name should be a symbol."
+              ))
     `(local
       (defthm defword-symbolp-keyword-updater (symbolp ',keyword-updater)
 	:rule-classes nil
-	:doc "Defword keyword-updater should be a symbol."))
+	;; :doc "Defword keyword-updater should be a symbol."
+        ))
     `(local (defthm defword-stringp-doc
 		(implies ',doc (stringp ',doc))
 	      :rule-classes nil
-	      :doc "Defword doc should be a string.")))
+	      ;; :doc "Defword doc should be a string."
+              )))
    (defword-struct-typecheck-thms struct)))
 
 
@@ -111,13 +117,13 @@
 ;; macro expansion is completed.  Because the original deword checks
 ;; types of arguments before expanding macro, some defword expressions
 ;; are rejected even if it can be considered as a legitimate defword
-;; expression. For instance, 
+;; expression. For instance,
 ;; (defword new-word ((field1 *field1-pos* *field1-width*)
 ;;                    (field2 *field2-pos* *field2-width*)))
 ;; is rejected because *field1-pos* and other constants are not
-;; integers. 
+;; integers.
 (defmacro defword* (name struct &key conc-name set-conc-name keyword-updater
-			 doc) 
+			 doc)
   (cond
    ((not (weak-defword-guards struct)))
    (t
@@ -141,7 +147,10 @@
        (field-names (strip-cars struct)))
 
       `(ENCAPSULATE ()                  ;Only to make macroexpansion pretty.
-         (DEFLABEL ,name ,@(if doc `(:DOC ,doc) nil))
+         (DEFLABEL ,name
+; Matt K. mod: :doc is no longer supported for defthm after v7-1
+           ;; ,@(if doc `(:DOC ,doc) nil)
+           )
 	 ,@type-check-thms
          ,@accessor-definitions
          ,@updater-definitions

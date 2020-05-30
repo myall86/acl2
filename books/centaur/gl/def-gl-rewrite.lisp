@@ -37,18 +37,18 @@
   (b* (((when (endp lemmas)) nil)
        (rule (car lemmas))
        ((when (eql (acl2::access acl2::rewrite-rule rule :nume) nume))
-        rule))
+        (cons rule (scan-lemmas-for-nume (cdr lemmas) nume))))
     (scan-lemmas-for-nume (cdr lemmas) nume)))
 
 (defun scan-props-for-nume-lemma (props nume)
   (declare (xargs :mode :program))
   (and (consp props)
-       (or (and (eq (cadar props) 'acl2::lemmas)
-                (scan-lemmas-for-nume (cddar props) nume))
-           (scan-props-for-nume-lemma (cdr props) nume))))
+       (append (and (eq (cadar props) 'acl2::lemmas)
+                    (scan-lemmas-for-nume (cddar props) nume))
+               (scan-props-for-nume-lemma (cdr props) nume))))
 
 
-(defun find-lemma-for-rune (rune world)
+(defun collect-lemmas-for-rune (rune world)
   (declare (xargs :mode :program))
   (b* ((nume (acl2::runep rune world))
        ((unless nume) nil)
@@ -56,23 +56,109 @@
                  (cdr (acl2::decode-logical-name (cadr rune) world)))))
     (scan-props-for-nume-lemma (acl2::actual-props segment nil nil) nume)))
 
+(defun collect-lemmas-for-runes (runes world)
+  (Declare (xargs :mode :program))
+  (if (atom runes)
+      nil
+    (append (b* ((rune (car runes)))
+              (collect-lemmas-for-rune (if (symbolp rune) `(:rewrite ,rune) rune) world))
+            (collect-lemmas-for-runes (cdr runes) world))))
+
+(defun gl-rewrite-table-entries-for-lemmas (rune lemmas)
+  (if (atom lemmas)
+      nil
+    (cons (b* ((fnsym (car (acl2::access acl2::rewrite-rule (car lemmas) :lhs))))
+            `(table gl-rewrite-rules ',fnsym
+                    (b* ((rules (cdr (assoc ',fnsym
+                                            (table-alist 'gl-rewrite-rules world)))))
+                      (if (member-equal ',rune rules)
+                          rules
+                        (cons ',rune rules)))))
+          (gl-rewrite-table-entries-for-lemmas rune (cdr lemmas)))))
+
+(defun alist-add-gl-rules (rules alist)
+  (declare (xargs :mode :program))
+  (if (atom rules)
+      alist
+    (b* ((fnsym (car (acl2::access acl2::rewrite-rule (car rules) :lhs)))
+         (rune (acl2::access acl2::rewrite-rule (car rules) :rune))
+         (new-alist
+          (acl2::put-assoc-eq fnsym (add-to-set-equal rune (cdr (assoc-eq fnsym alist))) alist)))
+      (alist-add-gl-rules (cdr rules) new-alist))))
+
+(defun alist-add-gl-rewrite (rune alist world)
+  (declare (xargs :mode :program))
+  (b* ((rune (if (symbolp rune) `(:rewrite ,rune) rune))
+       (rules (collect-lemmas-for-rune rune world)))
+    (alist-add-gl-rules rules alist)))
+
+
+(defun alist-add-gl-rewrites (runes alist world)
+  (declare (xargs :mode :program))
+  (b* ((rules (collect-lemmas-for-runes runes world)))
+    (alist-add-gl-rules rules alist)))
+
+
+
 (defun add-gl-rewrite-fn (rune world)
   (declare (xargs :mode :program))
   (b* ((rune (if (symbolp rune) `(:rewrite ,rune) rune))
-       (rule (find-lemma-for-rune rune world))
-       ((unless rule)
-        (cw "Failed to find a lemma for rune ~x0~%" rune))
-       (fnsym (car (acl2::access acl2::rewrite-rule rule :lhs))))
-    `(table gl-rewrite-rules ',fnsym
-            (b* ((rules (cdr (assoc ',fnsym
-                              (table-alist 'gl-rewrite-rules world)))))
-              (if (member-equal ',rune rules)
-                  rules
-                (cons ',rune rules))))))
+       (rules (collect-lemmas-for-rune rune world))
+       ((unless rules)
+        (er hard 'add-gl-rewrite-fn "No rules found for rune ~x0." rune)))
+    `(table gl-rewrite-rules nil
+            (alist-add-gl-rules ',rules (table-alist 'gl-rewrite-rules world))
+            :clear)))
 
 (defmacro add-gl-rewrite (rune)
-  `(make-event
-    (add-gl-rewrite-fn ',rune (w state))))
+  `(make-event (add-gl-rewrite-fn ',rune (w state))))
+
+
+
+
+(defun alist-remove-gl-rules (rules alist)
+  (declare (xargs :mode :program))
+  (if (atom rules)
+      alist
+    (b* ((fnsym (car (acl2::access acl2::rewrite-rule (car rules) :lhs)))
+         (rune (acl2::access acl2::rewrite-rule (car rules) :rune))
+         (new-alist
+          (acl2::put-assoc-eq fnsym (remove-equal rune (cdr (assoc-eq fnsym alist))) alist)))
+      (alist-remove-gl-rules (cdr rules) new-alist))))
+
+(defun alist-remove-gl-rewrite (rune alist world)
+  (declare (xargs :mode :program))
+  (b* ((rune (if (symbolp rune) `(:rewrite ,rune) rune))
+       (rules (collect-lemmas-for-rune rune world)))
+    (alist-remove-gl-rules rules alist)))
+
+
+(defun alist-remove-gl-rewrites (runes alist world)
+  (declare (xargs :mode :program))
+  (b* ((rules (collect-lemmas-for-runes runes world)))
+    (alist-remove-gl-rules rules alist)))
+
+
+
+(defun remove-gl-rewrite-fn (rune world)
+  (declare (xargs :mode :program))
+  (b* ((rune (if (symbolp rune) `(:rewrite ,rune) rune))
+       (rules (collect-lemmas-for-rune rune world))
+       ((unless rules)
+        (er hard 'remove-gl-rewrite-fn "No rules found for rune ~x0." rune)))
+    `(table gl-rewrite-rules nil
+            (alist-remove-gl-rules ',rules (table-alist 'gl-rewrite-rules world))
+            :clear)))
+
+(defmacro remove-gl-rewrite (rune)
+  `(make-event (remove-gl-rewrite-fn ',rune (w state))))
+
+
+
+
+
+
+
 
 (defsection def-gl-rewrite
   :parents (reference term-level-reasoning)
@@ -95,7 +181,7 @@ rewrite rule that is only used inside GL:</p>
 
 <p>This defines a disabled ACL2 rewrite rule called my-rewrite-rule, and adds
 my-rewrite-rule to the table of rules GL is allowed to use. (GL will still use
-it even though it is disabled, as long it is in that table.)</p>
+it even though it is disabled, as long as it is in that table.)</p>
 
 <p>Def-gl-rewrite supports syntaxp hypotheses, but the term representation used
 is different from ACL2's.  Instead of being bound to TERMPs, the variables are
@@ -105,6 +191,19 @@ reference.</p>"
   (defmacro def-gl-rewrite (name &rest args)
     `(progn (defthmd ,name . ,args)
             (add-gl-rewrite ,name))))
+
+
+(defun gl-rewrite-table-entries-for-lemma-removals (rune lemmas)
+  (if (atom lemmas)
+      nil
+    (cons (b* ((fnsym (car (acl2::access acl2::rewrite-rule (car lemmas) :lhs))))
+            `(table gl-rewrite-rules ',fnsym
+                    (b* ((rules (cdr (assoc ',fnsym
+                                            (table-alist 'gl-rewrite-rules world)))))
+                      (if (member-equal ',rune rules)
+                          (remove ',rune rules)
+                        rules))))
+          (gl-rewrite-table-entries-for-lemma-removals rune (cdr lemmas)))))
 
 
 
@@ -127,15 +226,50 @@ reference.</p>"
   :long
   "<p>Usage:</p>
 @({
+  ;; disallow definition expansion and concrete execution
   (gl::gl-set-uninterpreted fnname)
+  (gl::gl-set-uninterpreted fnname t) ;; same as above
+
+  ;; disallow definition expansion but allow concrete execution
+  (gl::gl-set-uninterpreted fnname :concrete-only)
+
+  ;; disallow concrete execution but allow definition expansion
+  (gl::gl-set-uninterpreted fnname :no-concrete)
+
+  ;; remove restrictions
+  (gl::gl-set-uninterpreted fnname nil)
+  (gl::gl-unset-uninterpreted fnname) ;; same
 })
-<p>prevents GL from opening the definition of fnname or concretely executing
+<p>prevents GL from opening the definition of fnname and/or concretely executing
 it.  GL will still apply rewrite rules to a call of @('fnname').  If the
 call is not rewritten away, symbolic execution of a @('fnname') call will
 simply produce an object (of the :g-apply type) representing a call of
 @('fnname') on the given arguments.</p>
 
-<p>@('gl::gl-unset-uninterpreted') undoes the effect of @('gl::gl-set-uninterpreted').</p>"
+<p>@('gl::gl-unset-uninterpreted') undoes the effect of @('gl::gl-set-uninterpreted').</p>
+
+<p>Note that @('gl::gl-set-uninterpreted') has virtually no effect when
+applied to a GL primitive: a function that has its ``symbolic
+counterpart'' built into the GL clause processor you're using.  (It
+actually does do a little &mdash; it can prevent the function from being
+applied to concrete values before rewrite rules are applied.  But that
+could change in the future.)  But what is a GL primitive?  That
+depends on the current GL clause processor, and can only be determined
+reliably by looking at the definition of the following function
+symbol:</p>
+
+@({
+(cdr (assoc-eq 'gl::run-gified
+               (table-alist 'gl::latest-greatest-gl-clause-proc (w state))))
+})
+
+<p>For example, this function symbol is 'gl::glcp-run-gified immediately after
+including the community-book @('\"centaur/gl/gl\"').  Now use @(':')@(tsee pe)
+on this function symbol.  The body of that definition should be of the form
+@('(case fn ...)'), which matches @('fn') against all the GL primitives for the
+current GL clause processor.</p>
+
+"
 
   (defmacro gl-set-uninterpreted (fn &optional (val 't))
     `(make-event
@@ -145,28 +279,20 @@ simply produce an object (of the :g-apply type) representing a call of
   `(make-event
     (gl-set-uninterpreted-fn ',fn nil (w state))))
 
+(defun gl-branch-merge-rules (wrld)
+  (declare (xargs :guard (plist-worldp wrld)))
+  (cdr (hons-assoc-equal 'gl-branch-merge-rules (table-alist 'gl-branch-merge-rules wrld))))
 
+(defun add-gl-branch-merge-fn (rune)
+  (declare (xargs :mode :program))
+  (b* ((rune (if (symbolp rune) `(:rewrite ,rune) rune)))
+    `(table gl-branch-merge-rules
+            'gl-branch-merge-rules
+            (add-to-set-equal ',rune (gl-branch-merge-rules world)))))
 
-(defun gl-branch-merge-find-fnsym (name state)
-  (declare (xargs :mode :program :stobjs state))
-  (b* ((thm (acl2::beta-reduce-full (acl2::meta-extract-formula name state)))
-       (concl
-        (if (eq (car thm) 'implies)
-            (third thm)
-          thm))
-       (equiv (car concl))
-       ((unless (and (symbolp equiv)
-                     (getprop equiv 'acl2::coarsenings nil 'current-acl2-world
-                              (w state))
-                     (consp (second concl))
-                     (eq (car (second concl)) 'if)
-                     (consp (third (second concl)))
-                     (symbolp (car (third (second concl))))))
-        (er hard? 'gl-branch-merge-find-fnsym
-            "The theorem ~x0 did not have the expected form for a branch ~
-             merge rule: conclusion should be:~%  (equiv (if c (fn args) b) ~
-             rhs)" name)))
-    (car (third (second concl)))))
+(defmacro add-gl-branch-merge (rune)
+  (add-gl-branch-merge-fn rune))
+
 
 (defsection def-gl-branch-merge
   :parents (reference term-level-reasoning)
@@ -201,12 +327,7 @@ must be a function call.</li>
          :hints ,hints
          :otf-flg ,otf-flg
          :rule-classes nil)
-       (make-event
-        (let* ((fn (gl-branch-merge-find-fnsym ',name state))
-               (rules (cons ',name (cdr (assoc fn (table-alist
-                                                   'gl-branch-merge-rules
-                                                   (w state)))))))
-          `(table gl-branch-merge-rules ',fn ',rules)))))
+       (add-gl-branch-merge ,name)))
 
   (defmacro def-gl-branch-merge (name body &key hints otf-flg)
     (def-gl-branch-merge-fn name body hints otf-flg)))

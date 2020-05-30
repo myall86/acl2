@@ -31,9 +31,10 @@
 (in-package "STR")
 (include-book "ieqv")
 (include-book "std/basic/defs" :dir :system)
-(include-book "std/util/deflist" :dir :system)
+(include-book "std/util/deflist-base" :dir :system)
+(include-book "std/lists/rev" :dir :system)
+(include-book "std/lists/append" :dir :system)
 (local (include-book "arithmetic"))
-(local (include-book "misc/assert" :dir :system))
 (local (include-book "ihs/quotient-remainder-lemmas" :dir :system))
 (local (in-theory (disable floor mod truncate)))
 
@@ -226,8 +227,12 @@ can run in raw lisp, with times reported in CCL on an AMD FX-8350.</p>
         ((digitp (car x)) (skip-leading-digits (cdr x)))
         (t                x))
   ///
+  (local (defun ind (x y)
+           (if (or (atom x) (atom y))
+               (list x y)
+             (ind (cdr x) (cdr y)))))
   (defcong charlisteqv charlisteqv (skip-leading-digits x) 1
-    :hints(("Goal" :in-theory (enable charlisteqv))))
+    :hints(("Goal" :induct (ind x x-equiv))))
   (defcong icharlisteqv icharlisteqv (skip-leading-digits x) 1
     :hints(("Goal" :in-theory (enable icharlisteqv))))
   (defthm len-of-skip-leading-digits
@@ -279,7 +284,9 @@ can run in raw lisp, with times reported in CCL on an AMD FX-8350.</p>
    (n  natp                :type unsigned-byte)
    (xl (eql xl (length x)) :type unsigned-byte))
   :guard (<= n xl)
-  :measure (nfix (- (nfix xl) (nfix n)))
+; Removed after v7-2 by Matt K. since logically, the definition is
+; non-recursive:
+; :measure (nfix (- (nfix xl) (nfix n)))
   :split-types t
   :verify-guards nil
   :enabled t
@@ -518,6 +525,86 @@ consing together characters in reverse order.</p>"
   (defthm natstr-nonempty
     (not (equal (natstr n) ""))))
 
+(define natstr-width
+  :short "Convert a natural number into a string with the given width."
+  ((n natp)
+   (width posp))
+  :returns (str stringp :rule-classes :type-prescription)
+  :long "<p>Similar to @(see natstr) but produces a fixed number of decimal
+digits.  If the input number is smaller it is padded with 0s, and if larger its
+more-significant bits are truncated.</p>"
+  (b* ((width (mbe :logic (if (posp width) width 1) :exec width))
+       (chars (natchars n))
+       (width-chars (cond ((<= width (len chars)) (nthcdr (- (len chars) width) chars))
+                          (t (append (make-list (- width (len chars)) :initial-element #\0)
+                                     chars)))))
+    (implode width-chars))
+  :prepwork
+  ((local (defthm character-listp-of-nthcdr
+            (implies (character-listp x)
+                     (character-listp (nthcdr n x))))))
+  ///
+  (defthm digit-listp-of-natstr-width
+    (digit-listp (explode (natstr-width n width))))
+  (defthm natstr-width-nonempty
+    (not (equal (natstr-width n width) ""))))
+
+(define intstr
+  :short "Convert an integer into a string with its digits."
+  ((i integerp))
+  :returns (str stringp :rule-classes :type-prescription)
+  :long "<p>For instance, @('(intstr -123)') is @('\"-123\"').</p>"
+  :inline t
+  (let ((i (mbe :logic (ifix i) :exec i)))
+    (if (< i 0)
+        (implode (cons #\- (natchars (- i))))
+      (implode (natchars i))))
+  ///
+  (defthm intstr-nonempty
+    (not (equal (intstr i) "")))
+
+  (local (defthm l0
+           (implies (digit-listp x)
+                    (not (equal x (cons #\- y))))))
+
+  (local (defthm l2
+           (implies (equal (char x 0) #\-)
+                    (not (equal x "0")))))
+
+  (defthm intstr-one-to-one-positive
+    (equal (equal (intstr n) (intstr m))
+           (equal (ifix n) (ifix m)))
+    :hints(("Goal"
+            :in-theory (enable natstr)
+            :use ((:instance natstr-one-to-one (n 0) (m m))
+                  (:instance natstr-one-to-one (n n) (m 0)))))))
+
+(define intstr-width
+  :short "Convert an integer into a string with a fixed number of digits."
+  ((i integerp)
+   (width posp))
+  :returns (str stringp :rule-classes :type-prescription)
+  (b* ((i (mbe :logic (ifix i) :exec i))
+       (width (mbe :logic (if (posp width) width 1) :exec width))
+       (chars (if (< i 0)
+                  (b* ((chars (natchars (- i))))
+                    (cons #\-
+                          (cond ((<= width (len chars)) (nthcdr (- (len chars) width) chars))
+                                (t (append (make-list (- width (len chars)) :initial-element #\0)
+                                           chars)))))
+                (b* ((chars (natchars i)))
+                  (cond ((<= width (len chars)) (nthcdr (- (len chars) width) chars))
+                        (t (append (make-list (- width (len chars)) :initial-element #\0)
+                                   chars)))))))
+    (implode chars))
+  :prepwork
+  ((local (defthm character-listp-of-nthcdr
+            (implies (character-listp x)
+                     (character-listp (nthcdr n x))))))
+  ///
+  (defthm intstr-width-nonempty
+    (not (equal (intstr-width i width) ""))))
+
 (define natstr-list
   :short "Convert a list of natural numbers into a list of strings."
   ((x nat-listp))
@@ -535,6 +622,24 @@ consing together characters in reverse order.</p>"
     (equal (natstr-list (cons a x))
            (cons (natstr a)
                  (natstr-list x)))))
+
+(define intstr-list
+  :short "Convert a list of integers into a list of strings."
+  ((x integer-listp))
+  :returns (strs string-listp)
+  (if (atom x)
+      nil
+    (cons (intstr (car x))
+          (intstr-list (cdr x))))
+  ///
+  (defthm intstr-list-when-atom
+    (implies (atom x)
+             (equal (intstr-list x)
+                    nil)))
+  (defthm intstr-list-of-cons
+    (equal (intstr-list (cons a x))
+           (cons (intstr a)
+                 (intstr-list x)))))
 
 
 (define natsize-slow ((x natp))
@@ -763,8 +868,4 @@ non-decimal digit characters or is empty, we return @('nil').</p>"
               (eql len xl)
               val)))
   ///
-  (defcong istreqv equal (strval x) 1)
-  (local (assert! (equal (strval "") nil)))
-  (local (assert! (equal (strval "0") 0)))
-  (local (assert! (equal (strval "1234") 1234))))
-
+  (defcong istreqv equal (strval x) 1))

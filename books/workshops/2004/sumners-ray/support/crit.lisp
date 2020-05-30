@@ -17,7 +17,7 @@
  (critical-id (n) nil
    (if (and (not (in-critical n-))
             (= (status (i n) n-) :try))
-       (i n) 
+       (i n)
      (critical-id n-)))
 
  (status (p n) :idle
@@ -38,6 +38,10 @@
   (defthm a-non-nil (not (equal (a) nil)))
   (defthm b-non-nil (not (equal (b) nil))))
 
+; Added after v7-2 by Matt K. since the define-system just below introduces a
+; non-recursive definition with a measure.
+(set-bogus-measure-ok t)
+
 (define-system critical-spec
  (ok (n) t
    (not (and (= (status (a) n-) :critical)
@@ -49,7 +53,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ; we have to use a different versions of the above functions which are
-; defined on natural time rather than the abstracted t+,t-,tzp time 
+; defined on natural time rather than the abstracted t+,t-,tzp time
 ; defined in basis.lisp.
 
 (mutual-recursion
@@ -67,7 +71,7 @@
      (let ((n- (1- n)))
        (if (and (not (in-critical* n-))
                 (= (status* (i n) n-) :try))
-           (i n) 
+           (i n)
          (critical-id* n-)))))
 
  (defun status* (p n)

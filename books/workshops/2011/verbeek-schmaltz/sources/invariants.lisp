@@ -262,7 +262,7 @@
 
 
 ;; THEOREMS
-;; 
+;;
 ;;---------------------------------------
 ;;---------------------------------------
 ;; 1.) Bogus subgoal
@@ -271,14 +271,16 @@
 ;; The following theorems enable ACL2 to force its way through the bogus subgoal generate by the assertion.
 (defthm forced--st-filter-unmarked123-nodes-update-marksi-2
   (implies (and (force (natp node))
-                (force (A-valid-nodes nodes nodeset)))
+; Matt K. mod for v7-2: Don't force assumption below with free variable.
+                (A-valid-nodes nodes nodeset))
            (equal (st-filter-unmarked123-nodes nodes (update-marksi node 2 marks))
                   (remove-equal node (st-filter-unmarked123-nodes nodes marks))))
     :hints (("Goal" :do-not '(eliminate-destructors generalize)
                   :in-theory (disable esci depi update-marksi nodes-length neighborsi dests-of-edge neighbors->destsi append-to-esc append-to-dep marksi nodesi))))
 (defthm forced--st-filter-unmarked123-nodes-update-marksi-3
   (implies (and (force (natp node))
-                (force (A-valid-nodes nodes nodeset)))
+; Matt K. mod for v7-2: Don't force assumption below with free variable.
+                (A-valid-nodes nodes nodeset))
            (equal (st-filter-unmarked123-nodes nodes (update-marksi node 3 marks))
                   (remove-equal node (st-filter-unmarked123-nodes nodes marks))))
     :hints (("Goal" :do-not '(eliminate-destructors generalize)
@@ -498,7 +500,7 @@
   (implies (is-keys-of-alist keys alist)
            (iff (member-equal key (keys alist))
                 (member-equal key keys))))
-           
+
 (defthm A-dests-E-2neighbor-update-marksi-2
   (implies (and (filled-graphp (nodes-length nodeset) graph)
                 (valid-graph (nodes-length nodeset) graph nodeset)
@@ -802,7 +804,7 @@
           ("Subgoal *1/7" :use ((:instance subsetp-esci-after-step1
                                     (node prev)
                                     (nodes (cdr nodes))
-                                    (marks (update-marksi (car nodes) 2 (append-to-esc prev (dests-of-edge prev (car nodes) graph nodeset) 
+                                    (marks (update-marksi (car nodes) 2 (append-to-esc prev (dests-of-edge prev (car nodes) graph nodeset)
                                             (st-escapable-inv (neighborsi (car nodes) graph) (car nodes) graph (update-marksi (car nodes) 1 marks) nodeset)))))
                                 (:instance subsetp-depi-after-step1
                                    (node prev)
@@ -979,7 +981,7 @@
                                                                                                                           (st-escapable-inv (neighborsi (car nodes) graph) (car nodes) graph (update-marksi (car nodes) 1 marks) nodeset)))))))
          ("Subgoal *1/7.2" :use ((:instance step1-does-not-alter-deps-3marked-nodes
                                   (nodes (cdr nodes))
-                                  (marks (update-marksi (car nodes) 2 (append-to-esc prev (dests-of-edge prev (car nodes) graph nodeset) 
+                                  (marks (update-marksi (car nodes) 2 (append-to-esc prev (dests-of-edge prev (car nodes) graph nodeset)
                                                                                      (st-escapable-inv (neighborsi (car nodes) graph) (car nodes) graph (update-marksi (car nodes) 1 marks) nodeset)))))
                                  (:instance step1-does-not-alter-escs-3marked-nodes
                                   (nodes (cdr nodes))
@@ -1042,7 +1044,7 @@
                                                                                                                              (st-escapable-inv (neighborsi (car nodes) graph) (car nodes) graph (update-marksi (car nodes) 1 marks) nodeset)))))))
           ("Subgoal *1/7.2" :use ((:instance step1-does-not-alter-deps-4marked-nodes
                                    (nodes (cdr nodes))
-                                   (marks (update-marksi (car nodes) 2 (append-to-esc prev (dests-of-edge prev (car nodes) graph nodeset) 
+                                   (marks (update-marksi (car nodes) 2 (append-to-esc prev (dests-of-edge prev (car nodes) graph nodeset)
                                                                                       (st-escapable-inv (neighborsi (car nodes) graph) (car nodes) graph (update-marksi (car nodes) 1 marks) nodeset)))))
                                   (:instance step1-does-not-alter-escs-4marked-nodes
                                    (nodes (cdr nodes))
@@ -1087,10 +1089,10 @@
                                     (nodes (cdr nodes))
                                   (marks (append-to-dep prev (dests-of-edge prev (car nodes) graph nodeset) (update-marksi (car nodes) 4
                                                                                                                           (st-escapable-inv (neighborsi (car nodes) graph) (car nodes) graph (update-marksi (car nodes) 1 marks) nodeset)))))))
-        
+
           ("Subgoal *1/7.27" :use ((:instance step1-does-not-alter-deps-2marked-nodes
                                    (nodes (cdr nodes))
-                                   (marks (update-marksi (car nodes) 2 (append-to-esc prev (dests-of-edge prev (car nodes) graph nodeset) 
+                                   (marks (update-marksi (car nodes) 2 (append-to-esc prev (dests-of-edge prev (car nodes) graph nodeset)
                                                                                       (st-escapable-inv (neighborsi (car nodes) graph) (car nodes) graph (update-marksi (car nodes) 1 marks) nodeset)))))
                                   (:instance step1-does-not-alter-escs-2marked-nodes
                                    (nodes (cdr nodes))
@@ -1098,7 +1100,7 @@
                                                                                       (st-escapable-inv (neighborsi (car nodes) graph) (car nodes) graph (update-marksi (car nodes) 1 marks) nodeset)))))))
           ("Subgoal *1/7.11" :use ((:instance step1-does-not-alter-deps-2marked-nodes
                                    (nodes (cdr nodes))
-                                   (marks (update-marksi (car nodes) 2 (append-to-esc prev (dests-of-edge prev (car nodes) graph nodeset) 
+                                   (marks (update-marksi (car nodes) 2 (append-to-esc prev (dests-of-edge prev (car nodes) graph nodeset)
                                                                                       (st-escapable-inv (neighborsi (car nodes) graph) (car nodes) graph (update-marksi (car nodes) 1 marks) nodeset)))))
                                   (:instance step1-does-not-alter-escs-2marked-nodes
                                    (nodes (cdr nodes))
@@ -1106,7 +1108,7 @@
                                                                                       (st-escapable-inv (neighborsi (car nodes) graph) (car nodes) graph (update-marksi (car nodes) 1 marks) nodeset)))))))
           ("Subgoal *1/7.2" :use ((:instance step1-does-not-alter-deps-2marked-nodes
                                    (nodes (cdr nodes))
-                                   (marks (update-marksi (car nodes) 2 (append-to-esc prev (dests-of-edge prev (car nodes) graph nodeset) 
+                                   (marks (update-marksi (car nodes) 2 (append-to-esc prev (dests-of-edge prev (car nodes) graph nodeset)
                                                                                       (st-escapable-inv (neighborsi (car nodes) graph) (car nodes) graph (update-marksi (car nodes) 1 marks) nodeset)))))
                                   (:instance step1-does-not-alter-escs-2marked-nodes
                                    (nodes (cdr nodes))

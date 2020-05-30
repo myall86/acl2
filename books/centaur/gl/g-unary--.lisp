@@ -56,14 +56,8 @@
        ((g-var &)
         (gret (g-apply 'unary-- (gl-list x))))
        ((g-boolean &) (gret 0))
-       ((g-number num)
-        (mv-let (rn rd in id)
-          (break-g-number num)
-          (gret
-           (mk-g-number (rlist-fix (bfr-unary-minus-s rn))
-                        (rlist-fix rd)
-                        (rlist-fix (bfr-unary-minus-s in))
-                        (rlist-fix id)))))
+       ((g-integer bits)
+        (gret (mk-g-integer (bfr-unary-minus-s (list-fix bits)))))
        (& (gret 0)))))
 
 ;; (def-gobjectp-thm unary--
@@ -81,24 +75,6 @@
             :expand (,gcall)
             :in-theory (disable (:d ,gfn)))))
 
-
-
-
-(local
- (defthm minus-of-non-acl2-number
-   (implies (not (acl2-numberp x))
-            (equal (- x) (- 0)))))
-
-(local
- (defthm minus-of-complex
-   (implies (and (rationalp a) (rationalp b))
-            (equal (- (complex a b))
-                   (complex (- a) (- b))))
-   :hints (("goal" :use ((:instance complex-definition
-                                    (x a) (y b))
-                         (:instance complex-definition
-                                    (x (- a)) (y (- b))))
-            :in-theory (disable equal-complexes-rw)))))
 
 ;; (local (defthm eval-g-base-atom
 ;;          (implies (and (not (consp x)) (gobjectp x))
@@ -121,11 +97,9 @@
 ;;                                      break-g-number bfr-listp)))))
 
 (def-g-correct-thm unary-- eval-g-base
-  :hints `(("Goal" :in-theory (e/d* (components-to-number-alt-def
-                                     general-concrete-obj natp)
+  :hints `(("Goal" :in-theory (e/d* (general-concrete-obj natp)
                                     ((:definition ,gfn)
-                                     general-number-components-ev
-                                     general-numberp-eval-to-numberp))
+                                     general-integer-bits-correct))
             :induct (,gfn x . ,params)
             :do-not-induct t
             :expand ((,gfn x . ,params)
