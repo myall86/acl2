@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -39,7 +27,6 @@
 (include-book "rewrite-theory") ; a little utility, which we don't use much...
 
 (include-book "rtl") ;definitions of the RTL primitives
-(include-book "rtlarr") ;RTL arrays
 (include-book "bvecp-lemmas") ;bvecp lemmas for all(?) of the RTL primitives  (what's the point of this book,
   ;given that we have lib/bvecp-raw-helpers?)
 
@@ -105,18 +92,9 @@
 
 (include-book "bits-trunc") ;theorems about how we implement trunc rounding...
 
-;theorems about circuits for addition
-(include-book "add3") ;theorems about how we implement addition of (2 or) 3 bit vectors using land0, lior0, and lxor0
-(include-book "lop1") ;leading-one prediction
-(include-book "lop2") ;leading-one prediction
-(include-book "lop3") ;leading-one prediction
-(include-book "stick") ;Some special-purpose lemmas by Russinoff, probably about sticky bit computation
-
 ;helpers
 (include-book "bvecp-helpers")
 (include-book "model-helpers") ; do we use this?
-(include-book "rom-helpers")
-(include-book "simple-loop-helpers")
 ;BOZO consider moving lib/simplify-model-helpers to support/ of (better yet), move all the helpers books to lib/
 
 (include-book "clocks")
@@ -126,8 +104,6 @@
 
 (include-book "../../arithmetic/top")
 (include-book "../../arithmetic/fp")
-
-(include-book "fadd")
 
 ; The following form evaluates to (prints out) the list of runes shown below,
 ; in the environment created by starting up ACL2 and then executing
@@ -279,66 +255,66 @@ So the correct result is, alteratively:
     (:REWRITE BVECP-UNKNOWN)
     (:FORWARD-CHAINING BVECP-UNKNOWN)
     (:TYPE-PRESCRIPTION BVECP-UNKNOWN)
-    (:EXECUTABLE-COUNTERPART acl2::<<)
-    (:TYPE-PRESCRIPTION acl2::<<)
-    (:REWRITE acl2::<<-IRREFLEXIVE)
-    (:REWRITE acl2::<<-TRANSITIVE)
-    (:REWRITE acl2::<<-ASYMMETRIC)
-    (:REWRITE acl2::<<-TRICHOTOMY)
-    (:REWRITE acl2::<<-IMPLIES-LEXORDER)
-    (:DEFINITION RCDP)
-    (:EXECUTABLE-COUNTERPART RCDP)
-    (:TYPE-PRESCRIPTION RCDP)
-    (:INDUCTION RCDP)
-    (:REWRITE RCDP-IMPLIES-ALISTP)
-    (:DEFINITION IFRP)
-    (:EXECUTABLE-COUNTERPART IFRP)
-    (:TYPE-PRESCRIPTION IFRP)
-    (:INDUCTION IFRP)
-    (:DEFINITION ACL2->RCD)
-    (:EXECUTABLE-COUNTERPART ACL2->RCD)
-    (:TYPE-PRESCRIPTION ACL2->RCD)
-    (:DEFINITION RCD->ACL2)
-    (:EXECUTABLE-COUNTERPART RCD->ACL2)
-    (:TYPE-PRESCRIPTION RCD->ACL2)
-    (:DEFINITION AG-AUX)
-    (:EXECUTABLE-COUNTERPART AG-AUX)
-    (:TYPE-PRESCRIPTION AG-AUX)
-    (:INDUCTION AG-AUX)
-    (:EXECUTABLE-COUNTERPART AG)
-    (:TYPE-PRESCRIPTION AG)
-    (:DEFINITION ACONS-IF)
-    (:EXECUTABLE-COUNTERPART ACONS-IF)
-    (:TYPE-PRESCRIPTION ACONS-IF)
-    (:DEFINITION AS-AUX)
-    (:EXECUTABLE-COUNTERPART AS-AUX)
-    (:TYPE-PRESCRIPTION AS-AUX)
-    (:INDUCTION AS-AUX)
-    (:EXECUTABLE-COUNTERPART AS)
-    (:TYPE-PRESCRIPTION AS)
-    (:REWRITE AG-SAME-AS)
-    (:REWRITE AG-DIFF-AS)
-    (:REWRITE AS-SAME-AG)
-    (:REWRITE AS-SAME-AS)
-    (:REWRITE AS-DIFF-AS)
-    (:REWRITE AG-OF-NIL-IS-DEFAULT)
-    (:REWRITE AS-NON-DEFAULT-CANNOT-BE-NIL)
-    (:FORWARD-CHAINING NON-NIL-IF-AG-NOT-DEFAULT)
-    (:EXECUTABLE-COUNTERPART BV-ARRP)
-    (:TYPE-PRESCRIPTION BV-ARRP)
-    (:REWRITE AS-MAPS-BV-ARR-TO-BV-ARR)
-    (:REWRITE AG-MAPS-BV-ARR-TO-BVECP)
-    (:EXECUTABLE-COUNTERPART MK-BVARR)
-    (:TYPE-PRESCRIPTION MK-BVARR)
-    (:REWRITE MK-BVARR-IS-BV-ARRP)
-    (:REWRITE MK-BVARR-IDENTITY)
-    (:DEFINITION POSITIVE-INTEGER-LISTP)
-    (:EXECUTABLE-COUNTERPART POSITIVE-INTEGER-LISTP)
-    (:TYPE-PRESCRIPTION POSITIVE-INTEGER-LISTP)
-    (:INDUCTION POSITIVE-INTEGER-LISTP)
-    (:REWRITE BV-ARRP-RESET2)
-    (:REWRITE BV-ARRP-UNKNOWN2)
-    (:REWRITE BV-ARRP-IF1)
+;    (:EXECUTABLE-COUNTERPART acl2::<<)
+;    (:TYPE-PRESCRIPTION acl2::<<)
+;    (:REWRITE acl2::<<-IRREFLEXIVE)
+;    (:REWRITE acl2::<<-TRANSITIVE)
+;    (:REWRITE acl2::<<-ASYMMETRIC)
+;    (:REWRITE acl2::<<-TRICHOTOMY)
+;    (:REWRITE acl2::<<-IMPLIES-LEXORDER)
+;    (:DEFINITION RCDP)
+;    (:EXECUTABLE-COUNTERPART RCDP)
+;    (:TYPE-PRESCRIPTION RCDP)
+;    (:INDUCTION RCDP)
+;    (:REWRITE RCDP-IMPLIES-ALISTP)
+;    (:DEFINITION IFRP)
+;    (:EXECUTABLE-COUNTERPART IFRP)
+;    (:TYPE-PRESCRIPTION IFRP)
+;    (:INDUCTION IFRP)
+;    (:DEFINITION ACL2->RCD)
+;    (:EXECUTABLE-COUNTERPART ACL2->RCD)
+;    (:TYPE-PRESCRIPTION ACL2->RCD)
+;    (:DEFINITION RCD->ACL2)
+;    (:EXECUTABLE-COUNTERPART RCD->ACL2)
+;    (:TYPE-PRESCRIPTION RCD->ACL2)
+;    (:DEFINITION AG-AUX)
+;    (:EXECUTABLE-COUNTERPART AG-AUX)
+;    (:TYPE-PRESCRIPTION AG-AUX)
+;    (:INDUCTION AG-AUX)
+;    (:EXECUTABLE-COUNTERPART AG)
+;    (:TYPE-PRESCRIPTION AG)
+;    (:DEFINITION ACONS-IF)
+;    (:EXECUTABLE-COUNTERPART ACONS-IF)
+;    (:TYPE-PRESCRIPTION ACONS-IF)
+;    (:DEFINITION AS-AUX)
+;    (:EXECUTABLE-COUNTERPART AS-AUX)
+;    (:TYPE-PRESCRIPTION AS-AUX)
+;    (:INDUCTION AS-AUX)
+;    (:EXECUTABLE-COUNTERPART AS)
+;    (:TYPE-PRESCRIPTION AS)
+;    (:REWRITE AG-SAME-AS)
+;    (:REWRITE AG-DIFF-AS)
+;    (:REWRITE AS-SAME-AG)
+;    (:REWRITE AS-SAME-AS)
+;    (:REWRITE AS-DIFF-AS)
+;    (:REWRITE AG-OF-NIL-IS-DEFAULT)
+;    (:REWRITE AS-NON-DEFAULT-CANNOT-BE-NIL)
+;    (:FORWARD-CHAINING NON-NIL-IF-AG-NOT-DEFAULT)
+;    (:EXECUTABLE-COUNTERPART BV-ARRP)
+;    (:TYPE-PRESCRIPTION BV-ARRP)
+;    (:REWRITE AS-MAPS-BV-ARR-TO-BV-ARR)
+;    (:REWRITE AG-MAPS-BV-ARR-TO-BVECP)
+;    (:EXECUTABLE-COUNTERPART MK-BVARR)
+;    (:TYPE-PRESCRIPTION MK-BVARR)
+;    (:REWRITE MK-BVARR-IS-BV-ARRP)
+;    (:REWRITE MK-BVARR-IDENTITY)
+;    (:DEFINITION POSITIVE-INTEGER-LISTP)
+;    (:EXECUTABLE-COUNTERPART POSITIVE-INTEGER-LISTP)
+;    (:TYPE-PRESCRIPTION POSITIVE-INTEGER-LISTP)
+;    (:INDUCTION POSITIVE-INTEGER-LISTP)
+;    (:REWRITE BV-ARRP-RESET2)
+;    (:REWRITE BV-ARRP-UNKNOWN2)
+;    (:REWRITE BV-ARRP-IF1)
     (:EXECUTABLE-COUNTERPART CG)
     (:TYPE-PRESCRIPTION CG)
     (:TYPE-PRESCRIPTION FL-INTEGER-TYPE)
@@ -740,46 +716,6 @@ So the correct result is, alteratively:
     (:TYPE-PRESCRIPTION NEXT-DENORMAL)
     (:REWRITE DENORMAL-SPACING)
     (:REWRITE NO-DENORMAL-IS-CLOSER-THAN-WHAT-DRND-ORIGINAL-NEAR-RETURNS)
-    (:DEFINITION GEN)
-    (:EXECUTABLE-COUNTERPART GEN)
-    (:TYPE-PRESCRIPTION GEN)
-    (:INDUCTION GEN)
-    (:DEFINITION PROP)
-    (:EXECUTABLE-COUNTERPART PROP)
-    (:TYPE-PRESCRIPTION PROP)
-    (:INDUCTION PROP)
-    (:REWRITE LAND0-GEN-0)
-    (:REWRITE BVECP-1-GEN)
-    (:FORWARD-CHAINING BVECP-1-GEN)
-    (:REWRITE BVECP-1-PROP)
-    (:FORWARD-CHAINING BVECP-1-PROP)
-    (:DEFINITION LAMT-0)
-    (:EXECUTABLE-COUNTERPART LAMT-0)
-    (:TYPE-PRESCRIPTION LAMT-0)
-    (:DEFINITION LAMG-0)
-    (:EXECUTABLE-COUNTERPART LAMG-0)
-    (:TYPE-PRESCRIPTION LAMG-0)
-    (:DEFINITION LAMZ-0)
-    (:EXECUTABLE-COUNTERPART LAMZ-0)
-    (:TYPE-PRESCRIPTION LAMZ-0)
-    (:DEFINITION LAM1-0)
-    (:EXECUTABLE-COUNTERPART LAM1-0)
-    (:TYPE-PRESCRIPTION LAM1-0)
-    (:DEFINITION LAM2-0)
-    (:EXECUTABLE-COUNTERPART LAM2-0)
-    (:TYPE-PRESCRIPTION LAM2-0)
-    (:DEFINITION LAM3-0)
-    (:EXECUTABLE-COUNTERPART LAM3-0)
-    (:TYPE-PRESCRIPTION LAM3-0)
-    (:DEFINITION LAM4-0)
-    (:EXECUTABLE-COUNTERPART LAM4-0)
-    (:TYPE-PRESCRIPTION LAM4-0)
-    (:DEFINITION LAM0-0)
-    (:EXECUTABLE-COUNTERPART LAM0-0)
-    (:TYPE-PRESCRIPTION LAM0-0)
-    (:DEFINITION LAMB-0)
-    (:EXECUTABLE-COUNTERPART LAMB-0)
-    (:TYPE-PRESCRIPTION LAMB-0)
     (:REWRITE A1)
     (:REWRITE A2)
     (:REWRITE A3)

@@ -33,7 +33,7 @@
 (include-book "ihs/basic-definitions" :dir :system)
 (local (include-book "arithmetic/top-with-meta" :dir :system))
 (local (include-book "ihsext-basics"))
-(local (include-book "misc/assert" :dir :system))
+(local (include-book "std/testing/assert-bang" :dir :system))
 
 (defsection bitops/part-select
   :parents (bitops)
@@ -86,7 +86,9 @@ parts of vectors.  For instance:</p>
            `(part-select-width-low ,x ,width ,low))
           (t
            (er hard? 'part-select
-               "Need at least :low and :width, or else :low and :high")))))
+               "Need at least :low and :width, or else :low and :high"))))
+
+  (add-macro-alias part-select part-select-width-low$inline))
 
 (local
  (progn

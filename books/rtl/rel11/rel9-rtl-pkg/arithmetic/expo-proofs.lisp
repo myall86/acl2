@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -55,14 +43,29 @@
 	((< x 1) (cons 1 (fl (/ x))))
 	(t (fl x))))
 
-(defund expo (x)
-  (declare (xargs :guard t
-                  :measure (expo-measure x)))
-  (cond ((or (not (rationalp x)) (equal x 0)) 0)
-	((< x 0) (expo (- x)))
-	((< x 1) (1- (expo (* 2 x))))
-	((< x 2) 0)
-	(t (1+ (expo (/ x 2))))))
+(defnd expo (x)
+  (declare (xargs :measure (expo-measure x)
+                  :verify-guards nil))
+  (mbe
+   :logic
+   (cond ((or (not (rationalp x)) (equal x 0)) 0)
+         ((< x 0) (expo (- x)))
+         ((< x 1) (1- (expo (* 2 x))))
+         ((< x 2) 0)
+         (t (1+ (expo (/ x 2)))))
+   :exec
+   (if (rationalp x)
+       (let* ((n (abs (numerator x)))
+              (d (denominator x))
+              (ln (integer-length n))
+              (ld (integer-length d))
+              (l (- ln ld)))
+         (if (>= ln ld)
+             (if (>= (ash n (- l)) d) l (1- l))
+           (if (> ln 1)
+               (if (> n (ash d l)) l (1- l))
+             (- (integer-length (1- d))))))
+     0)))
 
 
 ;probably get this anyway when we define expo
@@ -89,7 +92,7 @@
 ;rename?
 (defthm expo-minus-eric
   (implies (syntaxp (negative-syntaxp x))
-           (equal (expo x) 
+           (equal (expo x)
                   (expo (* -1 x))))
   :hints (("Goal" :in-theory (enable expo-minus))))
 
@@ -129,7 +132,7 @@
            :cases ((equal x 0))))))
 
 
-                
+
 (defthm expo-upper-bound
   (implies (rationalp x)
            (< (abs x) (expt 2 (1+ (expo x)))))
@@ -301,7 +304,7 @@
                                       expt-split
                                       expt-between-one-and-two
                                       )
-                              
+
                               '(POWER2P-SHIFT)))))
 
 (in-theory (disable EXPO-2**N)) ;why?
@@ -372,7 +375,7 @@
 
 
 
-;BOZO defn expt loops 
+;BOZO defn expt loops
 
 
 ;(in-theory (disable expo-shift))
@@ -411,8 +414,8 @@
           (implies (and (integerp x)
                         (>= x 0))
                    (>= (expo x) 0))
-          :hints (("Goal" 
-                   :use ((:instance expo>= 
+          :hints (("Goal"
+                   :use ((:instance expo>=
                                     (x x)
                                     (n 0)))))))
 
@@ -520,7 +523,7 @@
 
 (defthm expo-minus-const-mult
   (implies (and (syntaxp (and (quotep k) (< (cadr k) 0))))
-           (equal (EXPO (* k X)) 
+           (equal (EXPO (* k X))
                   (EXPO (* -1 k X)))))
 |#
 
@@ -620,7 +623,7 @@
 
 
 
-  
+
 
 
 
@@ -859,7 +862,7 @@
            (equal (expo (* (/ (expt 2 n)) x))
                   (+ (- n) (expo x))))
 
-           
+
   )
 
 (defthm expo-lower-bound-2
@@ -893,7 +896,7 @@
                                                  ))
            :use ((:instance expo-lower-bound (x (* a (expt 2 k))))
                  (:instance expo-upper-bound-tight (x a))
-                 (:instance expo-unique 
+                 (:instance expo-unique
                             (x (+ x (* a (expt 2 k)))) (n (expo (* a (expt 2 k))))))))
   :otf-flg t)
 

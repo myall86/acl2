@@ -8,7 +8,10 @@
 
 (in-package "ACL2")
 
-(include-book "misc/eval" :dir :system)
+(include-book "std/testing/must-fail" :dir :system)
+(include-book "std/testing/must-not-prove" :dir :system)
+(include-book "std/testing/must-prove" :dir :system)
+(include-book "std/testing/must-succeed" :dir :system)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Test override-hints.
@@ -701,7 +704,7 @@
 
 (defstub ppp (x) t)
 
-(not-thm?
+(must-not-prove
  (property (ggg aaa))
 
 ; This proof will fail but you will see 5 cases: 4 from the
@@ -713,7 +716,7 @@
    :cases ((ppp 1) (ppp 2) (ppp 3))))
  :otf-flg t)
 
-(thm?
+(must-prove
  (property (ggg aaa))
 
 ; This proof will succeed.
@@ -744,7 +747,7 @@
 
 ; This is just to see the the io.  The proof will fail.
 
-(not-thm?
+(must-not-prove
  (property ccc)
 
 ;;;   ------------ this will fail ---------------
@@ -756,7 +759,7 @@
     (:use (:instance bar (x disj-case-2)) :do-not '(fertilize)))))
  :otf-flg t)
 
-(not-thm?
+(must-not-prove
  (property ccc)
 
 ;;;   ------------ this will fail ---------------
@@ -770,7 +773,7 @@
  :otf-flg nil)
 
 
-(thm?
+(must-prove
  (property ccc)
 
 ;;; ------------ this will succeed on the first branch ---------
@@ -781,7 +784,7 @@
    ((:in-theory (enable aaa) :use (:instance bar (x ccc)))
     (:in-theory (enable bbb) :use (:instance mum (x ddd)))))))
 
-(thm?
+(must-prove
  (property ccc)
 
 ;;; ------------ this will succeed on the second branch ---------
@@ -792,7 +795,7 @@
    ((:in-theory (enable aaa) :use (:instance bar (x ddd)))
     (:in-theory (enable bbb) :use (:instance mum (x ccc)))))))
 
-(not-thm?
+(must-not-prove
  (property ccc)
 
 ;;; ------------ this will fail ---------
@@ -803,7 +806,7 @@
    ((:in-theory (enable aaa) :use (:instance bar (x ddd)))
     (:in-theory (enable bbb) :use (:instance mum (x ddd)))))))
 
-(thm?
+(must-prove
  (property ccc)
 
 ;;; ------------ this will succeed ---------
@@ -814,7 +817,7 @@
    ((                      :use (:instance bar (x ccc)))
     (:in-theory (enable bbb) :use (:instance mum (x ddd)))))))
 
-(not-thm?
+(must-not-prove
  (property ccc)
 
 ;;; ------------ this will fail ---------
@@ -837,7 +840,7 @@
                             (list :use val)
                             keyword-alist))))
 
-(not-thm?
+(must-not-prove
  (equal x y)
 
 ; This hint will expand at pre-process time.  You will be able to
@@ -849,7 +852,7 @@
           :do-not '(generalize))
          ("Goal'" :in-theory (enable car-cons))))
 
-(not-thm?
+(must-not-prove
  (equal x y)
 
 ; This will cause an error because of an ill-formed common hint mixed
@@ -882,7 +885,7 @@
                                      val))
                                 (t (value t)))))
 
-(not-thm?
+(must-not-prove
  (equal x y)
 
 ; This hint will expand at pre-process time.  You will see the checker
@@ -893,7 +896,7 @@
           :do-not '(generalize))
          ("Goal'" :in-theory (enable car-cons))))
 
-(not-thm?
+(must-not-prove
  (equal x y)
 
 ; This will cause an error because of the syn-use checker will fail.
@@ -910,14 +913,14 @@
                            `(:ERROR ,(msg "The value ~x0 is illegal!" val))
                            keyword-alist)))
 
-(not-thm?
+(must-not-prove
  (equal (append (append a b) c)
         (append a (append b c)))
 
 ; This will throw an error on translation.
 
  :hints (("Subgoal *1/1'" :eror (a b c))))
-              
+
 (remove-custom-keyword-hint :eror) ; added by Matt K.
 
 (add-custom-keyword-hint :eror
@@ -929,7 +932,7 @@
                                keyword-alist)
                             nil)))
 
-(not-thm?
+(must-not-prove
  (equal (append (append a b) c)
         (append a (append b c)))
 
@@ -961,7 +964,7 @@
                                      val))
                                 (t (value t)))))
 
-(thm?
+(must-prove
  (equal (append (append a b) c)
         (append a (append b c)))
 
@@ -987,12 +990,12 @@
                              `(:count-down ,(- val 1))
                              keyword-alist))))
 
-(thm?
+(must-prove
  (equal (append (append a b) c)
         (append a (append b c)))
  :hints (("Subgoal *1/1'" :count-down 7)))
 
-(thm?
+(must-prove
  (equal (append (append a b) c)
         (append a (append b c)))
 
@@ -1002,7 +1005,7 @@
 
 (remove-custom-keyword-hint :count-down)
 
-(not-thm?
+(must-not-prove
  (equal (append (append a b) c)
         (append a (append b c)))
 
@@ -1030,7 +1033,7 @@
                                val)))
 
 
-(not-thm?
+(must-not-prove
  (equal (append (append a b) c)
         (append a (append b c)))
 
@@ -1038,12 +1041,12 @@
 
  :hints (("Subgoal *1/1'" :count-down t)))
 
-(thm?
+(must-prove
  (equal (append (append a b) c)
         (append a (append b c)))
  :hints (("Subgoal *1/1'" :count-down 7)))
 
-(thm?
+(must-prove
  (equal (append (append a b) c)
         (append a (append b c)))
 ; Success
@@ -1064,7 +1067,7 @@
                                       keyword-alist)
                                    nil))))
 
-(thm?
+(must-prove
  (equal (append (append a b) c)
         (append a (append b c)))
 

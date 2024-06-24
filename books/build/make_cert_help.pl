@@ -64,13 +64,59 @@
 use warnings;
 use strict;
 use File::Spec;
+use File::Path qw(make_path);
 # problematic to get this from cpan on msys
 # use File::Which qw(which);
 use FindBin qw($RealBin);
 use POSIX qw(strftime);
 use Cwd;
+use utf8;
 
-(do "$RealBin/paths.pl") or die ("Error loading $RealBin/paths.pl:\n!: $!\n\@: $@\n");
+use lib "$RealBin/lib";
+use Cygwin_paths;
+use Bookscan;
+# Use ms-precision timing if we can load the Time::HiRes module,
+# otherwise gracefully default to second precision.
+# Note (Sol): I tried
+#   Time::Hires->import('time')
+# and just using time() instead of defining mytime() specially, but it
+# didn't work for me (always seemed to use 1-second precision); maybe
+# there's a problem with compile- versus run-time resolution of the
+# function name.
+my $msectiming = eval {
+    require Time::HiRes;
+    Time::HiRes->import();
+    1;
+};
+sub mytime {
+    if ($msectiming) {
+	return Time::HiRes::time();
+    } else {
+	return time();
+    }
+}
+
+my $parseable_timestamps = 0;
+if ($ENV{'CERT_PL_PARSEABLE_TIMESTAMPS'}) {
+    $parseable_timestamps = 1;
+}
+
+sub timestr {
+    my ($stamp) = @_;
+    my $base = strftime('%d-%b-%Y %H:%M:%S',localtime $stamp);
+    if ($msectiming) {
+	$base = sprintf("%s.%03d", $base, ($stamp-int($stamp))*1000);
+    }
+    if ($parseable_timestamps) {
+	$base = sprintf("%s [%d.%03d]", $base, int($stamp), ($stamp-int($stamp))*1000);
+    }
+    return $base;
+}
+
+my $SCRIPT_START_TIME = mytime();
+
+binmode(STDOUT,':utf8');
+
 
 sub trim
 {
@@ -245,71 +291,107 @@ sub write_whole_file
     close($fd);
 }
 
-sub parse_max_mem_arg
-{
-    # Try to parse the "..." part of (set-max-mem ...), return #GB needed
-    my $filename = shift;
-    my $arg = shift;
-    my $ret = 0;
-
-    if ($arg =~ m/\(\* ([0-9]+) \(expt 2 30\)\)/) {
-	# (* n (expt 2 30)) is n gigabytes
-	$ret = $1;
-    }
-    elsif ($arg =~ m/\(\* \(expt 2 30\) ([0-9]+)\)/) {
-	# (* (expt 2 30) n) is n gigabytes
-	$ret = $1;
-    }
-    elsif ($arg =~ m/^\(expt 2 ([0-9]+)\)*$/) {       # Example: arg is (expt 2 36))
-	my $expt  = $1;                               # 36
-	my $rexpt = ($expt > 30) ? ($expt - 30) : 0;  # 6  (but at least 0 in general)
-	$ret      = 2 ** $rexpt;                      # 64 (e.g., 2^6)
-    }
-    else {
-	print "Warning in $filename: skipping unsupported set-max-mem line: $arg\n";
-	print "Currently supported forms:\n";
-	print "  - (set-max-mem (expt 2 k))\n";
-	print "  - (set-max-mem (* n (expt 2 30)))\n";
-	print "  - (set-max-mem (* (expt 2 30) n))\n";
-    }
-    return $ret;
-}
-
 sub scan_source_file
 {
     my $filename = shift;
+    my $events = scan_src_run($filename);
     my $max_mem = 0;
     my $max_time = 0;
     my @includes = ();
-    open(my $fd, "<", $filename) or die("Can't open $filename: $!\n");
-    while(<$fd>) {
-	my $line = $_;
-	chomp($line);
-	if ($line =~ m/^[^;]*\((?:acl2::)?set-max-mem (.*)\)/)
-	{
-	    $max_mem = parse_max_mem_arg($filename, $1);
-	}
-	elsif ($line =~ m/^[^;]*\((?:acl2::)?set-max-time ([0-9]*)\)/)
-	{
-	    $max_time = $1;
-	}
-	elsif ($line =~ m/^[^;]*\((?:acl2::)?include-book[\s]*"([^"]*)"(?:.*:dir[\s]*:([^\s)]*))?(.*)/i)
-	{
-	    # We allow "no_port" in a comment after the include book to prevent
-	    # us from loading this book's .port file.  Note if we ever use this
-	    # collection of includes for anything other than determining what
-	    # port files to load, we should revisit this.
-	    my $book = $1;
-	    my $dir = $2;
-	    my $remainder = $3;
-	    if (! ($remainder =~ m/no[_-]port/i)) {
-		push (@includes, [$1, $2]);
+    my @pbs = ();
+    my $ifdef_level = 0;
+    my $ifdef_skipping_level = 0;
+    my %defines = ();
+    foreach my $event (@$events) {
+	my $type = shift @$event;
+	if ($type eq ifdef_event) {
+	    (my $neg, my $var) = @$event;
+	    my $value = exists($defines{$var}) ? $defines{$var} : ($ENV{$var} || "");
+	    $ifdef_level = $ifdef_level+1;
+	    if (($value eq "") xor $neg) {
+		if ($ifdef_skipping_level == 0) {
+		    # print "Skipping: $var\n";
+		    $ifdef_skipping_level = $ifdef_level;
+		}
+	    }
+	} elsif ($type eq endif_event) {
+	    if ($ifdef_skipping_level == $ifdef_level) {
+		# print "Leaving skipping ifdef\n";
+		$ifdef_skipping_level = 0;
+	    }
+	    $ifdef_level = $ifdef_level-1;
+	} elsif ($ifdef_skipping_level == 0) {
+	    if ($type eq set_max_mem_event) {
+		$max_mem = $event->[0];
+	    } elsif ($type eq set_max_time_event) {
+		$max_time = $event->[0];
+	    } elsif ($type eq ifdef_define_event) {
+		(my $neg, my $var) = @$event;
+		$defines{$var} = $neg ? "" : "1";
+	    } elsif ($type eq include_book_event) {
+		(my $book, my $dir, my $noport) = @$event;
+		if (! $noport) {
+		    push (@includes, [$book, $dir]);
+		}
+	    } elsif ($type eq pbs_event) {
+		push @pbs, $event->[0];
 	    }
 	}
     }
-    close($fd);
 
-     return ( $max_mem, $max_time, \@includes );
+     return ( $max_mem, $max_time, \@includes, \@pbs );
+}
+
+
+sub extract_pbs_from_acl2file
+{
+    # PBS directives placed in .acl2 files are extracted and used. An
+    # example of a PBS directive is:
+    #
+    #    ;PBS -l host=<my-host-name>
+
+    my $filename = shift;
+    (my $max_mem, my $max_time, my $includes, my $pbs) = scan_source_file($filename);
+    return $pbs;
+
+}
+
+
+
+sub maybe_switch_to_tempdir
+{
+    # This implements CERT_PL_TEMP_DIR.  When CERT_PL_TEMP_DIR points to some
+    # temporary directory, we use that temporary directory for all temporary
+    # files such as workxxx files and .cert.out files.  We take two arguments:
+
+    my $fulldir     = shift;  # The dir where the .lisp file to certify is
+    my $tmpfilename = shift; # The temporary filename we want
+
+    # We essentially create TMPDIR/FULLDIR if it doesn't exist already, and
+    # then return TMPDIR/FULLDIR/TMPFILENAME.
+
+    my $tmpdir = $ENV{"CERT_PL_TEMP_DIR"};
+    if (!$tmpdir)
+    {
+	# NOT using CERT_PL_TEMP_DIR, so we don't want to do any of this,
+	# just create a temporary file in the current directory.
+	return $tmpfilename;
+    }
+    die "Invalid CERT_PL_TEMP_DIR: not a directory: $tmpdir\n" if (! -d $tmpdir);
+    die "Invalid $fulldir in maybe_switch_to_tempdir: $fulldir\n" if (! -d $fulldir);
+
+    (my $tmp_vol, my $tmp_dirs, undef) = File::Spec->splitpath($tmpdir, 1);
+    (undef, my $full_dirs, undef) = File::Spec->splitpath($fulldir, 1);
+    my $all_dirs = File::Spec->catdir($tmp_dirs, $full_dirs);
+    my $fullpath = File::Spec->catpath($tmp_vol, $all_dirs);
+    # print "Full path: $fullpath\n";
+    if (! -d $fullpath) {
+	make_path($fullpath);
+    }
+    my $ret = File::Spec->catpath($tmp_vol, $all_dirs, $tmpfilename);
+    # print "Changed $tmpfilename to $ret\n";
+
+    return $ret;
 }
 
 
@@ -375,7 +457,11 @@ sub parse_certify_flags
 my $TARGET = shift;
 my $STEP = shift;      # certify, acl2x, acl2xskip, pcertify, pcertifyplus, convert, or complete
 my $ACL2X = shift;     # "yes" or otherwise no. use ACL2X file in certify/pcertify/pcertifyplus/convert steps
-my $PREREQS = \@ARGV;
+# Bug fix 2017-02-09: Uses of this variable #PREREQS only exist in code
+# that is commented out. Therefore commenting this assignment out to
+# fix the "argument list too long" issue.
+# Refer to https://github.com/acl2/acl2/issues/694 for more information.
+# my $PREREQS = \@ARGV;
 
 # print "Prereqs for $TARGET $STEP: \n";
 # foreach my $prereq (@$PREREQS) {
@@ -408,6 +494,8 @@ my $TIME_CERT      = $ENV{"TIME_CERT"} ? 1 : 0;
 my $STARTJOB       = $ENV{"STARTJOB"} || "";
 my $ON_FAILURE_CMD = $ENV{"ON_FAILURE_CMD"} || "";
 my $ACL2           = $ENV{"ACL2"} || "acl2";
+my $STACK_TRACES   = $ENV{"NO_STACK_TRACES"} ? 0 : 1;
+
 # Figure out what ACL2 points to before we switch directories.
 
 if ($ENV{"ACL2_BIN_DIR"}) {
@@ -457,15 +545,18 @@ my $full_file = File::Spec->rel2abs($TARGET);
 my $goal = "$file.$TARGETEXT";
 my $printgoal = path_export("$full_file.$TARGETEXT");
 
-print "Making $printgoal on " . strftime('%d-%b-%Y %H:%M:%S',localtime) . "\n";
+print "Making $printgoal on " . timestr($SCRIPT_START_TIME) . "\n";
 
 my $fulldir = File::Spec->canonpath(File::Spec->catpath($vol, $dir, ""));
 print "-- Entering directory $fulldir\n" if $DEBUG;
 chdir($fulldir) || die("Error switching to $fulldir: $!\n");
 
 my $status;
+
+
+
 my $timefile = "$file.$TARGETEXT.time";
-my $outfile = "$file.$TARGETEXT.out";
+my $outfile = maybe_switch_to_tempdir($fulldir, "$file.$TARGETEXT.out");
 
 print "-- Removing files to be generated.\n" if $DEBUG;
 
@@ -486,12 +577,17 @@ $ENV{"ACL2"} = $acl2;
 print "-- Image to use = $acl2\n" if $DEBUG;
 die("Can't determine which ACL2 to use.") if !$acl2;
 
+# Set ACL2_CUSTOMIZATION to NONE if not defined.
+if (! defined($ENV{"ACL2_CUSTOMIZATION"})) {
+    $ENV{"ACL2_CUSTOMIZATION"}="NONE";
+}
+
 # ------------ TEMPORARY LISP FILE FOR ACL2 INSTRUCTIONS ----------------------
 
 my $rnd = int(rand(2**30));
 my $tmpbase = "workxxx.$goal.$rnd";
 # upper-case .LISP so if it doesn't get deleted, we won't try to certify it
-my $lisptmp = "$tmpbase.LISP";
+my $lisptmp = maybe_switch_to_tempdir($fulldir, "$tmpbase.LISP");
 print "-- Temporary lisp file: $lisptmp\n" if $DEBUG;
 
 my $instrs = "";
@@ -499,10 +595,13 @@ my $instrs = "";
 # I think this strange :q/lp dance is needed for lispworks or something?
 $instrs .= "(acl2::value :q)\n";
 $instrs .= "(acl2::in-package \"ACL2\")\n";
-$instrs .= "#+acl2-hons (profile-fn 'prove)\n";
-$instrs .= "#+acl2-hons (profile-fn 'certify-book-fn)\n";
+$instrs .= "; see github issue #638 (waterfall-parallelism and profiling): \n";
+$instrs .= "#+(and hons (not acl2-par)) (profile-fn 'prove)\n";
+$instrs .= "#+(and hons (not acl2-par)) (profile-fn 'certify-book-fn)\n";
+$instrs .= "#+(and hons (not acl2-par)) (profile-fn 'include-book-fn)\n";
 $instrs .= "(acl2::lp)\n";
-#    $instrs .= "(set-debugger-enable :bt)\n";
+# We used to comment this out, but maybe it's better to leave this enabled by default?
+$instrs .= "(set-debugger-enable :bt)\n" if ($STACK_TRACES);
 $instrs .= "(acl2::in-package \"ACL2\")\n\n";
 $instrs .= "(set-ld-error-action (quote (:exit 1)) state)\n";
 $instrs .= "(set-write-acl2x t state)\n" if ($STEP eq "acl2x");
@@ -511,9 +610,13 @@ $instrs .= "$INHIBIT\n" if ($INHIBIT);
 $instrs .= "\n";
 
 # --- Scan the source file for includes (to collect the portculli) and resource limits ----
-my ($max_mem, $max_time, $includes) = scan_source_file("$file.lisp");
+my ($max_mem, $max_time, $includes, $book_pbs) = scan_source_file("$file.lisp");
 $max_mem = $max_mem ? ($max_mem + 3) : 4;
 $max_time = $max_time || 240;
+
+$ENV{"CERT_MAX_MEM"} = $max_mem;
+$ENV{"CERT_MAX_TIME"} = $max_time;
+$ENV{"CERT_GOALFILE"} = $goal;
 
 # Get the certification instructions from foo.acl2 or cert.acl2, if either
 # exists, or make a generic certify-book command.
@@ -522,6 +625,7 @@ my $acl2file = (-f "$file.acl2") ? "$file.acl2"
     : "";
 
 my $usercmds = $acl2file ? read_file_except_certify($acl2file) : "";
+my $acl2_pbs = $acl2file ? extract_pbs_from_acl2file($acl2file) : [];
 
 # Don't hideously underapproximate timings in event summaries
 $instrs .= "(acl2::assign acl2::get-internal-time-as-realtime acl2::t)\n";
@@ -542,23 +646,24 @@ $instrs .= "; portculli for included books:\n";
 foreach my $pair (@$includes) {
     my ($incname, $incdir) = @$pair;
     if ($incdir) {
-	$instrs .= "(acl2::ld \"$incname.port\" :dir :$incdir :ld-missing-input-ok t)\n"; 
+	$instrs .= "(acl2::ld \"$incname.port\" :dir :$incdir :ld-missing-input-ok t)\n";
     } else {
-	$instrs .= "(acl2::ld \"$incname.port\" :ld-missing-input-ok t)\n"; 
+	$instrs .= "(acl2::ld \"$incname.port\" :ld-missing-input-ok t)\n";
     }
 }
 
+# LD'd files above may change the current package
 $instrs .= "#!ACL2 (set-ld-error-action (quote :continue) state)\n";
 
 my $cert_flags = parse_certify_flags($acl2file, $usercmds);
 $instrs .= "\n; certify-book command flags: $cert_flags\n";
 
-my $cert_cmd = "#!ACL2 (er-progn (time\$ (certify-book \"$file\" $cert_flags $PCERT $ACL2X))
-                                 (value (prog2\$ #+acl2-hons (memsum)
-                                                 #-acl2-hons nil
+my $cert_cmds = "#!ACL2 (er-progn (time\$ (certify-book \"$file\" $cert_flags $PCERT $ACL2X))
+                                 (value (prog2\$ #+hons (memsum)
+                                                 #-hons nil
                                                  (exit 43))))\n";
 
-$instrs .= $cert_cmd;
+$instrs .= $cert_cmds;
 
 if ($DEBUG) {
     print "-- ACL2 Instructions: $lisptmp --\n";
@@ -573,7 +678,7 @@ write_whole_file($lisptmp, $instrs);
 # ------------ TEMPORARY SHELL SCRIPT FOR RUNNING ACL2 ------------------------
 
 # upper-case .SH to agree with upper-case .LISP
-    my $shtmp = "$tmpbase.SH";
+    my $shtmp = maybe_switch_to_tempdir($fulldir, "$tmpbase.SH");
     my $shinsts = "#!/bin/sh\n\n";
 
 # If we find a set-max-mem line, add 3 gigs of padding for the stacks and to
@@ -587,47 +692,56 @@ write_whole_file($lisptmp, $instrs);
     $shinsts .= "#PBS -l pmem=${max_mem}gb\n";
     $shinsts .= "#PBS -l walltime=${max_time}:00\n\n";
 
+    foreach my $directive (@$acl2_pbs) {
+	$shinsts .= "#PBS $directive\n";
+    }
+
+    foreach my $directive (@$book_pbs) {
+	$shinsts .= "#PBS $directive\n";
+    }
+
 # $shinsts .= "echo List directories of prereqs >> $outfile\n";
 # $shinsts .= "time ( ls @$prereq_dirs > /dev/null ) 2> $outfile\n";
 # foreach my $prereq (@$PREREQS) {
 #     $shinsts .= "echo prereq: $prereq >> $outfile\n";
 #     $shinsts .= "ls -l $startdir/$prereq >> $outfile 2>&1 \n";
 # }
-    $shinsts .= "echo >> $outfile\n";
-    $shinsts .= "pwd >> $outfile\n";
-    $shinsts .= "hostname >> $outfile\n";
-    $shinsts .= "echo >> $outfile\n";
+    $shinsts .= "echo >> '$outfile'\n";
+    $shinsts .= "pwd >> '$outfile'\n";
+    $shinsts .= "echo -n 'HOST: ' >> '$outfile'\n";
+    $shinsts .= "hostname >> '$outfile'\n";
+    $shinsts .= "echo >> '$outfile'\n";
 
-    $shinsts .= "echo Environment variables: >> $outfile\n";
-    my @relevant_env_vars = ("ACL2_CUSTOMIZATION", "ACL2_SYSTEM_BOOKS", "ACL2");
+    $shinsts .= "echo Environment variables: >> '$outfile'\n";
+    my @relevant_env_vars = ("ACL2_CUSTOMIZATION", "ACL2_SYSTEM_BOOKS", "ACL2", "ACL2_USELESS_RUNES");
     foreach my $var (@relevant_env_vars) {
 	if (exists $ENV{$var}) {
-	    $shinsts .= "echo $var=$ENV{$var} >> $outfile\n";
+	    $shinsts .= "echo $var=$ENV{$var} >> '$outfile'\n";
 	}
     }
-    $shinsts .= "echo >> $outfile\n";
+    $shinsts .= "echo >> '$outfile'\n";
 
-    $shinsts .= "echo Temp lisp file: >> $outfile\n";
-    $shinsts .= "cat $lisptmp >> $outfile\n";
-    $shinsts .= "echo --- End temp lisp file --- >> $outfile\n";
-    $shinsts .= "echo >> $outfile\n";
+    $shinsts .= "echo Temp lisp file: >> '$outfile'\n";
+    $shinsts .= "cat '$lisptmp' >> '$outfile'\n";
+    $shinsts .= "echo --- End temp lisp file --- >> '$outfile'\n";
+    $shinsts .= "echo >> '$outfile'\n";
 
-    $shinsts .= "echo TARGET: $TARGET >> $outfile\n";
-    $shinsts .= "echo STEP: $STEP >> $outfile\n";
-    $shinsts .= "echo Start of output: >> $outfile\n";
-    $shinsts .= "echo >> $outfile\n";
+    $shinsts .= "echo TARGET: $TARGET >> '$outfile'\n";
+    $shinsts .= "echo STEP: $STEP >> '$outfile'\n";
+    $shinsts .= "echo Start of output: >> '$outfile'\n";
+    $shinsts .= "echo >> '$outfile'\n";
 
     $shinsts .= "export ACL2_WRITE_PORT=t\n";
     if ($TIME_CERT) {
-	$shinsts .= "(time (($acl2 < $lisptmp 2>&1) >> $outfile)) 2> $timefile\n";
+	$shinsts .= "(time (($acl2 < '$lisptmp' 2>&1) >> '$outfile')) 2> '$timefile'\n";
     }
     else {
-	$shinsts .= "($acl2 < $lisptmp 2>&1) >> $outfile\n";
+	$shinsts .= "($acl2 < '$lisptmp' 2>&1) >> '$outfile'\n";
     }
 
     $shinsts .= "EXITCODE=\$?\n";
-    $shinsts .= "echo Exit code from ACL2 is \$EXITCODE >> $outfile\n";
-    $shinsts .= "ls -l $goal >> $outfile || echo $goal seems to be missing >> $outfile\n";
+    $shinsts .= "echo Exit code from ACL2 is \$EXITCODE >> '$outfile'\n";
+    $shinsts .= "ls -l '$goal' >> '$outfile' || echo '$goal' seems to be missing >> '$outfile'\n";
     $shinsts .= "exit \$EXITCODE\n";
 
 
@@ -638,12 +752,17 @@ write_whole_file($lisptmp, $instrs);
     }
 
     write_whole_file($shtmp, $shinsts);
-
+chmod(0750,$shtmp);
 
 # Run it!  ------------------------------------------------
 
-    system("$STARTJOB $shtmp");
+my $START_TIME = mytime();
+
+    # Single quotes to try to protect against file names with dollar signs and similar.
+    system("$STARTJOB '$shtmp'");
     $status = $? >> 8;
+
+my $END_TIME = mytime();
 
     unlink($lisptmp) if !$DEBUG;
     unlink($shtmp) if !$DEBUG;
@@ -671,30 +790,92 @@ if ($status == 43) {
     }
 }
 
+
+sub extract_hostname_from_outfile
+{
+    my $filename = shift;
+    my $ret = "";
+    open(my $fd, "<", $filename) or die("Can't open $filename: $!\n");
+    while(<$fd>) {
+	my $line = $_;
+	chomp($line);
+	if ($line =~ m/^HOST: (.*)$/)
+	{
+	    $ret = $1;
+	    last;
+	}
+    }
+    close($fd);
+
+    return $ret;
+}
+
+
 if ($success) {
-    print "Successfully built $printgoal\n";
+
+    my $black = chr(27) . "[0m";
+
+    my $boldred = chr(27) . "[31;1m";
+    my $red = chr(27) . "[31m";
+
+    my $boldyellow = chr(27) . "[33;1m";
+    my $yellow = chr(27) . "[33m";
+
+    my $green = chr(27) . "[32m";
+    my $boldgreen = chr(27) . "[32;1m";
+
+    my $ELAPSED = $END_TIME - $START_TIME;
+
+    my $color = ($ELAPSED > 300) ? $boldred
+	      : ($ELAPSED > 60) ? $red
+	      : ($ELAPSED > 40) ? $boldyellow
+              : ($ELAPSED > 20) ? $yellow
+	      : ($ELAPSED > 10) ? $boldgreen
+	      : $green;
+
+    if ($ENV{"CERT_PL_NO_COLOR"}) {
+	$color = "";
+	$black = "";
+    }
+
+    if ($ENV{"CERT_PL_RM_OUTFILES"}) {
+	unlink($outfile);
+    }
+
+    my $hostname = "";
+    if ($ENV{"CERT_PL_SHOW_HOSTNAME"}) {
+	$hostname = " " . extract_hostname_from_outfile($outfile);
+    }
+
+    my $endtime = "";
+    if (! $ENV{"CERT_PL_HIDE_ENDTIME"}) {
+	my $SCRIPT_END_TIME = mytime();
+	$endtime = sprintf(' at %s', timestr($SCRIPT_END_TIME));
+    }
+    printf("%sBuilt %s (%.3fs%s)%s%s\n", $color, $printgoal, $ELAPSED, $hostname, $endtime, $black);
+
 } else {
     my $taskname = ($STEP eq "acl2x" || $STEP eq "acl2xskip") ? "ACL2X GENERATION" :
 	($STEP eq "certify")  ? "CERTIFICATION" :
 	($STEP eq "pcertify") ? "PROVISIONAL CERTIFICATION" :
 	($STEP eq "pcertifyplus") ? "PROVISIONAL CERTIFICATION+" :
 	($STEP eq "convert")  ? "PCERT0->PCERT1 CONVERSION" :
-	($STEP eq "complete") ? "PCERT1->CERT COMLETION" : "UNKNOWN";
-    print "**$taskname FAILED** for $dir$file.lisp\n\n";
-    system("tail -300 $outfile | sed 's/^/   | /'") if $outfile;
-    print "\n\n";
+	($STEP eq "complete") ? "PCERT1->CERT COMPLETION" : "UNKNOWN";
+    print "\n**$taskname FAILED** for $dir$file.lisp\n\n" .
+        ($outfile ? `tail -300 $outfile | sed 's/^/   | /'` : "") .
+        "\n**$taskname FAILED** for $dir$file.lisp\n\n";
 
     if ($ON_FAILURE_CMD) {
-	system($ON_FAILURE_CMD);
+        print "\n-- Executing ON_FAILURE_CMD='$ON_FAILURE_CMD' for $dir$file.lisp\n\n" .
+            `{ $ON_FAILURE_CMD ; } 2>&1` .
+            "\n-- Finished executing ON_FAILURE_CMD='$ON_FAILURE_CMD' for $dir$file.lisp\n\n";
     }
 
-    print "**$taskname FAILED** for $dir$file.lisp\n\n";
     exit(1);
 }
 
 print "-- Final result appears to be success.\n" if $DEBUG;
 
 # Else, we made it!
-system("ls -l $goal");
+system("ls -l '$goal'") if $DEBUG;
 exit(0);
-

@@ -1,3 +1,31 @@
+; Copyright (C) 2008-2013 Centaur Technology
+;
+; Contact:
+;   Centaur Technology Formal Verification Group
+;   7600-C N. Capital of Texas Highway, Suite 300, Austin, TX 78731, USA.
+;   http://www.centtech.com/
+;
+; License: (An MIT/X11-style license)
+;
+;   Permission is hereby granted, free of charge, to any person obtaining a
+;   copy of this software and associated documentation files (the "Software"),
+;   to deal in the Software without restriction, including without limitation
+;   the rights to use, copy, modify, merge, publish, distribute, sublicense,
+;   and/or sell copies of the Software, and to permit persons to whom the
+;   Software is furnished to do so, subject to the following conditions:
+;
+;   The above copyright notice and this permission notice shall be included in
+;   all copies or substantial portions of the Software.
+;
+;   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+;   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+;   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+;   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+;   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+;   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+;   DEALINGS IN THE SOFTWARE.
+;
+; Original author: Sol Swords <sswords@centtech.com>
 
 (in-package "ACL2")
 
@@ -82,7 +110,7 @@
 ;; impelemented.  The :ALISTFN argument expects a function or lambda of three
 ;; arguments corresponding to CL, HINTS, and AL in the theorem statement above.
 ;; If it takes fewer arguments, you must provide a lambda which wraps this
-;; function, such as (LAMBDA (CL HINTS AL) (MY-ALIST-LIST-FN CL AL)). 
+;; function, such as (LAMBDA (CL HINTS AL) (MY-ALIST-LIST-FN CL AL)).
 
 (include-book "misc/untranslate-patterns" :dir :system)
 (local (include-book "join-thms"))
@@ -252,8 +280,8 @@
 (defmacro def-multi-env-fns (ev evlst)
   (def-multi-env-fn ev evlst))
 
-  
-  
+
+
 
 (defun prove-multi-env-clause-proc-fn (name ev evlst clauseproc alists hints
                                             bad-guy alist-name world)
@@ -385,7 +413,7 @@
                    (append a b) (append a-al b-al))
                   (and (clauses-apply-alists-cons-ev a a-al)
                        (clauses-apply-alists-cons-ev b b-al)))))
-              
+
 (defthm consp-cp-term-correct
   (implies (clauses-apply-alists-cons-ev
             (consp-cp-term term)
@@ -424,7 +452,7 @@
  :ev cons-ev :evlst cons-ev-lst
  :clauseproc consp-cp
  :alistfn (lambda (cl hints al) (consp-cp-alists cl al)))
-  
+
 
 
 

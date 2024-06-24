@@ -40,13 +40,12 @@
   :short "The VL Verilog Toolkit, 2014 Edition.  This is a \"stable\" fork of
 @(see vl::vl) for compatibility with @(see acl2::esim)."
 
-  :long "<h3>What is VL?</h3>
+  :long "<h3>What are VL and VL2014?</h3>
 
 <p>The @(see vl::vl) Verilog Toolkit is a large ACL2 library for working with
 <a href='http://en.wikipedia.org/wiki/Verilog'>Verilog</a> and <a
 href='http://en.wikipedia.org/wiki/SystemVerilog'>SystemVerilog</a> source
-code, developed at <a href='http://www.centtech.com/'>Centaur Technology</a> by
-Jared Davis and Sol Swords.</p>
+code, developed at Centaur Technology by Jared Davis and Sol Swords.</p>
 
 <p>The <u>2014 Edition</u> of VL is a \"stable\" fork of VL that is meant to
 provide continuing support for older tools, notably including @(see
@@ -78,17 +77,16 @@ years, we used VL to implement many tools, many of which were based around
 @(see acl2::esim).  ESIM is a purely bit-level backend.</p>
 
 <p>In 2014, we began extending VL with features from SystemVerilog and also
-began work on a new, vector-level backend, @(see acl2::svex).  Throughout 2014,
+began work on a new, vector-level backend, @(see acl2::sv).  Throughout 2014,
 and into the start of 2015, we made substantial changes to VL and transitioned
-our internal projects to SVEX.</p>
+our internal projects to SV.</p>
 
 <p>Much of this work was compatible with ESIM and expanded what the VL/ESIM
 flow could handle.  For instance: during this time, the ESIM flow gained better
 support for ANSI-style ports, SystemVerilog style global parameters, basic
 SystemVerilog idioms like @('always_comb') and @('logic') data types, and so
 on.  Other certain SystemVerilog features (structs, arrays, etc.) would have
-been difficult to support in ESIM, so we only added them to the VL/SVEX
-flow.</p>
+been difficult to support in ESIM, so we only added them to the VL/SV flow.</p>
 
 <p>In February 2015, we began working on a substantial change to VL's
 expression representation.  It became apparent that supporting ESIM through
@@ -105,12 +103,12 @@ of VL without having to continually update the ESIM flow.</p>")
 
 (defxdoc getting-started
   :parents (vl2014)
-  :short "Getting started with VL."
+  :short "Getting started with VL2014."
 
   :long "<h3>Introduction</h3>
 
-<p><b>VL</b> is an @(see acl2::acl2) library for working with <a
-href='http://en.wikipedia.org/wiki/Verilog'>Verilog</a> and <a
+<p><b>VL2014</b> (hereafter VL) is an @(see acl2::acl2) library for working
+with <a href='http://en.wikipedia.org/wiki/Verilog'>Verilog</a> and <a
 href='http://en.wikipedia.org/wiki/SystemVerilog'>SystemVerilog</a> source
 code.  It includes:</p>
 
@@ -128,9 +126,9 @@ to implement a family of Verilog-related tools.  Here are some examples:</p>
 
 <ul>
 
-<li>VL can build @(see esim) or @(see acl2::svex) models of Verilog modules for
-formal verification with ACL2.  This is the basis for much of Centaur's formal
-verification efforts.</li>
+<li>VL can build @(see esim) models of Verilog modules for formal verification
+with ACL2.  This is the basis for much of Centaur's formal verification
+efforts.</li>
 
 <li>The VL @(see kit) is a standalone command-line executable that you can
 build on top of ACL2 and VL.  It includes commands for @(see lint)ing Verilog
@@ -149,7 +147,7 @@ and transistor-level constructs.</li>
 <li>(unreleased) We have used it to implement <i>VL-Mangle</i>, a web-based
 Verilog refactoring tool.  A paper describing this tool can be found in: Jared
 Davis. <a
-href='http://www.cs.utexas.edu/users/jared/publications/2013-doform-embedding/embedding.pdf'>Embedding
+href='https://www.kookamara.com/jared/2013-doform-embedding.pdf'>Embedding
 ACL Models in End-User Applications</a>.  In <a
 href='http://www.cs.bham.ac.uk/research/projects/formare/events/aisb2013/'>Do-Form
 2013</a>.  April, 2013, Exeter, UK.</li>
@@ -161,9 +159,14 @@ transformations to easily implement other tools.</p>
 
 <h3>Starting Points</h3>
 
-<p>The first step in using VL for anything is probably to try to get it to
-parse your design; see the documentation for the @(see loader).  You may want
-to read the notes about @(see supported-constructs).</p>
+<p>If you want to use VL to do formal verification of hardware, you might start
+with the @(see acl2::esim-tutorial), which is a hands-on guide that will take
+you through using VL and @(see esim) to verify some simple circuits.</p>
+
+<p>The first step in using VL in any other capacity on a real project is
+probably to try to get it to parse your design; see the documentation for the
+@(see loader).  You may want to read the notes about @(see
+supported-constructs).</p>
 
 <p>Once you have parsed your design (or at least some portion of it) you will
 have a list of modules.  You might want to at least glance through the
@@ -212,7 +215,7 @@ designs.  It primarily handles RTL-based designs.  It has trouble with
 transistor-level constructs, hierarchical identifiers, inout ports, and fancy
 procedural statements.  It lacks support for most SystemVerilog features.</li>
 
-<li>The newer @(see acl2::svex) flow provides much better support for
+<li>The newer @(see acl2::sv) flow provides much better support for
 SystemVerilog features like structures, arrays, interfaces, and hierarchical
 identifiers.  It does not currently handle transistor-level constructs or
 simulation constructs like dynamic arrays, tasks, classes, etc.</li>
@@ -429,4 +432,3 @@ subsidiary helpers to carry out its work.  This work transforms various parts
 of the module, and meanwhile the warnings are perhaps extended.  Finally, the
 function returns a new @(see vl-module-p) which is updated with the extended
 list of warnings.</p>")
-

@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -32,7 +20,7 @@
 (local (include-book "top1"))
 
 (defun binary-lior (x y n)
-  (declare (xargs :guard (and (natp x) 
+  (declare (xargs :guard (and (natp x)
                               (natp y)
                               (integerp n)
                               (< 0 n))
@@ -58,7 +46,7 @@
                               (consp (cddr x)))))
   (cond ((endp (cdddr x)) ;(lior x y n) -- the base case
          `(binary-lior ,@x))
-        (t         
+        (t
          `(binary-lior ,(car x)
                        (lior ,@(cdr x))
                        ,(car (last x))))))
@@ -185,8 +173,8 @@
                 (case-split (integerp n))
                 )
            (equal (bits (lior x y n) i j)
-                  (lior (bits x i j) 
-                        (bits y i j) 
+                  (lior (bits x i j)
+                        (bits y i j)
                         (+ 1 i (- j))))))
 
 (defthmd bits-lior-2
@@ -195,8 +183,8 @@
                 (case-split (integerp n))
                 )
            (equal (bits (lior x y n) i j)
-                  (lior (bits x i j) 
-                        (bits y i j) 
+                  (lior (bits x i j)
+                        (bits y i j)
                         (+ n (- j))))))
 
 ;notice the call to MIN in the conclusion
@@ -206,8 +194,8 @@
                 (case-split (integerp i))
                 )
            (equal (bits (lior x y n) i j)
-                  (lior (bits x i j) 
-                        (bits y i j) 
+                  (lior (bits x i j)
+                        (bits y i j)
                         (+ (min n (+ 1 i)) (- j))))))
 
 (defthmd bitn-lior-1
@@ -216,8 +204,8 @@
                 (case-split (integerp n))
                 )
            (equal (bitn (lior x y n) m)
-                  (lior (bitn x m) 
-                        (bitn y m) 
+                  (lior (bitn x m)
+                        (bitn y m)
                         1))))
 
 (defthmd bitn-lior-2
@@ -236,8 +224,8 @@
                 )
            (equal (bitn (lior x y n) k)
                   (if (< k n)
-                      (lior (bitn x k) 
-                            (bitn y k) 
+                      (lior (bitn x k)
+                            (bitn y k)
                             1)
                     0))))
 

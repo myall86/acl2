@@ -29,18 +29,37 @@
 ; Original author: Jared Davis <jared@centtech.com>
 
 (in-package "VL")
-(include-book "zipformat")
+(include-book "zipfile")
 (include-book "../loader/top")
 (include-book "centaur/getopt/top" :dir :system)
 (include-book "std/io/read-file-characters" :dir :system)
 (include-book "progutils")
 (include-book "oslib/catpath" :dir :system)
 (include-book "oslib/date" :dir :system)
+(local (include-book "xdoc/display" :dir :system))
 (local (include-book "../util/arithmetic"))
 (local (include-book "../util/osets"))
 
+(defxdoc vl-zip
+  :parents (kit)
+  :short "Parse a SystemVerilog design and save it as a @('.vlzip') file,
+typically for use with the @(see vl-server)."
+
+  :long "<p>The VL @(see kit) provides a @('zip') command that you can use to
+parse a Verilog/SystemVerilog design and then write it out into a @('.vlzip')
+file.  These files are complete snapshots of what VL has parsed, and also
+include the full, raw source code files that have been loaded.</p>
+
+<p>These files are typically used by the @(see vl-server) for viewing with the
+VL Module Browser.  They can alternately be reloaded into ACL2 sessions using
+@(see vl-read-zip), which requires very little of VL to be loaded.</p>
+
+<p>For detailed usage information, run @('vl zip --help') or see @(see
+*vl-zip-help*).</p>")
+
+(local (xdoc::set-default-parents vl-zip))
+
 (defoptions vl-zip-opts
-  :parents (vl-zip)
   :short "Options for running @('vl zip')."
   :tag :vl-model-opts
 
@@ -74,6 +93,10 @@
    (start-files string-listp
                 "The list of files to parse. (Not options; this is the rest of
                  the command line, hence :hide t)"
+                :hide t)
+
+   (plusargs    string-listp
+                "The list of plusargs without plusses."
                 :hide t)
 
    (search-path string-listp
@@ -114,9 +137,12 @@
                 :longname "define"
                 :alias #\D
                 :argname "VAR"
-                "Set up definitions to use before parsing begins.  Equivalent
-                 to putting `define VAR 1 at the top of your Verilog file.
-                 You can give this option multiple times."
+                "Set up definitions to use before parsing begins.  For instance,
+                \"--define foo\" is similar to \"`define foo\" and \"--define
+                foo=3\" is similar to \"`define foo 3\".  Note: these defines
+                are \"sticky\" and will override subsequent `defines in your
+                Verilog files unless your Verilog explicitly uses `undef.  You
+                can give this option multiple times."
                 :parser getopt::parse-string
                 :merge acl2::cons)
 
@@ -142,8 +168,11 @@
                 :rule-classes :type-prescription)
    ))
 
-
-(defconst *vl-zip-help* (str::cat "
+(defval *vl-zip-help*
+  :short "Detailed usage information for the @('vl zip') command."
+  :showval t
+  :showdef nil
+  (str::cat "
 vl zip:  Parse Verilog files and write it out as a .vlzip file.
 
 Example:  vl zip engine.v wrapper.v core.v \\
@@ -160,48 +189,67 @@ Options:" *nls* *nls* *vl-zip-opts-usage* *nls*))
 
   (b* (((vl-zip-opts opts) opts)
 
+       ((mv cmdline-warnings defines)
+        (vl-parse-cmdline-defines opts.defines
+                                  (make-vl-location :filename "vl cmdline"
+                                                    :line 1
+                                                    :col 0)
+                                  ;; Command line defines are sticky
+                                  t))
+
+       (- (or (not cmdline-warnings)
+              (vl-cw-ps-seq (vl-print-warnings cmdline-warnings))))
+
        (loadconfig (make-vl-loadconfig
                     :edition       opts.edition
                     :strictp       opts.strict
                     :start-files   opts.start-files
+                    :plusargs      opts.plusargs
                     :search-path   opts.search-path
                     :search-exts   opts.search-exts
                     :include-dirs  opts.include-dirs
-                    :defines       (vl-make-initial-defines opts.defines)
+                    :defines       defines
                     :filemapp      t))
 
        ((mv result state) (vl-load loadconfig))
        ((vl-loadresult result) result)
        ((mv date state) (oslib::date))
        ((mv ltime state) (oslib::universal-time))
-       (zip (make-vl-zip :name    opts.name
-                         :syntax  *vl-current-syntax-version*
-                         :date    date
-                         :ltime   ltime
-                         :design  result.design
-                         :filemap result.filemap
-                         :defines result.defines))
+
+       (design (change-vl-design result.design
+                :warnings
+                (append-without-guard cmdline-warnings
+                                      (vl-design->warnings result.design))))
+
+
+       (zip (make-vl-zipfile :name    opts.name
+                             :syntax  *vl-current-syntax-version*
+                             :date    date
+                             :ltime   ltime
+                             :design  design
+                             :filemap result.filemap
+                             :defines result.defines))
        (- (cw "Writing output file ~x0~%" opts.output))
        (state (cwtime (vl-write-zip opts.output zip)))
        (- (cw "All done.")))
     state))
 
 (defconsts (*vl-zip-readme* state)
-  (b* (((mv contents state) (acl2::read-file-characters "zip.readme" state))
-       ((when (stringp contents))
-        (raise contents)
-        (mv "" state)))
-    (mv (implode contents) state)))
+  (b* ((topic (xdoc::find-topic 'vl::vl-zip (xdoc::get-xdoc-table (w state))))
+       ((mv text state) (xdoc::topic-to-text topic nil state)))
+    (mv text state)))
 
 (define vl-zip-top ((argv string-listp) &key (state 'state))
-  :parents (kit)
-  :short "The @('vl zip') command."
-  (b* (((mv errmsg opts start-files)
+  :short "Top-level @('vl zip') command."
+
+  (b* (((mv errmsg opts start-files-and-plusargs)
         (parse-vl-zip-opts argv))
        ((when errmsg)
         (die "~@0~%" errmsg)
         state)
+       ((mv start-files plusargs) (split-plusargs start-files-and-plusargs))
        (opts (change-vl-zip-opts opts
+                                 :plusargs plusargs
                                  :start-files start-files))
        ((vl-zip-opts opts) opts)
 

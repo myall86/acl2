@@ -43,6 +43,7 @@
 (include-book "../mlib/scopestack")
 (include-book "../util/cwtime")
 (include-book "../util/gc")
+(include-book "std/strings/fast-cat" :dir :system)
 (include-book "centaur/misc/hons-extra" :dir :system)
 (include-book "defsort/duplicated-members" :dir :system)
 (local (include-book "../util/arithmetic"))
@@ -115,7 +116,7 @@ assign foo = bar;
 
    (descalist  t
                "Fast alist of description names, for fast lookups."
-               :reqfix (vl-descalist descs))
+               :reqfix (vl-make-descalist descs))
 
    (defines   vl-defines-p
               "The current set of @('`define')s at any point in time.")
@@ -145,7 +146,7 @@ assign foo = bar;
                vl-loadconfig-p)."))
 
   :require
-  (equal descalist (vl-descalist descs)))
+  (equal descalist (vl-make-descalist descs)))
 
 (define vl-loadstate-warn (&key
                            (type   symbolp)
@@ -235,11 +236,11 @@ warning that maybe something is amiss with file loading.</p>")
 descriptions, warning about any multiply defined descriptions."
   ((new        vl-descriptionlist-p)
    (old        vl-descriptionlist-p)
-   (descalist  (equal descalist (vl-descalist old)))
+   (descalist  (equal descalist (vl-make-descalist old)))
    (reportcard vl-reportcard-p))
   :returns (mv (merged        vl-descriptionlist-p)
-               (new-descalist (equal new-descalist (vl-descalist merged))
-                              :hyp (equal descalist (vl-descalist old)))
+               (new-descalist (equal new-descalist (vl-make-descalist merged))
+                              :hyp (equal descalist (vl-make-descalist old)))
                (reportcard vl-reportcard-p))
   :long "<p>As a simple rule, we always keep the first definition of any
 description we encounter.  This function is responsible for enforcing this
@@ -248,7 +249,7 @@ descriptions.  If there are any name clashes, the original definition wins, and
 we add a warning to the @('reportcard') to say that the original definition is
 being kept.</p>"
   :hooks (:fix)
-  :prepwork ((local (in-theory (enable vl-descalist))))
+  :prepwork ((local (in-theory (enable vl-make-descalist))))
   (b* ((old        (vl-descriptionlist-fix old))
        (reportcard (vl-reportcard-fix reportcard))
        ((when (atom new))
@@ -278,7 +279,7 @@ being kept.</p>"
        ;; encountered, e.g., as a barbaric way to override problematic
        ;; definitions.
        (warning (make-vl-warning
-                 :type :vl-multidef-mod
+                 :type :vl-warn-multidef
                  :msg "~m0 is defined multiple times.  Keeping the old ~
                        definition (~a1) and ignoring the new one (~a2)."
                  :args (list newname1
@@ -788,7 +789,7 @@ you might want to attach some other kind of report here.</p>
                (vl-print-warnings floating-warnings)
                (vl-println ""))))
 
-       (multidef-warnings (vl-keep-warnings '(:vl-multidef-mod) regular-warnings))
+       (multidef-warnings (vl-keep-warnings '(:vl-warn-multidef) regular-warnings))
        (- (or (not multidef-warnings)
               (vl-cw-ps-seq
                (vl-ps-update-autowrap-col 68)

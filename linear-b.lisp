@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 8.4 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2022, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -64,6 +64,47 @@
                                            '<=
                                            t
                                            nil))))
+            ((ts-subsetp ts *ts-one*)
+             (list
+              ;; 1 <= term
+              (add-linear-terms :lhs *1*
+                                :rhs term
+                                (base-poly ts-ttree
+                                           '<=
+                                           t
+                                           nil))
+              ;; term <= 1
+              (add-linear-terms :lhs term
+                                :rhs *1*
+                                (base-poly ts-ttree
+                                           '<=
+                                           t
+                                           nil))))
+            ((ts-subsetp ts *ts-bit*)
+             (list
+              ;; 0 <= term
+              (add-linear-terms :lhs *0*
+                                :rhs term
+                                (base-poly ts-ttree
+                                           '<=
+                                           t
+                                           nil))
+              ;; term <= 1
+              (add-linear-terms :lhs term
+                                :rhs *1*
+                                (base-poly ts-ttree
+                                           '<=
+                                           t
+                                           nil))))
+            ((ts-subsetp ts *ts-integer>1*)
+             (list
+              ;; 2 <= term
+              (add-linear-terms :lhs *2*
+                                :rhs term
+                                (base-poly ts-ttree
+                                           '<=
+                                           t
+                                           nil))))
             ((ts-subsetp ts *ts-positive-integer*)
              (list
               ;; 1 <= term
@@ -118,6 +159,16 @@
              (list
               ;; term <= 0
               (add-linear-terms :lhs term
+                                (base-poly ts-ttree
+                                           '<=
+                                           t
+                                           nil))))
+            ((ts-subsetp ts (ts-union *ts-non-positive-rational*
+                                      *ts-one*))
+             (list
+              ;; term <= 1
+              (add-linear-terms :lhs term
+                                :rhs *1*
                                 (base-poly ts-ttree
                                            '<=
                                            t
@@ -228,27 +279,46 @@
 
 (mutual-recursion
 
-(defun eval-ground-subexpressions (term ens wrld state ttree)
+(defun eval-ground-subexpressions1 (term ens wrld safe-mode gc-off ttree
+                                         hands-off-fns memo)
+
+; We do not evaluate ground calls of the function symbols listed in
+; hands-off-fns.
+
+; Memo is an alist that saves results.  Typically it associates a ground
+; subexpression G with a quoted constant resulting from evaluation of G; but if
+; that evaluation fails then G is associated with either a term provably equal
+; to G when some argument was changed by evaluation, else with nil.  For
+; simplicity we don't bother saving such results for calls of IF or for lambda
+; applications.  Suppose for example that term is (if tst tbr fbr), tst
+; evaluates to nil, and fbr is a call of a function symbol other than IF that
+; evaluates to the quoted constant fbr'; then we add (cons fbr fbr') to memo
+; but we do not add (cons term fbr') to memo.  If necessary it shouldn't be too
+; difficult to save such additional information in memo.
+
   (cond
    ((or (variablep term)
         (fquotep term)
         (eq (ffn-symb term) 'hide))
-    (mv nil term ttree))
+    (mv nil term ttree memo))
    ((flambda-applicationp term)
     (mv-let
-     (flg args ttree)
-     (eval-ground-subexpressions-lst (fargs term) ens wrld state ttree)
-     (cond
-      ((all-quoteps args)
-       (mv-let
-        (flg val ttree)
-        (eval-ground-subexpressions
-         (sublis-var (pairlis$ (lambda-formals (ffn-symb term)) args)
-                     (lambda-body (ffn-symb term)))
-         ens wrld state ttree)
-        (declare (ignore flg))
-        (mv t val ttree)))
-      (flg
+      (flg args ttree memo)
+      (eval-ground-subexpressions1-lst (fargs term) ens wrld safe-mode gc-off
+                                       ttree
+                                       hands-off-fns
+                                       memo)
+      (cond
+       ((all-quoteps args)
+        (mv-let
+          (flg val ttree memo)
+          (eval-ground-subexpressions1
+           (sublis-var (pairlis$ (lambda-formals (ffn-symb term)) args)
+                       (lambda-body (ffn-symb term)))
+           ens wrld safe-mode gc-off ttree hands-off-fns memo)
+          (declare (ignore flg))
+          (mv t val ttree memo)))
+       (flg
 
 ; We could look for just those args that are quoteps, and substitute those,
 ; presumably then calling make-lambda-application to create a lambda out of the
@@ -256,87 +326,135 @@
 ; noting that through Version_2.9.4 we did not evaluate any ground lambda
 ; applications.
 
-       (mv t (cons-term (ffn-symb term) args) ttree))
-      (t (mv nil term ttree)))))
+        (mv t (cons-term (ffn-symb term) args) ttree memo))
+       (t (mv nil term ttree memo)))))
    ((eq (ffn-symb term) 'if)
     (mv-let
-     (flg1 arg1 ttree)
-     (eval-ground-subexpressions (fargn term 1) ens wrld state ttree)
-     (cond
-      ((quotep arg1)
-       (if (cadr arg1)
-           (mv-let
-            (flg2 arg2 ttree)
-            (eval-ground-subexpressions (fargn term 2) ens wrld state ttree)
-            (declare (ignore flg2))
-            (mv t arg2 ttree))
-           (mv-let
-            (flg3 arg3 ttree)
-            (eval-ground-subexpressions (fargn term 3) ens wrld state ttree)
-            (declare (ignore flg3))
-            (mv t arg3 ttree))))
-      (t (mv-let
-          (flg2 arg2 ttree)
-          (eval-ground-subexpressions (fargn term 2) ens wrld state ttree)
+      (flg1 arg1 ttree memo)
+      (eval-ground-subexpressions1 (fargn term 1) ens wrld safe-mode gc-off
+                                   ttree hands-off-fns memo)
+      (cond
+       ((quotep arg1)
+        (if (cadr arg1)
+            (mv-let
+              (flg2 arg2 ttree memo)
+              (eval-ground-subexpressions1 (fargn term 2) ens wrld safe-mode
+                                           gc-off ttree hands-off-fns memo)
+              (declare (ignore flg2))
+              (mv t arg2 ttree memo))
           (mv-let
-           (flg3 arg3 ttree)
-           (eval-ground-subexpressions (fargn term 3) ens wrld state ttree)
-           (mv (or flg1 flg2 flg3)
-               (if (or flg1 flg2 flg3)
-                   (fcons-term* 'if arg1 arg2 arg3)
-                 term)
-               ttree)))))))
-   (t (mv-let
-       (flg args ttree)
-       (eval-ground-subexpressions-lst (fargs term) ens wrld state ttree)
-       (cond
+            (flg3 arg3 ttree memo)
+            (eval-ground-subexpressions1 (fargn term 3) ens wrld safe-mode
+                                         gc-off ttree hands-off-fns memo)
+            (declare (ignore flg3))
+            (mv t arg3 ttree memo))))
+       (t (mv-let
+            (flg2 arg2 ttree memo)
+            (eval-ground-subexpressions1 (fargn term 2) ens wrld safe-mode
+                                         gc-off ttree hands-off-fns memo)
+            (mv-let
+              (flg3 arg3 ttree memo)
+              (eval-ground-subexpressions1 (fargn term 3) ens wrld safe-mode
+                                           gc-off ttree hands-off-fns memo)
+              (mv (or flg1 flg2 flg3)
+                  (if (or flg1 flg2 flg3)
+                      (fcons-term* 'if arg1 arg2 arg3)
+                    term)
+                  ttree
+                  memo)))))))
+   (t
+    (let ((pair (assoc-equal term memo)))
+      (cond
+       (pair
+        (mv t (or (cdr pair) term) ttree memo))
+       (t (mv-let
+            (flg args ttree memo)
+            (eval-ground-subexpressions1-lst (fargs term) ens wrld safe-mode
+                                             gc-off ttree hands-off-fns memo)
+            (cond
 
 ; The following test was taken from rewrite with a few modifications
 ; for the formals used.
 
-        ((and (logicalp (ffn-symb term) wrld) ; maybe fn is being admitted
-              (all-quoteps args)
-              (enabled-xfnp (ffn-symb term) ens wrld)
+             ((and (logicp (ffn-symb term) wrld) ; maybe fn is being admitted
+                   (all-quoteps args)
+                   (enabled-xfnp (ffn-symb term) ens wrld)
+                   (not (member-eq (ffn-symb term) hands-off-fns))
 
 ; We don't mind disallowing constrained functions that have attachments,
 ; because the call of ev-fncall below disallows the use of attachments (last
 ; parameter, aok, is nil).
 
-              (not (getprop (ffn-symb term) 'constrainedp nil
-                            'current-acl2-world wrld)))
-         (mv-let
-          (erp val latches)
-          (pstk
-           (ev-fncall (ffn-symb term)
-                      (strip-cadrs args)
-                      state nil t nil))
-          (declare (ignore latches))
-          (cond
-           (erp
-            (cond (flg
-                   (mv t (cons-term (ffn-symb term) args) ttree))
-                  (t (mv nil term ttree))))
-           (t (mv t
-                  (kwote val)
-                  (push-lemma (fn-rune-nume (ffn-symb term) nil t wrld)
-                              ttree))))))
-        (flg (mv t (cons-term (ffn-symb term) args) ttree))
-        (t (mv nil term ttree)))))))
+                   (not (getpropc (ffn-symb term) 'constrainedp nil wrld)))
+              (mv-let
+                (erp val)
+                (pstk
+                 (ev-fncall-w (ffn-symb term)
+                              (strip-cadrs args)
+                              wrld
+                              nil ; user-stobj-alist
+                              safe-mode gc-off
+                              t ; hard-error-returns-nilp
+                              nil ; aok
+                              ))
+                (cond
+                 (erp
+                  (cond (flg
+                         (let ((new-term (cons-term (ffn-symb term) args)))
+                           (mv t
+                               new-term
+                               ttree
+                               (acons term new-term memo))))
+                        (t (mv nil term ttree (acons term nil memo)))))
+                 (t (let ((kwote-val (kwote val)))
+                      (mv t
+                          kwote-val
+                          (push-lemma (fn-rune-nume (ffn-symb term) nil t wrld)
+                                      ttree)
+                          (acons term kwote-val memo)))))))
+             (flg (mv t (cons-term (ffn-symb term) args) ttree memo))
+             (t (mv nil term ttree memo))))))))))
 
-(defun eval-ground-subexpressions-lst (lst ens wrld state ttree)
-  (cond ((null lst) (mv nil nil ttree))
+(defun eval-ground-subexpressions1-lst (lst ens wrld safe-mode gc-off ttree
+                                            hands-off-fns memo)
+  (cond ((null lst) (mv nil nil ttree memo))
         (t (mv-let
-            (flg1 x ttree)
-            (eval-ground-subexpressions (car lst) ens wrld state ttree)
+            (flg1 x ttree memo)
+            (eval-ground-subexpressions1 (car lst) ens wrld safe-mode gc-off
+                                         ttree hands-off-fns memo)
             (mv-let
-             (flg2 y ttree)
-             (eval-ground-subexpressions-lst (cdr lst) ens wrld state ttree)
+             (flg2 y ttree memo)
+             (eval-ground-subexpressions1-lst (cdr lst) ens wrld safe-mode
+                                              gc-off ttree hands-off-fns memo)
              (mv (or flg1 flg2)
                  (if (or flg1 flg2)
                      (cons x y)
                    lst)
-                 ttree))))))
+                 ttree
+                 memo))))))
 )
+
+(defun eval-ground-subexpressions (term ens wrld state ttree)
+  (mv-let (flg x ttree memo)
+    (eval-ground-subexpressions1 term ens wrld
+                                 (f-get-global 'safe-mode state)
+                                 (gc-off state)
+                                 ttree
+                                 nil
+                                 nil)
+    (declare (ignore memo))
+    (mv flg x ttree)))
+
+(defun eval-ground-subexpressions-lst (lst ens wrld state ttree)
+  (mv-let (flg x ttree memo)
+    (eval-ground-subexpressions1-lst lst ens wrld
+                                     (f-get-global 'safe-mode state)
+                                     (gc-off state)
+                                     ttree
+                                     nil
+                                     nil)
+    (declare (ignore memo))
+    (mv flg x ttree)))
 
 (defun poly-set (op poly1 poly2)
 
@@ -417,7 +535,8 @@
                                             (access poly poly2 :parents))))))
         (t (list (list poly1) (list poly2)))))
 
-;; RAG - I changed complex-rational to complex, and rational to real,
+;; Historical Comment from Ruben Gamboa:
+;; I changed complex-rational to complex, and rational to real,
 ;; to stand for the non-zero numbers.
 
 (defun linearize1 (term positivep type-alist ens force-flg wrld ttree state)

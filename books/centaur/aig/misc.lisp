@@ -82,28 +82,36 @@
    x
    :true (mv nil nil)
    :false (mv nil nil)
-   :var (mv (list x) nil)
-   :inv (if (and (atom (car x))
-                 (not (booleanp (car x))))
-            (mv nil (list (car x)))
+   :var (mv (mbe :logic (set::insert x nil)
+                 :exec (list x))
+            nil)
+   :inv (if (aig-var-p (car x))
+            (mv nil (mbe :logic (set::insert (car x) nil)
+                         :exec (list (car x))))
           (mv nil nil))
    :and (mv-let (trues1 falses1)
           (aig-extract-assigns (car x))
           (mv-let (trues2 falses2)
             (aig-extract-assigns (cdr x))
-            (mv (hons-alphorder-merge trues1 trues2)
-                (hons-alphorder-merge falses1 falses2))))))
+            (mv (set::union trues1 trues2)
+                (set::union falses1 falses2))))))
 
-(defthm atom-listp-aig-extract-assigns
+(defthm aig-var-listp-aig-extract-assigns
   (mv-let (trues falses)
     (aig-extract-assigns x)
-    (and (atom-listp trues)
-         (atom-listp falses))))
+    (and (aig-var-listp trues)
+         (aig-var-listp falses))))
 
-(verify-guards aig-extract-assigns)
+(defthm setp-of-aig-extract-assigns
+  (b* (((mv trues falses) (aig-extract-assigns x)))
+    (and (set::setp trues)
+         (set::setp falses))))
+
+(verify-guards aig-extract-assigns
+  :hints(("Goal" :in-theory (enable set::insert))))
 
 (memoize 'aig-extract-assigns
-         :condition '(and (consp x) (cdr x))
+         :condition '(and (not (aig-atom-p x)) (cdr x))
          :forget t)
 
 (defthm aig-extract-assigns-member-impl
@@ -140,12 +148,44 @@
                             (x y)))
            :in-theory (disable var-eval-extend-env))))
 
+(define boolean-val-alistp (x)
+  (if (atom x)
+      (eq x nil)
+    (and (consp (car x)) (booleanp (cdar x))
+         (boolean-val-alistp (cdr x))))
+  ///
+  (defthmd aig-eval-alist-of-boolean-val-alistp
+    (implies (boolean-val-alistp x)
+             (equal (aig-eval-alist x env) x)))
+
+  (defthm lookup-in-boolean-val-alist
+    (implies (boolean-val-alistp x)
+             (booleanp (cdr (hons-assoc-equal k x)))))
+
+  (defthm alistp-when-boolean-val-alistp
+    (implies (boolean-val-alistp x)
+             (alistp x))
+    :rule-classes :forward-chaining)
+
+  (defthm boolean-val-alistp-of-append
+    (implies (and (boolean-val-alistp x)
+                  (boolean-val-alistp y))
+             (boolean-val-alistp (append x y)))))
+
+(local (in-theory (enable aig-eval-alist-of-boolean-val-alistp)))
+
 (defun assign-var-list (vars val)
   (declare (xargs :guard t))
   (if (atom vars)
       nil
     (cons (cons (car vars) val)
           (assign-var-list (cdr vars) val))))
+
+(defthm boolean-val-alistp-of-assign-var-list
+  (implies (booleanp val)
+           (boolean-val-alistp (assign-var-list vars val)))
+  :hints(("Goal" :in-theory (enable boolean-val-alistp))))
+
 
 (local
  (defthm aig-extract-assigns-assign-var-list1
@@ -205,6 +245,8 @@
 
 (in-theory (disable assign-var-list))
 
+
+
 (defun aig-extract-assigns-alist (x)
   (declare (xargs :guard t))
   (mv-let (trues falses)
@@ -212,6 +254,9 @@
     (make-fal (assign-var-list trues t)
               (make-fal (assign-var-list falses nil)
                         nil))))
+
+(defthm boolean-val-alistp-of-aig-extract-assigns-alist
+  (boolean-val-alistp (aig-extract-assigns-alist x)))
 
 (local (defthm true-listp-of-aig-extract-assigns-alist
          (true-listp (aig-extract-assigns-alist x))))
@@ -251,6 +296,8 @@
 
 
 
+
+
 (defun aig-extract-iterated-assigns-alist (x clk)
   (declare (Xargs :measure (nfix clk)
                    :guard (natp clk)))
@@ -263,6 +310,9 @@
        (let* ((more (aig-extract-iterated-assigns-alist newx (1- clk))))
          (make-fal (flush-hons-get-hash-table-link al) more))))))
 
+(defthm boolean-val-alistp-of-aig-extract-iterated-assigns-alist
+  (boolean-val-alistp (aig-extract-iterated-assigns-alist x clk)))
+
 (in-theory (disable aig-extract-assigns-alist))
 
 (local (defthm true-listp-of-aig-extract-iterated-assigns-alist
@@ -274,6 +324,8 @@
 (defthm aig-eval-alist-extract-iterated-assigns
   (equal (aig-eval-alist (aig-extract-iterated-assigns-alist x clk) env)
          (aig-extract-iterated-assigns-alist x clk)))
+
+
 
 (local
  (defun aig-extract-iterated-assigns-restrict-ind (x y clk)
@@ -305,10 +357,40 @@
 
 (defthmd aig-extract-iterated-assigns-alist-lookup-boolean
   (booleanp (cdr (hons-assoc-equal k (aig-extract-iterated-assigns-alist x clk))))
-  :hints(("Goal" :in-theory (enable aig-extract-iterated-assigns-alist
-                                    aig-extract-assigns-alist-lookup-boolean)))
   :rule-classes :type-prescription)
 
 
 (memoize 'aig-extract-iterated-assigns-alist
          :recursive nil)
+
+(defthmd lookup-in-aig-extract-assigns
+  (b* (((mv trues falses) (aig-extract-assigns x)))
+    (and (implies (and (member v trues)
+                       (aig-eval x env))
+                  (aig-env-lookup v env))
+         (implies (and (member v falses)
+                       (aig-eval x env))
+                  (not (aig-env-lookup v env)))))
+  :hints(("Goal" :in-theory (enable aig-extract-assigns))))
+
+
+(defthmd lookup-in-aig-extract-assigns-alist
+  (implies (and (hons-assoc-equal v (aig-extract-assigns-alist x))
+                (aig-eval x env))
+           (iff (aig-env-lookup v env)
+                (cdr (hons-assoc-equal v (aig-extract-assigns-alist x)))))
+  :hints(("Goal" :in-theory (e/d (aig-extract-assigns-alist)
+                                 (aig-env-lookup
+                                  lookup-in-aig-extract-assigns))
+          :use lookup-in-aig-extract-assigns)))
+
+(defthmd lookup-in-aig-extract-iterated-assigns-alist
+  (implies (and (hons-assoc-equal v (aig-extract-iterated-assigns-alist x n))
+                (aig-eval x env))
+           (iff (aig-env-lookup v env)
+                (cdr (hons-assoc-equal v (aig-extract-iterated-assigns-alist x n)))))
+  :hints(("Goal" :in-theory (e/d (aig-extract-iterated-assigns-alist
+                                  lookup-in-aig-extract-assigns-alist)
+                                 (aig-env-lookup))
+          :induct (aig-extract-iterated-assigns-alist x n))))
+

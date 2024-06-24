@@ -514,7 +514,9 @@ pieces, e.g., the @('bar[3][4][5]') part of @('foo.bar[3][4][5].baz')."
 
 (define vl-hidindex-count-indices ((x vl-expr-p))
   :guard (vl-hidindex-p x)
-  :measure (vl-expr-count x)
+; Removed after v7-2 by Matt K. since logically, the definition is
+; non-recursive:
+; :measure (vl-expr-count x)
   :returns (idxcount natp :rule-classes :type-prescription)
   :verify-guards nil
   :enabled t
@@ -627,30 +629,13 @@ instance:</p>
                   (force (not (vl-atom-p x))))
              (vl-hidexpr-p (second (vl-nonatom->args x)))))
 
-  (local (defthm vl-id-p-of-vl-atomguts-fix
-           (equal (vl-id-p (vl-atomguts-fix x))
-                  (vl-id-p x))
-           :hints(("Goal" :in-theory (e/d (vl-atomguts-fix
-                                           vl-atomguts-p)
-                                          (tag-when-vl-constint-p))
-                   :use ((:instance tag-when-vl-constint-p
-                          (x (vl-constint-fix x))))))))
-
-  (local (defthm vl-hidpiece-p-of-vl-atomguts-fix
-           (equal (vl-hidpiece-p (vl-atomguts-fix x))
-                  (vl-hidpiece-p x))
-           :hints(("Goal" :in-theory (e/d (vl-atomguts-fix
-                                           vl-atomguts-p)
-                                          (tag-when-vl-constint-p))
-                   :use ((:instance tag-when-vl-constint-p
-                          (x (vl-constint-fix x))))))))
-
   (defthm vl-hidexpr-p-of-vl-atom
     (equal (vl-hidexpr-p (make-vl-atom :guts guts
                                        :finalwidth finalwidth
                                        :finaltype finaltype))
-           (or (vl-hidpiece-p guts)
-               (vl-id-p guts)))
+           (let ((guts (vl-atomguts-fix guts)))
+             (or (vl-hidpiece-p guts)
+                 (vl-id-p guts))))
     :hints(("goal" :in-theory (enable vl-hidname-p))))
 
   (defthm vl-hidexpr-p-of-vl-nonatom-dot
@@ -1716,7 +1701,7 @@ and unpacked dimension @('[0:8]').</p>"
        (nunpacked (len unpacked-dims))
        ((when (<= idxcount nunpacked))
         (mv nil (vl-datatype-update-udims
-                 (nthcdr idxcount (redundant-list-fix unpacked-dims)) type)))
+                 (nthcdr idxcount (list-fix unpacked-dims)) type)))
        (remaining-idxcount (- idxcount nunpacked))
        ((unless (<= remaining-idxcount (len packed-dims)))
         (mv (make-vl-warning :type :vl-too-many-indices
@@ -1727,7 +1712,7 @@ and unpacked dimension @('[0:8]').</p>"
                              :fn __function__)
             nil))
        (type (vl-datatype-update-dims
-              (nthcdr remaining-idxcount (redundant-list-fix packed-dims))
+              (nthcdr remaining-idxcount (list-fix packed-dims))
               nil ;; udims
               type)))
     (mv nil type)))
@@ -1866,7 +1851,8 @@ type @('logic[3:0]').</li> </ul>"
   :parents (hid-tools)
   :short "Looks up a HID in a scopestack and looks for a declaration, returning the type and dimensionlist if found."
   :guard (vl-hidexpr-p x)
-  :measure (vl-expr-count x)
+; Removed after v7-2 by Matt K. since the definition is non-recursive:
+; :measure (vl-expr-count x)
   :returns (mv (warning (iff (vl-warning-p warning) warning))
                (type (iff (vl-datatype-p type) (not warning))))
   (b* ((x (vl-expr-fix x))
@@ -2118,7 +2104,8 @@ datatype is multidimensional.</p>"
                                         vl-expr-resolved-p-of-car-when-vl-exprlist-resolved-p
                                         vl-hidexpr-p-when-id-atom
                                         vl-nonatom->op-when-vl-hidindex-p))))
-  :measure (vl-expr-count x)
+; Removed after v7-2 by Matt K. since the definition is non-recursive:
+; :measure (vl-expr-count x)
   (b* ((ctx (vl-context-fix ctx))
        ((vl-nonatom x) (vl-expr-fix x))
        ((unless (member x.op
@@ -2291,7 +2278,8 @@ datatype is multidimensional.</p>"
   :guard (vl-hidindex-p x)
   :returns (bool)
   :short "Determines if every index in a @(see vl-hidindex-p) is resolved."
-  :measure (vl-expr-count x)
+; Removed after v7-2 by Matt K. since the definition is non-recursive:
+; :measure (vl-expr-count x)
   (vl-exprlist-resolved-p (vl-hidindex->indices x))
   ;; (b* (((when (vl-atom-p x))
   ;;       t)
@@ -2407,7 +2395,7 @@ datatype is multidimensional.</p>"
   (b* (((when (atom indices))
         acc)
        (acc (cons #\[ acc))
-       (acc (revappend (str::natchars (vl-resolved->val (car indices))) acc))
+       (acc (revappend (str::nat-to-dec-chars (vl-resolved->val (car indices))) acc))
        (acc (cons #\] acc)))
     (vl-flatten-hidindex-aux (cdr indices) acc)))
 
@@ -2416,7 +2404,8 @@ datatype is multidimensional.</p>"
               (vl-hidindex-resolved-p x))
   :returns (flat-string stringp :rule-classes :type-prescription)
   :short "Converts a @(see vl-hidindex-p) into a string like @('\"bar[3][4][5]\"')."
-  :measure (vl-expr-count x)
+; Removed after v7-2 by Matt K. since the definition is non-recursive:
+; :measure (vl-expr-count x)
   :guard-hints(("Goal" :in-theory (enable vl-hidindex-resolved-p)))
   (b* ((name    (vl-hidindex->name x))
        (indices (vl-hidindex->indices x))

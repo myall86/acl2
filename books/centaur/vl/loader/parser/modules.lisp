@@ -31,6 +31,7 @@
 (in-package "VL")
 (include-book "ports")      ;; vl-portdecllist-p, vl-portlist-p
 (include-book "elements")
+(include-book "timeunits")
 (include-book "../../mlib/blocks")
 (local (include-book "../../util/arithmetic"))
 
@@ -42,21 +43,24 @@
 ; and turn it into a module.
 
   ((name     stringp               "Name of the module.")
+   (imports  vl-importlist-p)
    (params   vl-paramdecllist-p    "Parameters declarations from the #(...) list, if any.")
+   (ansi-ports vl-ansi-portdecllist-p "Temporary form of ANSI portdecls")
    (ports    vl-portlist-p         "Ports like (o, a, b).")
+   (ansi-p   booleanp              "Was it parsed in the ANSI or non-ANSI style")
    (items    vl-genelementlist-p   "Items from the module's body, i.e., until endmodule.")
    (atts     vl-atts-p)
    (minloc   vl-location-p)
    (maxloc   vl-location-p)
    (warnings vl-warninglist-p))
   :returns (mod vl-module-p)
-  (b* ((items (append-without-guard (vl-modelementlist->genelements params) items))
+  (b* (;; (items (append-without-guard (vl-modelementlist->genelements params) items))
        (bad-item (vl-genelementlist-findbad items
                                             '(:vl-generate
                                               ;; :vl-port    -- not allowed, they were parsed separately
                                               :vl-portdecl
                                               :vl-assign
-                                              ;; :vl-alias   -- bozo, let's not permit these yet
+                                              :vl-alias
                                               :vl-vardecl
                                               :vl-paramdecl
                                               :vl-fundecl
@@ -65,47 +69,82 @@
                                               :vl-gateinst
                                               :vl-always
                                               :vl-initial
-                                              ;; :vl-typedef    -- let's not permit these yet
+                                              :vl-final
+                                              :vl-typedef
                                               :vl-import
                                               ;; :vl-fwdtypedef -- doesn't seem like these should be ok
                                               ;; :vl-modport    -- definitely not ok
                                               :vl-genvar
+                                              :vl-assertion
+                                              :vl-cassertion
+                                              :vl-property
+                                              :vl-sequence
+                                              :vl-clkdecl
+                                              :vl-gclkdecl
+                                              :vl-defaultdisable
+                                              :vl-dpiimport
+                                              :vl-dpiexport
+                                              :vl-bind
+                                              :vl-class
+                                              :vl-covergroup
+                                              :vl-elabtask
+                                              :vl-letdecl
                                               )))
        (warnings
         (if (not bad-item)
             warnings
           (fatal :type :vl-bad-module-item
-                 :msg "~a0: a module may not contain ~x1s."
-                 :args (list bad-item (tag bad-item)))))
+                 :msg "~a0: a module may not contain a ~s1."
+                 :args (list bad-item (vl-genelement->short-kind-string bad-item)))))
 
        ((vl-genblob c) (vl-sort-genelements items))
        ;; ((mv warnings c.portdecls c.vardecls)
        ;;  (vl-portdecl-sign c.portdecls c.vardecls warnings))
        )
-    (make-vl-module :name       name
-                    :params     params
-                    :ports      ports
-                    :portdecls  c.portdecls
-                    :assigns    c.assigns
-                    :aliases    c.aliases
-                    :vardecls   c.vardecls
-                    :paramdecls c.paramdecls
-                    :fundecls   c.fundecls
-                    :taskdecls  c.taskdecls
-                    :modinsts   c.modinsts
-                    :gateinsts  c.gateinsts
-                    :alwayses   c.alwayses
-                    :initials   c.initials
-                    :generates  c.generates
-                    :genvars    c.genvars
-                    :imports    c.imports
-                    :atts       atts
-                    :minloc     minloc
-                    :maxloc     maxloc
-                    :warnings   warnings
-                    :origname   name
-                    :comments   nil
-                    :loaditems  items
+    (make-vl-module :name        name
+                    :params      params ;; Is this even right?
+                    :ports       ports
+                    :portdecls   c.portdecls
+                    :assigns     c.assigns
+                    :aliases     c.aliases
+                    :vardecls    c.vardecls
+                    :paramdecls  (append-without-guard params c.paramdecls)
+                    :fundecls    c.fundecls
+                    :taskdecls   c.taskdecls
+                    :modinsts    c.modinsts
+                    :gateinsts   c.gateinsts
+                    :alwayses    c.alwayses
+                    :initials    c.initials
+                    :finals      c.finals
+                    :generates   c.generates
+                    :genvars     c.genvars
+                    :imports     (append-without-guard imports c.imports)
+                    :typedefs    c.typedefs
+                    :properties  c.properties
+                    :sequences   c.sequences
+                    :clkdecls    c.clkdecls
+                    :gclkdecls   c.gclkdecls
+                    :defaultdisables c.defaultdisables
+                    :assertions  c.assertions
+                    :cassertions c.cassertions
+                    :dpiimports  c.dpiimports
+                    :dpiexports  c.dpiexports
+                    :binds       c.binds
+                    :classes     c.classes
+                    :covergroups c.covergroups
+                    :elabtasks   c.elabtasks
+                    :atts        atts
+                    :minloc      minloc
+                    :maxloc      maxloc
+                    :warnings    warnings
+                    :origname    name
+                    :comments    nil
+                    :parse-temps (make-vl-parse-temps
+                                  :ansi-p ansi-p
+                                  :imports imports
+                                  :ansi-ports ansi-ports
+                                  :paramports params
+                                  :loaditems items)
                     )))
 
 
@@ -142,29 +181,33 @@
 ;       with until the end of the module 'belong' to this module.
 
   (seq tokstream
+       (imports  := (vl-parse-0+-package-import-declarations))
        (params   := (vl-maybe-parse-parameter-port-list))
        (portinfo := (vl-parse-module-port-list-top))
        (:= (vl-match-token :vl-semi))
+       ((timeunit . timeprec) := (vl-parse-optional-timeunits-declaration))
        (items := (vl-parse-genelements-until :vl-kwd-endmodule))
        (endkwd := (vl-match-token :vl-kwd-endmodule))
        (:= (vl-parse-endblock-name (vl-idtoken->name id) "module/endmodule"))
        (return-raw
-        (b* (((vl-parsed-ports portinfo))
-             (name   (vl-idtoken->name id))
+        (b* ((name   (vl-idtoken->name id))
              (minloc (vl-token->loc module_keyword))
              (maxloc (vl-token->loc endkwd))
              (warnings (vl-parsestate->warnings (vl-tokstream->pstate)))
-             ((when (and portinfo.ansi-p (vl-genelementlist->portdecls items))) ;; User's fault
+             ((mv ansi-p ansi-portdecls ports)
+              (vl-parsed-ports-case portinfo
+                :ansi (mv t portinfo.decls nil)
+                :nonansi (mv nil nil portinfo.ports)))
+             ((when (and ansi-p
+                         (vl-genelementlist->portdecls items))) ;; User's fault
               (vl-parse-error "ANSI module cannot have internal port declarations."))
-             ((when (and (not portinfo.ansi-p)
-                         (or portinfo.portdecls portinfo.vardecls)))
-              (vl-parse-error "Non-ANSI module ports are somehow causing declarations?
-                               Programming error."))
-             (items (append (vl-modelementlist->genelements portinfo.portdecls)
-                            (vl-modelementlist->genelements portinfo.vardecls)
-                            items))
-             (module (vl-make-module-by-items name params portinfo.ports items
-                                              atts minloc maxloc warnings)))
+             (module (vl-make-module-by-items name imports params ansi-portdecls ports ansi-p items
+                                              atts minloc maxloc warnings))
+             (module (if (or timeunit timeprec)
+                         (change-vl-module module
+                                           :timeunit timeunit
+                                           :timeprecision timeprec)
+                       module)))
           (mv nil module tokstream)))))
 
 (defparser vl-parse-module-main (atts module_keyword id)
@@ -230,7 +273,7 @@
                                :msg "[[ Remaining ]]: ~s0 ~s1.~%"
                                :args (list (vl-tokenlist->string-with-spaces
                                             (take (min 4 (len tokens))
-                                                  (redundant-list-fix tokens)))
+                                                  (list-fix tokens)))
                                            (if (> (len tokens) 4) "..." ""))
                                :fatalp t
                                :fn __function__)))

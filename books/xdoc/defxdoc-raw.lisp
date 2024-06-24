@@ -1,5 +1,5 @@
 ; XDOC Documentation System for ACL2
-; Copyright (C) 2009-2011 Centaur Technology
+; Copyright (C) 2009-2015 Centaur Technology
 ;
 ; Contact:
 ;   Centaur Technology Formal Verification Group
@@ -45,9 +45,6 @@
   (declare (xargs :stobjs state :verify-guards t))
   (prog2$
    (er hard? 'all-xdoc-topics "all-xdoc-topics not yet defined.")
-   (mv-let (err val state)
-     (read-acl2-oracle state)
-     (declare (ignore err))
-     (mv val state))))
+   (read-acl2-oracle state)))
 
 (acl2::include-raw "defxdoc-raw-impl.lsp")

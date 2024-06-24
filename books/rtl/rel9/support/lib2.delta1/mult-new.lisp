@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -29,7 +17,7 @@
 (include-book "add-new")
 
 (local (include-book "mult-new-proofs"))
-	       
+
 
 (set-inhibit-warnings "theory") ; avoid warning in the next event
 (local (in-theory nil))
@@ -40,7 +28,7 @@
 
 
 (defun theta_alt (i y)
-  (+ (bitn_alt y (1- (* 2 i))) 
+  (+ (bitn_alt y (1- (* 2 i)))
      (bitn_alt y (* 2 i))
      (* -2 (bitn_alt y (1+ (* 2 i))))))
 
@@ -72,7 +60,7 @@
 
 (encapsulate ((zeta (i) t))
  (local (defun zeta (i) (declare (ignore i)) 0))
- (defthm zeta-bnd 
+ (defthm zeta-bnd
      (and (integerp (zeta i))
 	  (<= (zeta i) 2)
 	  (>= (zeta i) -2))))
@@ -95,7 +83,7 @@
   (if (zp m)
       0
     (+ (* (expt 2 (* 2 (1- m))) (zeta (1- m)))
-       (sum-zeta (1- m)))))   
+       (sum-zeta (1- m)))))
 
 (defun sum-pp4_alt (x m n)
   (if (zp m)
@@ -158,19 +146,19 @@
 
 
 (defun m-mu-chi (i mode)
-  (cond ((equal mode 'mu)  
+  (cond ((equal mode 'mu)
          (if (zp i)  1
            (cons (cons 1  i) 1)))
         ((equal mode 'chi)
          (if (zp i)  0
            (cons (cons 1  i) 0)))))
-             
+
 
 (mutual-recursion
  (defun mu_alt (i y)
    (declare (xargs :measure (m-mu-chi i 'mu)))
      (+ (bits_alt y (1+ (* 2 i)) (* 2 i)) (chi_alt i y)))
- 
+
  (defun chi_alt (i y)
    (declare (xargs :measure (m-mu-chi i 'chi)))
    (if (zp i)
@@ -179,7 +167,7 @@
 	 1
        0))))
 
-  
+
 
 (defun phi_alt (i y)
   (if (= (bits_alt (mu_alt i y) 1 0) 3)
@@ -269,7 +257,7 @@
 		   (* x y))))
   :rule-classes ()
   :hints (("Goal" :use ((:instance static-booth)))))
-           
+
 
 ;;;**********************************************************************
 ;;;                Encoding Redundant Representations
@@ -286,13 +274,13 @@
 (defun delta_alt (i a b c d)
   (if (zp i)
       (bitn_alt d 0)
-    (logand (logior (logand (bitn_alt a (+ -2 (* 2 i))) 
+    (logand (logior (logand (bitn_alt a (+ -2 (* 2 i)))
 			    (bitn_alt b (+ -2 (* 2 i))))
 		    (logior (logand (bitn_alt a (+ -2 (* 2 i)))
 				    (gamma_alt (1- i) a b c))
 			    (logand (bitn_alt b (+ -2 (* 2 i)))
 				    (gamma_alt (1- i) a b c))))
-	    (lognot (logxor (bitn_alt a (1- (* 2 i))) 
+	    (lognot (logxor (bitn_alt a (1- (* 2 i)))
 			    (bitn_alt b (1- (* 2 i))))))))
 
 
@@ -313,8 +301,8 @@
 (defthm psi_alt-m-1
     (implies (and (natp m)
                   (>= m 1)
-		  (bvecp a (- (* 2 m) 2))   
-		  (bvecp b (- (* 2 m) 2))  
+		  (bvecp a (- (* 2 m) 2))
+		  (bvecp b (- (* 2 m) 2))
 		  (bvecp c 1)
 		  (bvecp d 1))
 	     (and (equal (gamma_alt m a b c) 0)
@@ -322,7 +310,7 @@
 		  (>= (psi_alt (1- m) a b c d) 0)))
   :rule-classes ()
   :hints (("Goal" :use ((:instance psi-m-1))
-           :in-theory (e/d () 
+           :in-theory (e/d ()
                            (psi_alt
                             psi
                             gamma_alt
@@ -350,7 +338,7 @@
 	     (equal (+ a b c d) (sum-psi_alt m a b c d)))
   :rule-classes ()
   :hints (("Goal" :use ((:instance sum-psi-lemma)))))
-           
+
 
 
 
@@ -404,7 +392,7 @@
 
 
 (defun eta_alt (i y)
-  (+ (bitn_alt y (1- (* 3 i))) 
+  (+ (bitn_alt y (1- (* 3 i)))
      (bitn_alt y (* 3 i))
      (* 2 (bitn_alt y (1+ (* 3 i))))
      (* -4 (bitn_alt y (+ 2 (* 3 i))))))
@@ -443,7 +431,7 @@
 
 (encapsulate ((xi (i) t))
  (local (defun xi (i) (declare (ignore i)) 0))
- (defthm xi-bnd 
+ (defthm xi-bnd
      (and (integerp (xi i))
 	  (<= (xi i) 4)
 	  (>= (xi i) -4))))
@@ -467,7 +455,7 @@
   (if (zp m)
       0
     (+ (* (expt 2 (* 3 (1- m))) (xi (1- m)))
-       (sum-xi (1- m)))))   
+       (sum-xi (1- m)))))
 
 (defun sum-pp8_alt (x m n)
   (if (zp m)

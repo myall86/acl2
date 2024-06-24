@@ -34,9 +34,10 @@
 (include-book "../util/cwtime")
 (local (include-book "../util/arithmetic"))
 (local (include-book "../util/osets"))
+(local (include-book "std/testing/assert-bang" :dir :system))
 
 (defsection check-case
-  :parents (lint)
+  :parents (vl-lint)
   :short "Basic checker to ensure that wire names don't differ only by case."
 
   :long "<p>Stylistically, we don't think wire names ought to differ only by
@@ -95,13 +96,16 @@ repeatedly.  Linear in the length of @('x').</p>"
                          '(("BAR" "Bar")
                            ("foo" "Foo"))))))
 
-
-(define vl-equiv-strings-to-lines ((x string-list-listp) &key (ps 'ps))
-  (if (atom x)
-      ps
-    (vl-ps-seq
-     (vl-basic-cw "      - ~&0~%" (car x))
-     (vl-equiv-strings-to-lines (cdr x)))))
+(define vl-make-case-equiv-warnings ((names string-list-listp)
+                                     (warnings vl-warninglist-p))
+  :returns (warnings vl-warninglist-p)
+  (b* (((when (atom names))
+        (ok))
+       (warnings (warn :type :vl-warn-case-sensitive-names
+                       :msg "Names differ only by case: ~&0.  This might indicate a typo ~
+                             and may also cause problems for some Verilog tools."
+                       :args (list (string-list-fix (car names))))))
+    (vl-make-case-equiv-warnings (cdr names) warnings)))
 
 (define vl-module-check-case ((x vl-module-p))
   :returns (new-x vl-module-p :hyp :fguard "Maybe with new warnings.")
@@ -117,15 +121,8 @@ repeatedly.  Linear in the length of @('x').</p>"
                             :mintime 1/2))
        ((unless equiv-names)
         x)
-       (w (make-vl-warning
-           :type :vl-warn-case-sensitive-names
-           :msg "In ~a0, found names that differ only by case.  This might ~
-                 indicate a typo, and otherwise it might cause problems for ~
-                 some Verilog tools.  Details: ~%~s1"
-           :args (list x.name (with-local-ps (vl-equiv-strings-to-lines equiv-names)))
-           :fatalp nil
-           :fn __function__)))
-    (change-vl-module x :warnings (cons w x.warnings))))
+       (warnings (vl-make-case-equiv-warnings equiv-names x.warnings)))
+    (change-vl-module x :warnings warnings)))
 
 (defprojection vl-modulelist-check-case (x)
   (vl-module-check-case x)

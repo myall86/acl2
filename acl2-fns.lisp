@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 8.4 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2022, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -30,7 +30,7 @@
 
 ; Avoid noise in CCL about undefined functions, not avoided by funcall alone.
 ; But this doesn't help in ANSI GCL or CMU CL 19e on Linux, and even has broken
-; onCMU CL 18d on Solaris, so we just punt on this trick for those Lisps.
+; on CMU CL 18d on Solaris, so we just punt on this trick for those Lisps.
 
   (if (not (symbolp fn))
       (error "~s requires a symbol, not ~s" 'qfuncall fn)
@@ -51,12 +51,15 @@
 ; is used in function find-package-fast, which is used by princ$ in place of
 ; find-package in order to save perhaps 15% of the print time.
 (defparameter *package-alist* nil)
-
+(defparameter *find-package-cache* nil)
 (defun-one-output find-package-fast (string)
-  (or (cdr (assoc string *package-alist* :test 'equal))
-      (let ((pkg (find-package string)))
-        (push (cons string pkg) *package-alist*)
-        pkg)))
+    (if (equal string (car *find-package-cache*))
+        (cdr *find-package-cache*)
+      (let ((pair (assoc string *package-alist* :test 'equal)))
+        (cond (pair (setq *find-package-cache* pair) (cdr pair))
+              (t (let ((pkg (find-package string)))
+                   (push (cons string pkg) *package-alist*)
+                   pkg))))))
 
 (defvar *global-symbol-key* (make-symbol "*GLOBAL-SYMBOL-KEY*"))
 
@@ -350,7 +353,6 @@
    ((or (eq type1 '*)
         (eq type2 '*))
     '*)
-   #+acl2-mv-as-values
    ((not (equal (and (consp type1)
                      (eq (car type1) 'values))
                 (and (consp type2)
@@ -390,7 +392,6 @@
              (list 'integer
                    (min-integer-*  (cadr type1)  (cadr type2))
                    (max-integer-* (caddr type1) (caddr type2))))
-            #+acl2-mv-as-values
             (values
              (cons 'values (max-output-type-for-declare-form-lst (cdr type1)
                                                                  (cdr type2))))
@@ -398,7 +399,6 @@
              (error
               "Unexpected type for max-output-type-for-declare-form: ~s"
               type1))))
-         #+acl2-mv-as-values
          ((or (eq sym1 'values) (eq sym2 'values)) ; but not both
           '*)
          (t (let* ((pair1 (convert-type-to-integer-pair type1))
@@ -417,10 +417,9 @@
                (t
                 (list 'integer lower-min upper-max))))))))))
 
-#+acl2-mv-as-values
 (defun max-output-type-for-declare-form-lst (type-list1 type-list2)
 
-; Type-list1 and type-list2 are known to be true lists (null-terminated
+; Type-list1 and type-list2 are known to be true lists (nil-terminated
 ; lists).
 
   (cond ((or (null type-list1) (null type-list2))
@@ -461,7 +460,7 @@
 ; Note that this isn't complete.  In particular, ACL2's proclaiming mechanism
 ; for GCL produces a return type of * for RETRACT-WORLD, because it can return
 ; what RETRACT-WORLD1 returns, and below we don't account for defined raw Lisp
-; functions likeRETRACT-WORLD1.  This could presumably be remedied by doing a
+; functions like RETRACT-WORLD1.  This could presumably be remedied by doing a
 ; sort of iterative computation of return types till we reach a fixed point,
 ; but that's for another day.
 
@@ -516,8 +515,7 @@
                 (eq (car (caddr form)) 'throw-nonexec-error))
            (setq *acl2-output-type-abort* '*))
           (t (output-type-for-declare-form-rec (car (last form)) flet-alist))))
-   ((member (car form) '(return-last return-from)
-            :test 'eq)
+   ((eq (car form) 'return-from)
     (output-type-for-declare-form-rec (car (last form)) flet-alist))
    ((eq (car form) 'when)
     (let ((tmp (output-type-for-declare-form-rec (car (last form))
@@ -530,7 +528,9 @@
    ((assoc (car form) flet-alist :test 'eq)
     (cdr (assoc (car form) flet-alist :test 'eq)))
    ((member (car form) '(values
-                         #+acl2-mv-as-values mv)
+                         mv
+; Note: for swap-stobjs, cadr and caddr have the same type.
+                         swap-stobjs)
             :test 'eq)
     (cond ((null (cdr form))
            (setq *acl2-output-type-abort* '*))
@@ -556,12 +556,6 @@
                                      (not *acl2-output-type-abort*))
                                 tmp)
                                (t t))))))))
-   #-acl2-mv-as-values
-   ((eq (car form) 'mv)
-    (output-type-for-declare-form-rec (cadr form) flet-alist))
-   #-acl2-mv-as-values
-   ((eq (car form) 'values)
-    (setq *acl2-output-type-abort* '*))
    ((member (car form) '(flet labels)
             :test 'eq) ; (flet bindings val)
     (let ((temp flet-alist))
@@ -582,9 +576,7 @@
              typ)
             ((and (consp typ)
                   (member (car typ)
-                          '(integer signed-byte unsigned-byte
-                                    #+acl2-mv-as-values
-                                    values)
+                          '(integer signed-byte unsigned-byte values)
                           :test 'eq))
              typ)
             (t t))))
@@ -604,7 +596,6 @@
     (cond ((cddr form)
            (output-type-for-declare-form-rec (car (last form)) flet-alist))
           (t t)))
-   #+acl2-mv-as-values
    ((eq (car form) 'multiple-value-bind)
     (cond ((cdddr form)
            (output-type-for-declare-form-rec (car (last form)) flet-alist))
@@ -658,8 +649,7 @@
                                  (fboundp 'get-stobjs-out-for-declare-form)
                                  (qfuncall get-stobjs-out-for-declare-form
                                            (car form)))))
-                         (cond #+acl2-mv-as-values
-                               ((consp (cdr x))
+                         (cond ((consp (cdr x))
                                 (cons 'values
                                       (make-list (length x)
                                                  :initial-element
@@ -681,23 +671,14 @@
 
 (defun output-type-for-declare-form (fn form)
 
-; We return a list of output types, one per value.  So if #-acl2-mv-as-values,
-; then we always return a list of length one.
+; We return a list of output types, one per value.
 
-  #-acl2-mv-as-values
-  (declare (ignore fn))
-  #-acl2-mv-as-values
-  (let* ((*acl2-output-type-abort* nil) ; protect for call on next line
-         (result (output-type-for-declare-form-rec form nil)))
-    (cond
-     (*acl2-output-type-abort*
-      '*)
-     (t
-      (list 'values result))))
-  #+acl2-mv-as-values
   (let* ((*acl2-output-type-abort* nil) ; protect for call on next line
          (result (output-type-for-declare-form-rec form nil))
-         (stobjs-out (and ; check that (w *the-live-state*) is bound
+         (stobjs-out (and
+                      (not (member fn (symbol-value '*stobjs-out-invalid*)
+                                   :test #'eq))
+; check that (w *the-live-state*) is bound
                       (boundp 'ACL2_GLOBAL_ACL2::CURRENT-ACL2-WORLD)
                       (fboundp 'get-stobjs-out-for-declare-form)
                       (qfuncall get-stobjs-out-for-declare-form fn))))
@@ -934,69 +915,105 @@ In the SPECIAL variable *backquote-counter* we keep track of the number of
 backquotes that are currently pending.  It is crucial that this variable
 be SPECIAL.")
 
+(defun constant-backquote-term-p (x)
+  (cond ((and (vectorp x) (not (stringp x))) ; see error case in backquote
+         nil)
+        ((atom x) t)
+        ((eq (car x) *comma*) nil)
+        ((eq (car x) *comma-atsign*) nil)
+
+; See backquote comments below.  We could have a more restrictive test for
+; LAMBDA objects but that's probably not worth it.  Returnig nil is safe.
+
+        ((eq (car x) 'lambda) nil)
+        (t (constant-backquote-lst-p x))))
+
+(defun constant-backquote-lst-p (l)
+  (cond ((atom l) t)
+        ((eq (car l) *comma*)
+         nil)
+        ((eq (car l) *comma-atsign*)
+         nil)
+        ((and (consp (car l))
+              (eq (caar l) *comma*))
+         nil)
+        ((and (consp (car l))
+              (eq (caar l) *comma-atsign*))
+         nil)
+        (t
+         (and (constant-backquote-term-p (car l))
+              (constant-backquote-lst-p (cdr l))))))
+
 (defun backquote (x)
 
   "The two functions BACKQUOTE and BACKQUOTE-LST implement backquote
 as described on pp. 349-350 of CLTL1 except that (a) use of vector
 notation causes an error and (b) the use of ,. is not permitted."
 
-; It must be emphasized that the ACL2 implementation of backquote is
-; only one of many implementations that are consistent with the Common
-; Lisp specification of backquote.  That spec requires only that
-; backquote produce a form that when evaluated will produce a
-; designated object.  We impose the requirement that *acl2-readtable*
-; be used both when checking files with ACL2 and when later compiling
-; or using those files.  This requirement guarantees that we obtain
-; the same behavior of backquote across all Common Lisps.  For
+; It must be emphasized that the ACL2 implementation of backquote is only one
+; of many implementations that are consistent with the Common Lisp
+; specification of backquote.  That spec requires only that backquote produce a
+; form that when evaluated will produce a designated object.  We impose the
+; requirement that *acl2-readtable* be used both when checking files with ACL2
+; and when later compiling or using those files.  This requirement guarantees
+; that we obtain the same behavior of backquote across all Common Lisps.  For
 ; example, it is an ACL2 theorem, across all Common Lisps that
 
 ;   (equal (car '`(,a)) 'cons)
 
-; This theorem is definitely not true about the implementation of
-; backquote provided by the implementors of each Common Lisp.  In
-; fact, the lefthand side of this theorem represents an informal
-; misuse of the backquote notation because one is intended to consider
-; the effects of evaluating backquoted forms, not the forms
-; themselves.  (In some Common Lisps, the lefthand side might even
-; evaluate to a symbol in a nonstandard package.)  Nevertheless,
-; because we inflict our definition of backquote on the ACL2 user at
-; all times, the above equation is a theorem throughout, so no harm is
-; done.  On the other hand, if we used the local implementation of
-; backquote of each particular Common Lisp, we would get different
-; ACL2 theorems in different Common Lisps, which would be bad.
+; This theorem is definitely not true about the implementation of backquote
+; provided by the implementors of each Common Lisp.  In fact, the lefthand side
+; of this theorem represents an informal misuse of the backquote notation
+; because one is intended to consider the effects of evaluating backquoted
+; forms, not the forms themselves.  (In some Common Lisps, the lefthand side
+; might even evaluate to a symbol in a nonstandard package.)  Nevertheless,
+; because we inflict our definition of backquote on the ACL2 user at all times,
+; the above equation is a theorem throughout, so no harm is done.  On the other
+; hand, if we used the local implementation of backquote of each particular
+; Common Lisp, we would get different ACL2 theorems in different Common Lisps,
+; which would be bad.
 
-; Unlike most implementors of backquote, we do no serious
-; optimization.  We feel this inattention to efficiency is justified
-; at the moment because in the usage we expect, the only serious costs
-; will be small ones, during compilation.
+; We do less optimization than many implementors of backquote, but we do use
+; quoted expressions for constant subterms (other than LAMBDA objects) rather
+; than consing new structure.
+
+; Our backquote always returns a cons-expression for a LAMBDA object.  For
+; example, '`(lambda (x) x) evaluates to (CONS 'LAMBDA '((X) X)) and not
+; '(LAMBDA (X) X); the latter sort of result would be legal for any backquote
+; expression that produces a constant, e.g., one containing no commas.  We rely
+; on the fact that the backquote of a LAMBDA object is a cons-expression in our
+; documentation of methods of bypassing the restrictions translate puts on
+; LAMBDA objects in :FN slots.  For example, see :DOC
+; gratuitous-lambda-object-restrictions.
 
   (cond ((and (vectorp x) (not (stringp x)))
          (error "ACL2 does not handle vectors in backquote."))
-        ((atom x) (list 'quote x))
+        ((constant-backquote-term-p x) ; includes the case (atom x)
+         (list 'quote x))
         ((eq (car x) *comma*) (cadr x))
         ((eq (car x) *comma-atsign*) (error "`,@ is an error"))
         (t (backquote-lst x))))
 
 (defun backquote-lst (l)
-  (cond ((atom l) (list 'quote l))
-        ((eq (car l) *comma*)
-         (cadr l))
-        ((eq (car l) *comma-atsign*)
-         (error ". ,@ is illegal."))
-        ((and (consp (car l))
-              (eq (caar l) *comma*))
-         (list 'cons
-               (cadr (car l))
-               (backquote-lst (cdr l))))
-        ((and (consp (car l))
-              (eq (caar l) *comma-atsign*))
-         (cond ((null (cdr l))
-                (cadr (car l)))
-               (t (list 'append (cadr (car l)) (backquote-lst (cdr l))))))
-        (t
-         (list 'cons
-               (backquote (car l))
-               (backquote-lst (cdr l))))))
+
+; This function assumes (consp l).
+
+  (cond
+   ((eq (car l) *comma*)
+    (cadr l))
+   ((eq (car l) *comma-atsign*)
+    (error ". ,@ is illegal."))
+   (t (let ((r (if (constant-backquote-lst-p (cdr l)) ; includes (atom (cdr l))
+                   (list 'quote (cdr l))
+                 (backquote-lst (cdr l)))))
+        (cond ((and (consp (car l))
+                    (eq (caar l) *comma-atsign*))
+               (cond ((null (cdr l))
+                      (cadr (car l)))
+                     (t (list 'append (cadr (car l)) r))))
+              (t (list 'cons
+                       (backquote (car l))
+                       r)))))))
 
 (defvar *read-object-comma-count* nil)
 
@@ -1023,6 +1040,130 @@ notation causes an error and (b) the use of ,. is not permitted."
      (list *comma-atsign* (read stream t nil t)))
     (#\. (error ",. not allowed in ACL2 backquote forms."))
     (otherwise (list *comma* (read stream t nil t)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;                            PACKAGES
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; The following function used to be defined in axioms.lisp (with
+; #-acl2-loop-only), but we need it here.
+
+(defun symbol-package-name (x)
+
+; Warning: This function assumes that x is not a bad-lisp-objectp.  In
+; particular, see the Invariant on Symbols in the Common Lisp Package,
+; discussed in a comment in bad-lisp-objectp, which allows us to assume that if
+; x resides in the "COMMON-LISP" package and does not have its
+; *initial-lisp-symbol-mark* property set, then its symbol-package is the
+; *main-lisp-package*.
+
+  (cond ((get x *initial-lisp-symbol-mark*))
+        ((let ((p (symbol-package x)))
+           (cond ((eq p *main-lisp-package*)
+
+; We could just return *main-lisp-package-name-raw* in this case (but do not
+; skip this case, since in non-ANSI GCL, (package-name *main-lisp-package*) is
+; "LISP", not "COMMON-LISP" (which is what we need here).  But we go ahead and
+; set *initial-lisp-symbol-mark* in order to bypass this code next time.
+
+                  (setf (get x *initial-lisp-symbol-mark*)
+                        *main-lisp-package-name-raw*))
+                 (t (and p (package-name p))))))
+
+; We use ERROR now because we cannot print symbols without packages
+; with ACL2 functions.
+
+        (t (error
+            "The symbol ~a, which has no package, was encountered~%~
+             by ACL2.  This is an inconsistent state of affairs, one that~%~
+             may have arisen by undoing a defpkg but holding onto a symbol~%~
+             in the package being flushed, contrary to warnings printed.~%~%"
+            x))))
+
+(defvar *defpkg-virgins* nil)
+
+(defun maybe-make-package (name)
+
+; We formerly had a long comment here explaining that this definition CMU
+; Common Lisp 19e.  At that time, maybe-make-package was a macro with a #+cmu
+; body of `(defpackage ,name (:use)).  But CMU Common Lisp 21a does not have
+; this problem, so we have changed maybe-make-package from a macro to a
+; function, which allows its callers to be functions as well.  That, in turn,
+; may avoid compilation required for macro calls in some Lisps, including CCL.
+
+  (when (not (find-package name))
+    (make-package name :use nil)))
+
+(defun maybe-make-three-packages (name)
+  (maybe-make-package name)
+  (maybe-make-package (concatenate 'string
+                                   acl2::*global-package-prefix*
+                                   name))
+  (maybe-make-package (concatenate 'string
+                                   acl2::*1*-package-prefix*
+                                   name)))
+
+(defmacro maybe-introduce-empty-pkg-1 (name)
+
+; It appears that GCL requires a user::defpackage (non-ANSI case) or
+; defpackage (ANSI case; this may be the same as user::defpackage) form near
+; the top of a file in order to read the corresponding compiled file.  For
+; example, an error occurred upon attempting to load the community books file
+; books/data-structures/defalist.o after certifying the corresponding book
+; using GCL, because the form (MAYBE-INTRODUCE-EMPTY-PKG-1 "U") near the top of
+; the file was insufficient to allow reading a symbol in the "U" package
+; occurring later in the corresponding source file.
+
+; On the other hand, the CL HyperSpec does not pin down the effect of
+; defpackage when a package already exists.  Indeed, the defpackage approach
+; that we use for GCL does not work for LispWorks 6.0.
+
+; So, we have quite a different definition of this macro for GCL as opposed to
+; the other Lisps.
+
+  #-gcl
+  `(eval-when
+    #+cltl2 (:load-toplevel :execute :compile-toplevel)
+    #-cltl2 (load eval compile) ; though probably #-gcl implies #+cltl2
+    (maybe-make-three-packages ,name))
+  #+gcl
+  (let ((defp #+cltl2 'defpackage #-cltl2 'user::defpackage))
+    `(progn
+       (,defp ,name
+         (:use))
+       (,defp ,(concatenate 'string
+                            acl2::*global-package-prefix*
+                            name)
+         (:use))
+       (,defp ,(concatenate 'string
+                            acl2::*1*-package-prefix*
+                            name)
+         (:use)))))
+
+(defvar *ever-known-package-alist* ; to be redefined in axioms.lisp
+  nil)
+
+(defun package-has-no-imports (name)
+  (let ((pkg (find-package name)))
+    (do-symbols (sym pkg)
+                (when (not (eq (symbol-package sym) pkg))
+                  (return-from package-has-no-imports nil))))
+  t)
+
+(defun maybe-introduce-empty-pkg-2 (name)
+  (when (and (not (member name *defpkg-virgins*
+                          :test 'equal))
+             (not (assoc name *ever-known-package-alist*
+                         :test 'equal))
+             (package-has-no-imports name))
+    (push name *defpkg-virgins*)))
+
+; The GCL proclaim mechanism puts symbols in package "ACL2-PC" into file
+; acl2-proclaims.lisp.  So Lisp needs to know about that package when it loads
+; that file.  We introduce that package in a harmless way here.  Although we
+; only need to do so for GCL, we do so for every Lisp, for uniformity.
+(maybe-make-package "ACL2-PC")
+(maybe-introduce-empty-pkg-2 "ACL2-PC")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;                            SUPPORT FOR ACL2 CHARACTER READER
@@ -1077,6 +1218,8 @@ notation causes an error and (b) the use of ,. is not permitted."
                    #\Page)
                   ((string-equal x "RUBOUT")
                    #\Rubout)
+                  ((string-equal x "RETURN")
+                   #\Return)
                   #+clisp
 
 ; Currently we only allow #\Null in CLISP.  We have to allow it there in some
@@ -1101,13 +1244,16 @@ notation causes an error and (b) the use of ,. is not permitted."
                       (if (fboundp 'interface-er)
                           'interface-er
                         'error)
-                      "When the ACL2 reader tries to read #\\x, then ~
-                       x must either be a single character followed ~
-                       by a character in the list ~x0, ~
-                       or else x must be one of Space, Tab, Newline, ~
-                       Page, or Rubout (where case is ignored). ~
-                       However, ~s1 is none of these."
+
+                      "When the ACL2 reader tries to read #\\x, then x must ~
+                       either be a single character or one of Space, Tab, ~
+                       Newline, Page, Rubout, or Return (where case is ~
+                       ignored).  What follows x must be a character in the ~
+                       list:~|~X01.~|However, ~s2 is neither a single ~
+                       character nor one of Space, Tab, Newline, Page, ~
+                       Rubout, or Return (where case is ignored)."
                       *acl2-read-character-terminators*
+                      nil
                       x)))))))
           (t (acl2-read-character-string s (cons ch acc))))))
 
@@ -1117,7 +1263,7 @@ notation causes an error and (b) the use of ,. is not permitted."
     (acl2-read-character-string s ch)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;                            SUPPORT FOR #,
+;                            SUPPORT FOR #.
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defvar *inside-sharp-dot-read* nil)
@@ -1148,14 +1294,22 @@ notation causes an error and (b) the use of ,. is not permitted."
                   (consp (cdr val))
                   (null (cddr val)))
              (cadr val))
-            (t (error "(Implementation error) Found non-quotep 'const ~%~
+            (t (clear-input stream)
+               (error "(Implementation error) Found non-quotep 'const ~%~
                        property for ~s."
                       sym))))
      (sym
+      (clear-input stream)
       (error "ACL2 supports #. syntax only for #.*a*, where *a* has been ~%~
-              defined by ~s.  Thus the form #.~s is illegal."
-             'defconst sym))
+              defined by ~s.  Thus the form #.~s is illegal.  See :DOC ~%~
+              sharp-dot-reader~a."
+             'defconst
+             sym
+             (cond ((eval '(f-get-global 'certify-book-info *the-live-state*))
+                    (format nil ", in particular Remark (2)"))
+                   (t ""))))
      (t ; surprising case
+      (clear-input stream)
       (error "ACL2 supports #. syntax only for #.*a*, where *a* has been ~%~
               defined by ~s."
              'defconst)))))
@@ -1210,51 +1364,106 @@ notation causes an error and (b) the use of ,. is not permitted."
                                       Result ~s is not a numeral."
                                      n)))))))))))
 
+(defun read-digits (stream base-16-p)
+  (declare (special *hex-array* *base-10-array*))
+  (let ((base-array (if base-16-p *hex-array* *base-10-array*))
+        (sign (read-char stream nil :eof t))
+        tmp lst)
+    (cond ((eq sign :eof)
+           (return-from read-digits
+                        (values 0 nil :eof)))
+          ((not (member sign '(#\+ #\-)))
+           (unread-char sign stream)))
+    (loop (setq tmp (read-char stream nil :eof t))
+          (cond ((eq tmp :eof) (return))
+                ((eql tmp #\_)) ; discard underscore
+                ((aref base-array (char-code tmp))
+                 (push tmp lst))
+                (t (return))))
+    (let ((len (length lst))) ; computed before destructive nreverse call
+      (values len
+              (eql sign #\-)
+              (cond ((null lst) 0)
+                    (t (let ((*read-base* (if base-16-p 16 10)))
+                         (read-from-string
+                          (coerce (nreverse lst) 'string)))))
+              tmp))))
+
+(defun sharp-f-read (stream char n)
+  (declare (ignore char n))
+  (flet ((read-exp (stream)
+                   (multiple-value-bind
+                    (len negp exp next-char)
+                    (read-digits stream nil)
+                    (when (eql len 0)
+                      (cond (*read-suppress* (return-from sharp-f-read nil))
+                            (t (clear-input stream)
+                               (error "Empty exponent in #f expression."))))
+                    (unread-char next-char stream)
+                    (if negp (- exp) exp))))
+    (let* ((tmp (read-char stream nil :eof t))
+           (base-16-p (cond
+                       ((member tmp '(#\x #\X)) t)
+                       ((eq tmp :eof)
+                        (cond (*read-suppress* (return-from sharp-f-read nil))
+                              (t (error "End of file encountered after #f."))))
+                       (t (unread-char tmp stream)
+                          nil)))
+           (exp-chars (if base-16-p '(#\p #\P) '(#\e #\E))))
+      (multiple-value-bind
+       (len negp before-dot next-char)
+       (read-digits stream base-16-p)
+       (declare (ignore len))
+       (cond ((eq next-char :eof)
+              (if negp (- before-dot) before-dot))
+             ((member next-char exp-chars)
+              (let* ((exp (read-exp stream)))
+                (* (if negp (- before-dot) before-dot)
+                   (expt (if base-16-p 2 10) exp))))
+             ((eql next-char #\.)
+              (multiple-value-bind
+               (len negp-after-dot after-dot next-char)
+               (read-digits stream base-16-p)
+               (when negp-after-dot
+                 (cond
+                  (*read-suppress* (return-from sharp-f-read nil))
+                  (t (clear-input stream)
+                     (error "Illegal sign after point in #f expression."))))
+               (let ((significand
+                      (+ before-dot (/ after-dot
+                                       (expt (if base-16-p 16 10) len)))))
+                 (cond ((member next-char exp-chars)
+                        (let* ((exp (read-exp stream)))
+                          (* (if negp (- significand) significand)
+                             (expt (if base-16-p 2 10) exp))))
+                       (t (unread-char next-char stream)
+                          (if negp (- significand) significand))))))
+             (t (unread-char next-char stream)
+                (if negp (- before-dot) before-dot)))))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;                            SUPPORT FOR #@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defmacro sharp-atsign-read-er (str &rest format-args)
-  `(progn (loop (when (null (read-char-no-hang stream nil nil t))
-                  (return)))
-          (error (concatenate 'string ,str ".  See :DOC set-iprint.")
-                 ,@format-args)))
-
-(defun sharp-atsign-read (stream char n)
-  (declare (ignore char n))
-  (let (ch
-        bad-ch
-        (zero-code (char-code #\0))
-        (index 0))
-    (loop
-     (when (eql (setq ch (read-char stream t nil t))
-                #\#)
-       (return))
-     (let ((digit (- (char-code ch) zero-code)))
-       (cond ((or (< digit 0)
-                  (> digit 9))
-              (when (not bad-ch)
-                (setq bad-ch ch))
-              (return))
-             (t
-              (setq index (+ digit (* 10 index)))))))
-    (cond (bad-ch
-           (sharp-atsign-read-er
-            "Non-digit character ~s following #@~s"
-            bad-ch index))
-          ((eval '(f-get-global 'certify-book-info *the-live-state*))
-           (sharp-atsign-read-er
-            "Illegal reader macro during certify-book, #@~s#"
-            index))
-          ((qfuncall iprint-ar-illegal-index index *the-live-state*)
-           (sharp-atsign-read-er
-            "Out-of-bounds index in #@~s#"
-            index))
-          (t (qfuncall iprint-ar-aref1 index *the-live-state*)))))
+; See interface-raw.lisp, as sharp-atsign-read uses several functions defined
+; in the sources and we want to avoid compiler warnings.
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;                            SUPPORT FOR #{"""
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun fancy-string-reader-escape-check (acc)
+
+; Checks whether acc consists of any number of backslashes followed by three
+; doublequotes.
+
+  (if (atom acc)
+      nil
+    (if (eql (car acc) #\\)
+        (fancy-string-reader-escape-check (cdr acc))
+      (and (eql (first acc) #\")
+           (eql (second acc) #\")
+           (eql (third acc) #\")))))
 
 (defun fancy-string-reader-macro-aux (stream acc)
 
@@ -1263,15 +1472,22 @@ notation causes an error and (b) the use of ,. is not permitted."
   (let ((char ; error on EOF is appropriate here
          (read-char stream)))
     (if (and (eql char #\})
-             (eql (first acc) #\")
-             (eql (second acc) #\")
-             (eql (third acc) #\"))
+             (fancy-string-reader-escape-check acc))
+        (if (eql (car acc) #\\)
 
-; Just saw """} -- we're at the end of the fancy string.  We haven't
-; accumulated the } yet, but throw away the """ since those end the string and
-; aren't part of its content.
+; We have three doublequotes followed by 1 or more backslashes and followed by
+; a close brace.  Just remove one of the backslashes and continue.
 
-        (cdddr acc)
+            (fancy-string-reader-macro-aux stream (cons #\} (cdr acc)))
+
+; No backslashes, so we have """} -- we're at the end of the fancy string.  We
+; haven't accumulated the } yet, but throw away the """ since those end the
+; string and aren't part of its content.
+
+          (cdddr acc))
+
+; Otherwise just accumulate the char.
+
       (fancy-string-reader-macro-aux stream (cons char acc)))))
 
 (defun fancy-string-reader-macro (stream subchar arg)
@@ -1400,244 +1616,83 @@ notation causes an error and (b) the use of ,. is not permitted."
              (setf (svref *sharp-reader-array* arg)
                    val)))))
 
-(defmacro with-reckless-read (&rest forms)
-
-; To experiment with disabling the reckless reader, replace the body below
-; simply with `(progn ,@forms).
-
-  `(let ((*readtable* *reckless-acl2-readtable*))
-     (unwind-protect
-         ,@forms
-       (let ((bound (the (unsigned-byte 29) (1+ *sharp-reader-max-index*))))
-         (declare (type (unsigned-byte 29) bound))
-         (do ((i 0 (the (unsigned-byte 29) (1+ i)))) ((eql i bound))
-           (declare (type (unsigned-byte 29) i))
-           (setf (svref *sharp-reader-array* i) nil))
-         (setq *sharp-reader-max-index* 0)))))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;                            PACKAGES
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-; The following function used to be defined in axioms.lisp (with
-; #-acl2-loop-only), but we need it here.
-
-(defun symbol-package-name (x)
-
-; Warning: This function assumes that x is not a bad-lisp-objectp.  In
-; particular, see the Invariant on Symbols in the Common Lisp Package,
-; discussed in a comment in bad-lisp-objectp, which allows us to assume that if
-; x resides in the "COMMON-LISP" package and does not have its
-; *initial-lisp-symbol-mark* property set, then its symbol-package is the
-; *main-lisp-package*.
-
-  (cond ((get x *initial-lisp-symbol-mark*))
-        ((let ((p (symbol-package x)))
-           (cond ((eq p *main-lisp-package*)
-
-; We could just return *main-lisp-package-name-raw* in this case (but do not
-; skip this case, since in non-ANSI GCL, (package-name *main-lisp-package*) is
-; "LISP", not "COMMON-LISP" (which is what we need here).  But we go ahead and
-; set *initial-lisp-symbol-mark* in order to bypass this code next time.
-
-                  (setf (get x *initial-lisp-symbol-mark*)
-                        *main-lisp-package-name-raw*))
-                 (t (and p (package-name p))))))
-
-; We use ERROR now because we cannot print symbols without packages
-; with ACL2 functions.
-
-        (t (error
-            "The symbol ~a, which has no package, was encountered~%~
-             by ACL2.  This is an inconsistent state of affairs, one that~%~
-             may have arisen by undoing a defpkg but holding onto a symbol~%~
-             in the package being flushed, contrary to warnings printed.~%~%"
-            x))))
-
-(defvar *defpkg-virgins* nil)
-
-(defmacro maybe-make-package (name)
-
-; When we moved to Version_4.3, with LispWorks once again a supported host
-; Lisp, we modified the macro maybe-introduce-empty-pkg-1 to avoid the use of
-; defpackage; see the comment in that macro.  Unfortunately, the new approach
-; didn't work for CMUCL (at least, for version 19e).  The following example
-; shows why; even with an eval-when form specifying :compile-toplevel, the
-; compiled code seems to skip the underlying package-creation form, as shown
-; below.  Therefore we revert to the use of defpackage for CMUCL, which appears
-; not to cause problems.
-
-;   % cat pkg-bug-cmucl.lisp
-;
-;   (in-package "CL-USER")
-;
-;   (eval-when (:load-toplevel :execute :compile-toplevel)
-;              (cond ((not (find-package "MYPKG"))
-;                     (print "*** About to make package ***")
-;                     (terpri)
-;                     (make-package "MYPKG" :use nil))))
-;
-;   (defparameter *foo* 'mypkg::x)
-;   % /projects/acl2/lisps/cmucl-19e-linux/bin/cmucl
-;   CMU Common Lisp 19e (19E), running on kindness
-;   With core: /v/filer4b/v11q001/acl2/lisps/cmucl-19e-linux/lib/cmucl/lib/lisp.core
-;   Dumped on: Thu, 2008-05-01 11:56:07-05:00 on usrtc3142
-;   See <http://www.cons.org/cmucl/> for support information.
-;   Loaded subsystems:
-;       Python 1.1, target Intel x86
-;       CLOS based on Gerd's PCL 2004/04/14 03:32:47
-;   * (load "pkg-bug-cmucl.lisp")
-;
-;   ; Loading #P"/v/filer4b/v41q001/kaufmann/temp/pkg-bug-cmucl.lisp".
-;
-;   "*** About to make package ***"
-;   T
-;   * (compile-file "pkg-bug-cmucl.lisp")
-;
-;   ; Python version 1.1, VM version Intel x86 on 04 JUL 11 09:57:13 am.
-;   ; Compiling: /v/filer4b/v41q001/kaufmann/temp/pkg-bug-cmucl.lisp 04 JUL 11 09:56:24 am
-;
-;   ; Byte Compiling Top-Level Form:
-;
-;   ; pkg-bug-cmucl.x86f written.
-;   ; Compilation finished in 0:00:00.
-;
-;   #P"/v/filer4b/v41q001/kaufmann/temp/pkg-bug-cmucl.x86f"
-;   NIL
-;   NIL
-;   * (quit)
-;   % /projects/acl2/lisps/cmucl-19e-linux/bin/cmucl
-;   CMU Common Lisp 19e (19E), running on kindness
-;   With core: /v/filer4b/v11q001/acl2/lisps/cmucl-19e-linux/lib/cmucl/lib/lisp.core
-;   Dumped on: Thu, 2008-05-01 11:56:07-05:00 on usrtc3142
-;   See <http://www.cons.org/cmucl/> for support information.
-;   Loaded subsystems:
-;       Python 1.1, target Intel x86
-;       CLOS based on Gerd's PCL 2004/04/14 03:32:47
-;   * (load "pkg-bug-cmucl.x86f")
-;
-;   ; Loading #P"/v/filer4b/v41q001/kaufmann/temp/pkg-bug-cmucl.x86f".
-;
-;
-;   Error in function LISP::FOP-PACKAGE:  The package "MYPKG" does not exist.
-;      [Condition of type SIMPLE-ERROR]
-;
-;   Restarts:
-;     0: [CONTINUE] Return NIL from load of "pkg-bug-cmucl.x86f".
-;     1: [ABORT   ] Return to Top-Level.
-;
-;   Debug  (type H for help)
-;
-;   (LISP::FOP-PACKAGE)
-;   Source: Error finding source:
-;   Error in function DEBUG::GET-FILE-TOP-LEVEL-FORM:  Source file no longer exists:
-;     target:code/load.lisp.
-;   0]
-
-  #-cmu
-  `(when (not (find-package ,name))
-     (make-package ,name :use nil))
-  #+cmu
-  `(defpackage ,name (:use)))
-
-(defmacro maybe-introduce-empty-pkg-1 (name)
-
-; It appears that GCL requires a user::defpackage (non-ANSI case) or
-; defpackage (ANSI case; this may be the same as user::defpackage) form near
-; the top of a file in order to read the corresponding compiled file.  For
-; example, an error occurred upon attempting to load the community books file
-; books/data-structures/defalist.o after certifying the corresponding book
-; using GCL, because the form (MAYBE-INTRODUCE-EMPTY-PKG-1 "U") near the top of
-; the file was insufficient to allow reading a symbol in the "U" package
-; occurring later in the corresponding source file.
-
-; On the other hand, the CL HyperSpec does not pin down the effect of
-; defpackage when a package already exists.  Indeed, the defpackage approach
-; that we use for GCL does not work for LispWorks 6.0.
-
-; So, we have quite different definitions of this macro for GCL and LispWorks.
-; All other Lisps we have encountered seem happy with the approach we have
-; adopted for Lispworks, so we adopt that approach for them, too.
-
-  #-gcl
-  `(eval-when
-    #+cltl2 (:load-toplevel :execute :compile-toplevel)
-    #-cltl2 (load eval compile) ; though probably #-gcl implies #+cltl2
-    (progn
-      (maybe-make-package ,name)
-      (maybe-make-package ,(concatenate 'string
-                                        acl2::*global-package-prefix*
-                                        name))
-      (maybe-make-package ,(concatenate 'string
-                                        acl2::*1*-package-prefix*
-                                        name))))
-  #+gcl
-  (let ((defp #+cltl2 'defpackage #-cltl2 'user::defpackage))
-    `(progn
-       (,defp ,name
-         (:use))
-       (,defp ,(concatenate 'string
-                            acl2::*global-package-prefix*
-                            name)
-         (:use))
-       (,defp ,(concatenate 'string
-                            acl2::*1*-package-prefix*
-                            name)
-         (:use)))))
-
-(defvar *ever-known-package-alist* ; to be redefined in axioms.lisp
-  nil)
-
-(defun package-has-no-imports (name)
-  (let ((pkg (find-package name)))
-    (do-symbols (sym pkg)
-                (when (not (eq (symbol-package sym) pkg))
-                  (return-from package-has-no-imports nil))))
-  t)
-
-(defmacro maybe-introduce-empty-pkg-2 (name)
-  `(when (and (not (member ,name *defpkg-virgins*
-                           :test 'equal))
-              (not (assoc ,name *ever-known-package-alist*
-                          :test 'equal))
-              (package-has-no-imports ,name))
-     (push ,name *defpkg-virgins*)))
-
-; The GCL proclaim mechanism puts symbols in package "ACL2-PC" into file
-; acl2-proclaims.lisp.  So Lisp needs to know about that package when it loads
-; that file.  We introduce that package in a harmless way here.  Although we
-; only need to do so for GCL, we do so for every Lisp, for uniformity.
-(maybe-make-package "ACL2-PC")
-(maybe-introduce-empty-pkg-2 "ACL2-PC")
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;                            ENVIRONMENT SUPPORT
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-; The following is first used in acl2-init.lisp, so we define it here.
+; Getenv$ is first used in acl2-init.lisp, so we define it here.
+
+#+cmu
+(defvar *cmucl-unix-setenv-fn*
+
+; Jared Davis has pointed us to the following from
+; https://common-lisp.net/project/cmucl/doc/cmu-user/unix.html#toc235:
+
+;   You probably won't have much cause to use them, but all the Unix system
+;   calls are available. The Unix system call functions are in the Unix
+;   package. The name of the interface for a particular system call is the name
+;   of the system call prepended with unix-. The system usually defines the
+;   associated constants without any prefix name. To find out how to use a
+;   particular system call, try using describe on it. If that is unhelpful,
+;   look at the source in unix.lisp or consult your system maintainer.
+
+; As Jared has also suggested, unix:unix-setenv is presumably a wrapper for the
+; C function setenv, described for example here:
+
+;   http://pubs.opengroup.org/onlinepubs/009695399/functions/setenv.html
+;   http://linux.die.net/man/3/setenv
+
+; Also see *cmucl-unix-getenv-fn*.
+
+  (and (find-package "UNIX")
+       (let ((fn (ignore-errors (intern "UNIX-SETENV" "UNIX"))))
+         (and (fboundp fn) fn))))
+
+#+cmu
+(defvar *cmucl-unix-getenv-fn*
+
+; Also see *cmucl-unix-setenv-fn*.
+
+  (and *cmucl-unix-setenv-fn* ; so that getenv$ respects setenv$
+       (let ((fn (ignore-errors (intern "UNIX-GETENV" "UNIX"))))
+         (and (fboundp fn) fn))))
 
 (defun getenv$-raw (string)
 
 ; The following either returns the value of the given environment variable or
 ; returns nil (in lisps where we do not yet know how to get that value).
+; Except, it causes an error if the computed value is an illegal ACL2 string.
 
 ; WARNING: Keep this in sync with the #-acl2-loop-only definition of setenv$.
 
-  #+cmu ; We might consider using unix:unix-getenv for newer CMUCL versions
-  (and (boundp 'ext::*environment-list*)
-       (cdr (assoc (intern string :keyword)
-                   ext::*environment-list*
-                   :test #'eq)))
-  #+(or gcl allegro lispworks ccl sbcl clisp)
-  (let ((fn
-         #+gcl       'si::getenv
-         #+allegro   'sys::getenv
-         #+lispworks 'hcl::getenv
-         #+ccl       'ccl::getenv
-         #+sbcl      'sb-ext::posix-getenv
-         #+clisp     'ext:getenv))
-    (and (fboundp fn)
-         (funcall fn string))))
+  (let* ((val
+          #+cmu
+          (cond (*cmucl-unix-getenv-fn*
+                 (funcall *cmucl-unix-getenv-fn* string))
+                ((boundp 'ext::*environment-list*)
+                 (cdr (assoc (intern string :keyword)
+                             ext::*environment-list*
+                             :test #'eq))))
+          #+(or gcl allegro lispworks ccl sbcl clisp)
+          (let ((fn
+                 #+gcl       'si::getenv
+                 #+allegro   'sys::getenv
+                 #+lispworks 'hcl::getenv
+                 #+ccl       'ccl::getenv
+                 #+sbcl      'sb-ext::posix-getenv
+                 #+clisp     'ext:getenv))
+            (and (fboundp fn)
+                 (funcall fn string))))
+         (msg (and val
+                   (fboundp 'bad-lisp-stringp) ; false early in boot-strap
+                   (qfuncall bad-lisp-stringp val))))
+    (cond (msg ; It's not clear that this case is possible, at least in CCL.
+           (qfuncall
+            interface-er
+            "The value of environment variable ~x0 is ~x1, which is not a ~
+             legal ACL2 string.~%~@2"
+            string val msg))
+          (t val))))
 
 #+sbcl
 (defmacro define-our-sbcl-putenv ()
@@ -1665,21 +1720,30 @@ notation causes an error and (b) the use of ,. is not permitted."
 
   #+unix (return-from get-os :unix)
   #+mswindows (return-from get-os :mswindows)
-  #+apple (return-from get-os :apple)
-  #-(or unix apple mswindows) nil)
+  #-(or unix mswindows) nil)
 
 (defmacro our-ignore-errors (x)
   #+cltl2 `(ignore-errors ,x)
   #-cltl2 x)
 
-(defmacro safe-open (&rest args)
-  `(our-ignore-errors (open ,@args)))
+(defmacro safe-open (filename &rest args &key direction &allow-other-keys)
+  (assert (member direction ; might later support :io and :probe
+                  '(:input :output)
+                  :test #'eq))
+  `(our-ignore-errors
+    (progn ,@(when (eq direction :output)
+               `((ensure-directories-exist ,filename)))
+           (open ,filename ,@args))))
+
+(defvar *check-namestring* t)
 
 (defun our-truename (filename &optional namestringp)
 
-; For now, assume that namestringp is nil (or not supplied).
-
 ; Filename can be a pathname, in which case we treat it as its namestring.
+; Both filename and the result of this function are OS filenames, which might
+; have characters that disqualify them from being ACL2 strings.
+
+; For now, assume that namestringp is nil (or not supplied).
 
 ; This function is intended to return nil if filename does not exist.  We thus
 ; rely on the CL HyperSpec, where it says of truename that "An error of type
@@ -1703,35 +1767,40 @@ notation causes an error and (b) the use of ,. is not permitted."
 
   (when (pathnamep filename)
     (setq filename (namestring filename)))
-  (let ((truename
-         (cond
-          #+allegro
-          ((fboundp 'excl::pathname-resolve-symbolic-links)
-           (ignore-errors
-            (qfuncall excl::pathname-resolve-symbolic-links
-                      filename)))
-          #+(and gcl (not cltl2))
-          ((fboundp 'si::stat) ; try to avoid some errors
-           (and (or (qfuncall si::stat filename)
+  (when (search "//" filename)
+    (error "The filename~%~s~%is illegal because it has consecutive directory ~
+            separators, //."
+           filename))
+  (let* ((truename
+          (cond
+           #+allegro
+           ((fboundp 'excl::pathname-resolve-symbolic-links)
+            (ignore-errors
+              (qfuncall excl::pathname-resolve-symbolic-links
+                        filename)))
+           #+(and gcl (not cltl2))
+           ((fboundp 'si::stat) ; try to avoid some errors
+            (and (or (qfuncall si::stat filename)
 
 ; But filename might be a directory, in which case the si::stat call above
 ; could return nil; so we try again.
 
-                    (and (or (equal filename "")
-                             (not (eql (char filename (1- (length filename)))
-                                       #\/)))
-                         (qfuncall si::stat
-                                   (concatenate 'string filename "/"))))
-                (truename filename)))
-          #+(and gcl (not cltl2))
-          (t (truename filename))
-          #-(and gcl (not cltl2))
-          (t
+                     (and (or (equal filename "")
+                              (not (eql (char filename (1- (length filename)))
+                                        #\/)))
+                          (qfuncall si::stat
+                                    (concatenate 'string filename "/"))))
+                 (truename filename)))
+           #+(and gcl (not cltl2))
+           (t (truename filename))
+           #-(and gcl (not cltl2))
+           (t
 
 ; Here we also catch the case of #+allegro if
 ; excl::pathname-resolve-symbolic-links is not defined.
 
-           (ignore-errors (truename filename))))))
+            (ignore-errors (truename filename)))))
+         (namestring (and truename (namestring truename))))
     (cond ((null namestringp)
            truename)
           ((null truename)
@@ -1747,23 +1816,16 @@ notation causes an error and (b) the use of ,. is not permitted."
 
                          (list "  ~@0" (cons #\0 namestringp))
                        "")))))
-          (t (namestring truename)))))
-
-(defun our-pwd ()
-
-; Warning: Do not be tempted to use (getenv$-raw "PWD").  The PWD environment
-; variable is not necessarily maintained, for example in Solaris/SunOS as one
-; make invokes another make in a different directory.
-
-  (qfuncall pathname-os-to-unix
-            (our-truename "" "Note: Calling OUR-TRUENAME from OUR-PWD.")
-            (get-os)
-            *the-live-state*))
+          (t namestring))))
 
 (defun unix-full-pathname (name &optional extension)
 
-; We formerly used Common Lisp function merge-pathnames.  But in CCL,
-; merge-pathnames can insert an extra backslash (\), as follows:
+; Unlike truename and our-truename, unix-full-pathname does not assume that any
+; particular file exists.
+
+; We formerly used Common Lisp function merge-pathnames.  But with CCL
+; (probably quite an old version), merge-pathnames has inserted an extra
+; backslash (\), as follows:
 
 ;  ? (MERGE-PATHNAMES "foo.xxx.lx86cl64" "/u/kaufmann/temp/")
 ;  #P"/u/kaufmann/temp/foo\\.xxx.lx86cl64"
@@ -1772,7 +1834,8 @@ notation causes an error and (b) the use of ,. is not permitted."
 ; Gary Byers has explained that while this behavior may not be ideal, it is
 ; legal for Common Lisp.  So we avoid merge-pathnames here.
 
-  (let* ((os (get-os))
+  (let* ((*check-namestring* t)
+         (os (get-os))
          (state *the-live-state*)
          (name (qfuncall pathname-os-to-unix
                          (if extension
@@ -1787,7 +1850,7 @@ notation causes an error and (b) the use of ,. is not permitted."
      (cond ((qfuncall absolute-pathname-string-p name nil os)
             name)
            (t
-            (concatenate 'string (our-pwd) name))))))
+            (concatenate 'string (qfuncall our-pwd) name))))))
 
 (defun our-user-homedir-pathname ()
 
@@ -1812,7 +1875,7 @@ notation causes an error and (b) the use of ,. is not permitted."
 
 ; For GCL, Camm Maguire has told us that calling user-homedir-pathname should
 ; work on GCL 2.6.8 or later, at least if there is a proper home directory and
-; password entry.  But if thata fails for some reason, one can use the
+; password entry.  But if that fails for some reason, one can use the
 ; commented-out alternative code below instead.
 
 ; (let ((home (si::getenv "HOME")))
@@ -1853,11 +1916,12 @@ notation causes an error and (b) the use of ,. is not permitted."
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ; The following definition was originally in interface-raw.lisp.  But it was
-; also needed in hons-raw.lisp, which is compiled earlier, and CCL (at
-; least) needs to know that we indeed have a macro here -- so the definition
-; can't be put off until loading interface-raw.lisp.  As of Version_3.2,
-; hons-raw.lisp is only included in special builds, so we don't want to put
-; this definition there; thus, we are putting it here.
+; also needed in hons-raw.lisp, which is compiled earlier, and CCL (at least)
+; needs to know that we indeed have a macro here -- so the definition can't be
+; put off until loading interface-raw.lisp.  In Version_3.2, hons-raw.lisp was
+; only included in special builds, so we did't want to put this definition
+; there; thus, we put it here.  (Even in August 2021, we saw no reason to move
+; it.)
 
 (defmacro special-form-or-op-p (name)
 
@@ -1876,20 +1940,17 @@ notation causes an error and (b) the use of ,. is not permitted."
 ; Consider a definition (save-def (defun name formals ... body)), where defun
 ; could be replaced by other macros that take the same arguments (like
 ; defun-one-output or defn1), and where body evaluates to a single value.  Then
-; this macro executes the definition and for the hons version, also saves (name
-; formals ... body) as the 'acl2-saved-def property of name.  We use this
-; property to obtain the raw Lisp definition of name for memoize-fn.
+; this macro executes the definition and saves (name formals ... body) as the
+; 'acl2-saved-def property of name.  We use this property to obtain the raw
+; Lisp definition of name for memoize-fn.
 
 ; This macro is intended only for raw Lisp definitions.  For definitions in the
 ; loop, we expect that cltl-def-from-name will give us the definition.
 
-  #+hons
   (let ((name (cadr def-form))) ; (defunxxx name ...)
     `(progn ,def-form
             (setf (get ',name 'acl2-saved-def)
-                  ',def-form)))
-  #-hons
-  def-form)
+                  ',def-form))))
 
 (defmacro defg (&rest r)
 
@@ -1920,6 +1981,15 @@ notation causes an error and (b) the use of ,. is not permitted."
   `(defvar ,@r)
   #+ccl
   `(ccl::defstaticvar ,@r))
+
+#+allegro
+(setq excl::*warn-smp-usage*
+
+; We turn off warnings for excl:without-interrupts, as per:
+; Section 2.0, Deprecated macros,
+; https://franz.com/support/documentation/current/doc/smp.htm.
+
+      nil)
 
 (defmacro without-interrupts (&rest forms)
 
@@ -1957,8 +2027,23 @@ notation causes an error and (b) the use of ,. is not permitted."
 ; "with-interrupts-blocked".
 
   `(mp:with-interrupts-blocked ,@forms)
-  #-(or ccl sbcl gcl lispworks)
-  `(progn ,@forms))
+  #+allegro
+
+; Excl:with-interrupts is deprecated in Allegro CL.  However, the documentation
+; suggests (Section 2.0, Deprecated macros,
+; https://franz.com/support/documentation/current/doc/smp.htm) that this is
+; fine to use in single-process applications.
+
+  `(excl:without-interrupts ,@forms)
+  #+cmucl
+  `(system:without-interrupts ,@forms)
+  #-(or allegro ccl cmucl gcl lispworks sbcl)
+  '(error "This Lisp implementation does not support ~s, which is used, for~%~
+           example, to support certain atomic operations when installing an~%~
+           ACL2 logical world.  One could define (without-interrupts ...) ~%~
+           to be (progn ...), but think about whether that provides enough~%~
+           support for those operations!"
+          'without-interrupts))
 
 (defmacro with-interrupts (&rest forms)
 
@@ -1996,6 +2081,8 @@ notation causes an error and (b) the use of ,. is not permitted."
   #+ccl
   `(unwind-protect ,body-form ,@cleanup-forms)
   #+lispworks
+; See http://www.lispworks.com/documentation/lw60/LW/html/lw-808.htm for why we
+; don't just use without-interrupts in the cleanup form here.
   `(hcl:unwind-protect-blocking-interrupts-in-cleanups ,body-form
                                                        ,@cleanup-forms)
   #-(or ccl lispworks)
@@ -2011,7 +2098,7 @@ notation causes an error and (b) the use of ,. is not permitted."
 
   (when (and verbose
              *load-compiled-verbose*)
-    (eval `(cw "~%Note: loading file ~s0.~|" ',filename)))
+    (eval `(format t "~&Note: loading file ~s.~&" ',filename)))
   #+clisp
   (let ((*readtable* *acl2-readtable-clisp-fas*))
     (declare (special *acl2-readtable-clisp-fas*))
@@ -2128,3 +2215,83 @@ notation causes an error and (b) the use of ,. is not permitted."
 ;    (the mfixnum x))
 
   `(the mfixnum ,x))
+
+(defun our-pwd ()
+
+; This function was moved here from basis-a.lisp, in order to avoid a build
+; error.
+
+; Warning: Do not be tempted to use (getenv$-raw "PWD").  The PWD environment
+; variable is not necessarily maintained, for example in Solaris/SunOS as one
+; make invokes another make in a different directory.
+
+  (qfuncall pathname-os-to-unix
+            (our-truename "" "Note: Calling OUR-TRUENAME from OUR-PWD.")
+            (get-os)
+            *the-live-state*))
+
+; The forms below were sent to us by Camm Maguire in February 2017, to fix an
+; issue with GCL 2.6.12.  We use the progn wrapper to avoid breaking the reader
+; in other Lisps.
+
+#+gcl
+(progn
+compiler::
+(defun c2funcall-new (funob args &optional loc info)
+
+  ;;; Usually, ARGS holds a list of forms, which are arguments to the
+  ;;; function.  If, however, the arguments are already pushed on the stack,
+  ;;; ARGS should be set to the symbol ARGS-PUSHED.
+  (case (car funob)
+    (call-global (c2call-global (caddr funob) args loc t))
+    (call-local (c2call-local (cddr funob) args))
+    (call-lambda (c2call-lambda (caddr funob) args))
+    (ordinary           ;;; An ordinary expression.  In this case, if
+                        ;;; arguments are already pushed on the stack, then
+                        ;;; LOC cannot be NIL.  Callers of C2FUNCALL must be
+                        ;;; responsible for maintaining this condition.
+      (let ((*vs* *vs*) (form (caddr funob)))
+           (declare (object form))
+           (cond ((and (listp args)
+                       (< (length args) 12) ;FIXME fcalln1 limitation
+                       *use-sfuncall*
+                       ;;Determine if only one value at most is required:
+                       (or
+                        (member *value-to-go* '(return-object trash))
+                        (and (consp *value-to-go*)
+                             (member (car *value-to-go*) '(var cvar jump-false jump-true)))
+                        (and info (equal (info-type info) '(values t)))
+                        ))
+                  (c2funcall-sfun form args info)
+                  (return-from c2funcall-new nil)))
+           (unless loc
+             (unless (listp args) (baboon))
+             (cond ((eq (car form) 'LOCATION) (setq loc (caddr form)))
+                   ((and (eq (car form) 'VAR)
+                         (not (args-info-changed-vars (caaddr form) args)))
+                    (setq loc (cons 'VAR (caddr form))))
+                   (t
+                    (setq loc (list 'vs (vs-push)))
+                    (let ((*value-to-go* loc)) (c2expr* (caddr funob))))))
+           (push-args args)
+           (if *compiler-push-events*
+               (wt-nl "super_funcall(" loc ");")
+             (if *super-funcall*
+                 (funcall *super-funcall* loc)
+               (wt-nl "super_funcall_no_event(" loc ");")))
+           (unwind-exit 'fun-val)))
+    (otherwise (baboon))
+    ))
+
+(when (or (< si::*gcl-major-version* 2)
+          (and (= si::*gcl-major-version* 2)
+               (or (< si::*gcl-minor-version* 6)
+                   (and (= si::*gcl-minor-version* 6)
+                        (<= si::*gcl-extra-version* 12)))))
+  (setf (symbol-function 'compiler::c2funcall)
+        (symbol-function 'compiler::c2funcall-new))))
+
+#+gcl
+(eval-when
+    (compile load eval)
+  (proclaim '(ftype (function (t t *) t) compiler::c2funcall-new)))

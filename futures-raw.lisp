@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 8.4 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2022, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -407,7 +407,7 @@
 
 (defvar *resource-and-timing-based-serializations*
   0
-  "Tracks the number of times that we do not parallize execution when
+  "Tracks the number of times that we do not parallelize execution when
   waterfall-parallelism is set to :resource-and-timing-based")
 
 (defvar *resource-based-parallelizations*
@@ -417,7 +417,7 @@
 
 (defvar *resource-based-serializations*
   0
-  "Tracks the number of times that we do not parallize execution when
+  "Tracks the number of times that we do not parallelize execution when
   waterfall-parallelism is set to :resource-based")
 
 (defun reset-future-queue-length-history ()
@@ -564,34 +564,12 @@
 ; performance, however, is that we avoid the cost of locks to try to remove
 ; bottlenecks.
 
-; In summary, it is unneccessary to acquire a lock, because we just don't care
+; In summary, it is unnecessary to acquire a lock, because we just don't care
 ; if we miss a few chances to parallelize, or parallelize a few extra times.
 
   (and (f-get-global 'parallel-execution-enabled *the-live-state*)
        (futures-parallelism-buffer-has-space-available)
        (not-too-many-futures-already-in-existence)))
-
-(defmacro unwind-protect-disable-interrupts-during-cleanup
-  (body-form &rest cleanup-forms)
-
-; As the name suggests, this is unwind-protect but with a guarantee that
-; cleanup-form cannot be interrupted.  Note that CCL's implementation already
-; disables interrupts during cleanup.
-
-  #+ccl
-  `(unwind-protect ,body-form ,@cleanup-forms)
-  #+sb-thread
-  `(unwind-protect ,body-form (without-interrupts ,@cleanup-forms))
-
-; Parallelism wart: we should specify a Lispworks compile-time definition (as
-; we did for CCL and SBCL).  Or, perhaps we should merge the CCL definition
-; into the LispWorks definition.  Regardless, we need to check that interrupts
-; are disabled during the cleanup form in LispWorks and then make a note that
-; LispWorks has this property (perhaps by merging with the note about CCL,
-; above).
-
-  #-(or ccl sb-thread)
-  `(unwind-protect ,body-form ,@cleanup-forms))
 
 (define-atomically-modifiable-counter *threads-waiting-for-starting-core*
 
@@ -1062,15 +1040,13 @@
 
            t)
 
-; If #+hons is set, we must bind *default-hs* to NIL so that each thread will
-; get its own hons space whenever it uses honsing code.  We could alternately
-; call (hl-hspace-init) here, but using NIL allows us to avoid the overhead of
+; We must bind *default-hs* to NIL so that each thread will get its own hons
+; space whenever it uses honsing code.  We could alternately call
+; (hl-hspace-init) here, but using NIL allows us to avoid the overhead of
 ; initializing a hons space unless honsing is used in this thread.  See also
 ; the notes in hons-raw.lisp.
 
-          #+hons
           (*default-hs* nil))
-      #+hons
       (declare (special *default-hs*)) ; special declared in hons-raw.lisp
 
 ; The following loop is exited by a throw to :worker-thread-no-longer-needed,
@@ -1208,7 +1184,7 @@
 
 ; Parallelism no-fix: we have considered causing child threads to inherit
 ; ld-specials from their parents, or even other state globals such as
-; *ev-shortcut-okp* and *raw-guard-warningp*, as the following comment from
+; *ev-shortcut-okp* and raw-guard-warningp, as the following comment from
 ; David Rager suggests.  But this now seems too difficult to justify that
 ; effort, and we do not feel obligated to do so; see the "IMPORTANT NOTE" in
 ; :doc parallelism.
@@ -1260,7 +1236,7 @@
 
 ; Return a future whose closure, when executed, will execute the given form, x.
 ; Note that (future x) macroexpands to (mt-future x).
-  
+
   `(cond
     (#-skip-resource-availability-test
      (not (futures-resources-available))

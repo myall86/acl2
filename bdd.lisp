@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 8.4 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2022, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -193,7 +193,7 @@
 ;   application of function symbol other than IF to a list of csts
 
 ; WARNING:  The definition of leafp below relies on the fact that leaf csts are
-; exactly those whose final cdr is nil.  Do not succomb to the temptation to
+; exactly those whose final cdr is nil.  Do not succumb to the temptation to
 ; add a new field as the final cdr without taking this into account.
 
 ; Note:  It is tempting to replace the "term" in the last case by an ACL2 term,
@@ -372,7 +372,6 @@
   (and (leafp cst)
        (if (quotep (trm cst))
            (not (cst-nilp cst))
-         (and (nvariablep (trm cst))
 
 ; Consider other types here besides cons, e.g., that of numbers.  We may want
 ; to pass in a list of functions that have been checked to have type-sets that
@@ -380,7 +379,7 @@
 ; below against such a list.  This list of function symbols could be determined
 ; easily from the list of all function symbols in op-alist.
 
-              (eq (ffn-symb (trm cst)) 'cons)))))
+         (ffn-symb-p (trm cst) 'cons))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;; II. OP-ALIST ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -428,9 +427,7 @@
          (let ((test (fargn x 1))
                (tbr (fargn x 2))
                (fbr (fargn x 3)))
-           (and (not (variablep test))
-                (not (fquotep test))
-                (eq (ffn-symb test) 'equal)
+           (and (ffn-symb-p test 'equal)
                 (let ((v (fargn test 1)))
                   (and (variablep v)
                        (let ((b (fargn test 2)))
@@ -492,17 +489,16 @@
    (t (first-boolean-type-prescription
        (cdr type-prescription-list) ens formals))))
 
-(defun recognizer-rune (fn recognizer-alist wrld ens)
+(defun recognizer-rune (recognizer-alist wrld ens)
   (cond
    ((endp recognizer-alist) nil)
-   ((and (eq fn (access recognizer-tuple (car recognizer-alist) :fn))
-         (enabled-runep (access recognizer-tuple (car recognizer-alist) :rune)
-                        ens
-                        wrld))
+   ((enabled-runep (access recognizer-tuple (car recognizer-alist) :rune)
+                   ens
+                   wrld)
     (access recognizer-tuple (car recognizer-alist) :rune))
-   (t (recognizer-rune fn (cdr recognizer-alist) wrld ens))))
+   (t (recognizer-rune (cdr recognizer-alist) wrld ens))))
 
-(defun bool-mask (fn recognizer-alist wrld ens)
+(defun bool-mask (fn wrld ens)
 
 ; Returns a "mask" that is a suitable argument to bool-flg.  Thus, this
 ; function returns either nil or else a mask of the form
@@ -529,7 +525,9 @@
 
     (list* nil *fake-rune-for-type-set*))
    (t
-    (let ((rune (recognizer-rune fn recognizer-alist wrld ens))
+    (let ((rune (recognizer-rune (getpropc fn 'recognizer-alist nil wrld)
+                                 wrld
+                                 ens))
           (formals (formals fn wrld)))
       (if rune
           (bool-mask1 formals nil rune)
@@ -540,7 +538,7 @@
 ; rules.
 
                 (first-boolean-type-prescription
-                 (getprop fn 'type-prescriptions nil 'current-acl2-world wrld)
+                 (getpropc fn 'type-prescriptions nil wrld)
                  ens
                  formals)
                 (and rune
@@ -564,9 +562,7 @@
                               "We had thought we had a rewrite rule with :lhs ~
                                being a call of ~x0, but the :lhs is ~x1."
                               fn lhs))
-                      (nvariablep rhs)
-                      (not (fquotep rhs))
-                      (eq (ffn-symb rhs) fn)
+                      (ffn-symb-p rhs fn)
                       (variablep (fargn lhs 1))
                       (variablep (fargn lhs 2))
                       (not (eq (fargn lhs 1) (fargn lhs 2)))
@@ -619,9 +615,9 @@
    ((eq fn 'equal)
     (fn-rune-nume 'equal nil nil wrld))
    (t (equivalence-rune1 fn
-                         (getprop fn 'congruences
-                                  '(:error "See equivalence-rune.")
-                                  'current-acl2-world wrld)))))
+                         (getpropc fn 'congruences
+                                   '(:error "See equivalence-rune.")
+                                   wrld)))))
 
 (defun commutative-p (fn ens wrld)
 
@@ -632,7 +628,7 @@
        (if (equivalence-relationp fn wrld)
            (equivalence-rune fn wrld)
            (commutative-p1 fn
-                           (getprop fn 'lemmas nil 'current-acl2-world wrld)
+                           (getpropc fn 'lemmas nil wrld)
                            ens))))
 
 ; To memoize the various merging operations we will hash on the opcodes.
@@ -663,14 +659,11 @@
                 (cons (list* (car fns)
                              i
                              (commutative-p (car fns) ens wrld)
-                             (and (not (getprop (car fns) 'constrainedp nil
-                                                'current-acl2-world wrld))
+                             (and (not (getpropc (car fns) 'constrainedp nil
+                                                 wrld))
                                   (enabled-xfnp (car fns) ens wrld)
                                   (fn-rune-nume (car fns) nil t wrld))
-                             (bool-mask (car fns)
-                                        (global-val 'recognizer-alist wrld)
-                                        wrld
-                                        ens))
+                             (bool-mask (car fns) wrld ens))
                       acc)
                 (+ 3 i)
                 ens
@@ -1015,14 +1008,15 @@
                                    nil)))
                      (mvf new-mx-id
                           new-cst
-                          (aset1 'op-ht op-ht hash-index
-                                 (cons
+                          (aset1-trusted 'op-ht op-ht hash-index
+                                         (cons
 
 ; The following is the same as (list new-cst 'quote (cadr term)), but saves a
 ; cons.
 
-                                  (cons new-cst term)
-                                  (aref1 'op-ht op-ht hash-index)))))))))))))
+                                          (cons new-cst term)
+                                          (aref1 'op-ht op-ht
+                                                 hash-index)))))))))))))
 
 (defmacro bdd-quotep+ (term op-ht if-ht mx-id ttree)
   `(mv-let (mx-id cst op-ht)
@@ -1132,7 +1126,7 @@
 (defun extra-rules-for-bdds (fn wrld)
 
 ; We include certain trivial rewrite rules regardless of whether there are
-; explicit rewrite rules that corrrespond to them.
+; explicit rewrite rules that correspond to them.
 
   (cond
    ((eq fn 'equal)
@@ -1159,6 +1153,19 @@
                 :lhs (fcons-term* 'equal 'x *nil*)
                 :var-info t
                 :rhs (fcons-term* 'if 'x *nil* *t*))))
+   ((eq fn 'consp)
+
+; (defthm consp-cons (consp (cons x y)))
+
+    (list (make rewrite-rule
+                :nume nil :hyps nil :equiv 'equal
+                :subclass 'backchain
+                :heuristic-info nil
+                :backchain-limit-lst *initial-default-backchain-limit*
+                :rune *fake-rune-for-anonymous-enabled-rule*
+                :lhs (fcons-term* 'consp (fcons-term* 'cons 'x 'y))
+                :var-info t
+                :rhs *t*)))
    ((equivalence-relationp fn wrld)
 
 ; We do not need to include reflexivity when fn is 'equal, because it is
@@ -1226,9 +1233,8 @@
    ((endp fns) (mv all-fns bdd-rules-alist))
    (t (mv-let (new-fns nondef-rules def-rules)
               (bdd-rules-alist1
-               (recursivep (car fns) wrld)
-               (append (getprop
-                        (car fns) 'lemmas nil 'current-acl2-world wrld)
+               (recursivep (car fns) t wrld)
+               (append (getpropc (car fns) 'lemmas nil wrld)
                        (extra-rules-for-bdds (car fns) wrld))
                ens
                (cons (car fns) all-fns)
@@ -1572,10 +1578,10 @@
                   (let ((x (cons-term (ffn-symb (trm cst))
                                       args)))
                     (mv x
-                        (aset1 'cst-array
-                               cst-array
-                               (unique-id cst)
-                               x)))))))
+                        (aset1-trusted 'cst-array
+                                       cst-array
+                                       (unique-id cst)
+                                       x)))))))
      (t (mv-let
          (tst cst-array)
          (decode-cst (tst cst) cst-array)
@@ -1587,10 +1593,10 @@
            (decode-cst (fbr cst) cst-array)
            (let ((x (mcons-term* 'if tst tbr fbr)))
              (mv x
-                 (aset1 'cst-array
-                        cst-array
-                        (unique-id cst)
-                        x))))))))))
+                 (aset1-trusted 'cst-array
+                                cst-array
+                                (unique-id cst)
+                                x))))))))))
 
 (defun decode-cst-lst (cst-lst cst-array)
   (cond
@@ -1714,9 +1720,9 @@
 ; this work -- have been updated to show the performance of this
 ; version of the code.
 
-                          (aset1 'op-ht op-ht n
-                                 (cons (list* y op args)
-                                       (aref1 'op-ht op-ht n)))
+                          (aset1-trusted 'op-ht op-ht n
+                                         (cons (list* y op args)
+                                               (aref1 'op-ht op-ht n)))
                           if-ht))
          (t (let ((m (if-hash-index x y z)))
               (declare (type (signed-byte 30) m))
@@ -1724,18 +1730,19 @@
                      (old-if (if-search-bucket x y z bucket)))
                 (cond (old-if (mvf mx-id
                                    old-if
-                                   (aset1 'op-ht op-ht n
-                                          (cons (list* old-if op args)
-                                                (aref1 'op-ht op-ht n)))
+                                   (aset1-trusted 'op-ht op-ht n
+                                                  (cons (list* old-if op args)
+                                                        (aref1 'op-ht op-ht
+                                                               n)))
                                    if-ht))
                       ((and (cst-tp y)
                             (cst-nilp z)
                             (cst-boolp x))
                        (mvf mx-id
                             x
-                            (aset1 'op-ht op-ht n
-                                   (cons (list* x op args)
-                                         (aref1 'op-ht op-ht n)))
+                            (aset1-trusted 'op-ht op-ht n
+                                           (cons (list* x op args)
+                                                 (aref1 'op-ht op-ht n)))
                             if-ht))
                       (t (let ((mx-id (1+mx-id mx-id)))
                            (declare (type (signed-byte 30) mx-id))
@@ -1751,11 +1758,13 @@
                              (t
                               (mvf mx-id
                                    new-if
-                                   (aset1 'op-ht op-ht n
-                                          (cons (list* new-if op args)
-                                                (aref1 'op-ht op-ht n)))
-                                   (aset1 'if-ht if-ht m
-                                          (cons new-if bucket)))))))))))))))
+                                   (aset1-trusted 'op-ht op-ht n
+                                                  (cons (list* new-if op args)
+                                                        (aref1 'op-ht op-ht
+                                                               n)))
+                                   (aset1-trusted 'if-ht if-ht m
+                                                  (cons new-if
+                                                        bucket)))))))))))))))
 
 (defun make-if-no-memo (mx-id x y z op-ht if-ht bdd-constructors)
 
@@ -1788,8 +1797,8 @@
                               ))
                     (t
                      (mvf mx-id new-if op-ht
-                          (aset1 'if-ht if-ht m
-                                 (cons new-if bucket)))))))))))))
+                          (aset1-trusted 'if-ht if-ht m
+                                         (cons new-if bucket)))))))))))))
 
 (defmacro split-var (cst)
 
@@ -1932,9 +1941,9 @@
         (t
          (mvf new-mx-id
               new-cst
-              (aset1 'op-ht op-ht hash-index
-                     (cons (list* new-cst op args)
-                           (aref1 'op-ht op-ht hash-index)))
+              (aset1-trusted 'op-ht op-ht hash-index
+                             (cons (list* new-cst op args)
+                                   (aref1 'op-ht op-ht hash-index)))
               if-ht
               (if rune (push-lemma rune ttree) ttree))))))))
 
@@ -1996,7 +2005,7 @@
 
 ; Then vars represents an "error", and we want to return an error of the same
 ; sort.  This sort will be different for combine-if-csts+ than for the other
-; allowable functions (from the guard expresssion above), but no matter.
+; allowable functions (from the guard expression above), but no matter.
 
                   (cons 'mvf vars)))
              ,body)))
@@ -2140,7 +2149,9 @@
    5
    (signed-byte 30)
    (mv-let (erp val latches)
-           (ev-fncall op (cst-list-to-evg-list args) state nil nil nil)
+           (ev-fncall op (cst-list-to-evg-list args)
+                      nil ; irrelevant arg-exprs (as latches is nil)
+                      state nil nil nil)
            (declare (ignore latches))
            (cond
             (erp
@@ -2194,9 +2205,9 @@
 ; Keep this case in sync with make-if.
 
      (mvf mx-id true-cst
-          (aset1 'op-ht op-ht hash-index
-                 (cons (list* true-cst op args)
-                       (aref1 'op-ht op-ht hash-index)))
+          (aset1-trusted 'op-ht op-ht hash-index
+                         (cons (list* true-cst op args)
+                               (aref1 'op-ht op-ht hash-index)))
           if-ht))
     ((let ((true-split-var (split-var true-cst))
            (false-split-var (split-var false-cst))
@@ -2216,9 +2227,9 @@
        test-cst true-cst false-cst op-ht if-ht mx-id bdd-constructors)
       (mvf mx-id
            cst
-           (aset1 'op-ht op-ht hash-index
-                  (cons (list* cst op args)
-                        (aref1 'op-ht op-ht hash-index)))
+           (aset1-trusted 'op-ht op-ht hash-index
+                          (cons (list* cst op args)
+                                (aref1 'op-ht op-ht hash-index)))
            if-ht))))))
 
 (mutual-recursion
@@ -2364,9 +2375,9 @@
 ; lemmas.  The "be" benchmarks suggest mixed results.
 
        (mvf mx-id cst
-            (aset1 'op-ht op-ht hash-index
-                   (cons (list* cst op args)
-                         (aref1 'op-ht op-ht hash-index)))
+            (aset1-trusted 'op-ht op-ht hash-index
+                           (cons (list* cst op args)
+                                 (aref1 'op-ht op-ht hash-index)))
             if-ht
             ttree)))
      (t (let ((bdd-constructors (access bddspv bddspv :bdd-constructors)))
@@ -2393,9 +2404,9 @@
 ; definitions.  The "be" benchmarks suggest mixed results.
 
                   (mvf mx-id cst
-                       (aset1 'op-ht op-ht hash-index
-                              (cons (list* cst op args)
-                                    (aref1 'op-ht op-ht hash-index)))
+                       (aset1-trusted 'op-ht op-ht hash-index
+                                      (cons (list* cst op args)
+                                            (aref1 'op-ht op-ht hash-index)))
                        if-ht ttree)))
                 (t
                  (let ((min-var (min-var nil args)))
@@ -2948,8 +2959,11 @@
          (mv nil nil ttree))
         ((flambda-applicationp term)
 
-; We don't use (and-orp (lambda-body (ffn-symb term)) bool) here because that
-; approach ignores nested lambdas.
+; Legacy comment, before adding lambda-okp argument to and-orp after v8-0 (the ACL2
+; bdd package is used so rarely that we don't rethink this):
+
+;   We don't use (and-orp (lambda-body (ffn-symb term)) bool) here because that
+;   approach ignores nested lambdas.
 
          (mv-let (hitp lst ttree0)
                  (expand-and-or-simple
@@ -2978,7 +2992,7 @@
          (expand-and-or-simple
           (subcor-var (formals 'implies wrld)
                       (fargs term)
-                      (body 'implies t wrld))
+                      (bbody 'implies))
           bool fns-to-be-ignored-by-rewrite wrld
           (push-lemma (fn-rune-nume 'implies nil nil wrld)
                       ttree)))
@@ -3129,7 +3143,7 @@
                                            t
                                            (access rewrite-constant rcnst
                                                    :current-enabled-structure)
-                                           wrld state nil nil nil)
+                                           wrld state nil)
               (declare (ignore hitp))
               (let ((position (cond ((integerp literal-hint)
                                      (position literal-hint

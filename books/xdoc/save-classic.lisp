@@ -1,5 +1,5 @@
 ; XDOC Documentation System for ACL2
-; Copyright (C) 2009-2011 Centaur Technology
+; Copyright (C) 2009-2015 Centaur Technology
 ;
 ; Contact:
 ;   Centaur Technology Formal Verification Group
@@ -43,20 +43,23 @@
 (set-state-ok t)
 (program)
 
-(defun clean-topics-aux (x seen-names-fal)
+(defun clean-topics-aux (x seen-fal)
   ;; Remove topics we've already seen.
   (b* (((when (atom x))
-        (fast-alist-free seen-names-fal)
+        (fast-alist-free seen-fal)
         nil)
-       (name1 (cdr (assoc :name (car x))))
-
-       ((when (hons-get name1 seen-names-fal))
+       (topic1 (car x))
+       (name1  (cdr (assoc :name topic1)))
+       (lookup (hons-get name1 seen-fal))
+       ((when (and lookup
+                   ;; Special hack: don't bother reporting that we're dropping
+                   ;; something that is literally identical to what we've seen
+                   ;; before.
+                   (not (equal topic1 (cdr lookup)))))
         (cw "~|WARNING: dropping shadowed topic for ~x0.~%" name1)
-        (clean-topics-aux (cdr x) seen-names-fal))
-
-       (seen-names-fal (hons-acons name1 t seen-names-fal)))
-    (cons (car x)
-          (clean-topics-aux (cdr x) seen-names-fal))))
+        (clean-topics-aux (cdr x) seen-fal))
+       (seen-fal (hons-acons name1 topic1 seen-fal)))
+    (cons topic1 (clean-topics-aux (cdr x) seen-fal))))
 
 (defun clean-topics (x)
   (clean-topics-aux x (len x)))
@@ -118,7 +121,7 @@
         x
       (acons :parents parents x))))
 
-(defun force-root-parents (all-topics)
+(defun force-missing-parents (all-topics)
   ;; Assumes the topics have been normalized.
   (declare (xargs :mode :program))
   (b* (((when (atom all-topics))
@@ -128,12 +131,12 @@
        (parents (cdr (assoc :parents topic)))
        ((when (or (equal name 'acl2::top)
                   (consp parents)))
-        (cons topic (force-root-parents (cdr all-topics))))
-       (- (cw "Relinking top-level ~x0 to be a child of ~x1.~%" name 'acl2::top))
+        (cons topic (force-missing-parents (cdr all-topics))))
+       (- (cw "Missing parents: forcing ~x0 to be a child of ~x1.~%" name 'missing-parents))
        (new-topic
-        (cons (cons :parents '(acl2::top))
+        (cons (cons :parents '(missing-parents))
               topic)))
-    (cons new-topic (force-root-parents (cdr all-topics)))))
+    (cons new-topic (force-missing-parents (cdr all-topics)))))
 
 (defun normalize-parents-list (x)
 
@@ -259,7 +262,7 @@ command, along the following lines:</p>
 ;;         (acc (str::revappend-chars "<hindex_short id=\"" acc))
 ;;         (acc (revappend id-chars acc))
 ;;         (acc (str::revappend-chars "\">" acc))
-;;         ((mv acc state) (preprocess-main short name dir topics-fal base-pkg state acc))
+;;         ((mv acc state) (preprocess-main short name dir topics-fal nil base-pkg state acc))
 ;;         (acc (str::revappend-chars "</hindex_short>" acc))
 
 ;;         (acc (str::revappend-chars "<hindex_children id=\"" acc))

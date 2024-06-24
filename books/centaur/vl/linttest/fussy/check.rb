@@ -1,3 +1,5 @@
+#!/usr/bin/env ruby
+
 # VL Verilog Toolkit
 # Copyright (C) 2008-2015 Centaur Technology
 #
@@ -28,6 +30,7 @@
 #
 # Original author: Jared Davis <jared@centtech.com>
 
+require 'require_relative' if RUBY_VERSION =~ /1\.8/
 require_relative '../utils'
 
 outlaw_bad_warnings()
@@ -172,7 +175,24 @@ normal("supp_normal1")
 normal("supp_normal2")
 normal("supp_normal3")
 
+
+normal("shift_mask_normal1")
+normal("shift_mask_normal2")
+normal("shift_mask_normal3")
+normal("shift_mask_normal4")
+
+fuss("shift_xor_warn1")
+fuss("shift_xor_warn2")
+normal("shift_xor_normal1")
+normal("shift_xor_normal2")
+
+normal("normal_sysfun1")
+normal("normal_sysfun2")
+normal("normal_sysfun3")
+normal("normal_sysfun4")
+
+outlaw_warning(:a1, "VL-WARN-QMARK-WIDTH", "foo")
+match_warning(:a1, "VL-WARN-QMARK-WIDTH", "bar")
+match_warning(:a1, "VL-WARN-QMARK-WIDTH", "baz")
+
 test_passed()
-
-
-

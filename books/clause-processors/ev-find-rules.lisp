@@ -51,7 +51,7 @@
   (car (remove ev (fgetprop ev 'siblings nil world))))
 
 
-;; Rewrite-rule fields are: 
+;; Rewrite-rule fields are:
 ;; rune nume hyps equiv lhs rhs subclass heuristic-info backchain-limit-lst
 ;; var-info match-free
 (defun find-matching-rule (hyps equiv lhs rhs lemmas)
@@ -103,6 +103,25 @@
    'equal
    `(,ev x a)
    '(if x (cdr (assoc-equal x a)) 'nil)
+   (fgetprop ev 'lemmas nil world)))
+
+(defun ev-find-nonsymbol-atom-rule (ev world)
+  (find-matching-rule
+   '((not (consp x))
+     (not (symbolp x)))
+   'equal
+   `(,ev x a)
+   ''nil
+   (fgetprop ev 'lemmas nil world)))
+
+(defun ev-find-bad-fncall-rule (ev world)
+  (find-matching-rule
+   '((consp x)
+     (not (consp (car x)))
+     (not (symbolp (car x))))
+   'equal
+   `(,ev x a)
+   ''nil
    (fgetprop ev 'lemmas nil world)))
 
 (defun ev-find-quote-rule (ev world)

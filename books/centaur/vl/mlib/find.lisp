@@ -40,14 +40,13 @@
                            default-cdr
                            acl2::subsetp-member
                            acl2::str-fix-default
-                           stringp-when-maybe-stringp
                            (:t member-equal)
                            member-equal
                            default-car
                            consp-when-member-equal-of-vl-gencaselist-p
                            consp-when-member-equal-of-vl-caselist-p
                            consp-when-member-equal-of-vl-commentmap-p
-                           consp-when-member-equal-of-vl-atts-p
+                           ;; consp-when-member-equal-of-vl-atts-p
                            acl2::consp-when-member-equal-of-keyval-alist-p
                            acl2::consp-of-car-when-alistp
                            (tau-system)
@@ -106,6 +105,16 @@
   :parents (vl-interfaceportlist-p)
   (vl-interfaceport->name x))
 
+(defprojection vl-dpiimportlist->names ((x vl-dpiimportlist-p))
+  :returns (names string-listp)
+  :parents (vl-dpiimportlist-p)
+  (vl-dpiimport->name x))
+
+(defprojection vl-genvarlist->names ((x vl-genvarlist-p))
+  :returns (names string-listp)
+  :parents (vl-genvarlist-p)
+  (vl-genvar->name x))
+
 (defprojection vl-modinstlist->modnames ((x vl-modinstlist-p))
   :parents (vl-modinstlist-p)
   :short "Collect all module names (not instance names!) from a
@@ -140,7 +149,9 @@ instances.</p>"
                             (vl-modinstlist->instnames (cdr x)))
                     (vl-modinstlist->instnames (cdr x)))
                 nil)
-       :exec (with-local-nrev (vl-modinstlist->instnames-nrev x nrev)))
+       :exec (if (atom x)
+                 nil
+               (with-local-nrev (vl-modinstlist->instnames-nrev x nrev))))
   ///
   (defthm vl-modinstlist->instnames-exec-removal
     (equal (vl-modinstlist->instnames-nrev x nrev)
@@ -170,10 +181,9 @@ instances.</p>"
     :hints(("Goal"
             :in-theory (e/d (list-equiv)
                             (vl-modinstlist->instnames-of-list-fix))
-            :use ((:instance vl-modinstlist->instnames-of-list-fix
-                   (x x))
+            :use ((:instance vl-modinstlist->instnames-of-list-fix)
                   (:instance vl-modinstlist->instnames-of-list-fix
-                   (x acl2::x-equiv))))))
+                   (x x-equiv))))))
 
   (defthm vl-modinstlist->instnames-of-append
     (equal (vl-modinstlist->instnames (append x y))
@@ -239,7 +249,7 @@ the number of gate instances in the list.</p>"
             :in-theory (e/d (list-equiv)
                             (vl-gateinstlist->names-of-list-fix))
             :use ((:instance vl-gateinstlist->names-of-list-fix (x x))
-                  (:instance vl-gateinstlist->names-of-list-fix (x acl2::x-equiv))))))
+                  (:instance vl-gateinstlist->names-of-list-fix (x x-equiv))))))
 
   (defthm vl-gateinstlist->names-of-append
     (equal (vl-gateinstlist->names (append x y))
@@ -251,10 +261,11 @@ the number of gate instances in the list.</p>"
            (rev (vl-gateinstlist->names x)))))
 
 (define vl-genelement->blockname ((x vl-genelement-p))
-  :returns (blockname maybe-stringp)
+  :returns (blockname vl-maybe-scopeid-p)
   :parents (vl-genelement-p)
   (vl-genelement-case x
-    :vl-genblock x.name
+    ;; BOZO should we be harvesting names from other kinds of generates?
+    :vl-genbegin (vl-genblock->name x.block)
     :vl-genarray x.name
     :otherwise nil))
 
@@ -263,7 +274,7 @@ the number of gate instances in the list.</p>"
   (b* (((when (atom x))
         (nrev-fix nrev))
        (name (vl-genelement->blockname (car x)))
-       (nrev (if name
+       (nrev (if (stringp name)
                  (nrev-push name nrev)
                nrev)))
     (vl-genelementlist->blocknames-nrev (cdr x) nrev)))
@@ -277,7 +288,7 @@ may be shorter than the number of elements in the list.</p>"
   :verify-guards nil
   :returns (names string-listp)
   (mbe :logic (if (consp x)
-                  (if (vl-genelement->blockname (car x))
+                  (if (stringp (vl-genelement->blockname (car x)))
                       (cons (vl-genelement->blockname (car x))
                             (vl-genelementlist->blocknames (cdr x)))
                     (vl-genelementlist->blocknames (cdr x)))
@@ -298,7 +309,7 @@ may be shorter than the number of elements in the list.</p>"
 
   (defthm vl-genelementlist->blocknames-of-cons
     (equal (vl-genelementlist->blocknames (cons a x))
-           (if (vl-genelement->blockname a)
+           (if (stringp (vl-genelement->blockname a))
                (cons (vl-genelement->blockname a)
                      (vl-genelementlist->blocknames x))
              (vl-genelementlist->blocknames x))))
@@ -313,7 +324,7 @@ may be shorter than the number of elements in the list.</p>"
             :in-theory (e/d (list-equiv)
                             (vl-genelementlist->blocknames-of-list-fix))
             :use ((:instance vl-genelementlist->blocknames-of-list-fix (x x))
-                  (:instance vl-genelementlist->blocknames-of-list-fix (x acl2::x-equiv))))))
+                  (:instance vl-genelementlist->blocknames-of-list-fix (x x-equiv))))))
 
   (defthm vl-genelementlist->blocknames-of-append
     (equal (vl-genelementlist->blocknames (append x y))
@@ -481,7 +492,7 @@ fast alists binding names to items that can be used for this purpose.</p>")
            (b* (((when (atom x))
                  acc)
                 (name (hons-copy (__element->name__ (car x))))
-                ((when name)
+                ((when (stringp name))
                  (cons (cons name (vl-__type__-fix (car x)))
                        (vl-__type__list-alist (cdr x) acc))))
              (vl-__type__list-alist (cdr x) acc)))
@@ -546,6 +557,7 @@ fast alists binding names to items that can be used for this purpose.</p>")
 (def-vl-finder udp)
 (def-vl-finder interface)
 (def-vl-finder program)
+(def-vl-finder class)
 (def-vl-finder package)
 (def-vl-finder config)
 (def-vl-finder vardecl)
@@ -553,6 +565,8 @@ fast alists binding names to items that can be used for this purpose.</p>")
 (def-vl-finder fundecl)
 (def-vl-finder paramdecl)
 (def-vl-finder typedef)
+(def-vl-finder dpiimport)
+(def-vl-finder genvar)
 
 (def-vl-finder modinst
   :name          instname
@@ -588,7 +602,7 @@ fast alists binding names to items that can be used for this purpose.</p>")
 ; don't really need this stuff, but we leave it for now in case old code is
 ; using it.
 
-(define vl-portdecl-alist ((x vl-portdecllist-p))
+(define vl-make-portdecl-alist ((x vl-portdecllist-p))
   :returns (palist vl-portdecl-alist-p :hyp :guard)
   :short "Build a fast alist associating the name of each port declaration with
 the whole @(see vl-portdecl-p) object."
@@ -599,12 +613,12 @@ the whole @(see vl-portdecl-p) object."
                     (alistp (vl-portdecllist-alist x acc)))
            :hints(("Goal" :in-theory (enable vl-portdecllist-alist)))))
 
-  (defthm alistp-of-vl-portdecl-alist
-    (alistp (vl-portdecl-alist x)))
+  (defthm alistp-of-vl-make-portdecl-alist
+    (alistp (vl-make-portdecl-alist x)))
 
-  (defthm hons-assoc-equal-of-vl-portdecl-alist
+  (defthm hons-assoc-equal-of-vl-make-portdecl-alist
     (implies (stringp k)
-             (equal (hons-assoc-equal k (vl-portdecl-alist x))
+             (equal (hons-assoc-equal k (vl-make-portdecl-alist x))
                     (and (vl-find-portdecl k x)
                          (cons k (vl-find-portdecl k x)))))
     :hints(("Goal" :in-theory (e/d (vl-find-portdecl
@@ -614,7 +628,7 @@ the whole @(see vl-portdecl-p) object."
 (define vl-fast-find-portdecl
   ((name      stringp)
    (portdecls vl-portdecllist-p)
-   (alist     (equal alist (vl-portdecl-alist portdecls))))
+   (alist     (equal alist (vl-make-portdecl-alist portdecls))))
   :short "Faster version of @(see vl-find-portdecl), where the search is done
   as an fast-alist lookup rather than as string search."
   :enabled t

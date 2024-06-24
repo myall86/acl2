@@ -27,6 +27,7 @@
 ;   DEALINGS IN THE SOFTWARE.
 ;
 ; Original author: Jared Davis <jared@centtech.com>
+; Contributing author: Alessandro Coglio <coglio@kestrel.edu>
 
 (in-package "STR")
 (include-book "ieqv")
@@ -34,7 +35,6 @@
 (include-book "std/util/deflist" :dir :system)
 (include-book "ihs/basic-definitions" :dir :system)
 (local (include-book "arithmetic"))
-(local (include-book "misc/assert" :dir :system))
 (local (include-book "centaur/bitops/ihs-extensions" :dir :system))
 
 (local (defthm unsigned-byte-p-8-of-char-code
@@ -84,11 +84,11 @@
 
 (local (xdoc::set-default-parents octal))
 
-(define octal-digitp (x)
+(define oct-digit-char-p (x)
   :short "Recognizer for octal digit characters: 0-7."
   :returns bool
   :long "<p>ACL2 provides @(see digit-char-p) which is more flexible and can
-recognize numeric characters in other bases.  @(call octal-digitp) only
+recognize numeric characters in other bases.  @(call oct-digit-char-p) only
 recognizes base-8 digits, but is much faster, at least on CCL.  Here is an
 experiment you can run in raw lisp, with times reported in CCL on an AMD
 FX-8350.</p>
@@ -103,7 +103,7 @@ FX-8350.</p>
 
   ;; 3.435 seconds
   (time (loop for i fixnum from 1 to 10000000 do
-              (loop for c in *chars* do (str::octal-digitp c))))
+              (loop for c in *chars* do (str::oct-digit-char-p c))))
 })"
   :inline t
   (mbe :logic (let ((code (char-code (char-fix x))))
@@ -114,19 +114,19 @@ FX-8350.</p>
                     (and (<= code 55)
                          (<= 48 code)))))
   ///
-  (defcong ichareqv equal (octal-digitp x) 1
+  (defcong ichareqv equal (oct-digit-char-p x) 1
     :hints(("Goal" :in-theory (enable ichareqv
                                       downcase-char
                                       char-fix))))
 
-  (defthm characterp-when-octal-digitp
-    (implies (octal-digitp char)
+  (defthm characterp-when-oct-digit-char-p
+    (implies (oct-digit-char-p char)
              (characterp char))
     :rule-classes :compound-recognizer)
 
   (local (defun test (n)
            (let ((x (code-char n)))
-             (and (iff (octal-digitp x)
+             (and (iff (oct-digit-char-p x)
                        (member x '(#\0 #\1 #\2 #\3 #\4 #\5 #\6 #\7)))
                   (or (zp n)
                       (test (- n 1)))))))
@@ -137,18 +137,18 @@ FX-8350.</p>
                          (natp n)
                          (<= i n))
                     (let ((x (code-char i)))
-                      (iff (octal-digitp x)
+                      (iff (oct-digit-char-p x)
                            (member x '(#\0 #\1 #\2 #\3 #\4 #\5 #\6 #\7)))))))
 
-  (defthmd octal-digitp-cases
-    (iff (octal-digitp x)
+  (defthmd oct-digit-char-p-cases
+    (iff (oct-digit-char-p x)
          (member x '(#\0 #\1 #\2 #\3 #\4 #\5 #\6 #\7)))
     :hints(("Goal"
             :in-theory (e/d (member) (l0))
             :use ((:instance l0 (n 255) (i (char-code x))))))))
 
 
-(define nonzero-octal-digitp (x)
+(define nonzero-oct-digit-char-p (x)
   :short "Recognizer for non-zero octal digit characters: 1-7."
   :returns bool
   :inline t
@@ -160,26 +160,26 @@ FX-8350.</p>
                     (and (<= code 55)
                          (<= 49 code)))))
   ///
-  (defcong ichareqv equal (nonzero-octal-digitp x) 1
+  (defcong ichareqv equal (nonzero-oct-digit-char-p x) 1
     :hints(("Goal" :in-theory (enable ichareqv
                                       downcase-char
                                       char-fix))))
-  (defthm octal-digitp-when-nonzero-octal-digitp
-    (implies (nonzero-octal-digitp x)
-             (octal-digitp x))
-    :hints(("Goal" :in-theory (enable octal-digitp)))))
+  (defthm oct-digit-char-p-when-nonzero-oct-digit-char-p
+    (implies (nonzero-oct-digit-char-p x)
+             (oct-digit-char-p x))
+    :hints(("Goal" :in-theory (enable oct-digit-char-p)))))
 
 
-(define octal-digit-val
-  :short "Coerces a @(see octal-digitp) character into a number."
-  ((x octal-digitp))
+(define oct-digit-char-value
+  :short "Coerces a @(see oct-digit-char-p) character into a number."
+  ((x oct-digit-char-p))
   :split-types t
   :returns (val natp :rule-classes :type-prescription)
-  :long "<p>For instance, @('(octal-digit-val #\\a)') is 10.  For any non-@(see
-         octal-digitp), 0 is returned.</p>"
+  :long "<p>For instance, @('(oct-digit-char-value #\\a)') is 10.  For any non-@(see
+         oct-digit-char-p), 0 is returned.</p>"
   :inline t
   (mbe :logic
-       (b* (((unless (octal-digitp x))
+       (b* (((unless (oct-digit-char-p x))
              0)
             (code (char-code x)))
          (- code (char-code #\0)))
@@ -189,194 +189,188 @@ FX-8350.</p>
                     (char-code (the character x)))
                48)))
   :prepwork
-  ((local (in-theory (enable octal-digitp char-fix))))
+  ((local (in-theory (enable oct-digit-char-p char-fix))))
   ///
-  (local (assert! (and (equal (octal-digit-val #\0) #x0)
-                       (equal (octal-digit-val #\1) #x1)
-                       (equal (octal-digit-val #\2) #x2)
-                       (equal (octal-digit-val #\3) #x3)
-                       (equal (octal-digit-val #\4) #x4)
-                       (equal (octal-digit-val #\5) #x5)
-                       (equal (octal-digit-val #\6) #x6)
-                       (equal (octal-digit-val #\7) #x7))))
-  (defcong ichareqv equal (octal-digit-val x) 1
+  (defcong ichareqv equal (oct-digit-char-value x) 1
     :hints(("Goal" :in-theory (enable ichareqv downcase-char))))
-  (defthm octal-digit-val-upper-bound
-    (< (octal-digit-val x) 8)
+  (defthm oct-digit-char-value-upper-bound
+    (< (oct-digit-char-value x) 8)
     :rule-classes ((:rewrite) (:linear)))
-  (defthm unsigned-byte-p-of-octal-digit-val
-    (unsigned-byte-p 3 (octal-digit-val x)))
-  (defthm equal-of-octal-digit-val-and-octal-digit-val
-    (implies (and (octal-digitp x)
-                  (octal-digitp y))
-             (equal (equal (octal-digit-val x) (octal-digit-val y))
+  (defthm unsigned-byte-p-of-oct-digit-char-value
+    (unsigned-byte-p 3 (oct-digit-char-value x)))
+  (defthm equal-of-oct-digit-char-value-and-oct-digit-char-value
+    (implies (and (oct-digit-char-p x)
+                  (oct-digit-char-p y))
+             (equal (equal (oct-digit-char-value x) (oct-digit-char-value y))
                     (ichareqv x y)))
-    :hints(("Goal" :in-theory (enable octal-digitp-cases))))
-  (defthm octal-digit-val-of-digit-to-char
+    :hints(("Goal" :in-theory (enable oct-digit-char-p-cases))))
+  (defthm oct-digit-char-value-of-digit-to-char
     (implies (and (natp n)
                   (< n 8))
-             (equal (octal-digit-val (digit-to-char n))
+             (equal (oct-digit-char-value (digit-to-char n))
                     n))
     :hints(("Goal" :in-theory (enable digit-to-char)))))
 
 
-(std::deflist octal-digit-listp (x)
-  :short "Recognizes lists of @(see octal-digitp) characters."
-  (octal-digitp x)
+(std::deflist oct-digit-char-listp (x)
+  :short "Recognizes lists of @(see oct-digit-char-p) characters."
+  (oct-digit-char-p x)
   ///
-  (defcong icharlisteqv equal (octal-digit-listp x) 1
+  (defcong icharlisteqv equal (oct-digit-char-listp x) 1
     :hints(("Goal" :in-theory (enable icharlisteqv))))
-  (defthm character-listp-when-octal-digit-listp
-    (implies (octal-digit-listp x)
+  (defthm character-listp-when-oct-digit-char-listp
+    (implies (oct-digit-char-listp x)
              (equal (character-listp x)
                     (true-listp x)))
     :rule-classes ((:rewrite :backchain-limit-lst 1))))
 
 
-(define octal-digit-list-value1
-  :parents (octal-digit-list-value)
-  ((x octal-digit-listp)
+(define oct-digit-chars-value1
+  :parents (oct-digit-chars-value)
+  ((x oct-digit-char-listp)
    (val :type unsigned-byte))
   :guard-debug t
   (if (consp x)
-      (octal-digit-list-value1
+      (oct-digit-chars-value1
        (cdr x)
        (the unsigned-byte
-            (+ (the (unsigned-byte 3) (octal-digit-val (car x)))
+            (+ (the (unsigned-byte 3) (oct-digit-char-value (car x)))
                (the unsigned-byte (ash (mbe :logic (lnfix val)
                                             :exec val)
                                        3)))))
     (lnfix val)))
 
-(define octal-digit-list-value
-  :short "Coerces a @(see octal-digit-listp) into a natural number."
-  ((x octal-digit-listp))
+(define oct-digit-chars-value
+  :short "Coerces a @(see oct-digit-char-listp) into a natural number."
+  ((x oct-digit-char-listp))
   :returns (value natp :rule-classes :type-prescription)
-  :long "<p>For instance, @('(octal-digit-list-value '(#\1 #\7))') is 15.  See
+  :long "<p>For instance, @('(oct-digit-chars-value '(#\1 #\7))') is 15.  See
          also @(see parse-octal-from-charlist) for a more flexible function that
          can tolerate non-octal characters after the number.</p>"
   :inline t
   :verify-guards nil
   (mbe :logic (if (consp x)
-                  (+ (ash (octal-digit-val (car x)) (* 3 (1- (len x))))
-                     (octal-digit-list-value (cdr x)))
+                  (+ (ash (oct-digit-char-value (car x)) (* 3 (1- (len x))))
+                     (oct-digit-chars-value (cdr x)))
                 0)
-       :exec (octal-digit-list-value1 x 0))
+       :exec (oct-digit-chars-value1 x 0))
   ///
-  (defcong icharlisteqv equal (octal-digit-list-value x) 1
+  (defcong icharlisteqv equal (oct-digit-chars-value x) 1
     :hints(("Goal" :in-theory (e/d (icharlisteqv)))))
-  (defthm unsigned-byte-p-of-octal-digit-list-value
-    (unsigned-byte-p (* 3 (len x)) (octal-digit-list-value x)))
-  (defthm octal-digit-list-value-upper-bound
-    (< (octal-digit-list-value x)
+  (defthm unsigned-byte-p-of-oct-digit-chars-value
+    (unsigned-byte-p (* 3 (len x)) (oct-digit-chars-value x)))
+  (defthm oct-digit-chars-value-upper-bound
+    (< (oct-digit-chars-value x)
        (expt 2 (* 3 (len x))))
     :rule-classes ((:rewrite) (:linear))
     :hints(("Goal"
             :in-theory (e/d (unsigned-byte-p)
-                            (unsigned-byte-p-of-octal-digit-list-value))
-            :use ((:instance unsigned-byte-p-of-octal-digit-list-value)))))
-  (defthm octal-digit-list-value-upper-bound-free
+                            (unsigned-byte-p-of-oct-digit-chars-value))
+            :use ((:instance unsigned-byte-p-of-oct-digit-chars-value)))))
+  (defthm oct-digit-chars-value-upper-bound-free
     (implies (equal n (len x))
-             (< (octal-digit-list-value x) (expt 2 (* 3 n)))))
-  (defthm octal-digit-list-value1-removal
+             (< (oct-digit-chars-value x) (expt 2 (* 3 n)))))
+  (defthm oct-digit-chars-value1-removal
     (implies (natp val)
-             (equal (octal-digit-list-value1 x val)
-                    (+ (octal-digit-list-value x)
+             (equal (oct-digit-chars-value1 x val)
+                    (+ (oct-digit-chars-value x)
                        (ash (nfix val) (* 3 (len x))))))
     :hints(("Goal"
-            :in-theory (enable octal-digit-list-value1)
-            :induct (octal-digit-list-value1 x val))))
-  (verify-guards octal-digit-list-value$inline)
-  (defthm octal-digit-list-value-of-append
-    (equal (octal-digit-list-value (append x (list a)))
-           (+ (ash (octal-digit-list-value x) 3)
-              (octal-digit-val a))))
-  (local (assert! (and (equal (octal-digit-list-value (coerce "0" 'list)) #o0)
-                       (equal (octal-digit-list-value (coerce "6" 'list)) #o6)
-                       (equal (octal-digit-list-value (coerce "12" 'list)) #o12)
-                       (equal (octal-digit-list-value (coerce "1234" 'list)) #o1234)))))
+            :in-theory (enable oct-digit-chars-value1)
+            :induct (oct-digit-chars-value1 x val))))
+  (verify-guards oct-digit-chars-value$inline)
+  (defthm oct-digit-chars-value-of-append
+    (equal (oct-digit-chars-value (append x (list a)))
+           (+ (ash (oct-digit-chars-value x) 3)
+              (oct-digit-char-value a)))))
 
 (define skip-leading-octal-digits (x)
   :short "Skip over any leading octal digit characters at the start of a character list."
   :returns (tail character-listp :hyp (character-listp x))
   (cond ((atom x)               nil)
-        ((octal-digitp (car x)) (skip-leading-octal-digits (cdr x)))
+        ((oct-digit-char-p (car x)) (skip-leading-octal-digits (cdr x)))
         (t                      x))
   ///
+  (local (defun ind (x y)
+           (if (or (atom x) (atom y))
+               (list x y)
+             (ind (cdr x) (cdr y)))))
   (defcong charlisteqv charlisteqv (skip-leading-octal-digits x) 1
-    :hints(("Goal" :in-theory (enable charlisteqv))))
+    :hints(("Goal" :induct (ind x x-equiv))))
   (defcong icharlisteqv icharlisteqv (skip-leading-octal-digits x) 1
     :hints(("Goal" :in-theory (enable icharlisteqv))))
   (defthm len-of-skip-leading-octal-digits
-    (implies (octal-digitp (car x))
+    (implies (oct-digit-char-p (car x))
              (< (len (skip-leading-octal-digits x))
                 (len x)))))
 
-(define take-leading-octal-digits (x)
+(define take-leading-oct-digit-chars (x)
   :short "Collect any leading octal digit characters from the start of a character
           list."
   :returns (head character-listp :hyp (character-listp x))
   (cond ((atom x)               nil)
-        ((octal-digitp (car x)) (cons (car x) (take-leading-octal-digits (cdr x))))
+        ((oct-digit-char-p (car x)) (cons (car x) (take-leading-oct-digit-chars (cdr x))))
         (t                      nil))
   ///
   (local (defthm l0 ;; Gross, but gets us an equal congruence
-           (implies (octal-digitp x)
+           (implies (oct-digit-char-p x)
                     (equal (ichareqv x y)
                            (equal x y)))
            :hints(("Goal" :in-theory (enable ichareqv
                                              downcase-char
-                                             octal-digitp
+                                             oct-digit-char-p
                                              char-fix)))))
-  (defcong icharlisteqv equal (take-leading-octal-digits x) 1
+  (defcong icharlisteqv equal (take-leading-oct-digit-chars x) 1
     :hints(("Goal" :in-theory (enable icharlisteqv))))
-  (defthm octal-digit-listp-of-take-leading-octal-digits
-    (octal-digit-listp (take-leading-octal-digits x)))
-  (defthm bound-of-len-of-take-leading-octal-digits
-    (<= (len (take-leading-octal-digits x)) (len x))
+  (defthm oct-digit-char-listp-of-take-leading-oct-digit-chars
+    (oct-digit-char-listp (take-leading-oct-digit-chars x)))
+  (defthm bound-of-len-of-take-leading-oct-digit-chars
+    (<= (len (take-leading-oct-digit-chars x)) (len x))
     :rule-classes :linear)
-  (defthm equal-of-take-leading-octal-digits-and-length
-    (equal (equal (len (take-leading-octal-digits x)) (len x))
-           (octal-digit-listp x)))
-  (defthm take-leading-octal-digits-when-octal-digit-listp
-    (implies (octal-digit-listp x)
-             (equal (take-leading-octal-digits x)
+  (defthm equal-of-take-leading-oct-digit-chars-and-length
+    (equal (equal (len (take-leading-oct-digit-chars x)) (len x))
+           (oct-digit-char-listp x)))
+  (defthm take-leading-oct-digit-chars-when-oct-digit-char-listp
+    (implies (oct-digit-char-listp x)
+             (equal (take-leading-oct-digit-chars x)
                     (list-fix x))))
-  (defthm consp-of-take-leading-octal-digits
-    (equal (consp (take-leading-octal-digits x))
-           (octal-digitp (car x)))))
+  (defthm consp-of-take-leading-oct-digit-chars
+    (equal (consp (take-leading-oct-digit-chars x))
+           (oct-digit-char-p (car x)))))
 
-(define octal-digit-string-p-aux
-  :parents (octal-digit-string-p)
+(define oct-digit-string-p-aux
+  :parents (oct-digit-string-p)
   ((x  stringp             :type string)
    (n  natp                :type unsigned-byte)
    (xl (eql xl (length x)) :type unsigned-byte))
   :guard (<= n xl)
-  :measure (nfix (- (nfix xl) (nfix n)))
+; Removed after v7-2 by Matt K. since logically, the definition is
+; non-recursive:
+; :measure (nfix (- (nfix xl) (nfix n)))
   :split-types t
   :verify-guards nil
   :enabled t
   (mbe :logic
-       (octal-digit-listp (nthcdr n (explode x)))
+       (oct-digit-char-listp (nthcdr n (explode x)))
        :exec
        (if (eql n xl)
            t
-         (and (octal-digitp (char x n))
-              (octal-digit-string-p-aux x
+         (and (oct-digit-char-p (char x n))
+              (oct-digit-string-p-aux x
                                       (the unsigned-byte (+ 1 n))
                                       xl))))
   ///
-  (verify-guards octal-digit-string-p-aux
-    :hints(("Goal" :in-theory (enable octal-digit-listp)))))
+  (verify-guards oct-digit-string-p-aux
+    :hints(("Goal" :in-theory (enable oct-digit-char-listp)))))
 
-(define octal-digit-string-p
+(define oct-digit-string-p
   :short "Recognizer for strings whose characters are octal digits."
   ((x :type string))
   :returns bool
   :long "<p>Corner case: this accepts the empty string since all of its
 characters are octal digits.</p>
 
-<p>Logically this is defined in terms of @(see octal-digit-listp).  But in the
+<p>Logically this is defined in terms of @(see oct-digit-char-listp).  But in the
 execution, we use a @(see char)-based function that avoids exploding the
 string.  This provides much better performance, e.g., on an AMD FX-8350 with
 CCL:</p>
@@ -385,19 +379,19 @@ CCL:</p>
     ;; 0.13 seconds, no garbage
     (let ((x \"deadbeef\"))
       (time$ (loop for i fixnum from 1 to 10000000 do
-                   (str::octal-digit-string-p x))))
+                   (str::oct-digit-string-p x))))
 
     ;; 1.36 seconds, 1.28 GB allocated
     (let ((x \"deadbeef\"))
       (time$ (loop for i fixnum from 1 to 10000000 do
-                   (str::octal-digit-listp (explode x)))))
+                   (str::oct-digit-char-listp (explode x)))))
 })"
   :inline t
   :enabled t
-  (mbe :logic (octal-digit-listp (explode x))
-       :exec (octal-digit-string-p-aux x 0 (length x)))
+  (mbe :logic (oct-digit-char-listp (explode x))
+       :exec (oct-digit-string-p-aux x 0 (length x)))
   ///
-  (defcong istreqv equal (octal-digit-string-p x) 1))
+  (defcong istreqv equal (oct-digit-string-p x) 1))
 
 
 (define octal-digit-to-char ((n :type (unsigned-byte 3)))
@@ -426,19 +420,19 @@ but @('octal-digit-to-char') is faster:</p>
   (mbe :logic (digit-to-char n)
        :exec (code-char (the (unsigned-byte 8) (+ 48 n)))))
 
-(define basic-natchars8
-  :parents (natchars8)
-  :short "Logically simple definition that is similar to @(see natchars8)."
+(define basic-nat-to-oct-chars
+  :parents (nat-to-oct-chars)
+  :short "Logically simple definition that is similar to @(see nat-to-oct-chars)."
   ((n natp))
-  :returns (chars octal-digit-listp)
-  :long "<p>This <i>almost</i> computes @('(natchars8 n)'), but when @('n') is
+  :returns (chars oct-digit-char-listp)
+  :long "<p>This <i>almost</i> computes @('(nat-to-oct-chars n)'), but when @('n') is
 zero it returns @('nil') instead of @('(#\\0)').  You would normally never call
 this function directly, but it is convenient for reasoning about @(see
-natchars8).</p>"
+nat-to-oct-chars).</p>"
   (if (zp n)
       nil
     (cons (octal-digit-to-char (logand n #x7))
-          (basic-natchars8 (ash n -3))))
+          (basic-nat-to-oct-chars (ash n -3))))
   :prepwork
   ((local (defthm l0
             (implies (and (< a 8)
@@ -451,25 +445,25 @@ natchars8).</p>"
    (local (defthm l1
             (implies (and (< a 8)
                           (natp a))
-                     (octal-digitp (digit-to-char a)))
+                     (oct-digit-char-p (digit-to-char a)))
             :hints(("Goal" :in-theory (enable digit-to-char)))))
    (local (in-theory (disable digit-to-char))))
   ///
-  (defthm basic-natchars8-when-zp
+  (defthm basic-nat-to-oct-chars-when-zp
     (implies (zp n)
-             (equal (basic-natchars8 n)
+             (equal (basic-nat-to-oct-chars n)
                     nil)))
-  (defthm true-listp-of-basic-natchars8
-    (true-listp (basic-natchars8 n))
+  (defthm true-listp-of-basic-nat-to-oct-chars
+    (true-listp (basic-nat-to-oct-chars n))
     :rule-classes :type-prescription)
-  (defthm character-listp-of-basic-natchars8
-    (character-listp (basic-natchars8 n)))
-  (defthm basic-natchars8-under-iff
-    (iff (basic-natchars8 n)
+  (defthm character-listp-of-basic-nat-to-oct-chars
+    (character-listp (basic-nat-to-oct-chars n)))
+  (defthm basic-nat-to-oct-chars-under-iff
+    (iff (basic-nat-to-oct-chars n)
          (not (zp n))))
-  (defthm consp-of-basic-natchars8
-    (equal (consp (basic-natchars8 n))
-           (if (basic-natchars8 n) t nil)))
+  (defthm consp-of-basic-nat-to-oct-chars
+    (equal (consp (basic-nat-to-oct-chars n))
+           (if (basic-nat-to-oct-chars n) t nil)))
   (local (defun my-induction (n m)
            (if (or (zp n)
                    (zp m))
@@ -495,41 +489,41 @@ natchars8).</p>"
                    :in-theory (disable c0)
                    :use ((:instance c0 (x n) (n k))
                          (:instance c0 (x m) (n k)))))))
-  (defthm basic-natchars8-one-to-one
-    (equal (equal (basic-natchars8 n)
-                  (basic-natchars8 m))
+  (defthm basic-nat-to-oct-chars-one-to-one
+    (equal (equal (basic-nat-to-oct-chars n)
+                  (basic-nat-to-oct-chars m))
            (equal (nfix n)
                   (nfix m)))
     :hints(("Goal" :induct (my-induction n m)))))
 
-(define natchars8-aux ((n natp) acc)
-  :parents (natchars8)
+(define nat-to-oct-chars-aux ((n natp) acc)
+  :parents (nat-to-oct-chars)
   :verify-guards nil
   :enabled t
   (mbe :logic
-       (revappend (basic-natchars8 n) acc)
+       (revappend (basic-nat-to-oct-chars n) acc)
        :exec
        (if (zp n)
            acc
-         (natchars8-aux
+         (nat-to-oct-chars-aux
           (the unsigned-byte (ash (the unsigned-byte n) -3))
           (cons (octal-digit-to-char
                  (the (unsigned-byte 3) (logand (the unsigned-byte n) #x7)))
                 acc))))
   ///
-  (verify-guards natchars8-aux
-    :hints(("Goal" :in-theory (enable basic-natchars8)))))
+  (verify-guards nat-to-oct-chars-aux
+    :hints(("Goal" :in-theory (enable basic-nat-to-oct-chars)))))
 
-(define natchars8
+(define nat-to-oct-chars
   :short "Convert a natural number into a list of octal bits."
   ((n natp))
-  :returns (chars octal-digit-listp)
-  :long "<p>For instance, @('(natchars8 15)') is @('(#\\1 #\\7)').</p>
+  :returns (chars oct-digit-char-listp)
+  :long "<p>For instance, @('(nat-to-oct-chars 15)') is @('(#\\1 #\\7)').</p>
 
 <p>This is like ACL2's built-in function @(see explode-nonnegative-integer),
 except that it doesn't deal with accumulators and is limited to base-8 numbers.
 These simplifications lead to particularly nice rules, e.g., about @(see
-octal-digit-list-value), and somewhat better performance:</p>
+oct-digit-chars-value), and somewhat better performance:</p>
 
 @({
   ;; Times reported by an AMD FX-8350, Linux, 64-bit CCL:
@@ -537,7 +531,7 @@ octal-digit-list-value), and somewhat better performance:</p>
   ;; 1.114 seconds, 1.241 GB allocated
   (progn (gc$)
          (time (loop for i fixnum from 1 to 10000000 do
-                     (str::natchars8 i))))
+                     (str::nat-to-oct-chars i))))
 
   ;; 4.727 seconds, 1.241 GB allocated
   (progn (gc$)
@@ -545,14 +539,14 @@ octal-digit-list-value), and somewhat better performance:</p>
             (explode-nonnegative-integer i 8 nil))))
 })"
   :inline t
-  (or (natchars8-aux n nil) '(#\0))
+  (or (nat-to-oct-chars-aux n nil) '(#\0))
   ///
-  (defthm true-listp-of-natchars8
-    (and (true-listp (natchars8 n))
-         (consp (natchars8 n)))
+  (defthm true-listp-of-nat-to-oct-chars
+    (and (true-listp (nat-to-oct-chars n))
+         (consp (nat-to-oct-chars n)))
     :rule-classes :type-prescription)
-  (defthm character-listp-of-natchars8
-    (character-listp (natchars8 n)))
+  (defthm character-listp-of-nat-to-oct-chars
+    (character-listp (nat-to-oct-chars n)))
   (local (defthm lemma1
            (equal (equal (rev x) (list y))
                   (and (consp x)
@@ -582,15 +576,15 @@ octal-digit-list-value), and somewhat better performance:</p>
                       (< 15 n)))
            :hints(("Goal" :in-theory (enable digit-to-char)))))
   (local (defthmd lemma2
-           (not (equal (basic-natchars8 n) '(#\0)))
-           :hints(("Goal" :in-theory (acl2::enable* basic-natchars8
+           (not (equal (basic-nat-to-oct-chars n) '(#\0)))
+           :hints(("Goal" :in-theory (acl2::enable* basic-nat-to-oct-chars
                                                     acl2::ihsext-recursive-redefs)))))
-  (defthm natchars8-one-to-one
-    (equal (equal (natchars8 n) (natchars8 m))
+  (defthm nat-to-oct-chars-one-to-one
+    (equal (equal (nat-to-oct-chars n) (nat-to-oct-chars m))
            (equal (nfix n) (nfix m)))
     :hints(("Goal"
-            :in-theory (disable basic-natchars8-one-to-one)
-            :use ((:instance basic-natchars8-one-to-one)
+            :in-theory (disable basic-nat-to-oct-chars-one-to-one)
+            :use ((:instance basic-nat-to-oct-chars-one-to-one)
                   (:instance lemma2)
                   (:instance lemma2 (n m))))))
   (local (defthm c0
@@ -601,38 +595,38 @@ octal-digit-list-value), and somewhat better performance:</p>
            :hints(("Goal"
                    :in-theory (acl2::enable* acl2::ihsext-recursive-redefs
                                              acl2::ihsext-inductions)))))
-  (local (defthm octal-digit-list-value-of-rev-of-basic-natchars8
-           (equal (octal-digit-list-value (rev (basic-natchars8 n)))
+  (local (defthm oct-digit-chars-value-of-rev-of-basic-nat-to-oct-chars
+           (equal (oct-digit-chars-value (rev (basic-nat-to-oct-chars n)))
                   (nfix n))
            :hints(("Goal"
-                   :induct (basic-natchars8 n)
-                   :in-theory (acl2::enable* basic-natchars8
+                   :induct (basic-nat-to-oct-chars n)
+                   :in-theory (acl2::enable* basic-nat-to-oct-chars
                                              acl2::ihsext-recursive-redefs
                                              acl2::logcons)))))
-  (defthm octal-digit-list-value-of-natchars8
-    (equal (octal-digit-list-value (natchars8 n))
+  (defthm oct-digit-chars-value-of-nat-to-oct-chars
+    (equal (oct-digit-chars-value (nat-to-oct-chars n))
            (nfix n))))
 
-(define revappend-natchars8-aux ((n natp) (acc))
-  :parents (revappend-natchars8)
+(define revappend-nat-to-oct-chars-aux ((n natp) (acc))
+  :parents (revappend-nat-to-oct-chars)
   :enabled t
   :verify-guards nil
   (mbe :logic
-       (append (basic-natchars8 n) acc)
+       (append (basic-nat-to-oct-chars n) acc)
        :exec
        (if (zp n)
            acc
          (cons (octal-digit-to-char (the (unsigned-byte 4)
                                        (logand (the unsigned-byte n) #x7)))
-               (revappend-natchars8-aux
+               (revappend-nat-to-oct-chars-aux
                 (the unsigned-byte (ash (the unsigned-byte n) -3))
                 acc))))
   ///
-  (verify-guards revappend-natchars8-aux
-    :hints(("Goal" :in-theory (enable basic-natchars8)))))
+  (verify-guards revappend-nat-to-oct-chars-aux
+    :hints(("Goal" :in-theory (enable basic-nat-to-oct-chars)))))
 
-(define revappend-natchars8
-  :short "More efficient version of @('(revappend (natchars8 n) acc).')"
+(define revappend-nat-to-oct-chars
+  :short "More efficient version of @('(revappend (nat-to-oct-chars n) acc).')"
   ((n natp)
    (acc))
   :returns (new-acc)
@@ -640,78 +634,77 @@ octal-digit-list-value), and somewhat better performance:</p>
          together characters in reverse order.</p>"
   :inline t
   :enabled t
-  :prepwork ((local (in-theory (enable natchars8))))
-  (mbe :logic (revappend (natchars8 n) acc)
+  :prepwork ((local (in-theory (enable nat-to-oct-chars))))
+  (mbe :logic (revappend (nat-to-oct-chars n) acc)
        :exec (if (zp n)
                  (cons #\0 acc)
-               (revappend-natchars8-aux n acc))))
+               (revappend-nat-to-oct-chars-aux n acc))))
 
-(define natstr8
+(define nat-to-oct-string
   :short "Convert a natural number into a string with its octal digits."
   ((n natp))
   :returns (str stringp :rule-classes :type-prescription)
-  :long "<p>For instance, @('(natstr8 15)') is @('\"17\"').</p>"
+  :long "<p>For instance, @('(nat-to-oct-string 15)') is @('\"17\"').</p>"
   :inline t
-  (implode (natchars8 n))
+  (implode (nat-to-oct-chars n))
   ///
-  (defthm octal-digit-listp-of-natstr
-    (octal-digit-listp (explode (natstr8 n))))
-  (defthm natstr8-one-to-one
-    (equal (equal (natstr8 n) (natstr8 m))
+  (defthm oct-digit-char-listp-of-nat-to-dec-string
+    (oct-digit-char-listp (explode (nat-to-oct-string n))))
+  (defthm nat-to-oct-string-one-to-one
+    (equal (equal (nat-to-oct-string n) (nat-to-oct-string m))
            (equal (nfix n) (nfix m))))
-  (defthm octal-digit-list-value-of-natstr
-    (equal (octal-digit-list-value (explode (natstr8 n)))
+  (defthm oct-digit-chars-value-of-nat-to-dec-string
+    (equal (oct-digit-chars-value (explode (nat-to-oct-string n)))
            (nfix n)))
-  (defthm natstr8-nonempty
-    (not (equal (natstr8 n) ""))))
+  (defthm nat-to-oct-string-nonempty
+    (not (equal (nat-to-oct-string n) ""))))
 
-(define natstr8-list
+(define nat-to-oct-string-list
   :short "Convert a list of natural numbers into a list of octal digit strings."
   ((x nat-listp))
   :returns (strs string-listp)
   (if (atom x)
       nil
-    (cons (natstr8 (car x))
-          (natstr8-list (cdr x))))
+    (cons (nat-to-oct-string (car x))
+          (nat-to-oct-string-list (cdr x))))
   ///
-  (defthm natstr8-list-when-atom
+  (defthm nat-to-oct-string-list-when-atom
     (implies (atom x)
-             (equal (natstr8-list x)
+             (equal (nat-to-oct-string-list x)
                     nil)))
-  (defthm natstr8-list-of-cons
-    (equal (natstr8-list (cons a x))
-           (cons (natstr8 a)
-                 (natstr8-list x)))))
+  (defthm nat-to-oct-string-list-of-cons
+    (equal (nat-to-oct-string-list (cons a x))
+           (cons (nat-to-oct-string a)
+                 (nat-to-oct-string-list x)))))
 
-(define natsize8-aux
-  :parents (natsize8)
+(define nat-to-oct-string-size-aux
+  :parents (nat-to-oct-string-size)
   ((n natp))
   :returns (size natp :rule-classes :type-prescription)
   (if (zp n)
       0
-    (+ 1 (natsize8-aux (ash n -3))))
-  :prepwork ((local (in-theory (enable natchars8))))
+    (+ 1 (nat-to-oct-string-size-aux (ash n -3))))
+  :prepwork ((local (in-theory (enable nat-to-oct-chars))))
   ///
   ;; BOZO perhaps eventually reimplement this using integer-length.  See also
   ;; hex.lisp for some fledgling steps toward that.
-  (defthm natsize8-aux-redef
-    (equal (natsize8-aux n)
-           (len (basic-natchars8 n)))
-    :hints(("Goal" :in-theory (enable basic-natchars8)))))
+  (defthm nat-to-oct-string-size-aux-redef
+    (equal (nat-to-oct-string-size-aux n)
+           (len (basic-nat-to-oct-chars n)))
+    :hints(("Goal" :in-theory (enable basic-nat-to-oct-chars)))))
 
-(define natsize8
+(define nat-to-oct-string-size
   :short "Number of characters in the octal representation of a natural."
   ((x natp))
   :returns (size posp :rule-classes :type-prescription)
   :inline t
-  (mbe :logic (len (natchars8 x))
+  (mbe :logic (len (nat-to-oct-chars x))
        :exec  (if (zp x)
                   1
-                (natsize8-aux x)))
-  :prepwork ((local (in-theory (enable natchars8)))))
+                (nat-to-oct-string-size-aux x)))
+  :prepwork ((local (in-theory (enable nat-to-oct-chars)))))
 
 (define parse-octal-from-charlist
-  :parents (numbers)
   :short "Parse a octal number from the beginning of a character list."
   ((x   character-listp "Characters to read from.")
    (val natp            "Accumulator for the value of the octal digits we have read
@@ -727,11 +720,11 @@ octal-digit-list-value), and somewhat better performance:</p>
          digits and returns their octal value.</p>"
   (cond ((atom x)
          (mv (lnfix val) (lnfix len) nil))
-        ((octal-digitp (car x))
+        ((oct-digit-char-p (car x))
          (parse-octal-from-charlist
           (cdr x)
           (the unsigned-byte
-               (+ (the unsigned-byte (octal-digit-val (car x)))
+               (+ (the unsigned-byte (oct-digit-char-value (car x)))
                   (the unsigned-byte (ash (the unsigned-byte (lnfix val)) 3))))
           (the unsigned-byte (+ 1 (the unsigned-byte (lnfix len))))))
         (t
@@ -739,14 +732,14 @@ octal-digit-list-value), and somewhat better performance:</p>
   ///
   (defthm val-of-parse-octal-from-charlist
       (equal (mv-nth 0 (parse-octal-from-charlist x val len))
-             (+ (octal-digit-list-value (take-leading-octal-digits x))
-                (ash (nfix val) (* 3 (len (take-leading-octal-digits x))))))
-      :hints(("Goal" :in-theory (enable take-leading-octal-digits
-                                        octal-digit-list-value))))
+             (+ (oct-digit-chars-value (take-leading-oct-digit-chars x))
+                (ash (nfix val) (* 3 (len (take-leading-oct-digit-chars x))))))
+      :hints(("Goal" :in-theory (enable take-leading-oct-digit-chars
+                                        oct-digit-chars-value))))
   (defthm len-of-parse-octal-from-charlist
     (equal (mv-nth 1 (parse-octal-from-charlist x val len))
-           (+ (nfix len) (len (take-leading-octal-digits x))))
-    :hints(("Goal" :in-theory (enable take-leading-octal-digits))))
+           (+ (nfix len) (len (take-leading-oct-digit-chars x))))
+    :hints(("Goal" :in-theory (enable take-leading-oct-digit-chars))))
 
   (defthm rest-of-parse-octal-from-charlist
     (equal (mv-nth 2 (parse-octal-from-charlist x val len))
@@ -799,11 +792,11 @@ of our logical definition.</p>"
              (mv val len))
             ((the character char) (char (the string x)
                                         (the unsigned-byte n)))
-            ((when (octal-digitp char))
+            ((when (oct-digit-char-p char))
              (parse-octal-from-string
               (the string x)
               (the unsigned-byte
-                   (+ (the unsigned-byte (octal-digit-val char))
+                   (+ (the unsigned-byte (oct-digit-char-value char))
                       (the unsigned-byte (ash (the unsigned-byte val) 3))))
               (the unsigned-byte (+ 1 (the unsigned-byte len)))
               (the unsigned-byte (+ 1 n))
@@ -811,14 +804,14 @@ of our logical definition.</p>"
          (mv val len)))
   ///
   ;; Minor speed hint
-  (local (in-theory (disable BOUND-OF-LEN-OF-TAKE-LEADING-OCTAL-DIGITS
+  (local (in-theory (disable BOUND-OF-LEN-OF-TAKE-LEADING-OCT-DIGIT-CHARS
                              ACL2::RIGHT-SHIFT-TO-LOGTAIL
-                             OCTAL-DIGIT-LISTP-OF-CDR-WHEN-OCTAL-DIGIT-LISTP)))
+                             OCT-DIGIT-CHAR-LISTP-OF-CDR-WHEN-OCT-DIGIT-CHAR-LISTP)))
 
   (verify-guards parse-octal-from-string
     :hints(("Goal" :in-theory (enable parse-octal-from-charlist
-                                      take-leading-octal-digits
-                                      octal-digit-list-value
+                                      take-leading-oct-digit-chars
+                                      oct-digit-chars-value
                                       )))))
 
 
@@ -835,8 +828,8 @@ or has any non octal digit characters (0-7), we return @('nil').</p>"
   (mbe :logic
        (let ((chars (explode x)))
          (and (consp chars)
-              (octal-digit-listp chars)
-              (octal-digit-list-value chars)))
+              (oct-digit-char-listp chars)
+              (oct-digit-chars-value chars)))
        :exec
        (b* (((the unsigned-byte xl) (length x))
             ((mv (the unsigned-byte val) (the unsigned-byte len))
@@ -845,7 +838,4 @@ or has any non octal digit characters (0-7), we return @('nil').</p>"
               (eql len xl)
               val)))
   ///
-  (defcong istreqv equal (strval8 x) 1)
-  (local (assert! (equal (strval8 "") nil)))
-  (local (assert! (equal (strval8 "0") 0)))
-  (local (assert! (equal (strval8 "1234") #o1234))))
+  (defcong istreqv equal (strval8 x) 1))

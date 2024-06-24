@@ -394,10 +394,7 @@ an existing fast alist like @('make-fal').</p>"
                (equal (hons-sublis-aux fal x)
                       (sublis fal x)))))
 
-  (make-event
-   (if (hons-enabledp state)
-       '(memoize 'hons-sublis-aux :condition '(consp x))
-     '(value-triple :skipping-memoization))))
+  (memoize 'hons-sublis-aux :condition '(consp x)))
 
 (defsection hons-sublis
   :parents (hons sublis)
@@ -441,10 +438,13 @@ tree argument, @('x'), contains large, shared structures.</li>
 
   18
 
+; Matt K. mod: Comment out doc string (disallowed after ACL2 8.3).
+#|
   "Assoc is sometimes faster than gethash.~/
 
   Lisp folklore says it is faster to use ASSOC than GETHASH on a list
-  if the list has length 18 or less.~/~/")
+  if the list has length 18 or less.~/~/"
+|#)
 
 
 ; [Jared] BOZO it would be nice to prove these equivalent to simple set
@@ -776,11 +776,13 @@ tree argument, @('x'), contains large, shared structures.</li>
 
 ; From Matt Mon Sep 29 09:53:49 CDT 2008
 
+  (declare (ignore doc))
   `(with-output
     :off summary
     (progn
       ;; [Jared]: switched to hons-copy-persistent
-      (defconst ,name (hons-copy-persistent ,form) ,doc)
+; Matt K. mod: Eliminate doc argument for defconst (disallowed after ACL2 8.3).
+      (defconst ,name (hons-copy-persistent ,form))
       (table evisc-table
              ,name
              ,(if eviscp

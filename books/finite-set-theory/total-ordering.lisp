@@ -1,18 +1,6 @@
 ; Finite Set Theory for ACL2
 ; Copyright (C) 2000  University of Texas at Austin
-
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of Version 2 of the GNU General Public License as published by the
-; Free Software Foundation.
-
-; This program is distributed in the hope that it will be useful,
-; but WITHOUT ANY WARRANTY; without even the implied warranty of
-; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-; GNU General Public License for more details.
-
-; You should have received a copy of the GNU General Public License
-; along with this program; if not, write to the Free Software
-; Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+; License: A 3-clause BSD license.  See the LICENSE file distributed with ACL2.
 
 ; Written by: J Strother Moore
 ; email:      Moore@cs.utexas.edu
@@ -136,7 +124,7 @@
           (and (equal (car x) (car y))
                (<< (cdr x) (cdr y)))))))
 
-; Now we prove that << is a total ordering on ACL2 objects. 
+; Now we prove that << is a total ordering on ACL2 objects.
 
 (defthm <<-irreflexivity
   (not (<< x x)))

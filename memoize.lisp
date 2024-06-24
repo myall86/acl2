@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 8.4 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2022, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -27,28 +27,28 @@
 
 (in-package "ACL2")
 
-#+(or acl2-loop-only (not hons))
+#+acl2-loop-only
 (defn clear-memoize-table (fn)
 
 ; Warning: Keep the return values in sync for the logic and raw Lisp.
 
   fn)
 
-#+(or acl2-loop-only (not hons))
+#+acl2-loop-only
 (defn clear-memoize-tables ()
 
 ; Warning: Keep the return values in sync for the logic and raw Lisp.
 
   nil)
 
-#+(or acl2-loop-only (not hons))
+#+acl2-loop-only
 (defn memoize-summary ()
 
 ; Warning: Keep the return values in sync for the logic and raw Lisp.
 
   nil)
 
-#+(or acl2-loop-only (not hons))
+#+acl2-loop-only
 (defn clear-memoize-statistics ()
 
 ; Warning: Keep the return values in sync for the logic and raw Lisp.
@@ -87,7 +87,6 @@
     fast-alist-summary
     cons-subtrees
     number-subtrees
-    clear-hash-tables
     flush-hons-get-hash-table-link
     ;; from memoize.lisp
     clear-memoize-table
@@ -118,6 +117,8 @@
                      memo-table-init-size
                      aokp
                      stats
+                     total
+                     invoke
                      ideal-okp)
 
 ; Jared Davis suggests that we consider bundling up these 13 parameters, for
@@ -142,6 +143,8 @@
                                        *mht-default-size*))
                             (cons :aokp ,aokp)
                             (cons :stats ,stats)
+                            (cons :total ,total)
+                            (cons :invoke ,invoke)
                             (and (not (eq ,ideal-okp :default))
                                  (list (cons :ideal-okp ,ideal-okp)))))
               (value-triple (deref-macro-name
@@ -156,10 +159,8 @@
                (condition ,condition)
                (formals
                 (and (symbolp fn) ; guard for getprop
-                     (getprop fn 'formals t
-                              'current-acl2-world wrld)))
-               (stobjs-in (getprop fn 'stobjs-in t
-                                   'current-acl2-world wrld))
+                     (getpropc fn 'formals t wrld)))
+               (stobjs-in (getpropc fn 'stobjs-in t wrld))
                (condition-fn (or ,condition-fn
                                  (add-suffix fn "-MEMOIZE-CONDITION")))
                (hints ,hints)
@@ -170,18 +171,20 @@
                (memo-table-init-size ,memo-table-init-size)
                (aokp ,aokp)
                (stats ,stats)
+               (total ,total)
+               (invoke ,invoke)
                (ideal-okp ,ideal-okp))
           (cond ((not (and
                        (symbolp fn)
                        (not (eq t formals))
                        (not (eq t stobjs-in))
-                       (not (eq t (getprop fn 'stobjs-out t
+                       (not (eq t (getpropc fn 'stobjs-out t
 
 ; Normally we would avoid getting the stobjs-out of return-last.  But
 ; return-last will eventually be rejected for mamoization anyhow (by
 ; memoize-table-chk).
 
-                                           'current-acl2-world wrld)))
+                                            wrld)))
                        (cltl-def-from-name fn wrld)))
                  (er hard 'memoize
                      "The symbol ~x0 is not a known function symbol, and thus ~
@@ -207,8 +210,7 @@
                       (declare
                        (ignorable ,@formals)
                        (xargs :guard
-                              ,(getprop fn 'guard *t*
-                                        'current-acl2-world wrld)
+                              ,(getpropc fn 'guard *t* wrld)
                               :verify-guards nil
                               ,@(let ((stobjs (remove nil stobjs-in)))
                                   (and stobjs
@@ -229,6 +231,8 @@
                                             *mht-default-size*))
                                   (cons :aokp ',aokp)
                                   (cons :stats ,stats)
+                                  (cons :total ',total)
+                                  (cons :invoke ',invoke)
                                   (and (not (eq ',ideal-okp :default))
                                        (list (cons :ideal-okp ',ideal-okp)))))
                     (value-triple ',fn)))))))
@@ -243,6 +247,8 @@
                                         *mht-default-size*))
                               (cons :aokp ',aokp)
                               (cons :stats ,stats)
+                              (cons :total ,total)
+                              (cons :invoke ,invoke)
                               (and (not (eq ',ideal-okp :default))
                                    (list (cons :ideal-okp ',ideal-okp)))))
                 (value-triple (deref-macro-name
@@ -252,12 +258,14 @@
 (defmacro memoize (fn &key
                       (condition 't condition-p)
                       condition-fn hints otf-flg
-                      (recursive 't)
+                      (recursive ':default)
                       commutative
                       forget
                       memo-table-init-size
                       aokp
                       (stats ':default)
+                      total
+                      invoke
                       (ideal-okp ':default)
                       (verbose 't))
 
@@ -275,10 +283,10 @@
 ; unmemoize should be changed to modify the 'saved-memoize-table instead of
 ; 'memoize-table.
 
-  (declare (xargs :guard (booleanp recursive))
+  (declare (xargs :guard (member-eq recursive '(t nil :default)))
            (ignorable condition-p condition condition-fn hints otf-flg
                       recursive commutative forget memo-table-init-size
-                      aokp stats ideal-okp verbose))
+                      aokp stats total invoke ideal-okp verbose))
 
   #-acl2-loop-only
   `(progn (when (eql *ld-level* 0)
@@ -302,8 +310,24 @@
          Note that the arguments to MEMOIZE are evaluated; so perhaps you ~
          intended the first argument to be (QUOTE ~x0) or, equivalently, '~x0."
         fn))
+   ((and invoke (symbolp invoke))
+    (er hard 'memoize
+        "It is illegal for the :INVOKE argument of MEMOIZE to be a symbol.  ~
+         Note that the arguments to MEMOIZE are evaluated; so perhaps you ~
+         intended that argument to be (QUOTE ~x0) or, equivalently, '~x0."
+        invoke))
    (t
-    (let* ((inline recursive)
+    (let* ((inline (if (eq recursive :default)
+                       (if invoke nil t)
+                     recursive))
+           (condition (cond ((and invoke
+                                  (not condition-p)
+                                  (not condition-fn))
+                             nil)
+                            (t condition)))
+           (stats (if (and invoke (eq stats :default))
+                      nil
+                    stats))
            (form
             (cond
              ((eq commutative t)
@@ -329,10 +353,13 @@
                                  ',memo-table-init-size
                                  ',aokp
                                  ',stats
+                                 ',total
+                                 ',invoke
                                  ',ideal-okp)))))
              (t (memoize-form fn condition condition-p condition-fn
                               hints otf-flg inline commutative forget
-                              memo-table-init-size aokp stats ideal-okp)))))
+                              memo-table-init-size aokp stats total invoke
+                              ideal-okp)))))
       (cond (verbose form)
             (t `(with-output
                  :off (summary prove event)
@@ -373,15 +400,7 @@
   `(memoize ,fn :condition nil :recursive nil ,@r))
 
 (defmacro memoizedp-world (fn wrld)
-  `(let ((fn ,fn)
-         (wrld ,wrld))
-     (cond
-      ((not (global-val 'hons-enabled wrld))
-       (er hard 'memoizedp
-           "Memoizedp cannot be called in this ACL2 image, as it requires a ~
-            hons-aware ACL2.  See :DOC hons-and-memoization."))
-      (t
-       (cdr (assoc-eq fn (table-alist 'memoize-table wrld)))))))
+  `(cdr (assoc-eq ,fn (table-alist 'memoize-table ,wrld))))
 
 (defmacro memoizedp (fn)
   (declare (xargs :guard t))
@@ -391,11 +410,7 @@
 ; those books to certify in vanilla ACL2, we define a default value for that
 ; variable here.
 
-#+(and (not hons) (not acl2-loop-only))
-(defparameter *never-profile-ht*
-  (make-hash-table :test 'eq))
-
-#+(or acl2-loop-only (not hons))
+#+acl2-loop-only
 (defun never-memoize-fn (fn)
 
 ; Warning: Keep the return values in sync for the logic and raw Lisp.
@@ -411,10 +426,29 @@
             '(value-triple :invisible))
     :check-expansion t))
 
+(defconst *bad-lisp-consp-memoization*
+  '(bad-lisp-consp :forget t))
+
 (defconst *thread-unsafe-builtin-memoizations*
 
 ; This alist associates built-in raw Lisp functions with corresponding
 ; keyword arguments for memoize-fn.  These functions may be unsafe to memoize
 ; when using ACL2(hp).
 
-  '((bad-lisp-objectp :forget t)))
+  (list *bad-lisp-consp-memoization*))
+
+#+acl2-loop-only
+(defun set-bad-lisp-consp-memoize (arg)
+
+; Warning: Keep the return values in sync for the logic and raw Lisp.
+
+  (declare (xargs :guard t)
+           (ignore arg))
+  nil)
+
+(defconst *special-cltl-cmd-attachment-mark-name*
+; This is used in memoize-raw.lisp, so we define it here.
+  ':apply$-userfn/badge-userfn)
+
+(defconst *special-cltl-cmd-attachment-mark*
+  `(attachment ,*special-cltl-cmd-attachment-mark-name*))

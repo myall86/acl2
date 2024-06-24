@@ -25,7 +25,7 @@
                           ''(summary)
                         ;;shut everything except error
                         ''(warning warning! observation prove
-                                  proof-checker event history
+                                  proof-builder event history
                                   proof-tree summary)))) 
                     
 ;doesnt work on an make-event
@@ -82,28 +82,36 @@
 ;; (thm (implies (true-listp x)
 ;;               (equal (rev (rev x)) x))) 
 
+       ((mv top-hyps top-concl state) (partition-into-hyps-concl-and-preprocess top-term "print-assignment" state))
+
+       (mv-sig-alist (mv-sig-alist (cons top-concl top-hyps) (w state)))
+       (hyp/m   (mv-list-ify (single-hypothesis top-hyps) mv-sig-alist))
+       (concl/m (mv-list-ify top-concl mv-sig-alist))
+       
        ((mv ?er res state) 
         (acl2::state-global-let*
-         ((acl2::guard-checking-on :none))
+;         ((acl2::guard-checking-on :none))
+;; PETE: now controlled by the global cgen::cgen-guard-checking
+         ((acl2::guard-checking-on (@ cgen-guard-checking)))
          (trans-eval
           `(let* ,A
              (declare (ignorable ,@(strip-cars A)))
-             (list ,top-term
+             (list ,hyp/m ,concl/m
 ; make list/let A (list `(var ,var) ...) 
                    ,(make-var-value-list-bindings top-vars nil)))
           'get-top-level-assignment state T))) ;defattach ok
-       ((list form-eval-res top-A) (cdr res)))
+
+       ((list hyps-res concl-res top-A) (cdr res))
+       (consistent? (if counteregp
+                        (and hyps-res (not concl-res))
+                      (and hyps-res concl-res))))
 
 ;  in
-   (if (or (and counteregp (not form-eval-res)) 
-;check if its really a counter-example or really a witness
-           (and (not counteregp) form-eval-res)) 
-       (value (list t top-A))
-;only return A if its a true counterexample/witness
-     (value (list nil top-A)))));nil means inconsistent top-level A
+    (value (list consistent? top-A))))
 
 
 (include-book "misc/evalable-printing" :dir :system)
+
 
 ;; Print the random instantiations for a particular test run.
 ;; Return value is a dummy error-triple. 
@@ -124,10 +132,11 @@
 ;the usual, but filter the variables that are in the original output clause
   (b* ((top-A (filter-alist-keys A top-vars))
        (vals  (acl2::make-evalable-lst-how (strip-cadrs top-A) (acl2::get-evalable-printing-abstractions state)))
-       (top-A (list-up-lists (strip-cars top-A) vals))
-       ((unless elided-var-map) ;the simple case
-        (value (cw? (normal-output-flag vl)
-                    "~| -- ~x0~%" top-A)))
+       (?top-A (list-up-lists (strip-cars top-A) vals))
+;; [2015-07-29 Wed] Always check for inconsistency
+       ;; ((unless elided-var-map) ;the simple case
+       ;;  (value (cw? (normal-output-flag vl)
+       ;;              "~| -- ~x0~%" top-A)))
                     ;;;"~| -- ~&0~%" top-A)))
   
 ;show top goal, show counterexamples and witness in 
@@ -145,16 +154,14 @@
          (cw? (normal-output-flag vl)
               "~| -- ~x0~%"  top-A)
          (cw? (normal-output-flag vl)
-"~|WARNING: The above counterexample is not consistent with top-level form. ~
- This is most likely due to the application of an elim rule that generalized ~
- its parent goal. If that is not what happened, then please report this ~
- example to ACL2s authors.~%")
+"~|Note: The above counterexample is not consistent with the top-level form. ~
+ Counterexamples are only guaranteed to be consistent with subgoals.~%")
          (value nil))
       (progn$
        (cw? (normal-output-flag vl)
             "~| -- ~x0~%"  top-A)
        (cw? (normal-output-flag vl)
-"~|NOTE: The above witness is not consistent with the top-level form. ~
+"~|Note: The above witness is not consistent with the top-level form. ~
  Witnesses are only guaranteed to be consistent with subgoals.~%")
        (value nil))
        )))
@@ -182,7 +189,7 @@
 
 
 ; 30th Aug '12 keep global track of num of wts/cts to print
-(def print-cts/wts (s-hist cts-p nc nw top-vars top-term vl state)
+(def print-cts/wts-subgoals (s-hist cts-p nc nw top-vars top-term vl state)
   (decl :mode :program
         :sig ((s-hist-p booleanp symbol-listp all natp state) 
               -> (mv erp all state))
@@ -205,13 +212,13 @@
                     (access test-outcomes% cts)
                   (access test-outcomes% wts)))
          (elide-map (access s-hist-entry% elide-map))
-         (- (cw? (debug-flag vl) 
-"~|DEBUG/print-cts/wts: A-lst:~x0 top-vars:~x1 elide-map:~x2~|" 
+         (- (cw? (system-debug-flag vl) 
+"~|Cgen/SYSDEBUG/print-cts/wts-subgoals: A-lst:~x0 top-vars:~x1 elide-map:~x2~|" 
 A-lst top-vars elide-map))
          ((when (endp A-lst)) 
 ; none found, so move on to the next subgoal
-          (print-cts/wts (cdr s-hist) cts-p 
-                         nc nw top-vars top-term vl state))
+          (print-cts/wts-subgoals (cdr s-hist) cts-p 
+                                  nc nw top-vars top-term vl state))
          (nc (- nc (if cts-p (len A-lst) 0)))
          (nw (- nw (if cts-p 0 (len A-lst))))
          (- (cw? (normal-output-flag vl) "~| [found in : ~x0]~%" name))
@@ -223,11 +230,221 @@ A-lst top-vars elide-map))
          )
      (er-progn
       (print-assignments A-lst top-vars top-term elide-map vl cts-p state)
-      (print-cts/wts (cdr s-hist) cts-p nc nw top-vars top-term vl state)))))
+      (print-cts/wts-subgoals (cdr s-hist) cts-p nc nw top-vars top-term vl state)))))
+
+(program)
+; adapted from acl2/axioms.lisp
+(defun rational-to-decimal-string (x)
+  (let ((x00 (round (* 100 (abs x)) 1)))
+    (b* ((prefix (if (< x 0) "-" ""))
+         (integer-part (cond ((> x00 99) (to-string (floor (/ x00 100) 1)))
+                             (t "0")))
+         (r (rem x00 100))
+         (fractional-part (cond ((< r 10) (concatenate 'acl2::string "0" (to-string r)))
+                               (t (to-string r)))))
+      (concatenate 'acl2::string prefix integer-part "." fractional-part))))
+
+
+;; [2015-04-07 Tue]
+;; [2016-08-30 Tue] Removed restriction to vacuous test cases.
+(defun print-sat-stats-hyps (hyps kinds total hyp->sat)
+;  Hypothesis | Type of Constraint | Negated | Sat/Total
+  (if (endp hyps)
+      nil
+    (b* ((hyp (car hyps))
+         (kind (car kinds))
+         (num-sat (cdr (assoc-equal hyp hyp->sat)))
+         (p (if (= total 0) "100" (rational-to-decimal-string (* 100 (/ num-sat total)))))
+         )
+      (prog2$ ;in Awk use ; as the field separator
+       (cw! "~|Constraint;~f0 ~|Kind;~f1;Percentage;~s4;Sat/Total;~x2/~x3~%" hyp kind num-sat total p)
+       (print-sat-stats-hyps (cdr hyps) (cdr kinds) total hyp->sat)))))
+
+(defun update-hyps->num-sat (hyp-vals hyps hyp->num-sat)
+  "for each T value of hyp, increment its num-sat"
+  (declare (xargs :guard (and (true-listp hyp-vals)
+                              (pseudo-term-listp hyps)
+                              (alistp hyp->num-sat)
+                              (= (len hyp-vals) (len hyps)))))
+  (if (endp hyp-vals)
+      hyp->num-sat
+    (if (car hyp-vals) ;true
+        (b* ((n (nfix (cdr (assoc-equal (car hyps) hyp->num-sat)))))
+          (update-hyps->num-sat (cdr hyp-vals) (cdr hyps)
+                              (put-assoc-equal (car hyps) (1+ n) hyp->num-sat)))
+      (update-hyps->num-sat (cdr hyp-vals) (cdr hyps) hyp->num-sat))))
+      
+
+  
+(defun print-sat-stats/subgoal (hyp-vals-list hyps kinds total hyp->num-sat)
+  (if (endp hyp-vals-list)
+      (print-sat-stats-hyps hyps kinds total hyp->num-sat)
+    (b* ((hyp-vals (car hyp-vals-list))
+         (hyp->num-sat (update-hyps->num-sat hyp-vals hyps hyp->num-sat)))
+      (print-sat-stats/subgoal (cdr hyp-vals-list) hyps kinds total hyp->num-sat))))
+
+
+
+; The following two functions are by Matt K. [2015-04-07 Tue]
+#!ACL2
+(defun boolean-fn-symb-1 (tp-lst) ; helper function
+  (cond ((endp tp-lst) nil)
+        ((let ((tp (car tp-lst)))
+           (and (ts-subsetp (access type-prescription tp :basic-ts)
+                            *ts-boolean*)
+                (null (access type-prescription tp :hyps))
+                (null (access type-prescription tp :vars)))))
+        (t (boolean-fn-symb-1 (cdr tp-lst)))))
+#!ACL2
+(defun boolean-fn-symb (fn wrld)
+  (cond
+   ((assoc-eq fn *primitive-formals-and-guards*)
+    (or (eq fn 'bad-atom<=)
+        (eq fn '<)
+        (eq fn 'equal)
+
+; The following is right, by inspection.  Perhaps it would be better though to
+; enumerate the appropriate symbols.
+
+        (let ((name (symbol-name fn)))
+          (eql (char name (1- (length name)))
+               #\P))))
+   (t
+    (let ((tp-lst (getprop fn 'type-prescriptions nil 'current-acl2-world wrld)))
+      (boolean-fn-symb-1 tp-lst)))))
+
+(defun assoc-fn-p (f)
+  (member-eq f '(ACL2::ASSOC-EQUAL ACL2::ASSOC-EQ)))
+
+(defun subsetp-fn-p (f)
+  (member-eq f '(ACL2::SUBSETP-EQUAL ACL2::SUBSETP-EQ)))
+
+(defun intersectp-fn-p (f)
+  (member-eq f '(ACL2::INTERSECTP-EQUAL ACL2::INTERSECTP-EQ)))
+
+(defun equal-fn-p (f)
+  (member-eq f '(ACL2::EQUAL ACL2::= ACL2::EQ ACL2::EQL)))
+
+(defun mem-fn-p (R)
+  (member-eq R '(acl2::member-eq acl2::member acl2::member-eql acl2::member-equal acl2s::in |ACL2S B|::in)))
+
+(defun subclassify-binary-relation (f args)
+  (b* (((when (equal-fn-p f))
+        (if (or (proper-symbolp (first args)) (proper-symbolp (second args)))
+            (list :EQUAL/VAR)
+          (list  :EQUAL)))
+       ((when (assoc-fn-p f))
+        (if (proper-symbolp (first args))
+            (list :ASSOC/VAR)
+          (list  :ASSOC)))
+       ((when (mem-fn-p f))
+        (if (proper-symbolp (first args))
+            (list :MEMBER/VAR)
+          (list :MEMBER)))
+       ((when (member-eq f '(ACL2::<)))
+        (if (or (proper-symbolp (first args)) (proper-symbolp (second args)))
+            (list :LESS/VAR)
+          (list :LESS)))
+       ((when (intersectp-fn-p f))
+        (list  :INTERSECTP))
+       ((when (subsetp-fn-p f))
+        (list  :SUBSETP))
+       )
+    '()))
+
+(defun classify-hyp/kinds (f args wrld)
+  "report all kinds that satisfy (f @args)"
+  (b* ((arity (len args))
+       ((unless (symbolp f))
+        (list :LAMBDA-APPLICATION)) ;can it be something else
+
+       ((when (defdata::is-type-predicate f wrld))
+        (list :MONADIC/DEFDATA-TYPE))
+       ((when (and (equal arity 1)))
+        (if (acl2::boolean-fn-symb f wrld)
+            (list :MONADIC/PREDICATE)
+          (list :MONADIC)))
+       ((when (and (equal arity 2)))
+        (if (acl2::boolean-fn-symb f wrld)
+            (list*  :BINARY/PREDICATE (subclassify-binary-relation f args))
+          (list* :BINARY (subclassify-binary-relation f args))))
+       ((when (and (equal arity 3)))
+        (if (eq f 'ACL2::IF)
+            (list :TERNARY/IF)
+          (if (acl2::boolean-fn-symb f wrld)
+              (list :TERNARY/PREDICATE)
+            (list :TERNARY))))
+       ((when (and (> arity 3) (acl2::boolean-fn-symb f wrld)))
+        (list :>3-ARY-RELATION)))
+    (list :UNKNOWN)))
+
+
+(defun classify-hyp (hyp negp wrld)
+  "classify hyp as one of Equality, Arithmetic Inequality, defdata type, monadic predicate, n-ary Relation, unknown"
+  (declare (xargs :guard (and (pseudo-termp hyp)
+                              (booleanp negp)
+                              (plist-worldp wrld))))
+  (cond ((atom hyp) (append (if negp '(:NEG) '(:POS)) '(:SHALLOW :ATOMIC-VARIABLE)))
+        ((equal (acl2::ffn-symb hyp) 'ACL2::NOT) (classify-hyp (cadr hyp) (not negp) wrld))
+        (t (b* ((f (ffn-symb hyp))
+                (args (fargs hyp))
+                (shallow-p (proper-symbol-listp args))
+                (neg+shallow (append (if negp '(:NEG) '(:POS)) (if shallow-p '(:SHALLOW) '(:NON-SHALLOW)))))
+             (append neg+shallow (classify-hyp/kinds f args wrld))))))
+
+(defun classify-hyps (hyps wrld)
+  (if (endp hyps)
+      '()
+    (cons (classify-hyp (car hyps) nil wrld)
+          (classify-hyps (cdr hyps) wrld))))
+  
+(defun print-sat-stats/subgoals (s-hist vl wrld)
+  (if (endp s-hist)
+      nil
+    (b* (((cons name s-hist-entry%) (car s-hist))
+         (test-outcomes% (access s-hist-entry% test-outcomes))
+         (hyps      (access s-hist-entry% hyps))
+         (concl      (access s-hist-entry% concl))
+         (vacs-hyp-vals-list (access test-outcomes% vacs-hyp-vals-list))
+         (cts-hyp-vals-list (access test-outcomes% cts-hyp-vals-list))
+         (wts-hyp-vals-list (access test-outcomes% wts-hyp-vals-list))
+         (all-hyp-vals-list (append cts-hyp-vals-list
+                                    wts-hyp-vals-list
+                                    vacs-hyp-vals-list))
+         (|#vacs| (access test-outcomes% |#vacs|))
+         (total-runs/subgoal (+ |#vacs|
+                                (access test-outcomes% |#dups|)
+                                (access test-outcomes% |#cts|)
+                                (access test-outcomes% |#wts|)))
+         (sat% (if (<= total-runs/subgoal 0)
+                   "100"
+                 (rational-to-decimal-string
+                  (* 100 (/ (- total-runs/subgoal |#vacs|) total-runs/subgoal)))))
+         (cl (clausify-hyps-concl hyps concl))
+         (pform (acl2::prettyify-clause cl nil wrld))
+
+         (disp-enum-alist (access test-outcomes% disp-enum-alist))
+         (elim-bindings   (access test-outcomes% elim-bindings))
+         
+         (hyp->num-sat (pairlis$ hyps (make-list (len hyps) :initial-element 0)))
+         (kinds (classify-hyps hyps wrld))
+         )
+      (progn$
+       (cw? (verbose-stats-flag vl) "~|__SUBGOAL_BEGIN__~%")
+       (cw? (verbose-stats-flag vl) "SUBGOAL_NAME;~f0;SAT%;~s1~%" name sat%)
+       (cw? (verbose-stats-flag vl) "~x0~%" pform)
+       (cw? (verbose-stats-flag vl) "Enum: ~%~x0~%"  disp-enum-alist)
+       (cw? (and (verbose-stats-flag vl) elim-bindings)
+            "Elim/Fixer: ~%~x0~%~%"  elim-bindings)
+       (print-sat-stats/subgoal all-hyp-vals-list hyps kinds total-runs/subgoal hyp->num-sat)
+       (cw? (verbose-stats-flag vl) "~|__SUBGOAL_END__~%" )
+       (print-sat-stats/subgoals (cdr s-hist) vl wrld)))))
+
+(logic)
 
 
 (def print-s-hist (s-hist printc? printw? nc nw 
-                          top-term top-vars vl state)
+                          top-term top-vars top-ctx vl state)
 ;nc and nw are the number of cts/wts requested by user (acl2s defaults)
   (decl :mode :program
         :sig ((s-hist-p bool bool natp natp 
@@ -239,16 +456,24 @@ history s-hist.")
                    (prog2$
                     (cw? (normal-output-flag vl)
 "~|~%We falsified the conjecture. Here are counterexamples:~|")
-                    (print-cts/wts s-hist T nc nw top-vars top-term vl state))
+                    (print-cts/wts-subgoals s-hist T nc nw top-vars top-term vl state))
                  (value nil)))
 
        ((er &) (if printw?
                    (prog2$
                     (cw? (normal-output-flag vl)
 "~|~%Cases in which the conjecture is true include:~|")
-                    (print-cts/wts s-hist NIL nc nw top-vars top-term vl state))
-                 (value nil))))
+                    (print-cts/wts-subgoals s-hist NIL nc nw top-vars top-term vl state))
+                 (value nil)))
+;       (event-name (get-event-name-from-ctx top-ctx))
+       (- (and (verbose-stats-flag vl)
+               (progn$
+                (cw "~%__Vacuous_test_statistics_BEGIN__~%")
+                (cw "~|CTX;~f0~%" (if (and (consp top-ctx)) (cdr top-ctx) top-ctx)) 
+                (print-sat-stats/subgoals s-hist vl (w state))
+                (cw "~|__Vacuous_test_statistics_END__~%")))))
     (value nil)))
+
 (logic)
 
   
@@ -279,8 +504,8 @@ history s-hist.")
        (- (cw? (debug-flag vl) "~|testing summary - s-hist = ~x0~%" s-hist))
        ((unless (and (consp s-hist) (consp (car s-hist))
                      (> (access gcs% runs) 0)))
-        (value (cw? (verbose-stats-flag vl) 
-"~|CEgen/Note (~x0): No testing summary to print~|" ctx)))
+        (value (cw? (debug-flag vl) 
+"~|CEgen/Debug (~x0): No testing summary to print~|" ctx)))
                   
        (num-subgoals (len s-hist))
        (start (cget start-time))
@@ -335,12 +560,13 @@ history s-hist.")
                            (newline (standard-co state) state)
                            (value :invisible))
                      (value nil)))
-           ((mv cts-to-reach wts-to-reach) (mv (cget num-counterexamples) (cget num-witnesses)))
+           ((mv cts-to-print wts-to-print) (mv (cget num-print-counterexamples) (cget num-print-witnesses)))
+           (top-ctx (cget top-ctx))
            ((er &)  (print-s-hist s-hist 
-                                  (> num-cts 0);print cts if true
-                                  (> num-wts 0);print wts if true
-                                  cts-to-reach wts-to-reach 
-                                  top-term top-vars
+                                  (and (> cts-to-print 0) (> num-cts 0));print cts if true
+                                  (and (> wts-to-print 0) (> num-wts 0));print wts if true
+                                  cts-to-print wts-to-print 
+                                  top-term top-vars top-ctx
                                   vl state)))
        (value nil)))
      (& (value (cw? (normal-output-flag vl) "~|CEgen/Error: BAD gcs% in cgen-state.~|"))))))
@@ -356,7 +582,7 @@ history s-hist.")
 
 ;; (defun keywordify (sym)
 ;;   (declare (xargs :guard (symbolp sym)))
-;;   (intern-in-package-of-symbol (symbol-name sym) :key))
+;;   (acl2s::fix-intern-in-pkg-of-sym (symbol-name sym) :key))
 
 ;; (defun keywordify-lst (syms)
 ;;   (declare (xargs :guard (symbol-listp syms)))
@@ -382,18 +608,18 @@ history s-hist.")
        (ans. (acons arg1 value ans.)))
     (make-cgen-params-from-args (cddr kwd-val-lst) ans.)))
 
-(defun make-cgen-state-fn (form kwd-val-lst wrld)
+(defun make-cgen-state-fn (form ctx-name kwd-val-lst wrld)
   (b* ((override-params (make-cgen-params-from-args kwd-val-lst '()))
-       (params (acl2s::acl2s-defaults-value-alist. (table-alist 'acl2s::acl2s-defaults-table wrld) override-params '())))
+       (params (acl2s::acl2s-defaults-value-alist. (table-alist 'ACL2S::ACL2S-DEFAULTS-TABLE wrld) override-params '())))
     (list (cons 'PARAMS params)
           (cons 'USER-SUPPLIED-TERM :undefined)
           (cons 'DISPLAYED-GOAL form)
           (cons 'START-TIME :undefined)
           (cons 'GCS *initial-gcs%*)
-          (cons 'TOP-CTX :user-defined))))
+          (cons 'TOP-CTX (cons :USER-DEFINED ctx-name)))))
 
-(defmacro make-cgen-state (form &rest kwd-val-lst)
-  `(make-cgen-state-fn ',form ',kwd-val-lst (w state)))
+(defmacro make-cgen-state (form ctx-name &rest kwd-val-lst)
+  `(make-cgen-state-fn ',form ',ctx-name ',kwd-val-lst (w state)))
 
 (defun update-cgen-state-givens/user-fn (term start top-vt-alist cgen-state)
 ;  called from below macro
@@ -410,48 +636,141 @@ history s-hist.")
                               top-vt-alist)))
   `(update-cgen-state-givens/user-fn ,user-supplied-term ,start-time ,top-vt-alist cgen-state))
 
+(defun check-syntax (form logicp state)
+  (declare (xargs :mode :program :stobjs (state)))
+  (acl2::state-global-let*
+   ((acl2::inhibit-output-lst acl2::*valid-output-names*)
+    (acl2::inhibited-summary-types acl2::*summary-types*))
+   (acl2::translate-ignore-ok form T logicp T "test? check" (w state) state)))
 
-
-(def prove/cgen (form hints cgen-state state)
-  (decl :mode :program
-        :sig ((any hints cgen-state state) 
-              -> (mv (oneof nil :falsifiable :? t) cgen-state state))
-        )
+;; TODO: remove code duplication between this function and prove/cgen
+(defun test/cgen (form hints cgen-state state)
+  (declare (ignore hints))
+  (declare (xargs :mode :program :stobjs (state)))
+  ;; (decl :mode :program
+  ;;       :sig ((any hints cgen-state state) 
+  ;;             -> (mv (oneof nil :falsifiable :? t) cgen-state state)))
   (b* ((ctx (cget top-ctx))
        (vl  (cget verbosity-level))
-
+       
        ((unless (equal (cget displayed-goal) form))
         (prog2$ (cw? (normal-output-flag vl) 
-                     "~|CEgen/Error: cgen-state.displayed-goal should match the first argument to prove/cgen.~|")
+                     "~|Cgen/Error: cgen-state.displayed-goal should match the first argument to prove/cgen.~|")
                 (mv :? cgen-state state)))
          
        (testing-enabled (cget testing-enabled ))
        ((when (eq testing-enabled NIL)) ;dont do any testing
         (prog2$ (cw? (verbose-flag vl) 
-                     "~|CEgen/Note: TESTING-ENABLED is set to NIL; skipping this form altogether.~|")
+                     "~|Cgen/Note: TESTING-ENABLED is set to NIL; skipping this form altogether.~|")
                 (mv :? cgen-state state)))
-       ((acl2::fun (check-syntax form logicp state)) ;flet
-        (acl2::state-global-let*
-         ((acl2::inhibit-output-lst acl2::*valid-output-names*))
-         (acl2::translate form T logicp T "test? check" (w state) state)))
-    
        ((mv erp term state) (check-syntax form NIL state))
        ((when erp)          
         (prog2$
          (cw? (normal-output-flag vl) 
-              "~|CEgen/Error: The input form is ill-formed, see below:")
+              "~|Cgen/Error: The input form is ill-formed, see below:")
 ; show error to user which was invisble earlier
          (acl2::state-global-let*
-          ((acl2::inhibit-output-lst '(summary)))
+          ((acl2::inhibit-output-lst '(summary))
+           (acl2::inhibited-summary-types acl2::*summary-types*))
           (acl2::translate form  T NIL T "test? check" (w state) state))))
 
 
        ((mv all-execp unsupportedp) 
           (cgen-exceptional-functions (list term) vl (w state)))
 ; 21st March 2013 - catch stobj taking and constrained functions, skip testing.
-         ((unless all-execp)  (mv :? cgen-state state)) ;possible with test? ?
-         ((when unsupportedp) (mv :? cgen-state state))
+       ((unless all-execp)  (mv :? cgen-state state)) ;possible with test? ?
+       ((when unsupportedp) (mv :? cgen-state state))
+       ((when (acl2::global-val 'acl2::include-book-path (w state)))
+        (prog2$ (cw? (verbose-flag vl) 
+                      "~|Cgen/Note: Inside include-book; skip testing altogether.~|")
+                 (mv :? cgen-state state)))
+         
+; No syntax error in input form, check for program-mode fns
+; Note: translate gives nil as the term if form has
+; a program-mode function, so we ignore it
+         ((mv pm? & state)    (check-syntax form T state))
+         (programp            (or pm?
+                                  (eq (default-defun-mode (w state)) 
+                                      :program)))
 
+         ((mv hyps concl state) (partition-into-hyps-concl-and-preprocess term "test?" state))
+         ((mv start-top state) (acl2::read-run-time state))
+         
+         ((unless (cgen-state-p cgen-state))
+          (er soft ctx "~|Cgen/Error: CGEN::CGEN-STATE is ill-formed~|"))
+         
+         (vars (all-vars term))
+         (d-typ-al (dumb-type-alist-infer (cons (cgen-dumb-negate-lit concl) hyps)
+                                          vars vl (w state)))
+         (- (cw? (verbose-stats-flag vl) 
+                 "~|Cgen/Verbose: (at top-level) dumb type-alist is ~x0~|" d-typ-al))
+
+         (cgen-state (update-cgen-state-givens/user :user-supplied-term term
+                                                    :start-time start-top  
+                                                    :top-vt-alist d-typ-al))
+         (clause (clausify-hyps-concl hyps concl))
+         (type-alist (if programp 
+                         nil
+                       (get-acl2-type-alist clause)))
+         (tau-interval-alist (tau-interval-alist-clause-fn clause vars (acl2::ens state) state))
+
+         ((mv error-or-timeoutp cgen-state state) (cgen-search-fn "top" hyps concl 
+                                                                  type-alist tau-interval-alist
+                                                                  '() 
+                                                                   programp 
+                                                                   cgen-state 
+                                                                   ctx state))
+         ((mv end state) (acl2::read-run-time state))
+         (cgen-state (cput end-time end))
+         (gcs% (cget gcs))
+         )
+    
+    ;;in
+    (cond ((posp (access gcs% cts)) (mv :falsifiable cgen-state state))
+          (error-or-timeoutp (mv t cgen-state state))
+          (t (mv :? cgen-state state)))))
+
+
+
+
+(def prove/cgen (form hints cgen-state state)
+  (decl :mode :program
+        :sig ((any hints cgen-state state) 
+              -> (mv (oneof nil :falsifiable :? t) cgen-state state)))
+  (b* ((ctx (cget top-ctx))
+       (vl  (cget verbosity-level))
+
+       ((unless (equal (cget displayed-goal) form))
+        (prog2$ (cw? (normal-output-flag vl) 
+                     "~|Cgen/Error: cgen-state.displayed-goal should match the first argument to prove/cgen.~|")
+                (mv :? cgen-state state)))
+         
+       (testing-enabled (cget testing-enabled ))
+       ((when (eq testing-enabled NIL)) ;dont do any testing
+        (prog2$ (cw? (verbose-flag vl) 
+                     "~|Cgen/Note: TESTING-ENABLED is set to NIL; skipping this form altogether.~|")
+                (mv :? cgen-state state)))
+       ((mv erp term state) (check-syntax form NIL state))
+       ((when erp)          
+        (prog2$
+         (cw? (normal-output-flag vl) 
+              "~|Cgen/Error: The input form is ill-formed, see below:")
+; show error to user which was invisble earlier
+         (acl2::state-global-let*
+          ((acl2::inhibit-output-lst '(summary))
+           (acl2::inhibited-summary-types acl2::*summary-types*))
+          (acl2::translate form  T NIL T "test? check" (w state) state))))
+
+
+       ((mv all-execp unsupportedp) 
+          (cgen-exceptional-functions (list term) vl (w state)))
+; 21st March 2013 - catch stobj taking and constrained functions, skip testing.
+       ((unless all-execp)  (mv :? cgen-state state)) ;possible with test? ?
+       ((when unsupportedp) (mv :? cgen-state state))
+       ((when (acl2::global-val 'acl2::include-book-path (w state)))
+        (prog2$ (cw? (verbose-flag vl) 
+                      "~|Cgen/Note: Inside include-book; skip testing altogether.~|")
+                 (mv :? cgen-state state)))
          
 ; No syntax error in input form, check for program-mode fns
 ; Note: translate gives nil as the term if form has
@@ -462,33 +781,34 @@ history s-hist.")
                                       :program)))
 
          (- (cw? (debug-flag vl)
-                 "~%~%CEgen/Debug: (pm? ~x0) ~x1~|" programp (cons 'test? form))) 
+                 "~%~%Cgen/Debug: (pm? ~x0) ~x1~|" programp (cons 'test? form))) 
 
-         ((mv hyps concl state) (partition-hyps-concl term "test?" state))
+         ((mv hyps concl state) (partition-into-hyps-concl-and-preprocess term "test?" state))
          ((mv start-top state) (acl2::read-run-time state))
          
          ((unless (cgen-state-p cgen-state))
-          (er soft ctx "~|CEgen/Error: CGEN::CGEN-STATE is ill-formed~|"))
+          (er soft ctx "~|Cgen/Error: CGEN::CGEN-STATE is ill-formed~|"))
          
          (vars (all-vars term))
-         (d-typ-al (dumb-type-alist-infer (cons (dumb-negate-lit concl) hyps)
+         (d-typ-al (dumb-type-alist-infer (cons (cgen-dumb-negate-lit concl) hyps)
                                           vars vl (w state)))
          (- (cw? (verbose-stats-flag vl) 
-                 "~|CEgen/Verbose: (at top-level) dumb type-alist is ~x0~|" d-typ-al))
+                 "~|Cgen/Verbose: (at top-level) dumb type-alist is ~x0~|" d-typ-al))
 
          (cgen-state (update-cgen-state-givens/user :user-supplied-term term
                                                     :start-time start-top  
                                                     :top-vt-alist d-typ-al))
-         (vt-acl2-alst (if programp 
-                           (pairlis$ vars (make-list (len vars)
-                                                     :initial-element (list 'ACL2::ALL)))
-                         (get-acl2-type-alist (list term) vars)))
-         (tau-interval-alist (tau-interval-alist-clause (clausify-hyps-concl hyps concl) vars))
-
+         (clause (clausify-hyps-concl hyps concl))
+         (type-alist (if programp 
+                         nil
+                       (get-acl2-type-alist clause)))
+         (tau-interval-alist (tau-interval-alist-clause clause vars))
+                  
 ; put cgen-state in state, so that nested testing via events is caught and disallowed.
          (state (f-put-global 'cgen-state cgen-state state))
          ((mv ?error-or-timeoutp cgen-state state) (cgen-search-fn "top" hyps concl 
-                                                                   vt-acl2-alst tau-interval-alist '() 
+                                                                   type-alist tau-interval-alist
+                                                                   '() 
                                                                    programp 
                                                                    cgen-state 
                                                                    ctx state))
@@ -501,7 +821,7 @@ history s-hist.")
                                programp
                                (eq testing-enabled :naive)))
 
-         (- (cw? (debug-flag vl) "~|CEgen/Debug: no-prove-call-p: ~x0 override-hints: ~x1~%" no-prove-call-p (acl2::override-hints (w state))))
+         (- (cw? (debug-flag vl) "~|Cgen/Debug: no-prove-call-p: ~x0 override-hints: ~x1~%" no-prove-call-p (acl2::override-hints (w state))))
 ; TODO: print something if erp is true i.e error in testing
          
 ; put modified cgen-state back in globals, so that the computed hint
@@ -509,7 +829,6 @@ history s-hist.")
          (state (f-put-global 'cgen-state cgen-state state)) 
 
 
-         
 ; 2 July '13 (bug: hard error reported as proof without induction)
          ((mv trans-erp prove-erp state) 
           (if no-prove-call-p
@@ -517,9 +836,13 @@ history s-hist.")
             (mv-let 
              (erp trval state)
              (acl2::state-global-let*
-              ((acl2::inhibit-output-lst 
+              ((acl2::inhibited-summary-types acl2::*summary-types*)
+               (acl2::inhibit-output-lst 
                 (cond ((debug-flag vl) '(summary))
                       (t #!acl2(set-difference-eq *valid-output-names* '(error))))))
+; Pete: replaced the line below to get rid of annoying "Q.E.D."
+; messages when testing.              
+;                     (t #!acl2(set-difference-eq *valid-output-names* '(error prove))))))
 ; Q: Why is here a wrapper call to trans-eval?
 ; A: To catch some hard errors! (see the email to Matt dated 3/20/2013)
               (trans-eval
@@ -543,7 +866,7 @@ history s-hist.")
              ;; mv-let body
              (prog2$
               (cw? (and erp (normal-output-flag vl))
-                   "~|CEgen/Error: bad trans-eval wrapper call to prove.~|")
+                   "~|Cgen/Error: bad trans-eval wrapper call to prove.~|")
               (mv erp (if erp t (cadr trval)) state)))))
 
          (cgen-state (@ cgen-state)) ;reify cgen-state from callback

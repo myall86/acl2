@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 8.4 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2022, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -1507,6 +1507,14 @@
   (ser-decode-and-load-strs hons-mode decoder stream)
   (ser-decode-and-load-packages check-packagesp decoder stream))
 
+(defun ser-make-array-wrapper (size)
+
+; Sol Swords reported in July 2017 that with SBCL, he has provided the
+; following safety-3 wrapper to avoid some crashes in ser-decode-from-stream.
+
+  #+sbcl (declare (optimize (safety 3)))
+  (make-array size))
+
 (defun ser-decode-from-stream (check-packagesp hons-mode stream)
 
 ; Warning: If you change the input or output signature of this function, change
@@ -1533,7 +1541,7 @@
     (unless (typep arr-size 'fixnum)
       (error "Serialized object is too large."))
 
-    (let* ((arr     (make-array arr-size))
+    (let* ((arr     (ser-make-array-wrapper arr-size))
            (decoder (make-ser-decoder :array arr
                                       :free 0
                                       :version version)))

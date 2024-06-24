@@ -1,5 +1,5 @@
 ; XDOC Documentation System for ACL2
-; Copyright (C) 2009-2013 Centaur Technology
+; Copyright (C) 2009-2015 Centaur Technology
 ;
 ; Contact:
 ;   Centaur Technology Formal Verification Group
@@ -38,6 +38,9 @@
 (include-book "linkcheck")
 (include-book "centaur/bridge/to-json" :dir :system)
 (include-book "oslib/copy" :dir :system)
+
+(include-book "centaur/misc/tshell" :dir :system)
+
 (set-state-ok t)
 (program)
 
@@ -77,7 +80,7 @@
   (declare (type symbol x)
            (type symbol base-pkg))
   (json-encode-string
-   (str::rchars-to-string (sym-mangle-cap x base-pkg nil))
+   (str::rchars-to-string (sym-mangle-cap x base-pkg nil nil))
    acc))
 
 (defun json-encode-topicnames-aux (x base-pkg acc)
@@ -107,8 +110,8 @@
 (defun json-encode-uid (x acc)
   (declare (type integer x))
   (if (< x 0)
-      (str::revappend-natchars (- x) (cons #\- acc))
-    (str::revappend-natchars x acc)))
+      (str::revappend-nat-to-dec-chars (- x) (cons #\- acc))
+    (str::revappend-nat-to-dec-chars x acc)))
 
 (defun json-encode-uids-aux (x acc)
   (declare (xargs :guard (integer-listp x)))
@@ -177,77 +180,96 @@
 ; viz., their position in the array.  This seems like a useful capability for
 ; implementing search features.
 
-(defun short-xml-for-topic (topic topics-fal state)
+(defun short-xml-for-topic (topic xtopic state)
   ;; Returns (mv xml-string state)
   (b* ((short    (or (cdr (assoc :short topic)) ""))
-       (base-pkg (cdr (assoc :base-pkg topic)))
+       ;; (base-pkg (cdr (assoc :base-pkg topic)))
        (name     (cdr (assoc :name topic)))
-       ((mv short-rchars state) (preprocess-main short name topics-fal base-pkg state nil))
-       (short-str (str::rchars-to-string short-rchars))
-       ((mv err &) (parse-xml short-str))
+       ((xtopic xtopic))
+       ;; ((mv short-rchars state)
+       ;;  (preprocess-main short name topics-fal nil base-pkg state nil))
+       ;; (short-str (str::printtree->str short-rchars))
+       ;; ((mv err &) (parse-xml short-str))
+       (err xtopic.short-err)
+       (short-str short)
        (state
         (if err
             (pprogn
-               (fms "~|~%WARNING: problem with :short in topic ~x0:~%"
-                    (list (cons #\0 name))
-                    *standard-co* state nil)
-               (princ$ err *standard-co* state)
-               (fms "~%~%" nil *standard-co* state nil))
+             (prog2$ (note-xdoc-error) state)
+; See comment regarding the use of "; xdoc error" instead of "WARNING"
+; in preprocess-topic (file prepare-topic.lisp).
+             (fms "~|~%; xdoc error: problem with :short in topic ~x0:~%"
+                  (list (cons #\0 name))
+                  *standard-co* state nil)
+             (princ$ err *standard-co* state)
+             (fms "~%~%" nil *standard-co* state nil))
           state))
        (short-str-xml
         (b* (((unless err)
               short-str)
              (tmp nil)
-             (tmp (str::revappend-chars
+             (tmp (str::printtree-rconcat
                    "<b><color rgb='#ff0000'>Markup error in :short</color></b>
                     <code>" tmp))
              (tmp (simple-html-encode-str err 0 (length err) tmp))
-             (tmp (str::revappend-chars "</code>" tmp)))
-          (str::rchars-to-string tmp))))
+             (tmp (str::printtree-rconcat "</code>" tmp)))
+          (str::printtree->str tmp))))
     (mv short-str-xml state)))
 
-(defun long-xml-for-topic (topic topics-fal state)
+(defun long-xml-for-topic (topic xtopic state)
   ;; Returns (mv xml-string state)
   (b* ((long     (or (cdr (assoc :long topic)) ""))
-       (base-pkg (cdr (assoc :base-pkg topic)))
+       ;; (base-pkg (cdr (assoc :base-pkg topic)))
        (name     (cdr (assoc :name topic)))
-       ((mv long-rchars state) (preprocess-main long name topics-fal base-pkg state nil))
-       (long-str (str::rchars-to-string long-rchars))
-       ((mv err &) (parse-xml long-str))
+       ((xtopic xtopic))
+       ;; ((mv long-rchars state)
+       ;;  (preprocess-main long name topics-fal nil base-pkg state nil))
+       ;; (long-str (str::printtree->str long-rchars))
+       ;; ((mv err &) (parse-xml long-str))
+       (err xtopic.long-err)
+       (long-str long)
        (state
         (if err
             (pprogn
-               (fms "~|~%WARNING: problem with :long in topic ~x0:~%"
-                    (list (cons #\0 name))
-                    *standard-co* state nil)
-               (princ$ err *standard-co* state)
-               (fms "~%~%" nil *standard-co* state nil))
+             (prog2$ (note-xdoc-error) state)
+; See comment regarding the use of "; xdoc error" instead of "WARNING"
+; in preprocess-topic (file prepare-topic.lisp).
+             (fms "~|~%; xdoc error: problem with :long in topic ~x0:~%"
+                  (list (cons #\0 name))
+                  *standard-co* state nil)
+             (princ$ err *standard-co* state)
+             (fms "~%~%" nil *standard-co* state nil))
           state))
        (long-str-xml
         (b* (((unless err)
               long-str)
              (tmp nil)
-             (tmp (str::revappend-chars
+             (tmp (str::printtree-rconcat
                    "<h3><color rgb='#ff0000'>Markup error in :long</color></h3>
                     <code>" tmp))
              (tmp (simple-html-encode-str err 0 (length err) tmp))
-             (tmp (str::revappend-chars "</code>" tmp)))
-          (str::rchars-to-string tmp))))
+             (tmp (str::printtree-rconcat "</code>" tmp)))
+          (str::printtree->str tmp))))
     (mv long-str-xml state)))
 
 
-(defun json-encode-index-entry (topic topics-fal uid-map state acc)
+(defun json-encode-index-entry (topic topics xtopics-fal uid-map state acc)
   (b* ((- (check-topic-syntax topic))
 
-       (name     (cdr (assoc :name topic)))
-       (base-pkg (cdr (assoc :base-pkg topic)))
-       (parents  (cdr (assoc :parents topic)))
-       (suborder (cdr (assoc :suborder topic)))
+       (name      (cdr (assoc :name topic)))
+       (base-pkg  (cdr (assoc :base-pkg topic)))
+       (parents   (cdr (assoc :parents topic)))
+       (suborder0 (cdr (assoc :suborder topic)))
+       (suborder-flg (suborder-indicates-chronological-p suborder0))
+       (suborder  (if suborder-flg
+                      (apply-suborder suborder0
+                                      (find-children name topics t))
+                    suborder0))
 
        (parent-uids (collect-uids parents uid-map))
        (suborder    (and suborder (collect-uids suborder uid-map)))
-
-       ((mv short-str state) (short-xml-for-topic topic topics-fal state))
+       (xtopic   (cdr (hons-get name xtopics-fal)))
+       ((mv short-str state) (short-xml-for-topic topic xtopic state))
 
 ; I originally used a JSON object like {"name":"Append","rawname":"..."}  But
 ; then some back-of-the-napkin calculations said that these nice names were
@@ -291,24 +313,29 @@
      (topics-fal (topics-fal topics))
      (uid-map nil)
      ((mv acc state)
-      (json-encode-index-entry (car topics) topics-fal uid-map state nil))
+      (json-encode-index-entry topics (car topics) topics-fal uid-map state nil))
      (state (princ$ (str::rchars-to-string acc) *standard-co* state)))
   state)
 ||#
 
-(defun json-encode-index-aux (topics topics-fal uid-map state acc)
+(defun json-encode-index-aux (all-topics topics xtopics-fal uid-map state acc)
   (b* (((when (atom topics))
         (mv acc state))
-       ((mv acc state) (json-encode-index-entry (car topics) topics-fal uid-map
-                                                state acc))
+       ((mv acc state) (json-encode-index-entry (car topics) all-topics xtopics-fal
+                                                uid-map state acc))
        ((when (atom (cdr topics)))
         (mv acc state))
        (acc (list* #\Space #\Newline #\, acc)))
-    (json-encode-index-aux (cdr topics) topics-fal uid-map state acc)))
+    (json-encode-index-aux all-topics (cdr topics) xtopics-fal uid-map state acc)))
 
-(defun json-encode-index (topics topics-fal uid-map state acc)
+(defun json-encode-index (topics0 topics xtopics-fal uid-map state acc)
+
+; Topics is a version of topics0 that has been ordered.  Topics0 preserves the
+; order in which each topic was introduced into the xdoc table.
+
   (b* ((acc (cons #\[ acc))
-       ((mv acc state) (json-encode-index-aux topics topics-fal uid-map state acc))
+       ((mv acc state)
+        (json-encode-index-aux topics0 topics xtopics-fal uid-map state acc))
        (acc (cons #\] acc)))
     (mv acc state)))
 
@@ -316,20 +343,21 @@
 (b* ((topics     (take 5 (get-xdoc-table (w state))))
      (topics-fal (topics-fal topics))
      ((mv acc state)
-      (json-encode-index topics topics-fal state nil))
+      (json-encode-index topics topics topics-fal state nil))
      (state (princ$ (str::rchars-to-string acc) *standard-co* state)))
   state)
 ||#
 
 
-(defun json-encode-data-entry (topic topics-fal state acc)
+(defun json-encode-data-entry (topic xtopics-fal state acc)
   (b* ((- (check-topic-syntax topic))
        (name     (cdr (assoc :name topic)))
        (base-pkg (cdr (assoc :base-pkg topic)))
        (parents  (cdr (assoc :parents topic)))
        (from     (or (cdr (assoc :from topic)) "Unknown"))
 
-       ((mv long-str state) (long-xml-for-topic topic topics-fal state))
+       (xtopic   (cdr (hons-get name xtopics-fal)))
+       ((mv long-str state) (long-xml-for-topic topic xtopic state))
 
        (from-xml (str::rchars-to-string
                   (simple-html-encode-chars
@@ -364,20 +392,20 @@
   state)
 ||#
 
-(defun json-encode-data-aux (topics topics-fal state acc)
+(defun json-encode-data-aux (topics xtopics-fal state acc)
   (b* (((when (atom topics))
         (mv acc state))
-       ((mv acc state) (json-encode-data-entry (car topics) topics-fal state acc))
+       ((mv acc state) (json-encode-data-entry (car topics) xtopics-fal state acc))
        ((when (atom (cdr topics)))
         (mv acc state))
        (acc (list* #\Space #\Newline #\Newline #\, acc)))
-    (json-encode-data-aux (cdr topics) topics-fal state acc)))
+    (json-encode-data-aux (cdr topics) xtopics-fal state acc)))
 
-(defun json-encode-data (topics topics-fal state acc)
-  (b* ((acc (cons #\{ acc))
-       ((mv acc state) (json-encode-data-aux topics topics-fal state acc))
-       (acc (cons #\} acc)))
-    (mv acc state)))
+(defun json-encode-data (topics xtopics-fal state acc)
+   (b* ((acc (cons #\{ acc))
+        ((mv acc state) (json-encode-data-aux topics xtopics-fal state acc))
+        (acc (cons #\} acc)))
+     (mv acc state)))
 
 #||
 (b* ((topics (take 5 (get-xdoc-table (w state))))
@@ -390,14 +418,31 @@
 ||#
 
 (defun save-json-files (topics dir state)
-  (b* ((topics (force-root-parents
-                (maybe-add-top-topic
-                 (normalize-parents-list
-                  (clean-topics topics)))))
+  (b* ((topics0 (force-missing-parents
+                 (maybe-add-top-topic
+                  (normalize-parents-list
+                   (clean-topics topics)))))
 
-       (- (cw "; Saving JSON files for ~x0 topics.~%" (len topics)))
-       ((mv topics xtopics ?sitemap state)
-        (time$ (order-topics-by-importance topics state)
+       (prev-event-table-binding
+        ;; save the previous binding (or lack) of xdoc-get-event-table, set it
+        ;; to one generated from the current world, and restore at the end
+        (and (acl2::f-boundp-global 'xdoc-get-event-table state)
+              (list (f-get-global 'xdoc-get-event-table state))))
+       (state (f-put-global 'xdoc-get-event-table (make-get-event*-table (w state) nil) state))
+
+       (topics-fal (time$ (topics-fal topics0)))
+
+       (- (cw "; Preprocessing ~x0 topics.~%" (len topics0)))
+       ((mv preproc-topics state) (time$ (preprocess-transform-topics topics0 topics-fal state)
+                              :msg "; Preprocessing: ~st sec, ~sa bytes.~%"))
+
+       (- (cw "; XML parsing preprocessed topics.~%"))
+       ((mv xtopics state) (time$ (xtopics-from-topics preproc-topics state)
+                                  :msg "; XML parsing: ~st sec, ~sa bytes.~%"))
+
+       (- (cw "; Saving JSON files for ~x0 topics.~%" (len topics0)))
+       ((mv ordered-topics ?sitemap state)
+        (time$ (order-topics-by-importance preproc-topics xtopics state)
                :msg "; Importance sorting topics: ~st sec, ~sa bytes.~%"
                :mintime 1/2))
 
@@ -411,13 +456,14 @@
        (state (princ$ (linkcheck xtopics) channel state))
        (state (close-output-channel channel state))
 
-       (topics-fal (time$ (topics-fal topics)))
-       (uid-map    (time$ (make-uid-map 0 topics nil)))
+;       (topics-fal (time$ (topics-fal topics)))
+       (uid-map    (time$ (make-uid-map 0 ordered-topics nil)))
 
        (index nil)
        (index (str::revappend-chars "var xindex = " index));
+       (xtopics-fal (time$ (xtopics-fal xtopics)))
        ((mv index state)
-        (time$ (json-encode-index topics topics-fal uid-map state index)
+        (time$ (json-encode-index preproc-topics ordered-topics xtopics-fal uid-map state index)
                :msg "; Preparing JSON index: ~st sec, ~sa bytes.~%"))
        (index (cons #\; index))
        (index (str::rchars-to-string index))
@@ -429,7 +475,7 @@
        (data nil)
        (data (str::revappend-chars "var xdata = " data))
        ((mv data state)
-        (time$ (json-encode-data topics topics-fal state data)
+        (time$ (json-encode-data ordered-topics xtopics-fal state data)
                :msg "; Preparing JSON topic data: ~st sec, ~sa bytes.~%"
                :mintime 1/2))
        (data (cons #\; data))
@@ -439,7 +485,13 @@
        (state (princ$ data channel state))
        (state (close-output-channel channel state))
 
-       (orphans (find-orphaned-topics topics topics-fal nil)))
+       (orphans (find-orphaned-topics topics topics-fal nil))
+
+
+        (- (fast-alist-free (@ xdoc-get-event-table)))
+        (state (if prev-event-table-binding
+                   (f-put-global 'xdoc-get-event-table (car prev-event-table-binding) state)
+                 (makunbound-global 'xdoc-get-event-table state))))
 
     (or (not orphans)
         (cw "~|~%WARNING: found topics with non-existent parents:~%~x0~%These ~
@@ -448,7 +500,6 @@
     (fast-alist-free topics-fal)
     (fast-alist-free uid-map)
     state))
-
 
 (defun copy-resource-dirs (resdir              ;; path to new-manual/res
                            resource-dirs-alist ;; alist created by add-resource-directory
@@ -461,26 +512,40 @@
        (state       (oslib::copy! source-path target-path :recursive t)))
     (copy-resource-dirs resdir (cdr resource-dirs-alist) state)))
 
-(defun prepare-fancy-dir (dir state)
+(defun prepare-fancy-dir (dir logo-image state)
   (b* (((unless (stringp dir))
-        (prog2$ (er hard? 'prepare-fancy-dir
-                    "Dir must be a string, but is: ~x0.~%" dir)
-                state))
+        (er hard? 'prepare-fancy-dir "Dir must be a string, but is: ~x0.~%" dir)
+        state)
 
        (dir-system     (acl2::f-get-global 'acl2::system-books-dir state))
        (xdoc-dir       (oslib::catpath dir-system "xdoc"))
        (xdoc/fancy     (oslib::catpath xdoc-dir "fancy"))
 
        (- (cw "; Preparing directory ~s0.~%" dir))
-       (state          (oslib::rmtree! dir))
+       (state (time$ (oslib::rmtree! dir)
+                     :msg ";; Removing old directory: ~st sec, ~sa bytes.~%"))
 
-       (- (cw "; Copying fancy viewer files.~%"))
-       (state          (oslib::copy! xdoc/fancy dir :recursive t))
+       (state (time$ (oslib::copy! xdoc/fancy dir :recursive t)
+                     :msg ";; Copying xdoc/fancy files: ~st sec, ~sa bytes.~%"))
+
+       (state (if (not logo-image)
+                  state
+                (time$ (b* ((dir/xdoc-logo.png (oslib::catpath dir "xdoc-logo.png"))
+                            ((mv error state)
+                             (oslib::copy-file logo-image dir/xdoc-logo.png
+                                               :overwrite t))
+                            ((when error)
+                             (er hard? 'prepare-fancy-dir
+                                 "Error copying logo image: ~@0" error)
+                             state))
+                         state)
+                       :msg ";; Installing custom logo: ~st sec, ~sa bytes.~%")))
 
        (- (cw "; Copying resource directories.~%"))
        (resdir              (oslib::catpath dir "res"))
        (resource-dirs-alist (cdr (assoc 'resource-dirs (table-alist 'xdoc (w state)))))
-       (state               (copy-resource-dirs resdir resource-dirs-alist state)))
+       (state               (time$ (copy-resource-dirs resdir resource-dirs-alist state)
+                                   :msg ";; Copying resource directories: ~st sec, ~sa bytes.~%")))
 
     state))
 
@@ -495,20 +560,121 @@
        ;; gets rid of the ~ characters.
        (dir-fix (acl2::extend-pathname dir "." state))
        (zip.sh  (acl2::extend-pathname dir-fix "zip.sh" state))
-       ((mv erp val state)
-        (time$ (sys-call+ "sh" (list zip.sh dir-fix) state)
+       (cmd (string-append "sh "
+             (string-append zip.sh
+              (string-append " " dir-fix))))
+       ((mv exit-status lines)
+        (time$ (acl2::tshell-call cmd :print t)
                :msg "; XDOC zip.sh: ~st sec, ~sa bytes.~%"))
-       ((when erp)
-        (er hard? 'run-fancy-zip
-            "zip.sh failed (exit code ~x0).  ~x1."
-            erp val)
-        state))
+       ((unless (equal exit-status 0))
+        (acl2::warning$ 'run-fancy-zip "run-fancy-zip"
+                        "zip.sh failed to create a zip file for directory ~x0 ~
+                         (exit code ~x1).  ~x2."
+                        dir-fix exit-status lines)))
     state))
 
-(defun save-fancy (all-topics dir zip-p state)
-  (b* ((state (prepare-fancy-dir dir state))
-       (state (save-json-files all-topics dir state))
-       (state (if zip-p
-                  (run-fancy-zip dir state)
-                state)))
-    state))
+; The check done by check-xdoc-topics (and addition of functions below to
+; support it) was added by Matt K. in November 2019, to ease debugging of the
+; case that a non-standard character in the :long string can cause there to be
+; an empty page in the web-based manual.  (This actually happened when a stray
+; control-P wound up in the documentation for defstobj.)  Note that this check
+; is probably not complete, for example since preprocessing has not yet been
+; applied to the given topics.  Rather than try to get a clearer understanding
+; of the generation of web pages from xdoc source, I'm taking this conservative
+; approach.  Our first implementation did not allow tabs, but that uncovered 23
+; violations in the acl2+books manual, so for now at least we'll allow tabs.
+
+(defun standard+-string-p1 (x n)
+; Based on standard-string-p1 in the ACL2 source code.
+  (declare (xargs :guard (and (stringp x)
+                              (natp n)
+                              (<= n (length x)))))
+  (cond ((zp n) t)
+        (t (let ((n (1- n)))
+             (and (or (standard-char-p (char x n))
+                      (eql (char x n) #\Tab))
+                  (standard+-string-p1 x n))))))
+
+(defun standard+-string-p (x)
+  (declare (xargs :guard (stringp x)))
+  (standard+-string-p1 x (length x)))
+
+(defun non-standard+-char-position1 (x n)
+; Based on standard-string-p1 in the ACL2 source code.
+  (declare (xargs :guard (and (stringp x)
+                              (natp n)
+                              (<= n (length x)))))
+  (cond ((zp n) nil)
+        (t (let ((n (1- n)))
+             (if (or (standard-char-p (char x n))
+                     (eql x #\Tab))
+                 (non-standard+-char-position1 x n)
+               n)))))
+
+(defun non-standard+-char-position (x)
+  (declare (xargs :guard (stringp x)))
+  (non-standard+-char-position1 x (length x)))
+
+(defun check-xdoc-topics (topics msg-list)
+  (cond
+   ((endp topics)
+    (cond
+     (msg-list (er hard 'check-xdoc-topics
+                   "~|~%~*0"
+                   `("impossible"             ; when nothing to print
+                     "~@*."                   ; the last element
+                     "~@*; and~|~%"           ; the 2nd to last element
+                     "~@*;~|~%"               ; all other elements
+                     ,msg-list)))
+     (t nil)))
+   (t
+    (check-xdoc-topics
+     (cdr topics)
+     (let* ((topic (car topics))
+            (ap (alistp (car topics)))
+            (short (and ap (cdr (assoc-eq :short topic))))
+            (long (and ap (cdr (assoc-eq :long topic)))))
+       (cond
+        ((not ap) ; impossible?
+         (cons (msg "Topic is not an alist: ~x0"
+                    topic)
+               msg-list))
+        (t
+         (let* ((msg-list
+                 (cond
+                  ((and short
+                        (not (standard+-string-p short)))
+                   (let ((posn (non-standard+-char-position short)))
+                     (cons (msg "Found non-standard character, ~x0, in the ~
+                                 :short string of the topic named ~x1, at ~
+                                 position ~x2"
+                                (char short posn)
+                                (cdr (assoc-eq :name topic))
+                                posn)
+                           msg-list)))
+                  (t msg-list)))
+                (msg-list
+                 (cond
+                  ((and long
+                        (not (standard+-string-p long)))
+                   (let ((posn (non-standard+-char-position long)))
+                     (cons (msg "Found non-standard character, ~x0, in the ~
+                                 :long string of the topic named ~x1, at ~
+                                 position ~x2"
+                                (char long posn)
+                                (cdr (assoc-eq :name topic))
+                                posn)
+                           msg-list)))
+                  (t msg-list))))
+           msg-list))))))))
+
+(defun save-fancy (all-topics dir zip-p logo-image broken-links-limit state)
+  (prog2$
+   (check-xdoc-topics all-topics nil)
+   (b* ((state (f-put-global 'broken-links-limit broken-links-limit state))
+        (state (prepare-fancy-dir dir logo-image state))
+        (state (save-json-files all-topics dir state))
+        (state (if zip-p
+                   (run-fancy-zip dir state)
+                 state)))
+     state)))

@@ -30,7 +30,6 @@
 
 (in-package "STD")
 (include-book "support")
-(include-book "misc/assert" :dir :system)
 (set-state-ok t)
 (program)
 
@@ -58,7 +57,7 @@ copying and pasting code.")
 ; Check added by Matt K.  (Without it, the check below involving
 ;   (get-event-tuple 'binary-append world)
 ; was failing after a 3/20/2015 modification to ACL2 source file axioms.lisp.
-             (get-event-tuple name (cdr ev-world)))
+             (get-event-tuple name (acl2::scan-to-event (cdr ev-world))))
             (t tuple))))
 
 (defun runes-to-e/ds (runes enables disables state)
@@ -279,6 +278,31 @@ copying and pasting code.")
     `((value-triple (cw "Const: ~x0.~%" ',name))
       (defconst ,name ,value))))
 
+
+(defun redundant-defstobj (event-tuple state)
+  (declare (ignorable state))
+  (b* ((?__function__ 'redundant-defmacro)
+       (form  (acl2::access-event-tuple-form event-tuple))
+       ((unless (and (consp form)
+                     (eq (car form) 'defstobj)))
+        (raise "Called redundant-defstobj on ~x0?" event-tuple))
+       (name    (second form))
+       (rest (cddr form)))
+    `((value-triple (cw "Stobj: ~x0.~%" ',name))
+      (defstobj ,name . ,rest))))
+
+(defun redundant-encapsulate (event-tuple state)
+  (declare (ignorable state))
+  (b* ((?__function__ 'redundant-encapsulate)
+       (form  (acl2::access-event-tuple-form event-tuple))
+       ((unless (and (consp form)
+                     (eq (car form) 'encapsulate)))
+        (raise "Called redundant-encapsulate on ~x0?" event-tuple))
+       (bound-fns    (second form))
+       (rest (cddr form)))
+    `((value-triple (cw "Encapsulate: ~x0.~%" ',(strip-cars bound-fns)))
+      (encapsulate ,bound-fns . ,rest))))
+
 (defun redundant-event1 (name force-programp state)
   (b* ((?__function__ 'redundant-event1)
        (world       (w state))
@@ -296,7 +320,11 @@ copying and pasting code.")
        ((when (eq type 'defmacro))
         (redundant-defmacro event-tuple state))
        ((when (eq type 'mutual-recursion))
-        (redundant-mutrec event-tuple force-programp state)))
+        (redundant-mutrec event-tuple force-programp state))
+       ((when (eq type 'defstobj))
+        (redundant-defstobj event-tuple state))
+       ((when (eq type 'encapsulate))
+        (redundant-encapsulate event-tuple state)))
      (raise "For ~x0: unsupported event type: ~x1" name type)))
 
 (defun redundant-events1 (names force-programp state)
@@ -336,13 +364,6 @@ copying and pasting code.")
         (list alias)))
     nil))
 
-(assert!
- (equal (let ((world (w state)))
-          (find-macro-aliases-for-defun (acl2::access-event-tuple-form
-                                         (get-event-tuple 'binary-append world))
-                                        world))
-        '(append)))
-
 (defun find-macro-aliases-for-defuns (forms world)
   ;; Returns a list of macro-alias names (NIL if there are no aliases)
   (if (atom forms)
@@ -378,14 +399,6 @@ copying and pasting code.")
             but found ~x1." name defun-form)
     (mv nil nil)))
 
-(assert! (b* ((world (w state))
-              ((mv macros fns)
-               (find-defun-aliases-for-macro (acl2::access-event-tuple-form
-                                              (get-event-tuple 'append world))
-                                             world)))
-           (and (equal macros '(append))
-                (equal fns '(binary-append)))))
-
 
 (defun redundant-event (name force-programp state)
   (b* ((?__function__ 'redundant-event)
@@ -397,7 +410,9 @@ copying and pasting code.")
        (type (car form))
 
        ((when (or (eq type 'defthm)
-                  (eq type 'defconst)))
+                  (eq type 'defconst)
+                  (eq type 'defstobj)
+                  (eq type 'encapsulate)))
         (redundant-event1 name force-programp state))
 
        ((when (eq type 'defun))
@@ -422,7 +437,8 @@ copying and pasting code.")
              (fn-events       (redundant-events1 fns force-programp state)))
           (append macro-events fn-events))))
 
-    (raise "For ~x0: unsupported event type: ~x1" name type)))
+    (raise "For ~x0: unsupported event type: ~x1 form: ~x2~%" name type
+           (acl2::access-event-tuple-form event-tuple))))
 
 (defun redundant-events (names force-programp state)
   (if (atom names)

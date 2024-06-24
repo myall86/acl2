@@ -83,7 +83,8 @@
 
 (def-basic-type-sets
   *ts-zero*
-  *ts-positive-integer*
+  *ts-one*
+  *ts-integer>1*
   *ts-positive-ratio*
   *ts-negative-integer*
   *ts-negative-ratio*
@@ -95,6 +96,9 @@
   *ts-improper-cons*
   *ts-string*
   *ts-character*)
+
+(defconst *ts-positive-integer* (ts-union *ts-one*
+                                          *ts-integer>1*))
 
 (defconst *ts-non-negative-integer* (ts-union *ts-zero*
                                               *ts-positive-integer*))
@@ -153,10 +157,21 @@
 (defun type-set-binary-+-alist-entry (ts1 ts2)
   (ts-builder ts1
               (*ts-zero* ts2)
-              (*ts-positive-integer*
+              (*ts-one*
                (ts-builder ts2
                            (*ts-zero* ts1)
-                           (*ts-positive-integer* *ts-positive-integer*)
+                           (*ts-one* *ts-integer>1*)
+                           (*ts-integer>1* *ts-integer>1*)
+                           (*ts-negative-integer* *ts-non-positive-integer*)
+                           (*ts-positive-ratio* *ts-positive-ratio*)
+                           (*ts-negative-ratio* *ts-ratio*)
+                           (*ts-complex-rational* *ts-complex-rational*)
+                           ))
+              (*ts-integer>1*
+               (ts-builder ts2
+                           (*ts-zero* ts1)
+                           (*ts-one* *ts-integer>1*)
+                           (*ts-integer>1* *ts-integer>1*)
                            (*ts-negative-integer* *ts-integer*)
                            (*ts-positive-ratio* *ts-positive-ratio*)
                            (*ts-negative-ratio* *ts-ratio*)
@@ -165,7 +180,8 @@
               (*ts-negative-integer*
                (ts-builder ts2
                            (*ts-zero* ts1)
-                           (*ts-positive-integer* *ts-integer*)
+                           (*ts-one* *ts-non-positive-integer*)
+                           (*ts-integer>1* *ts-integer*)
                            (*ts-negative-integer* *ts-negative-integer*)
                            (*ts-positive-ratio* *ts-ratio*)
                            (*ts-negative-ratio* *ts-negative-ratio*)
@@ -174,7 +190,8 @@
               (*ts-positive-ratio*
                (ts-builder ts2
                            (*ts-zero* ts1)
-                           (*ts-positive-integer* *ts-positive-ratio*)
+                           (*ts-one* *ts-positive-ratio*)
+                           (*ts-integer>1* *ts-positive-ratio*)
                            (*ts-negative-integer* *ts-ratio*)
                            (*ts-positive-ratio* *ts-positive-rational*)
                            (*ts-negative-ratio* *ts-rational*)
@@ -183,7 +200,8 @@
               (*ts-negative-ratio*
                (ts-builder ts2
                            (*ts-zero* ts1)
-                           (*ts-positive-integer* *ts-ratio*)
+                           (*ts-one* *ts-ratio*)
+                           (*ts-integer>1* *ts-ratio*)
                            (*ts-negative-integer* *ts-negative-ratio*)
                            (*ts-positive-ratio* *ts-rational*)
                            (*ts-negative-ratio* *ts-negative-rational*)
@@ -192,7 +210,8 @@
               (*ts-complex-rational*
                (ts-builder ts2
                            (*ts-zero* ts1)
-                           (*ts-positive-integer* *ts-complex-rational*)
+                           (*ts-one* *ts-complex-rational*)
+                           (*ts-integer>1* *ts-complex-rational*)
                            (*ts-negative-integer* *ts-complex-rational*)
                            (*ts-positive-ratio* *ts-complex-rational*)
                            (*ts-negative-ratio* *ts-complex-rational*)
@@ -203,10 +222,12 @@
 (defun type-set-binary-*-alist-entry (ts1 ts2)
   (ts-builder ts1
               (*ts-zero* *ts-zero*)
-              (*ts-positive-integer*
+              (*ts-one* ts2)
+              (*ts-integer>1*
                (ts-builder ts2
                            (*ts-zero* *ts-zero*)
-                           (*ts-positive-integer* *ts-positive-integer*)
+                           (*ts-one* ts1)
+                           (*ts-integer>1* *ts-integer>1*)
                            (*ts-negative-integer* *ts-negative-integer*)
                            (*ts-positive-ratio* *ts-positive-rational*)
                            (*ts-negative-ratio* *ts-negative-rational*)
@@ -215,7 +236,8 @@
               (*ts-negative-integer*
                (ts-builder ts2
                            (*ts-zero* *ts-zero*)
-                           (*ts-positive-integer* *ts-negative-integer*)
+                           (*ts-one* ts1)
+                           (*ts-integer>1* *ts-negative-integer*)
                            (*ts-negative-integer* *ts-positive-integer*)
                            (*ts-positive-ratio* *ts-negative-rational*)
                            (*ts-negative-ratio* *ts-positive-rational*)
@@ -224,7 +246,8 @@
               (*ts-positive-ratio*
                (ts-builder ts2
                            (*ts-zero* *ts-zero*)
-                           (*ts-positive-integer* *ts-positive-rational*)
+                           (*ts-one* ts1)
+                           (*ts-integer>1* *ts-positive-rational*)
                            (*ts-negative-integer* *ts-negative-rational*)
                            (*ts-positive-ratio* *ts-positive-rational*)
                            (*ts-negative-ratio* *ts-negative-rational*)
@@ -233,7 +256,8 @@
               (*ts-negative-ratio*
                (ts-builder ts2
                            (*ts-zero* *ts-zero*)
-                           (*ts-positive-integer* *ts-negative-rational*)
+                           (*ts-one* ts1)
+                           (*ts-integer>1* *ts-negative-rational*)
                            (*ts-negative-integer* *ts-positive-rational*)
                            (*ts-positive-ratio* *ts-negative-rational*)
                            (*ts-negative-ratio* *ts-positive-rational*)
@@ -242,7 +266,8 @@
               (*ts-complex-rational*
                (ts-builder ts2
                            (*ts-zero* *ts-zero*)
-                           (*ts-positive-integer* *ts-complex-rational*)
+                           (*ts-one* ts1)
+                           (*ts-integer>1* *ts-complex-rational*)
                            (*ts-negative-integer* *ts-complex-rational*)
                            (*ts-positive-ratio* *ts-complex-rational*)
                            (*ts-negative-ratio* *ts-complex-rational*)
@@ -257,15 +282,26 @@
               (*ts-zero*
                (ts-builder ts2
                            (*ts-zero* *ts-nil*)
-                           (*ts-positive-integer* *ts-t*)
+                           (*ts-one* *ts-t*)
+                           (*ts-integer>1* *ts-t*)
                            (*ts-negative-integer* *ts-nil*)
                            (*ts-positive-ratio* *ts-t*)
                            (*ts-negative-ratio* *ts-nil*)
                            ))
-              (*ts-positive-integer*
+              (*ts-one*
                (ts-builder ts2
                            (*ts-zero* *ts-nil*)
-                           (*ts-positive-integer* *ts-boolean*)
+                           (*ts-one* *ts-nil*)
+                           (*ts-integer>1* *ts-t*)
+                           (*ts-negative-integer* *ts-nil*)
+                           (*ts-positive-ratio* *ts-boolean*)
+                           (*ts-negative-ratio* *ts-nil*)
+                           ))
+              (*ts-integer>1*
+               (ts-builder ts2
+                           (*ts-zero* *ts-nil*)
+                           (*ts-one* *ts-nil*)
+                           (*ts-integer>1* *ts-boolean*)
                            (*ts-negative-integer* *ts-nil*)
                            (*ts-positive-ratio* *ts-boolean*)
                            (*ts-negative-ratio* *ts-nil*)
@@ -273,7 +309,8 @@
               (*ts-negative-integer*
                (ts-builder ts2
                            (*ts-zero* *ts-t*)
-                           (*ts-positive-integer* *ts-t*)
+                           (*ts-one* *ts-t*)
+                           (*ts-integer>1* *ts-t*)
                            (*ts-negative-integer* *ts-boolean*)
                            (*ts-positive-ratio* *ts-t*)
                            (*ts-negative-ratio* *ts-boolean*)
@@ -281,7 +318,8 @@
               (*ts-positive-ratio*
                (ts-builder ts2
                            (*ts-zero* *ts-nil*)
-                           (*ts-positive-integer* *ts-boolean*)
+                           (*ts-one* *ts-boolean*)
+                           (*ts-integer>1* *ts-boolean*)
                            (*ts-negative-integer* *ts-nil*)
                            (*ts-positive-ratio* *ts-boolean*)
                            (*ts-negative-ratio* *ts-nil*)
@@ -289,7 +327,8 @@
               (*ts-negative-ratio*
                (ts-builder ts2
                            (*ts-zero* *ts-t*)
-                           (*ts-positive-integer* *ts-t*)
+                           (*ts-one* *ts-t*)
+                           (*ts-integer>1* *ts-t*)
                            (*ts-negative-integer* *ts-boolean*)
                            (*ts-positive-ratio* *ts-t*)
                            (*ts-negative-ratio* *ts-boolean*)
@@ -303,7 +342,7 @@
 ; nonnumeric bits then those bits are shut off and *ts-zero* is turned on.
 ; Another way to look at it is that if term has type ts then (fix term) has
 ; type (numeric-type-set ts).
-         
+
   (let ((numeric-subtype
          (ts-intersection ts *ts-acl2-number*)))
     (if (ts= numeric-subtype ts)
@@ -351,12 +390,6 @@
           ((and (equal arg1 ''-1)
                 (ts-subsetp ts2 *ts-positive-integer*))
            *ts-non-negative-integer*)
-          ((and (equal arg2 ''+1)
-                (ts-subsetp ts1 *ts-negative-integer*))
-           *ts-non-positive-integer*)
-          ((and (equal arg1 ''+1)
-                (ts-subsetp ts2 *ts-negative-integer*))
-           *ts-non-positive-integer*)
           (t (type-set-binary-+-alist-entry
               (numeric-type-set ts1)
               (numeric-type-set ts2))))))
@@ -396,17 +429,12 @@
 
   (let* ((nts1 (numeric-type-set ts1))
          (nts2 (numeric-type-set ts2)))
-    (cond ((and (equal arg2 *1*)
+    (cond ((and (equal arg1 *-1*)
 
 ; Actually we don't have to add 0 back in, as done by numeric-type-set, before
 ; making the following test.  But let's keep things simple.
 
                 (ts-subsetp nts1 *ts-integer*))
-           (type-set-not
-            (type-set-< *0* arg1 *ts-zero* ts1)))
-          ((and (quotep arg1)
-                (eql (cadr arg1) -1)
-                (ts-subsetp nts2 *ts-integer*))
            (type-set-not
             (type-set-< arg2 *0* ts2 *ts-zero*)))
           ((or (ts-intersectp ts1 *ts-complex-rational*)
@@ -422,15 +450,20 @@
      (t
       (ts-builder ts1
                   (*ts-zero* *ts-zero*)
-                  (*ts-positive-integer* *ts-negative-integer*)
+                  (*ts-one* *ts-negative-integer*)
+                  (*ts-integer>1* *ts-negative-integer*)
                   (*ts-positive-ratio* *ts-negative-ratio*)
-                  (*ts-negative-integer* *ts-positive-integer*))))))
+                  (*ts-negative-integer* *ts-positive-integer*)
+                  (*ts-negative-ratio* *ts-positive-ratio*)
+                  (*ts-complex-rational* *ts-complex-rational*))))))
 
 (defun type-set-unary-/ (ts)
   (let* ((ts1 (numeric-type-set ts)))
     (ts-builder ts1
                 (*ts-zero* *ts-zero*)
-                (*ts-positive-rational* *ts-positive-rational*)
+                (*ts-one* *ts-one*)
+                (*ts-integer>1* *ts-positive-ratio*)
+                (*ts-positive-ratio* *ts-positive-rational*)
                 (*ts-negative-rational* *ts-negative-rational*)
                 (*ts-complex-rational* *ts-complex-rational*))))
 
@@ -438,8 +471,16 @@
   (let* ((ts1 (rational-type-set ts)))
     (ts-builder ts1
                 (*ts-zero* *ts-zero*)
-                (*ts-positive-rational* *ts-positive-integer*)
+                (*ts-one* *ts-one*)
+                (*ts-integer>1* *ts-integer>1*)
+                (*ts-positive-ratio* *ts-positive-integer*)
                 (*ts-negative-rational* *ts-negative-integer*))))
+
+(defun type-set-denominator (ts)
+  (let* ((ts1 (rational-type-set ts)))
+    (ts-builder ts1
+                (*ts-integer* *ts-one*)
+                (*ts-ratio* *ts-integer>1*))))
 
 (defun type-set-realpart (ts)
   (cond ((ts-intersectp ts *ts-complex-rational*)
@@ -578,7 +619,7 @@
 ; true-ts then (fn x) might be true, so we should throw in *ts-t*.
 ; Conversely, if arg-ts does not intersect with true-ts then (fn x)
 ; cannot possibly be true.  Exactly analogous statements can be made
-; about false-ts.  
+; about false-ts.
 
 ; We return the type set of (fn x).
 
@@ -654,7 +695,8 @@
          (cond ((rationalp evg)
                 (cond ((integerp evg)
                        (cond ((int= evg 0) *ts-zero*)
-                             ((> evg 0) *ts-positive-integer*)
+                             ((int= evg 1) *ts-one*)
+                             ((> evg 0) *ts-integer>1*)
                              (t *ts-negative-integer*)))
                       ((> evg 0) *ts-positive-ratio*)
                       (t *ts-negative-ratio*)))
@@ -820,7 +862,7 @@
 
 ; This function is used to push a new entry onto ancestors.  Lit is a
 ; term to be assumed true.
- 
+
 ; Note:  It is important that the literal, lit, be in the car of the
 ; frame constructed below.
 
@@ -840,7 +882,7 @@
                   ancestors))))
 
 (defun ancestors-check1 (lit-atm lit fn-cnt p-fn-cnt ancestors)
-                                 
+
 ; Roughly speaking, ancestors is a list of all the things we can
 ; assume by virtue of our trying to prove their negations.  That is,
 ; when we backchain from B to A by applying (implies A B), we try to
@@ -960,35 +1002,35 @@
                               (cdr type-alist)
                               unify-subst))))
 
-(defun term-and-typ-to-lookup (hyp wrld)
+(defun term-and-typ-to-lookup (hyp wrld ens)
   (mv-let
-   (not-flg term)
-   (strip-not hyp)
-   (let* ((recog-tuple (and (nvariablep term)
+    (not-flg term)
+    (strip-not hyp)
+    (let ((recog-tuple (and (nvariablep term)
                             (not (fquotep term))
                             (not (flambda-applicationp term))
-                            (assoc-eq (ffn-symb term)
-                                      (global-val 'recognizer-alist wrld))))
-          (typ (if (and recog-tuple
-                        (access recognizer-tuple recog-tuple :strongp))
-                   (if not-flg
-                       (access recognizer-tuple recog-tuple :false-ts)
-                       (access recognizer-tuple recog-tuple :true-ts))
-                   (if not-flg *ts-nil* *ts-non-nil*)))
-          (term (if (and recog-tuple
-                         (access recognizer-tuple recog-tuple :strongp))
-                    (fargn term 1)
-                    term)))
-     (mv term typ))))
+			    (<reduce-id>
+			     (most-recent-enabled-recog-tuple
+			      (ffn-symb term)
+			      (global-val 'recognizer-alist wrld)
+			      ens)))))
+      (cond ((and recog-tuple
+                  (access recognizer-tuple recog-tuple :strongp))
+             (mv (fargn term 1)
+                 (if not-flg
+                     (access recognizer-tuple recog-tuple :false-ts)
+                   (access recognizer-tuple recog-tuple :true-ts))))
+            (t (mv term
+                   (if not-flg *ts-nil* *ts-non-nil*)))))))
 
-(defun lookup-hyp (hyp type-alist wrld unify-subst)
+(defun lookup-hyp (hyp type-alist wrld unify-subst ens)
 
 ; See if hyp is true by type-alist considerations -- possibly
 ; extending the unify-subst.  If successful we return t and a new
 ; unify-subst.  No-Change Loser.
 
   (mv-let (term typ)
-          (term-and-typ-to-lookup hyp wrld)
+          (term-and-typ-to-lookup hyp wrld ens)
           (search-type-alist term typ type-alist unify-subst)))
 
 (mutual-recursion
@@ -1093,7 +1135,7 @@
                                (ts-complement *ts-acl2-number*)))
          (ts-intersectp
           ts1
-          (ts-complement 
+          (ts-complement
            (ts-union *ts-negative-rational* *ts-complex-rational*))))
     (extend-type-alist
      arg1
@@ -1102,7 +1144,7 @@
                                 *ts-complex-rational*))
      type-alist))
    ((and not-flg
-         (ts-subsetp ts1 
+         (ts-subsetp ts1
                      *ts-negative-rational*)
          (ts-intersectp ts2
                         (ts-complement (ts-union *ts-complex-rational*
@@ -1121,7 +1163,7 @@
          (ts-subsetp ts1
                      (ts-union *ts-non-positive-rational*
                                (ts-complement *ts-acl2-number*)))
-         (ts-intersectp ts2 
+         (ts-intersectp ts2
                         *ts-positive-rational*))
 
 ; Here we are dealing with (not (< arg1 arg2)) which is (<= arg2 arg1).  We
@@ -1140,7 +1182,7 @@
       (ts-complement *ts-positive-rational*))
      type-alist))
    ((and not-flg
-         (ts-subsetp ts2 
+         (ts-subsetp ts2
                      *ts-positive-rational*)
          (ts-intersectp ts1
                         (ts-complement
@@ -1159,7 +1201,7 @@
           (ts-complement
            (ts-union *ts-complex-rational*
                      *ts-negative-rational*)))
-         (ts-intersectp ts1 
+         (ts-intersectp ts1
                         *ts-negative-rational*))
     (extend-type-alist
      arg1
@@ -1228,171 +1270,62 @@
 ; The bottom line: I think it is best to add a numeric argument, nnn, to
 ; handle these two recursions.
 
-(include-book "ordinals/e0-ordinal" :dir :system)
-(acl2::set-well-founded-relation e0-ord-<)
+(include-book "std/basic/two-nats-measure" :dir :system)
 
 (defun lex4 (i j k l)
-  (cons (cons (cons (+ 1 i) j) k) l))
+  (acl2::nat-list-measure (list i j k l)))
 
 (defthm type-set-admission-lemma1
-  (IMPLIES (CONSP X)
-           (< (ACL2-COUNT (CADDDR X))
-              (acl2-count x)))
-  :rule-classes (:built-in-clause :linear))
+  (<= (acl2-count (car x))
+      (acl2-count x))
+  :rule-classes :linear)
 
 (defthm type-set-admission-lemma2
-  (<= (ACL2-COUNT (CAR X12))
-      (ACL2-count X12))
+  (<= (acl2-count (cdr x))
+      (acl2-count x))
+  :rule-classes :linear)
+
+(defthm type-set-admission-lemma3
+  (implies (consp x)
+           (< (acl2-count (car x))
+              (acl2-count x)))
+  :rule-classes :linear)
+
+(defthm type-set-admission-lemma4
+  (implies (consp x)
+           (< (acl2-count (cdr x))
+              (acl2-count x)))
+  :rule-classes :linear)
+
+(defthm type-set-admission-lemma5
+  (implies (car x)
+           (< (acl2-count (cdr x)) (acl2-count x)))
   :rule-classes :linear)
 
 (defthm acl2-count-non-cons-cdr
   (<= (acl2-count (non-cons-cdr x)) (acl2-count x))
   :hints (("Goal" :induct (non-cons-cdr x)))
-  :rule-classes :linear)  
-
-; The following rather dumb lemmas are here to speed the admission of
-; the type-set clique.  In fact, ACL2 can admit the clique without any
-; hints, but it takes about 1000 seconds.  With these lemmas and the
-; hints below, it takes about 200.  The basic problem is that the
-; measure conjectures all contain a lot of hypotheses involving IFs.
-; When these IFs are split, we get hundreds of sub-subgoals, all of
-; which are true because of the conclusion and perhaps one other hyp.
-; So all that splitting is irrelevant.  I just searched the successful
-; proof for each subgoal in which case-split-limitations was involved
-; and proved the conclusion.  Then, for that subgoal, I prevented
-; preprocessing (which does the case-splitting) and inserted the
-; appropriate :by hint (because a rewrite rule would have still split
-; out the hyps first).  I could speed it up further; there are many
-; other subgoals generated by irrelevant case splits, they just did
-; not exceed case-split-limitations.  But I find the "need" to do this
-; offensive and I adopted these speedup lemmas reluctantly just so I
-; could get on with the development of Paco.
-
-(defthm type-set-clique-speedup-53
-  (e0-ord-<
-   (cons
-    (cons
-     (cons
-      (+ 1 (nfix nnn))
-      (acl2-count (caddr (mv-nth 1
-                                 (let ((term x))
-                                   (cond ((atom term) (list nil term))
-                                         ((equal 'quote (car term))
-                                          (list nil term))
-                                         ((equal (car term) 'not)
-                                          (list 'not (cadr term)))
-                                         ((and (equal (car term) 'if)
-                                               (equal (caddr term) ''nil)
-                                               (equal (cadddr term) ''t))
-                                          (list 'if (cadr term)))
-                                         (t (list nil term))))))))
-     10)
-    0)
-   (cons (cons (cons (+ 1 (nfix nnn)) (acl2-count x))
-               12)
-         0))
-  :rule-classes nil)
-
-#|
-; Once upon a time this was useful but it is not now.
-(defthm type-set-clique-speedup-50
-  (e0-ord-<
-   (cons
-    (cons
-     (cons
-      (+ 1 (nfix nnn))
-      (acl2-count (cadr (mv-nth 1
-                                (let ((term x))
-                                  (cond ((atom term) (list nil term))
-                                        ((equal 'quote (car term))
-                                         (list nil term))
-                                        ((equal (car term) 'not)
-                                         (list 'not (cadr term)))
-                                        ((and (equal (car term) 'if)
-                                              (equal (caddr term) ''nil)
-                                              (equal (cadddr term) ''t))
-                                         (list 'if (cadr term)))
-                                        (t (list nil term))))))))
-     10)
-    0)
-   (cons (cons (cons (+ 1 (nfix nnn)) (acl2-count x))
-               12)
-         0))
-  :rule-classes nil)|#
-
-(defthm type-set-clique-speedup-16
-  (e0-ord-<
-   (cons
-    (cons
-     (cons (+ 1 (nfix nnn))
-           (acl2-count (mv-nth 1
-                               (let ((term x))
-                                 (cond ((atom term) (list nil term))
-                                       ((equal 'quote (car term))
-                                        (list nil term))
-                                       ((equal (car term) 'not)
-                                        (list 'not (cadr term)))
-                                       ((and (equal (car term) 'if)
-                                             (equal (caddr term) ''nil)
-                                             (equal (cadddr term) ''t))
-                                        (list 'if (cadr term)))
-                                       (t (list nil term)))))))
-     11)
-    0)
-   (cons (cons (cons (+ 1 (nfix nnn)) (acl2-count x))
-               12)
-         0))
-  :rule-classes nil)
-
-(defthm type-set-clique-speedup-13
-  (implies (not (zp nnn))
-           (e0-ord-<
-            (cons
-             (cons
-              (cons (+ 1 (nfix (+ -1 nnn)))
-                    any1)
-              any2)
-             any3)
-            (cons (cons (cons (+ 1 (nfix nnn)) any4)
-                        any5)
-                  any6)))
-  :rule-classes nil)
-
-(defthm type-set-clique-speedup-11
-  (implies (consp hyps)
-           (e0-ord-< (cons (cons (cons (+ 1 (nfix nnn)) 0) 0)
-                           (acl2-count (cdr hyps)))
-                     (cons (cons (cons (+ 1 (nfix nnn)) 0) 0)
-                           (acl2-count hyps))))
-  :rule-classes nil)
-
+  :rule-classes :linear)
 
 (mutual-recursion
 
 (defun type-set (x type-alist ancestors ens w nnn)
 
-  (declare (xargs :measure (lex4 (nfix nnn) (acl2-count x) 5 0)
+  (declare (xargs :measure (lex4 nnn (acl2-count x) 5 0)
                   :hints
-                  (("Goal" :in-theory (disable getprop))
-                   ("Subgoal 53" :do-not '(preprocess)
-                    :by type-set-clique-speedup-53)
-;                  ("Subgoal 50" :do-not '(preprocess)
-;                   :by type-set-clique-speedup-50)
-                   ("Subgoal 16" :do-not '(preprocess)
-                    :by type-set-clique-speedup-16)
-                   ("Subgoal 13" :do-not '(preprocess)
-                    :by type-set-clique-speedup-13)
-                   ("Subgoal 11" :do-not '(preprocess)
-                    :by type-set-clique-speedup-11)
-                   ("Subgoal 10" :do-not '(preprocess)
-                    :by type-set-clique-speedup-11)
-                   )))
+                  (("Goal" :in-theory (disable getprop
+                                               ancestors-check push-ancestor
+                                               sublis-var free-varsp
+                                               enabled-numep
+                                               look-in-type-alist lookup-hyp
+                                               one-way-unify acl2-count
+                                               member-eq acl2::member-equal)))))
 
 ; X is a term and type-alist is a type alist mapping terms to their
 ; type-sets and thus encoding the current assumptions.  We return the
 ; type-set of term under those assumptions.
 
-; Note:  If ancestors is t it means:  don't backchain.  Act as though 
+; Note:  If ancestors is t it means:  don't backchain.  Act as though
 ; the literal we're backchaining on is worse than everything in sight.
 ; This is called the ``t-ancestors hack'' and is commented upon below.
 
@@ -1461,14 +1394,14 @@
                                             false-type-alist
                                             ancestors ens
                                             w nnn))))))
-             (t 
+             (t
               (type-set-with-rules
                (getprop fn 'type-prescriptions nil w)
                x type-alist ancestors ens w *ts-unknown* nnn)))))))))))
 
 (defun type-set-relieve-hyps (hyps alist type-alist ancestors ens w nnn)
 
-  (declare (xargs :measure (lex4 (nfix nnn) 0 0 (acl2-count hyps))))
+  (declare (xargs :measure (lex4 nnn 0 0 (acl2-count hyps))))
 
 ; Hyps is a list of terms, implicitly conjoined.  Alist is a
 ; substitution mapping variables in hyps to terms governed by
@@ -1482,7 +1415,7 @@
 ; type-prescription lemmas never contain free variables in the
 ; conclusion.  While we are at it, we record in an extension of
 ; type-alist the type computed for each hyp', so that if subsequent
-; rules need that information, they can get it quickly.  We return 
+; rules need that information, they can get it quickly.  We return
 ; (mv wonp type-alist').
 
   (cond
@@ -1491,7 +1424,7 @@
     (let* ((hyp (car hyps)))
       (mv-let
        (lookup-hyp-ans alist)
-       (lookup-hyp hyp type-alist w alist)
+       (lookup-hyp hyp type-alist w alist ens)
        (cond
         (lookup-hyp-ans
          (type-set-relieve-hyps (cdr hyps) alist type-alist ancestors
@@ -1531,7 +1464,7 @@
                                         alist type-alist ancestors ens w nnn))
                 (t (mv nil type-alist))))
               ((zp nnn) (mv nil type-alist))
-              (t 
+              (t
                (let* ((ts1 (type-set atm1 type-alist
 
 ; Here is the other place we enforce the t-ancestors hack.
@@ -1565,7 +1498,7 @@
 
 (defun extend-type-alist-with-bindings (alist type-alist ancestors ens w nnn)
 
-  (declare (xargs :measure (lex4 (nfix nnn) 0 0 (acl2-count alist))))
+  (declare (xargs :measure (lex4 nnn 0 0 (acl2-count alist))))
 
 ; Alist is an alist that pairs variables in some rule with terms.  We compute
 ; the type-set of each term in the range of alist and extend type-alist with
@@ -1577,7 +1510,7 @@
             (cdr alist)
             (cond ((assoc-equal (cdr (car alist)) type-alist)
                    type-alist)
-                  (t 
+                  (t
                    (extend-type-alist
                     (cdr (car alist))
                     (type-set (cdr (car alist))
@@ -1587,7 +1520,7 @@
             ancestors ens w nnn))))
 
 (defun type-set-with-rule (tp term type-alist ancestors ens w nnn)
-  (declare (xargs :measure (lex4 (nfix nnn) (acl2-count term) 3 0)))
+  (declare (xargs :measure (lex4 nnn (acl2-count term) 3 0)))
 
 ; We apply the type-prescription, tp, to term, if possible, and return
 ; a type-set and an extended type-alist.  If the rule is inapplicable,
@@ -1636,7 +1569,7 @@
 
 (defun type-set-with-rule1 (alist vars type-alist ancestors ens w basic-ts nnn)
 
-  (declare (xargs :measure (lex4 (nfix nnn) 0 0 (acl2-count alist))))
+  (declare (xargs :measure (lex4 nnn 0 0 (acl2-count alist))))
 
 ; Alist is an alist that maps variables to terms.  The terms are in
 ; the context described by type-alist.  Vars is a list of variables.
@@ -1657,7 +1590,7 @@
 
 (defun type-set-with-rules (tp-lst term type-alist ancestors ens w ts nnn)
 
-  (declare (xargs :measure (lex4 (nfix nnn)
+  (declare (xargs :measure (lex4 nnn
                                  (acl2-count term)
                                  4
                                  (acl2-count tp-lst))))
@@ -1687,7 +1620,7 @@
 
 (defun type-set-primitive (term type-alist ancestors ens w nnn)
 
-  (declare (xargs :measure (lex4 (nfix nnn) (acl2-count term) 3 0)))
+  (declare (xargs :measure (lex4 nnn (acl2-count term) 3 0)))
 
 ; This function should handle
 ; every non-recognizer function handled in *primitive-formals-and-guards*,
@@ -1720,7 +1653,8 @@
                 ancestors ens
                 w nnn)))
     (denominator
-     *ts-positive-integer*)
+     (type-set-denominator
+      (type-set (fargn term 1) type-alist ancestors ens w nnn)))
     (numerator
      (type-set-numerator
       (type-set (fargn term 1) type-alist ancestors ens w nnn)))
@@ -1780,7 +1714,7 @@
 
 (defun assume-true-false (x type-alist ancestors ens w nnn)
 
-  (declare (xargs :measure (lex4 (nfix nnn) (acl2-count x) 12 0)))
+  (declare (xargs :measure (lex4 nnn (acl2-count x) 12 0)))
 
 ; We assume x both true and false, extending type-alist as appropriate.
 
@@ -1848,7 +1782,7 @@
              (assume-true-false1 xnot-flg x type-alist ancestors ens w nnn)
            (mv-let
             (mbt mbf tta fta)
-            (assume-true-false 
+            (assume-true-false
              (subcor-var (formals (ffn-symb x) w)
                          (fargs x)
                          (body (ffn-symb x) t w))
@@ -2044,7 +1978,7 @@
 ; assume-true-false on it and we have to normalize it to produce the
 ; desired tta and fta.  If (< x 1) appears as the entire resultant
 ; term, we'll just call type-set on it and we have to normalize it to
-; decide it.  
+; decide it.
 
 ; Another question raised is: "What about the second transformation done
 ; above?"  We assume ~(< x 0) when asked to assume (< 0 (+ 1 x)), with the
@@ -2067,7 +2001,7 @@
                              (extend-type-alist
                               arg2
                               (ts-intersection
-                               ts2 
+                               ts2
                                (ts-union *ts-positive-rational*
                                          *ts-complex-rational*))
                               type-alist))
@@ -2089,7 +2023,7 @@
  (defstub foo (x) t)
 
  (defaxiom test1
-   (implies (and (<= 0 x) 
+   (implies (and (<= 0 x)
                  (rationalp x))
             (foo y)))
 
@@ -2196,7 +2130,7 @@
                                  xnot-flg x)))))
                   ((equal arg2 *0*)
                    (cond
-                    ((ts-subsetp ts1 
+                    ((ts-subsetp ts1
                                  *ts-negative-rational*)
                      (mv-atf not-flg t nil type-alist nil))
                     ((ts-subsetp ts1
@@ -2208,7 +2142,7 @@
                              (extend-type-alist
                               arg1
                               (ts-intersection
-                               ts1 
+                               ts1
                                (ts-union *ts-negative-rational*
                                          *ts-complex-rational*))
                               type-alist))
@@ -2216,7 +2150,7 @@
                              (extend-type-alist
                               arg1
                               (ts-intersection
-                               ts1 (ts-complement 
+                               ts1 (ts-complement
                                     *ts-negative-rational*))
                               type-alist)))
                        (mv-atf-2 not-flg true-type-alist false-type-alist
@@ -2309,7 +2243,7 @@
 
 (defun assume-true-false1 (not-flg x type-alist ancestors ens w nnn)
 
-  (declare (xargs :measure (lex4 (nfix nnn) (acl2-count x) 11 0)))
+  (declare (xargs :measure (lex4 nnn (acl2-count x) 11 0)))
 
 ; Roughly speaking, this is the simple assume-true-false, which just
 ; computes the type-set of x and announces that x must be t, must be
@@ -2326,13 +2260,13 @@
            (mv-atf not-flg nil nil
                    (extend-with-proper/improper-cons-ts-tuple
                     x
-                    (ts-intersection ts *ts-non-nil*) 
+                    (ts-intersection ts *ts-non-nil*)
                     type-alist ancestors type-alist ens w nnn)
                    (extend-type-alist x *ts-nil* type-alist))))))
 
 (defun proper/improper-cons-ts-tuple (term ts type-alist ancestors ens w nnn)
 
-  (declare (xargs :measure (lex4 (nfix nnn) (acl2-count term) 9 0)))
+  (declare (xargs :measure (lex4 nnn (acl2-count term) 9 0)))
 
 ; We return a tuple of the form (mv term' ts') that asserts the
 ; assumption that term has type set ts.  Most often, term' and ts' are
@@ -2398,7 +2332,7 @@
 (defun extend-with-proper/improper-cons-ts-tuple
   (term ts type-alist ancestors type-alist-to-be-extended ens w nnn)
 
-  (declare (xargs :measure (lex4 (nfix nnn) (acl2-count term) 10 0)))
+  (declare (xargs :measure (lex4 nnn (acl2-count term) 10 0)))
 
 ; Programming Note:
 
@@ -2414,8 +2348,6 @@
           (extend-type-alist term ts type-alist-to-be-extended)))
 
 )
-
-(acl2::set-well-founded-relation acl2::o<)
 
 (defun type-set-lst (x type-alist ancestors ens w nnn)
 

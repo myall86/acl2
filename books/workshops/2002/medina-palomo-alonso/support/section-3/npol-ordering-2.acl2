@@ -1,9 +1,15 @@
+; The following comment line tells the build system that if *acl2-exports*
+; changes, then every book that uses this file should be recertified:
+; (depends-on "build/acl2-exports.certdep" :dir :system)
+
 ;;; --------
 ;;; Packages
 ;;; --------
 
 (defconst *acl2-and-lisp-exports*
-  (union-eq *acl2-exports* *common-lisp-symbols-from-main-lisp-package*))
+  (set-difference-eq ; modified 5/26/2015 by Matt K.
+   (union-eq *acl2-exports* *common-lisp-symbols-from-main-lisp-package*)
+   '(termp)))
 
 (defpkg "TER"
   (set-difference-eq *acl2-and-lisp-exports* '(<)))

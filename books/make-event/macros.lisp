@@ -8,6 +8,12 @@
 
 (in-package "ACL2")
 
+; The following book reads the .cert file of the present book.  So recertify
+; the present book if the following book changes, in case that's because the
+; format of .cert files has changed.
+
+; (depends-on "macros-include.lisp")
+
 ; [1]
 (defmacro my-mac (x) x)
 
@@ -59,7 +65,7 @@
 
 ; Needed for definition of must-fail, used below:
 ; [9]
-(include-book "misc/eval" :dir :system)
+(include-book "std/testing/must-fail" :dir :system)
 
 ; Not redundant with command 3 (my-mac call is missing).
 ; [10]

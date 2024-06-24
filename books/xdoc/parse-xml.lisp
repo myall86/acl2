@@ -1,5 +1,5 @@
 ; XDOC Documentation System for ACL2
-; Copyright (C) 2009-2011 Centaur Technology
+; Copyright (C) 2009-2015 Centaur Technology
 ;
 ; Contact:
 ;   Centaur Technology Formal Verification Group
@@ -65,7 +65,9 @@
 ;
 ;    (:ENTITY TYPE) represents entities like &amp;
 ;
-;      - TYPE is :AMP, :LT, :GT, :APOS, :NBSP, :MDASH, :RARR, LSQUO, RSQUO, LDQUO, or RDQUO
+;      - TYPE is :AMP, :LT, :GT, :APOS, :NBSP, :NDASH, :MDASH, :RARR, LSQUO, RSQUO, LDQUO, or RDQUO
+
+
 
 (defun opentok-p (x) (eq (first x) :OPEN))
 (defun opentok-name (x) (second x))
@@ -79,7 +81,16 @@
 (defun entitytok-type (x) (second x))
 
 (defun texttok-p (x) (eq (first x) :TEXT))
-(defun texttok-text (x) (second x))
+(defun mcflatten (x acc)
+  (if (atom x)
+      (cons x acc)
+    (mcflatten (car x) (mcflatten (cdr x) acc))))
+(defun texttok-texttree (x) (second x))
+(defun texttok-text (x)
+  (let ((tree (texttok-texttree x)))
+    (if (atom tree) ;; optimization
+        tree
+      (str::fast-string-append-lst (mcflatten (texttok-texttree x) nil)))))
 
 (defconst *nls* (coerce (list #\Newline) 'string))
 
@@ -197,7 +208,8 @@
        ((when err)
         (mv err n nil))
        (n (skip-past-ws x n xl))
-       ((unless (eql (char x n) #\>))
+       ((unless (and (< n xl)
+                     (eql (char x n) #\>)))
         (mv (str::cat "Invalid closing tag." *nls*
                       "Nearby text: {" (error-context x saved-n xl) "}" *nls*)
             n nil))
@@ -208,7 +220,7 @@
 (defun skip-declaration (x n xl start-n)
   ;; Read through ?>
   "Returns (MV ERR N NIL)"
-  (b* (((when (>= (- n 1) xl))
+  (b* (((when (>= (+ 1 n) xl))
         (mv (str::cat "<? ... ?> declaration never closes." *nls*
                       "Nearby text: {" (error-context x start-n xl) "}" *nls*)
             n nil))
@@ -220,7 +232,7 @@
 (defun skip-entity-stuff (x n xl start-n)
   ;; Read through ]>
   "Returns (MV ERR N NIL)"
-  (b* (((when (>= (- n 1) xl))
+  (b* (((when (>= (+ 1 n) xl))
         (mv (str::cat "<! ... ]> declaration never closes." *nls*
                       "Nearby text: {" (error-context x start-n xl) "}" *nls*)
             n nil))
@@ -279,6 +291,7 @@
        ((when (equal str "quot")) (mv nil n '(:ENTITY :QUOT)))
        ((when (equal str "apos")) (mv nil n '(:ENTITY :APOS)))
        ((when (equal str "nbsp")) (mv nil n '(:ENTITY :NBSP)))
+       ((when (equal str "ndash")) (mv nil n '(:ENTITY :NDASH)))
        ((when (equal str "mdash")) (mv nil n '(:ENTITY :MDASH)))
        ((when (equal str "rarr")) (mv nil n '(:ENTITY :RARR)))
        ((when (equal str "lsquo")) (mv nil n '(:ENTITY :LSQUO)))
@@ -330,13 +343,13 @@
     (:QUOT  "&quot;")
     (:APOS  "&apos;")
     (:NBSP  "&nbsp;")
+    (:NDASH "&ndash;")
     (:MDASH "&mdash;")
     (:RARR  "&rarr;")
     (:LSQUO "&lsquo;")
     (:RSQUO "&rsquo;")
     (:LDQUO "&ldquo;")
-    (:RDQUO "&rdquo;")
-    ))
+    (:RDQUO "&rdquo;")))
 
 (defun entitytok-as-plaintext (x)
   (case (entitytok-type x)
@@ -346,6 +359,7 @@
     (:QUOT  "\"")
     (:APOS  "'")
     (:NBSP  " ")
+    (:NDASH "--")
     (:MDASH "---")
     (:RARR  "-->")
     (:LSQUO "`")
@@ -401,7 +415,7 @@
   (b* (((when (atom x))
         (if open-tags
             (mv (str::cat (opentok-name (car open-tags)) " tag is never closed.")
-                nil open-tags)
+                loc open-tags)
           (mv nil nil nil)))
        ((when (opentok-p (car x)))
         (find-tag-imbalance (cdr x) (cons (car x) open-tags) (+ 1 loc)))

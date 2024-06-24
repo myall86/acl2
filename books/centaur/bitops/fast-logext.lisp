@@ -83,7 +83,6 @@ into a call of a specialized, inlined function.</p>
     (- (logxor x1 m) m))              ;; r = (x ^ m) - m
   ///
   (local (include-book "arithmetic/top" :dir :system))
-  (local (include-book "ihs-extensions"))
 
   (local (defthm l0
            (implies (integerp x)
@@ -193,11 +192,19 @@ into a call of a specialized, inlined function.</p>
   :inline t
   :enabled t
   (mbe :logic (logext 64 x)
-       :exec (the (signed-byte 64)
-               (- (the (unsigned-byte 64)
-                    (logxor (the (unsigned-byte 64) (logand #uxFFFF_FFFF_FFFF_FFFF x))
-                            (the (unsigned-byte 64) #ux8000_0000_0000_0000)))
-                  #ux8000_0000_0000_0000)))
+       :exec
+       (if
+           ;; If (- (expt 2 60)) <= x <= (1- (expt 2 60)), then x is a
+           ;; fixnum (at least on CCL and SBCL). logext doesn't do
+           ;; anything then.
+           (and (<= x #ux_0FFF_FFFF_FFFF_FFFF)  ;; (1- (expt 2 60))
+                (<= #ux-1000_0000_0000_0000 x)) ;; (- (expt 2 60))
+           x
+         (the (signed-byte 64)
+           (- (the (unsigned-byte 64)
+                (logxor (the (unsigned-byte 64) (logand #uxFFFF_FFFF_FFFF_FFFF x))
+                        (the (unsigned-byte 64) #ux8000_0000_0000_0000)))
+              #ux8000_0000_0000_0000))))
   :prepwork
   ((local (defthm fast-logext64-crux
             (equal (+ #ux-8000_0000_0000_0000
@@ -209,11 +216,79 @@ into a call of a specialized, inlined function.</p>
                                     (fast-logext-exec-is-logext))
                     :use ((:instance fast-logext-exec-is-logext (b 64)))))))))
 
+(define bignum-logext ((n posp)
+                       (x integerp))
+  ;; This version is useful when n may be very large, in which case if x is not
+  ;; very large then we'd like to avoid creating all the big masks that
+  ;; fast-logext does.
+  :inline t
+  :enabled t
+  (mbe :logic (logext n x)
+       :exec (if (< (integer-length x) n)
+                 x
+               (fast-logext n x)))
+  :prepwork
+  ((local (defthm logext-of-greater-than-length
+            (implies (< (integer-length x) (pos-fix n))
+                     (equal (logext n x) (ifix x)))
+            :hints(("Goal" :in-theory (enable* ihsext-inductions
+                                               ihsext-recursive-redefs))
+                   (and stable-under-simplificationp
+                        '(:in-theory (enable pos-fix))))))))
 
+(define bignum-loghead ((n posp)
+                       (x integerp))
+  ;; This version is useful when n may be very large, in which case if x is not
+  ;; very large then we'd like to avoid creating the big mask that
+  ;; loghead does.
+  :inline t
+  :enabled t
+  (mbe :logic (loghead n x)
+       :exec (b* ((len (integer-length x)))
+               (if (and (< len n)
+                        (not (logbitp len x)))
+                   x
+                 (loghead n x))))
+  :prepwork
+  ((local (defthm loghead-of-greater-than-length
+            (implies (and (< (integer-length x) (pos-fix n))
+                          (not (logbitp (integer-length x) x)))
+                     (equal (loghead n x) (ifix x)))
+            :hints(("Goal" :in-theory (enable* ihsext-inductions
+                                               ihsext-recursive-redefs))
+                   (and stable-under-simplificationp
+                        '(:in-theory (enable pos-fix))))))))
 
 #||
 
-;; Basic timing tests
+;; Timing tests:
+
+(include-book
+ "centaur/misc/memory-mgmt"
+ :dir :system)
+(acl2::set-max-mem (* 10 (expt 2 30)))
+(gc$)
+
+(value :q)
+
+(defun fast-logext-64-test-fixnums ()
+  (loop for i fixnum from 1 to 100000000 when (zerop (fast-logext 64 i))
+        do (return 17)))
+
+;; Blazing fast (as it should be for fixnums since almost no
+;; computation is done)
+(time$ (fast-logext-64-test-fixnums))
+
+(defun fast-logext-test-64-bignums ()
+  (loop for i from 1152921504606846976 to 1152921504706846976
+        when (zerop (fast-logext 64 i))
+        do (return 17)))
+
+(time$ (fast-logext-test-64-bignums)) ;; 23.18s (12.8G)
+
+;; [Shilpi] On CCL, the following timing tests are misleading because
+;; CCL optimizes away the computation when it notices that the results
+;; are not being used.
 
 (time (loop for i fixnum from 1 to 100000000 do (logext 4 i)))        ;; 5.787 sec
 (time (loop for i fixnum from 1 to 100000000 do (logext 8 i)))        ;; 5.446 sec

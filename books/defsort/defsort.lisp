@@ -60,7 +60,7 @@ comparison function beforehand; see the discussion of @(':weak') below.</p>
            :comparable-listp foolist-p
            :true-listp nil
            :weak t)
- 
+
   (defsort :comparablep rationalp
            :compare< <
            :prefix <
@@ -79,7 +79,7 @@ comparison function beforehand; see the discussion of @(':weak') below.</p>
            :compare< intalist2-<
            :comparablep (lambda (x alist) (stringp x)))
 
- 
+
 })
 
 <p>The first form is a new syntax that gives the name of the sorting function
@@ -176,7 +176,7 @@ it has a special hack for that particular case.</p>
 ; functions and theorems we generate.
 
 (defconst *defsort-keywords*
-  '(:comparablep :compare< :prefix :comparable-listp :true-listp :weak :extra-args :extra-args-guard))
+  '(:comparablep :compare< :prefix :comparable-listp :true-listp :weak :extra-args :extra-args-guard :extra-args-stobjs :extra-args-stobj-recognizers))
 
 (defun defsort-functional-inst-subst (func-subst wrld)
   ;; this is a bit weak; it removes substitutions in which the substituted
@@ -243,7 +243,7 @@ it has a special hack for that particular case.</p>
 (defun defsort-guard-for-term (term state)
   (declare (Xargs :mode :program :stobjs state))
   (b* ((wrld (w state))
-       ((mv clauses & state)
+       ((mv clauses &)
         (guard-obligation-clauses
          (cons :term term) nil *defsort-empty-ens* wrld state)))
     (mv (untranslate* (conjoin-clauses clauses) nil wrld)
@@ -319,7 +319,7 @@ it has a special hack for that particular case.</p>
         (er soft 'defsort-fn
             "Defsort: The formals, if provided, must be a symbol-list whose ~
              first element is named X (standing for the list to be sorted)."))
-                       
+
        ((mv kwd-alist args)
         (std::extract-keywords 'defsort *defsort-keywords* args nil))
 
@@ -341,7 +341,7 @@ it has a special hack for that particular case.</p>
                                          'ACL2::foo
                                        prefix)))
        (sort             (or sort (mksym prefix "-SORT")))
-       
+
 
        (comparable-listp (std::getarg :comparable-listp nil kwd-alist))
        (compare<         (std::getarg :compare< nil kwd-alist))
@@ -354,7 +354,9 @@ it has a special hack for that particular case.</p>
                              (cdr formals)
                            (std::getarg :extra-args nil kwd-alist)))
        (extra-args-guard (std::getarg :extra-args-guard t kwd-alist))
-       
+       (extra-args-stobjs (std::getarg :extra-args-stobjs nil kwd-alist))
+       (extra-args-stobj-recognizers (std::getarg :extra-args-stobj-recognizers t kwd-alist))
+
        ((unless (and (symbol-listp extra-args)
                      (not (intersectp-eq '(x y z) extra-args))))
         (er soft 'defsort ":extra-args must be a symbol list not containing ~x0, ~x1, or ~x2.~%"
@@ -362,9 +364,11 @@ it has a special hack for that particular case.</p>
        ((unless compare<)
         (er soft 'defsort "Defsort requires :compare< to be specified"))
 
-       (definedp         comparable-listp)
+       (definedp         (or comparable-listp (and (not comparablep) true-listp)))
        (comparable-listp (or comparable-listp
-                             (mksym prefix "-LIST-P")))
+                             (if comparablep
+                                 (mksym prefix "-LIST-P")
+                               (and true-listp 'true-listp))))
        (orderedp         (mksym prefix "-ORDERED-P"))
        (merge            (mksym prefix "-MERGE"))
        (merge-tr         (mksym prefix "-MERGE-TR"))
@@ -375,7 +379,7 @@ it has a special hack for that particular case.</p>
        (comparable-inst  (if comparablep
                              `(lambda (x) (,comparablep x . ,extra-args))
                            `(lambda (x) t)))
-       (comparable-listp-inst (if comparablep
+       (comparable-listp-inst (if (or comparablep true-listp)
                                   `(lambda (x) (,comparable-listp x . ,extra-args))
                                 `(lambda (x) t)))
        (element-list-final-cdr-inst (if true-listp
@@ -436,7 +440,8 @@ it has a special hack for that particular case.</p>
                      (make-event
                       '(:or (defthm defsort-comparablep-sufficient
                               (implies (and (,comparablep x . ,extra-args)
-                                            ,extra-args-guard)
+                                            ,extra-args-guard
+                                            ,extra-args-stobj-recognizers)
                                        ,compare-guard)
                               :rule-classes (:rewrite :forward-chaining))
                         (value-triple
@@ -452,7 +457,8 @@ it has a special hack for that particular case.</p>
                   `((local
                      (make-event
                       '(:or (defthm defsort-extra-args-guard-sufficient
-                              (implies ,extra-args-guard
+                              (implies (and ,extra-args-guard
+                                            ,extra-args-stobj-recognizers)
                                        ,comparablep-guard)
                               :rule-classes (:rewrite :forward-chaining))
                         (value-triple
@@ -483,7 +489,7 @@ it has a special hack for that particular case.</p>
                   `((local (in-theory (enable ,(mksym prefix "-COMPARE<-NEGATION-TRANSITIVE")
                                               ,(mksym prefix "-COMPARE<-STRICT"))))))
 
-           ,@(and definedp comparablep
+           ,@(and definedp (or comparablep true-listp)
                   `((local
                      (make-event
                       '(:or (defthm defsort-comparable-list-check
@@ -519,9 +525,10 @@ it has a special hack for that particular case.</p>
 
            ;; (local (in-theory '(natp-compound-recognizer)))
 
-           ,@(and comparablep (not definedp)
+           ,@(and (or comparablep true-listp) (not definedp)
                   `((defund ,comparable-listp (x . ,extra-args)
-                      (declare (xargs :guard ,extra-args-guard))
+                      (declare (xargs :guard ,extra-args-guard
+                                      :stobjs ,extra-args-stobjs))
                       (if (consp x)
                           (and (,comparablep (car x) . ,extra-args)
                                (,comparable-listp (cdr x) . ,extra-args))
@@ -533,9 +540,10 @@ it has a special hack for that particular case.</p>
                                            (consp x))
                                       (,comparablep (car x) . ,extra-args))
                              :hints(("Goal" :in-theory nil
-                                     :expand ((,comparable-listp x . ,extra-args))))))
+                                     :expand ((,comparable-listp x . ,extra-args))))))))
 
-                    (local (defthm defsort-comparable-listp-of-cdr
+           ,@(and (or comparablep true-listp)
+                  `((local (defthm defsort-comparable-listp-of-cdr
                              (implies (,comparable-listp x . ,extra-args)
                                       (,comparable-listp (cdr x) . ,extra-args))
                              :hints(("Goal" :in-theory '(default-cdr)
@@ -546,7 +554,7 @@ it has a special hack for that particular case.</p>
                     ;; necessary if comparablep is e.g. (lambda (x extra-args)
                     ;; (foo x)), because then it needs to match extra-args as a
                     ;; free variable.  We only need to do this when comparablep is a lambda.
-                    ,@(and (consp comparablep) 
+                    ,@(and (consp comparablep)
                            `((local (defthm defsort-comparablep-of-cadr
                                       (implies (and (,comparable-listp x . ,extra-args)
                                                     (consp x)
@@ -557,10 +565,11 @@ it has a special hack for that particular case.</p>
                                                        (,comparable-listp (cdr x) . ,extra-args))))))))))
 
            (defund ,orderedp (x . ,extra-args)
-             (declare (xargs :guard ,(if comparablep
+             (declare (xargs :guard ,(if (or comparablep true-listp)
                                          `(and ,extra-args-guard
                                                (,comparable-listp x . ,extra-args))
                                        extra-args-guard)
+                             :stobjs ,extra-args-stobjs
                              :measure (len x)))
              (cond ((atom x)
                     t)
@@ -576,7 +585,8 @@ it has a special hack for that particular case.</p>
            (defund ,merge (x y . ,extra-args)
              (declare (xargs :measure (+ (len x)
                                          (len y))
-                             :guard ,(if comparablep
+                             :stobjs ,extra-args-stobjs
+                             :guard ,(if (or comparablep true-listp)
                                          `(and ,extra-args-guard
                                                (,comparable-listp x . ,extra-args)
                                                (,comparable-listp y . ,extra-args))
@@ -593,7 +603,8 @@ it has a special hack for that particular case.</p>
            (defund ,merge-tr (x y ,@extra-args acc)
              (declare (xargs :measure (+ (len x)
                                          (len y))
-                             :guard ,(if comparablep
+                             :stobjs ,extra-args-stobjs
+                             :guard ,(if (or comparablep true-listp)
                                          `(and ,extra-args-guard
                                                (,comparable-listp x . ,extra-args)
                                                (,comparable-listp y . ,extra-args))
@@ -609,8 +620,9 @@ it has a special hack for that particular case.</p>
 
            (defund ,fixnum (x ,@extra-args len)
              (declare (xargs :measure (nfix len)
+                             :stobjs ,extra-args-stobjs
                              :guard (and ,extra-args-guard
-                                         ,(if comparablep
+                                         ,(if (or comparablep true-listp)
                                               `(,comparable-listp x . ,extra-args)
                                             t)
                                          (natp len)
@@ -636,8 +648,9 @@ it has a special hack for that particular case.</p>
 
            (defund ,integer (x ,@extra-args len)
              (declare (xargs :measure (nfix len)
+                             :stobjs ,extra-args-stobjs
                              :guard (and ,extra-args-guard
-                                         ,(if comparablep
+                                         ,(if (or comparablep true-listp)
                                               `(,comparable-listp x . ,extra-args)
                                             t)
                                          (natp len)
@@ -663,11 +676,12 @@ it has a special hack for that particular case.</p>
                       (,merge-tr part1 part2 ,@extra-args nil)))))
 
            (defund ,sort (x . ,extra-args)
-             (declare (xargs :guard ,(if comparablep
+             (declare (xargs :guard ,(if (or comparablep true-listp)
                                          `(and ,extra-args-guard
                                                (,comparable-listp x . ,extra-args))
                                        extra-args-guard)
                              :measure (len x)
+                             :stobjs ,extra-args-stobjs
                              :verify-guards nil))
              (mbe :logic
                   (cond ((atom x)
@@ -705,7 +719,7 @@ it has a special hack for that particular case.</p>
                                        (,fixnum x ,@extra-args len)
                                        (,merge-tr x y ,@extra-args acc)
                                        (,orderedp x . ,extra-args)
-                                       ,@(and comparablep
+                                       ,@(and (or comparablep true-listp)
                                               `((,comparable-listp x . ,extra-args))))))))
 
            (verify-guards ,fixnum
@@ -744,7 +758,7 @@ it has a special hack for that particular case.</p>
                       duplicity-of-comparable-mergesort
                       ,subst1)))
 
-           ,@(and comparablep
+           ,@(and (or comparablep true-listp)
                   `((defthm ,(mksym prefix "-SORT-CREATES-COMPARABLE-LISTP")
                       (implies (,comparable-listp x . ,extra-args)
                                (,comparable-listp (,sort x . ,extra-args) . ,extra-args))
@@ -758,34 +772,40 @@ it has a special hack for that particular case.</p>
                       ,subst1
                       :in-theory (enable ,orderedp))))
 
-           (defthm ,(mksym prefix "-NO-DUPLICATESP-EQUAL")
+           (defthm ,(mksym prefix "-SORT-NO-DUPLICATESP-EQUAL")
              (equal (no-duplicatesp-equal (,sort x . ,extra-args))
                     (no-duplicatesp-equal x))
              :hints((defsort-functional-inst
                       no-duplicatesp-equal-of-comparable-mergesort
                       ,subst1)))
 
-           (defthm ,(mksym prefix "-TRUE-LISTP")
+           (defthm ,(mksym prefix "-SORT-TRUE-LISTP")
              (true-listp (,sort x . ,extra-args))
              :rule-classes :type-prescription
              :hints((defsort-functional-inst
                       true-listp-of-comparable-mergesort
                       ,subst1)))
 
-           (defthm ,(mksym prefix "-LEN")
+           (defthm ,(mksym prefix "-SORT-LEN")
              (equal (len (,sort x . ,extra-args))
                     (len x))
              :hints ((defsort-functional-inst
                        len-of-comparable-mergesort
                        ,subst1)))
 
-           (defthm ,(mksym prefix "-CONSP")
+           (defthm ,(mksym prefix "-SORT-CONSP")
              (equal (consp (,sort x . ,extra-args))
                     (consp x))
              :hints ((defsort-functional-inst
                        consp-of-comparable-mergesort
+                       ,subst1)))
+
+           (defthm ,(mksym prefix "-SORT-IS-IDENTITY-UNDER-SET-EQUIV")
+             (set-equiv (,sort x . ,extra-args) x)
+             :hints ((defsort-functional-inst
+                       comparable-mergesort-is-identity-under-set-equiv
                        ,subst1)))))
-       
+
        ((when weak) (value events1))
 
        (insert           (mksym prefix "-INSERT"))
@@ -799,11 +819,13 @@ it has a special hack for that particular case.</p>
 
        (events2
         `((defund ,insert (elt x . ,extra-args)
-            (declare (xargs :guard ,(if comparablep
+            (declare (xargs :guard ,(if (or comparablep true-listp)
                                         `(and ,extra-args-guard
-                                              (,comparablep elt . ,extra-args)
+                                              ,@(and comparablep
+                                                     `((,comparablep elt . ,extra-args)))
                                               (,comparable-listp x . ,extra-args))
                                       extra-args-guard)
+                            :stobjs ,extra-args-stobjs
                             :measure (len x)))
             (if (atom x)
                 (list elt)
@@ -812,10 +834,11 @@ it has a special hack for that particular case.</p>
                 (cons elt x))))
 
           (defund ,insertsort (x . ,extra-args)
-            (declare (xargs :guard ,(if comparablep
+            (declare (xargs :guard ,(if (or comparablep true-listp)
                                         `(and ,extra-args-guard
                                               (,comparable-listp x . ,extra-args))
                                       extra-args-guard)
+                            :stobjs ,extra-args-stobjs
                             :verify-guards nil
                             :measure (len x)))
             (if (atom x)
@@ -850,7 +873,7 @@ it has a special hack for that particular case.</p>
              :hints(("goal" :use ,(mksym prefix "-SORT-PRESERVES-DUPLICITY")
                      :in-theory (disable ,(mksym prefix "-SORT-PRESERVES-DUPLICITY")))))
 
-           ,@(and comparablep
+           ,@(and (or comparablep true-listp)
                   `((defthm ,(mksym prefix "-INSERTSORT-CREATES-COMPARABLE-LISTP")
                       (implies (,comparable-listp x . ,extra-args)
                                (,comparable-listp (,insertsort x . ,extra-args) . ,extra-args))
@@ -865,30 +888,28 @@ it has a special hack for that particular case.</p>
            (defthm ,(mksym prefix "-INSERTSORT-NO-DUPLICATESP-EQUAL")
              (equal (no-duplicatesp-equal (,insertsort x . ,extra-args))
                     (no-duplicatesp-equal x))
-             :hints(("goal" :use ,(mksym prefix "-NO-DUPLICATESP-EQUAL")
-                     :in-theory (disable ,(mksym prefix "-NO-DUPLICATESP-EQUAL")))))
+             :hints(("goal" :use ,(mksym prefix "-SORT-NO-DUPLICATESP-EQUAL")
+                     :in-theory (disable ,(mksym prefix "-SORT-NO-DUPLICATESP-EQUAL")))))
 
            (defthm ,(mksym prefix "-INSERTSORT-TRUE-LISTP")
              (true-listp (,insertsort x . ,extra-args))
              :rule-classes :type-prescription
-             :hints(("goal" :use ,(mksym prefix "-TRUE-LISTP")
-                     :in-theory (disable ,(mksym prefix "-TRUE-LISTP")))))
+             :hints(("goal" :use ,(mksym prefix "-SORT-TRUE-LISTP")
+                     :in-theory (disable ,(mksym prefix "-SORT-TRUE-LISTP")))))
 
            (defthm ,(mksym prefix "-INSERTSORT-LEN")
              (equal (len (,insertsort x . ,extra-args))
                     (len x))
-             :hints (("goal" :use ,(mksym prefix "-LEN")
-                     :in-theory (disable ,(mksym prefix "-LEN")))))
+             :hints (("goal" :use ,(mksym prefix "-SORT-LEN")
+                     :in-theory (disable ,(mksym prefix "-SORT-LEN")))))
 
            (defthm ,(mksym prefix "-INSERTSORT-CONSP")
              (equal (consp (,insertsort x . ,extra-args))
                     (consp x))
-             :hints (("goal" :use ,(mksym prefix "-CONSP")
-                      :in-theory (disable ,(mksym prefix "-CONSP"))))))))
+             :hints (("goal" :use ,(mksym prefix "-SORT-CONSP")
+                      :in-theory (disable ,(mksym prefix "-SORT-CONSP"))))))))
     (value (append events1 events2))))
 
 (defmacro defsort (&rest args)
   `(make-event
     (defsort-fn ',args state)))
-
-

@@ -18,6 +18,8 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+; (depends-on "build/ground-zero-theory.certdep" :dir :system)
+
 (deftheory-static arithmetic-5-current-base
   ;; Presumably the same as 'ground-zero
   (current-theory :here))
@@ -55,7 +57,7 @@
 
 (deftheory-static minimal-arithmetic-5
   ;; Using theories defined in lib/basic-ops/top.lisp
-  (union-theories 
+  (union-theories
    (set-difference-theories (theory 'arithmetic-5-minimal-end-a)
 			    (theory 'arithmetic-5-minimal-start-a))
    (set-difference-theories (theory 'arithmetic-5-minimal-end-b)

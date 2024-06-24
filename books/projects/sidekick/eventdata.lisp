@@ -50,11 +50,11 @@
          (100fpart (* fpart 100))
          (chop     (truncate 100fpart 1)))
     (cat sign
-         (natstr ipart)
+         (nat-to-dec-string ipart)
          "."
          (if (< chop 10)
-             (cat "0" (natstr chop))
-           (natstr chop)))))
+             (cat "0" (nat-to-dec-string chop))
+           (nat-to-dec-string chop)))))
 
 ;; (local (defthm acl2-numberp-when-rationalp
 ;;          (implies (rationalp x)
@@ -108,7 +108,8 @@
 ; (depends-on "eventdata-raw.lsp")
 (include-raw "eventdata-raw.lsp")
 
-(defattach acl2::finalize-event-user sidekick-finalize-event-user)
+(defattach (acl2::finalize-event-user sidekick-finalize-event-user)
+  :system-ok t)
 
 (define eventdata->namex ((x alistp))
   (let ((look (assoc 'acl2::namex x)))
@@ -171,5 +172,3 @@
 ;;  - figure out how to grab all events from a command block
 ;;  - simple sum up their total times, etc.
 ;;  - implement top-level command-block-time command.
-
-

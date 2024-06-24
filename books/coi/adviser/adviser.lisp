@@ -272,7 +272,7 @@
 ; ~ev[]")
 
 (defxdoc adviser::adviser
-  :parents (adviser::adviser)
+  :parents (acl2::miscellaneous)
   :short "A extensible hint suggestion daemon"
   :long "<p>Adviser is a a hint computation service.  When the adviser book is
  loaded, this service is installed into the ACL2 world as a default hint.  This
@@ -308,7 +308,7 @@
     :rule-classes rule-classes)
  })
 
- <p>where @('name') is a new symbolic name See @(see name), @('term') is a term
+ <p>where @('name') is a new symbolic name See @(see acl2::name), @('term') is a term
  alleged to be a useful piece of advice, and @('rule-classes') describe the
  type of advice being added and when to suggest hints of this nature.</p>
 

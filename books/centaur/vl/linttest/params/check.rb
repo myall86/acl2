@@ -1,3 +1,5 @@
+#!/usr/bin/env ruby
+
 # VL Verilog Toolkit
 # Copyright (C) 2008-2015 Centaur Technology
 #
@@ -28,6 +30,7 @@
 #
 # Original author: Jared Davis <jared@centtech.com>
 
+require 'require_relative' if RUBY_VERSION =~ /1\.8/
 require_relative '../utils'
 
 outlaw_bad_warnings()
@@ -37,13 +40,13 @@ match_warning(:m0, "VL-LUCID-UNUSED", "height");
 
 match_warning(:m1, "VL-WARN-TRUNCATION", "a & b");
 
-match_warning(:m2, "VL-LUCID-UNUSED", "alpha")
-match_warning(:m2, "VL-LUCID-UNUSED", "beta")
-match_warning(:m2, "VL-LUCID-UNSET", "omega")
+match_warning(:m2, "VL-LUCID-UNUSED-VARIABLE", "alpha")
+match_warning(:m2, "VL-LUCID-UNUSED-VARIABLE", "beta")
+match_warning(:m2, "VL-LUCID-UNSET-VARIABLE", "omega")
 
-match_warning(:m3, "VL-LUCID-UNUSED", "alpha")
-match_warning(:m3, "VL-LUCID-UNUSED", "beta")
-match_warning(:m3, "VL-LUCID-UNSET", "omega")
+match_warning(:m3, "VL-LUCID-UNUSED-VARIABLE", "alpha")
+match_warning(:m3, "VL-LUCID-UNUSED-VARIABLE", "beta")
+match_warning(:m3, "VL-LUCID-UNSET-VARIABLE", "omega")
 
 test_passed()
 

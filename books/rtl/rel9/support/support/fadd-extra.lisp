@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -152,7 +140,7 @@
                 (bvecp v 1)
                 (bvecp w 1))
            (equal (+ u v w)
-                  (cat (lior (land u v 1) (lior (land u w 1) (land v w 1) 1) 1) 1 
+                  (cat (lior (land u v 1) (lior (land u w 1) (land v w 1) 1) 1) 1
                        (lxor u (lxor v w 1) 1) 1)))
   :hints (("Goal" :in-theory (enable bvecp)
            :cases ((and (equal u 0) (equal v 0) (equal w 0))
@@ -326,7 +314,7 @@
                             (cat (lior (land u v 1)
                                        (lior (land u w 1) (land v w 1) 1)
                                        1)
-                                 1 
+                                 1
                                  (lxor u (lxor v w 1) 1)
                                  1)))
                        (rc-sum x y k))))
@@ -343,7 +331,7 @@
                   (natp x)
                   (natp y))
              (equal (cat (rc-carry x y (1+ k))
-                         1 
+                         1
                          (bitn (rc-sum x y (1+ k)) k)
                          1)
                     (let ((u (bitn x k))
@@ -352,7 +340,7 @@
                       (cat (lior (land u v 1)
                                  (lior (land u w 1) (land v w 1) 1)
                                  1)
-                           1 
+                           1
                            (lxor u (lxor v w 1) 1)
                            1)))))
 
@@ -370,7 +358,7 @@
                        (bits y k 0))
                     (+ (* (expt 2 k)
                           (cat (rc-carry x y (1+ k))
-                               1 
+                               1
                                (bitn (rc-sum x y (1+ k)) k)
                                1))
                        (rc-sum x y k))))
@@ -401,7 +389,7 @@
                      (rc-sum x y k))))
   :hints (("Goal" :use main-4
            :expand ((cat (rc-carry x y (1+ k))
-                         1 
+                         1
                          (bitn (rc-sum x y (1+ k)) k)
                          1))
            :in-theory (e/d (bits-tail) (rc-sum rc-carry))))
@@ -417,7 +405,7 @@
                   (natp y))
              (equal (bits (rc-sum x y (1+ k)) (1- k) 0)
                     (rc-sum x y k)))
-    :hints (("Goal" 
+    :hints (("Goal"
              :expand ((rc-sum x y (1+ k)))
              :in-theory (e/d (cat) (rc-sum)))))
 

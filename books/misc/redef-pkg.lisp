@@ -21,7 +21,7 @@
 ;   the user to most cases of this, but it's still unfortunate.  Example log:
 
 ;      ACL2 !>(defpkg "TEST" '(cons car defun))
-;      
+;
 ;      Summary
 ;      Form:  ( DEFPKG "TEST" ...)
 ;      Rules: NIL
@@ -30,11 +30,11 @@
 ;      ACL2 !>(in-package "TEST")
 ;       "TEST"
 ;      TEST !>(defun foo (x) (cons x x))
-;      
+;
 ;      Since FOO is non-recursive, its admission is trivial.  We observe that
 ;      the type of FOO is described by the theorem (COMMON-LISP::CONSP (FOO X)).
 ;      We used primitive type reasoning.
-;      
+;
 ;      Summary
 ;      Form:  ( DEFUN FOO ...)
 ;      Rules: ((:FAKE-RUNE-FOR-TYPE-SET COMMON-LISP::NIL))
@@ -43,15 +43,15 @@
 ;      TEST !>(acl2::in-package "ACL2")
 ;       "ACL2"
 ;      ACL2 !>(include-book "misc/redef-pkg" :dir :system)
-;      
+;
 ;      TTAG NOTE (for included book): Adding ttag :REDEF-PKG from book /Users/kaufmann/acl2/devel/books/misc/redef-pkg.
-;      
+;
 ;      ACL2 Warning [Ttags] in ( INCLUDE-BOOK "misc/redef-pkg" ...):  The
 ;      ttag note just printed to the terminal indicates a modification to
 ;      ACL2.  To avoid this warning, supply an explicit :TTAGS argument when
 ;      including the book "/Users/kaufmann/acl2/devel/books/misc/redef-pkg".
-;      
-;      
+;
+;
 ;      Summary
 ;      Form:  ( INCLUDE-BOOK "misc/redef-pkg" ...)
 ;      Rules: NIL
@@ -59,22 +59,22 @@
 ;      Time:  0.06 seconds (prove: 0.00, print: 0.00, other: 0.06)
 ;       "/Users/kaufmann/acl2/devel/books/misc/redef-pkg.lisp"
 ;      ACL2 !>(defpkg "TEST" '(cons car defun foo))
-;      
+;
 ;      Executing the redefined chk-acceptable-defpkg
-;      
+;
 ;      NOTE: Added the following list of symbols to package "TEST":
 ;       (FOO)
 ;      and deleted the following list of symbols:
 ;       NIL
-;      
-;      
+;
+;
 ;      ACL2 Warning [Package] in SET-IMPORTED-SYMBOLS-TO-PKG:  The symbol
 ;      with name "FOO" imported into the "TEST" package may cause problems,
 ;      since it already has properties in the ACL2 world.
-;      
-;      
+;
+;
 ;      The event ( DEFPKG "TEST" ...) is redundant.  See :DOC redundant-events.
-;      
+;
 ;      Summary
 ;      Form:  ( DEFPKG "TEST" ...)
 ;      Rules: NIL
@@ -84,23 +84,23 @@
 ;      ACL2 !>:pbt 0
 ;                 0  (EXIT-BOOT-STRAP-MODE)
 ;                 1  (DEFPKG "TEST" '#)
-;       L         2  
+;       L         2
 ;      ***********************************************
 ;      ************ ABORTING from raw Lisp ***********
 ;      Error:  The symbol FOO, which has no package, was encountered
 ;      by ACL2.  This is an inconsistent state of affairs, one that
 ;      may have arisen by undoing a defpkg but holding onto a symbol
 ;      in the package being flushed, contrary to warnings printed.
-;      
+;
 ;      ***********************************************
-;      
+;
 ;      The message above might explain the error.  If not, and
 ;      if you didn't cause an explicit interrupt (Control-C),
 ;      then the root cause may be call of a :program mode
 ;      function that has the wrong guard specified, or even no
 ;      guard specified (i.e., an implicit guard of t).
 ;      See :DOC guards.
-;      
+;
 ;      To enable breaks into the debugger (also see :DOC acl2-customization):
 ;      (SET-DEBUGGER-ENABLE T)
 ;      ACL2 !>
@@ -198,14 +198,14 @@
 ;;; End new code
 
   (let ((package-entry
-         (and (not (global-val 'boot-strap-flg w))
+         (and (not (f-get-global 'boot-strap-flg state))
               (find-package-entry
                name
                (global-val 'known-package-alist w)))))
 ;;; Begin code deletion
 ; I removed the case with the same `form' from the previous defpkg call,
 ; because the evaluation of `form' may results in a list with different
-; symbols.  The case in which form is evaluated to the same imported 
+; symbols.  The case in which form is evaluated to the same imported
 ; symbol list is processed as redundant at the end of the function.
 #||
     (cond
@@ -231,8 +231,8 @@
         ((equal name "")
 
 ; In Allegro CL, "" is prohibited because it is already a nickname for the
-; KEYWORD package.  But in GCL we could prove nil up through v2-7 by certifying
-; the following book with the indicated portcullis:
+; KEYWORD package.  But in (non-ANSI, at least) GCL we could prove nil up
+; through v2-7 by certifying the following book with the indicated portcullis:
 
 ; (in-package "ACL2")
 ;
@@ -307,7 +307,7 @@
 ; In order to build a profiling image for GCL, we have observed a need to avoid
 ; going into safe-mode when building the system.
 
-          (not (global-val 'boot-strap-flg w))))
+          (not (f-get-global 'boot-strap-flg state))))
         (er-let*
          ((pair (simple-translate-and-eval form nil nil
                                            "The second argument to defpkg"
@@ -404,7 +404,7 @@ nil
 ; Warning: In maybe-push-undo-stack and maybe-pop-undo-stack we rely
 ; on the fact that the symbol name-PACKAGE is new!
 
-                          (chk-just-new-name base-symbol
+                          (chk-just-new-name base-symbol nil
                                              'theorem nil ctx w state)
                           (prog2$
                            (chk-package-reincarnation-import-restrictions

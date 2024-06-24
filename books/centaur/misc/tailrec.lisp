@@ -28,6 +28,9 @@
 ;   DEALINGS IN THE SOFTWARE.
 ;
 ; Original author: Sol Swords <sswords@centtech.com>
+;
+; Includes tweaks made by Mihir Mehta 4/2019 for a change to the
+; definition of take.
 
 (in-package "ACL2")
 
@@ -281,27 +284,12 @@
        (equal (assoc key (normalize-sym-alist keys x))
               (and (member key keys)
                    (assoc key x)))))
-   
+
 
    (defthm subsetp-equal-append
      (iff (subsetp-equal (append a b) c)
           (and (subsetp-equal a c)
                (subsetp-equal b c))))
-
-   (defthm subsetp-of-symbol-<-merge-1
-     (iff (subsetp (symbol-<-merge x y) z)
-          (and (subsetp x z) (subsetp y z)))
-     :hints(("Goal" :in-theory (enable symbol-<-merge))))
-   (defthm subsetp-of-symbol-<-merge-2
-     (iff (subsetp z (symbol-<-merge x y))
-          (subsetp z (append x y)))
-     :hints(("Goal" :in-theory (enable symbol-<-merge)
-             :induct (len z))))
-
-   (defthm symbol-<-merge-under-set-equiv
-     (set-equiv (symbol-<-merge x y)
-                (append x y))
-     :hints(("Goal" :in-theory (enable set-equiv))))
 
    (defthm-simple-term-vars-flag
      (defthm normalize-sym-alist-eval
@@ -313,7 +301,7 @@
                (and stable-under-simplificationp
                     '(:in-theory (enable partial-ev-constraint-0))))
        :flag simple-term-vars)
-     
+
      (defthm normalize-sym-alist-eval-lst
        (implies (and (subsetp-equal (simple-term-vars-lst x) keys)
                      (pseudo-term-listp x))
@@ -370,7 +358,7 @@
                   :verify-guards nil))
   (b* (((mv vars body args) (clean-lambda1 vars body args)))
     (clean-lambda2 vars body args)))
-       
+
 
 (local
  (progn
@@ -389,7 +377,7 @@
      (implies (assoc-equal key (pairlis$ vars args))
               (equal (assoc key (pairlis$ vars (partial-ev-lst args alist)))
                      (cons key (partial-ev (cdr (assoc key (pairlis$ vars args))) alist)))))
-   
+
 
    (defthm pairlist-partial-ev-strip-normalize
      (equal (pairlis$
@@ -417,7 +405,7 @@
                (and stable-under-simplificationp
                     '(:in-theory (enable partial-ev-constraint-0))))
        :flag simple-term-vars)
-     
+
      (defthm eval-list-under-identity-alist-containing-all-vars
        (implies (and (subsetp-equal (simple-term-vars-lst x) keys)
                      (pseudo-term-listp x))
@@ -503,8 +491,8 @@
 (local
  (progn
    (flag::make-flag clean-lambdas-flag clean-lambdas
-                    :flag-mapping ((clean-lambdas . term)
-                                   (clean-lambdas-list . list)))
+                    :flag-mapping ((clean-lambdas term)
+                                   (clean-lambdas-list list)))
 
 
    (defthm-clean-lambdas-flag
@@ -541,8 +529,8 @@
 (local
  (progn
    (flag::make-flag term-ev-flag term-ev-ind
-                    :flag-mapping ((term-ev-ind . term)
-                                   (term-ev-list-ind . list)))
+                    :flag-mapping ((term-ev-ind term)
+                                   (term-ev-list-ind list)))
 
    (defthm-term-ev-flag
      (defthm clean-lambdas-correct
@@ -573,7 +561,7 @@
                   :verify-guards nil))
   (cond ((atom x)           (mv nil *t* (or x *nil*) *nil*))
         ((quotep x)         (mv nil *t* x *nil*))
-        ((equal (first x) fnname) 
+        ((equal (first x) fnname)
          (if (equal (len (rest x)) arity)
              (mv nil *nil* nil (if (= 1 arity)
                                    (car (rest x))
@@ -686,12 +674,16 @@
                (equal (car (nthcdr n x))
                       (mv-nth n x))
                :hints(("Goal" :in-theory (enable nthcdr mv-nth)))))
+      (local (defthm cdr-nthcdr
+               (equal (cdr (nthcdr n x))
+                      (nthcdr n (cdr x)))
+               :hints(("Goal" :in-theory (enable nthcdr mv-nth)))))
       (defthm get-mv-nths-correct
         (implies (and (natp start) (natp n))
                  (equal (partial-ev-lst (get-mv-nths start n term) al)
                         (take n (nthcdr start (partial-ev term al)))))
-        :hints(("Goal" :in-theory (enable take-redefinition nthcdr)
-                :induct t
+        :hints(("Goal" :in-theory (enable take nthcdr)
+                :induct (get-mv-nths start n term)
                 :expand ((:free (x) (nthcdr (+ 1 start) x))))))))
 
 
@@ -738,8 +730,8 @@
                               len mk-list-term kwote-lst get-mv-nths
                               pairlis$ true-listp
                               done-retval-next-from-body
-                              partial-ev-constraint-8
-                              partial-ev-constraint-7
+                              partial-ev-constraint-10
+                              partial-ev-constraint-9
                               symbol-listp pseudo-termp
                               (:type-prescription kwote-lst)
                               (:type-prescription pseudo-termp)
@@ -1028,7 +1020,7 @@
                (and stable-under-simplificationp
                     '(:in-theory (enable partial-ev-constraint-0))))
        :flag simple-term-vars)
-     
+
      (defthm eval-list-under-identity-alist-containing-all-vars1
        (implies (and (subsetp-equal (simple-term-vars-lst x) keys)
                      (pseudo-term-listp x))
@@ -1120,10 +1112,11 @@
                        (partial-ev x nil)))
        :hints ('(:expand (simple-term-vars x))
                (and stable-under-simplificationp
-                    '(:in-theory (enable partial-ev-constraint-0)
+                    '(:in-theory (enable partial-ev-constraint-0
+                                         partial-ev-constraint-6)
                       :use ((:instance partial-ev-constraint-0 (a nil))))))
        :flag simple-term-vars)
-     
+
      (defthm eval-list-when-simple-term-vars-empty
        (implies (and (syntaxp (not (equal al ''nil)))
                      (atom (simple-term-vars-lst x)))
@@ -1156,11 +1149,11 @@
    (encapsulate nil
      (local (in-theory (disable fsubst-into-tail-recursion-body
                                 done-retval-next-from-body
-                                partial-ev-constraint-9
-                                partial-ev-constraint-8
-                                partial-ev-constraint-7
                                 partial-ev-constraint-11
                                 partial-ev-constraint-10
+                                partial-ev-constraint-9
+                                partial-ev-constraint-13
+                                partial-ev-constraint-12
                                 partial-ev-constraint-0-rewrite
                                 default-car default-cdr len
                                 append-to-nil
@@ -1448,7 +1441,11 @@
                     & ;; reclassifying
                     & ;; world
                     non-execp
-                    ?guard-debug))
+                    guard-debug
+                    ?measure-debug
+                    ?split-types-terms
+                    ?lambda$-stuff
+                    guard-simplify))
           (chk-acceptable-defuns tuple 'def-tr-fn world state))
          ((er &) (set-ld-redefinition-action redef-action state))
          (- (cw "symbol-class: ~x0~%" symbol-class))
@@ -1498,20 +1495,20 @@
                        (lambda (st) ,(bind formals 'st `(,terminates . ,formals))))
                       (pf-terminates-witness
                        (lambda (st) ,(bind formals 'st `(,terminates-witness . ,formals))))
-                      (pf-measure  
+                      (pf-measure
                        (lambda (st) ,(bind formals 'st `(,measure . ,formals)))))))
       (value
        `(encapsulate
           nil
           (set-ignore-ok t)
           (set-irrelevant-formals-ok t)
-          
+
           (defun-nx ,done ,formals
             ,done-term)
 
           (defund-nx ,ret ,formals
             ,ret-term)
-          
+
           (defun-nx ,next ,formals
             ,next-term)
 
@@ -1694,7 +1691,7 @@
           ;;  :rule-classes ((:definition
           ;;                  :clique (,measure)
           ;;                  :controller-alist ((,measure . ,controllers)))))
-          
+
           (in-theory (disable ,measure ,terminates))
 
           (,(if non-execp 'defun-nx 'defun) ,fn ,formals
@@ -1767,7 +1764,9 @@
                  `((verify-guards ,fn
                      :hints ,(cons `'(:use ,(dtr-sym fn "-REDEF")
                                       :in-theory (disable ,(dtr-sym fn "-REDEF")))
-                                   guard-hints))))
+                                   guard-hints)
+                     :guard-simplify ,guard-simplify
+                     :guard-debug ,guard-debug)))
 
           (in-theory (disable (:definition ,fn))))))))
 
@@ -1800,7 +1799,9 @@
 
    (def-tr my-run (pc prog sta)
      (declare (xargs :guard (and (natp pc) (true-listp prog))
-                     :stobjs sta))
+                     :stobjs sta
+                     :guard-simplify :limited
+                     :guard-debug t))
      (if (< (len prog) pc)
          sta
        (mv-let (pc sta)
@@ -1850,9 +1851,3 @@
              (otherwise (prog2$ (cw "bad instruction: ~x0~%" (car instr))
                                 sta))))))
      :diverge (mk-sta))))
-
-
-
-
-
-

@@ -32,7 +32,7 @@
 (include-book "tools/flag" :dir :system)
 (include-book "std/util/bstar" :dir :system)
 (include-book "std/lists/acl2-count" :dir :system)
-
+(include-book "clause-processors/term-vars" :dir :system)
 
 
 (verify-termination acl2::def-body)
@@ -72,6 +72,8 @@
 (defun my-def-body (name world)
   (let ((def-body (ec-call (acl2::def-body name world))))
     (and (not (acl2::access acl2::def-body def-body :hyp))
+         (eq (acl2::access acl2::def-body def-body :equiv)
+             'equal)
          `(equal ,(acl2::fcons-term
                    name (acl2::access acl2::def-body def-body :formals))
                  ,(acl2::access acl2::def-body def-body :concl)))))
@@ -223,8 +225,11 @@ passed to ~x2 in that theorem.~%"
 (program)
 
 (defun gl-fnsym (fn)
+  ;; [Jared] To better support inline functions, I changed the way these names
+  ;; are generated, so that they always end with $.  This prevents the GL version
+  ;; of an inline/notinline function from ever ending with $inline/$notinline.
   (incat 'gl-sym::foo
-         (symbol-package-name fn) "::" (symbol-name fn)))
+         (symbol-package-name fn) "::" (symbol-name fn) "$"))
 
 (defmacro glr (fn &rest args)
   `(,(gl-fnsym fn) ,@args))
@@ -251,11 +256,66 @@ passed to ~x2 in that theorem.~%"
          '(g-boolean
            g-boolean-p g-boolean->bool
            g-number g-number-p g-number->num
+           g-integer g-integer-p g-integer->bits
            g-concrete g-concrete-p g-concrete->obj
            g-ite g-ite-p g-ite->test g-ite->then g-ite->else
            g-apply g-apply-p g-apply->fn g-apply->args
            g-var g-var-p g-var->name))))
 
 
+(logic)
+
+
+
+
+
+
+;; A version of ACL2's dumb-negate-lit that behaves logically wrt an evaluator.
+(defund dumb-negate-lit (term)
+  (declare (xargs :guard (pseudo-termp term)))
+  (cond ((null term) ''t)
+        ((atom term) `(not ,term))
+        ((eq (car term) 'quote)
+         (acl2::kwote (not (cadr term))))
+        ((eq (car term) 'not)
+         (cadr term))
+        ((eq (car term) 'equal)
+         (cond ((or (eq (cadr term) nil)
+                    (equal (cadr term) ''nil))
+                (caddr term))
+               ((or (eq (caddr term) nil)
+                    (equal (caddr term) ''nil))
+                (cadr term))
+               (t `(not ,term))))
+        (t `(not ,term))))
+
+(defthm pseudo-termp-of-dumb-negate-lit
+  (implies (pseudo-termp term)
+           (pseudo-termp (dumb-negate-lit term)))
+  :hints(("Goal" :in-theory (enable dumb-negate-lit pseudo-termp))))
+
+
+(acl2::defund-inline maybe-fmt-to-comment-window (test str alist col evisc-tuple print-base-radix)
+  (declare (xargs :guard t))
+  (and test
+       (fmt-to-comment-window str alist col evisc-tuple print-base-radix)))
+
+(defmacro maybe-cw (test str &rest args)
+  `(maybe-fmt-to-comment-window ,test ,str
+                                (pairlis2 acl2::*base-10-chars* (list ,@args))
+                                0 nil nil))
+
+(acl2::defund-inline observation-uninhibited (state)
+  (declare (xargs :guard t :stobjs state
+                  :guard-hints (("goal" :in-theory (e/d (state-p1)
+                                                        (state-p-implies-and-forward-to-state-p1))))))
+  
+  (not (let ((lst (f-get-global 'acl2::inhibit-output-lst state)))
+         (and (true-listp lst)
+              (member-eq 'acl2::observation lst)))))
+
+(defmacro obs-cw (str &rest args)
+  `(maybe-cw (observation-uninhibited state)
+             ,str . ,args))
 
 

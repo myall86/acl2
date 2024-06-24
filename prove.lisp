@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 8.4 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2022, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -126,8 +126,7 @@
   (mv-let
     (wonp cr-rune lemma unify-subst)
     (find-abbreviation-lemma term geneqv
-                             (getprop (ffn-symb term) 'lemmas nil
-                                      'current-acl2-world wrld)
+                             (getpropc (ffn-symb term) 'lemmas nil wrld)
                              ens
                              wrld)
     (cond
@@ -168,9 +167,9 @@
 ;  several members of *expandable-boot-strap-non-rec-fns* here, and
 ;  IFF.  The impetus for this decision was the forcing of impossible
 ;  goals by simplify-clause.  As of this writing, we have just added
-;  the idea of forcing rounds and the concommitant notion that forced
+;  the idea of forcing rounds and the concomitant notion that forced
 ;  hypotheses are proved under the type-alist extant at the time of the
-;  force.  But if the simplifer sees IMPLIES terms and rewrites their
+;  force.  But if the simplifier sees IMPLIES terms and rewrites their
 ;  arguments, it does not augment the context, e.g., in (IMPLIES hyps
 ;  concl) concl is rewritten without assuming hyps and thus assumptions
 ;  forced in concl are context free and often impossible to prove.  Now
@@ -247,7 +246,7 @@
 
 ; Term collapsed to a constant.  But it wasn't a constant before, and so
 ; it collapsed because cons-term executed fn on constants.  So we record
-; a use of the executable counterpart.
+; a use of the executable-counterpart.
 
               (mv step-limit
                   term
@@ -257,8 +256,7 @@
              ((and (all-quoteps expanded-args)
                    (enabled-xfnp fn ens wrld)
                    (or (flambda-applicationp term)
-                       (not (getprop fn 'constrainedp nil
-                                     'current-acl2-world wrld))))
+                       (not (getpropc fn 'constrainedp nil wrld))))
               (cond ((flambda-applicationp term)
                      (expand-abbreviations
                       (lambda-body fn)
@@ -268,46 +266,41 @@
                       (adjust-rdepth rdepth) step-limit ens wrld state ttree))
                     ((programp fn wrld)
 
-; Why is the above test here?  We do not allow :program mode fns in theorems.
-; However, the prover can be called during definitions, and in particular we
-; wind up with the call (SYMBOL-BTREEP NIL) when trying to admit the following
-; definition.
+; We formerly thought this case was possible during admission of recursive
+; definitions.  Best if it's not!  So we cause an error; if we ever hit this
+; case, we can think about whether allowing :program mode functions into the
+; prover processes is problematic.  Our concern about :program mode functions
+; in proofs has led us in May 2016 to change the application of meta functions
+; and clause-processors to insist that the result is free of :program mode
+; function symbols.
 
-;  (defun symbol-btreep (x)
-;    (if x
-;        (and (true-listp x)
-;             (symbolp (car x))
-;             (symbol-btreep (caddr x))
-;             (symbol-btreep (cdddr x)))
-;      t))
-
-                     (mv step-limit (cons-term fn expanded-args) ttree))
+                     (mv step-limit
+;                        (cons-term fn expanded-args)
+                         (er hard! 'expand-abbreviations
+                             "Implementation error: encountered :program mode ~
+                              function symbol, ~x0"
+                             fn)
+                         ttree))
                     (t
                      (mv-let
-                      (erp val latches)
+                      (erp val bad-fn)
                       (pstk
-                       (ev-fncall fn (strip-cadrs expanded-args) state nil t
-                                  nil))
-                      (declare (ignore latches))
+                       (ev-fncall+ fn (strip-cadrs expanded-args) t state))
+                      (declare (ignore bad-fn))
                       (cond
                        (erp
 
-; We following a suggestion from Matt Wilding and attempt to simplify the term
-; before applying HIDE.
+; We originally followed a suggestion from Matt Wilding and attempt to simplify
+; the term before applying HIDE.  Now, we partially follow an idea from Eric
+; Smith of avoiding the application of HIDE -- we do this only here in
+; expand-abbreviations, expecting that the rewriter will apply HIDE if
+; appropriate.
 
-                        (let ((new-term1 (cons-term fn expanded-args)))
-                          (sl-let (new-term2 ttree)
-                                  (expand-abbreviations-with-lemma
-                                   new-term1 geneqv pequiv-info
-                                   fns-to-be-ignored-by-rewrite
-                                   rdepth step-limit ens wrld state ttree)
-                                  (cond
-                                   ((equal new-term2 new-term1)
-                                    (mv step-limit
-                                        (mcons-term* 'hide new-term1)
-                                        (push-lemma (fn-rune-nume 'hide nil nil wrld)
-                                                    ttree)))
-                                   (t (mv step-limit new-term2 ttree))))))
+                        (expand-abbreviations-with-lemma
+                         (cons-term fn expanded-args)
+                         geneqv pequiv-info
+                         fns-to-be-ignored-by-rewrite
+                         rdepth step-limit ens wrld state ttree))
                        (t (mv step-limit
                               (kwote val)
                               (push-lemma (fn-rune-nume fn nil t wrld)
@@ -374,8 +367,9 @@
                                                      body)
                                                expanded-args)
                                    ttree)))))))
-             ((member-eq fn '(iff synp mv-list return-last wormhole-eval force
-                                  case-split double-rewrite))
+             ((member-eq fn '(iff synp mv-list cons-with-hint return-last
+                                  wormhole-eval force case-split
+                                  double-rewrite))
 
 ; The list above is an arbitrary subset of *expandable-boot-strap-non-rec-fns*.
 ; Once upon a time we used the entire list here, but Bishop Brock complained
@@ -403,7 +397,7 @@
                (fn-rune-nume fn nil nil wrld)
                ((the (signed-byte 30) step-limit) term ttree)
                t
-               (expand-abbreviations (body fn t wrld)
+               (expand-abbreviations (bbody fn)
                                      (pairlis$ (formals fn wrld) expanded-args)
                                      geneqv pequiv-info
                                      fns-to-be-ignored-by-rewrite
@@ -432,9 +426,7 @@
                  ((and (equal geneqv *geneqv-iff*)
                        (equal b *t*)
                        (or (equal c *nil*)
-                           (and (nvariablep c)
-                                (not (fquotep c))
-                                (eq (ffn-symb c) 'HARD-ERROR))))
+                           (ffn-symb-p c 'HARD-ERROR)))
 
 ; Some users keep HARD-ERROR disabled so that they can figure out
 ; which guard proof case they are in.  HARD-ERROR is identically nil
@@ -492,16 +484,34 @@
 
 )
 
-(defun and-orp (term bool)
+(defun and-orp (term bool lambda-okp)
 
-; We return t or nil according to whether term is a disjunction
-; (if bool is t) or conjunction (if bool is nil).
+; We return t or nil according to whether term is a disjunction (if bool is t)
+; or conjunction (if bool is nil).
+
+; After v8-0 we made a change to preserve lambdas on right-hand sides of
+; rewrite rules.  At that time we added the clause for lambdas below, to
+; preserve the old behavior of find-and-or-lemma.  However, in general it seems
+; a good idea to open up lambdas slowly, so we keep the old behavior of and-orp
+; -- not diving into lambda bodies -- in other places, which also helps with
+; backward compatibility (one example is the proof of lemma
+; aignet-marked-copies-in-bounds-of-empty-bitarr in community book
+; books/centaur/aignet/rewrite.lisp).  Parameter lambda-okp is true when we
+; allow exploration of lambda bodies, else nil.  When we tried on 8/14/2018
+; calling and-orp with lambda-okp = t in the case (flambda-applicationp term)
+; of expand-and-or -- that is, to dive into lambda-bodies of lambda-bodies --
+; we got 19 failures when trying an "everything" regression, which (of course)
+; almost surely undercounts failures, since certification wasn't attempted for
+; books depending on failed books.
 
   (case-match term
               (('if & c2 c3)
                (if bool
                    (or (equal c2 *t*) (equal c3 *t*))
-                 (or (equal c2 *nil*) (equal c3 *nil*))))))
+                 (or (equal c2 *nil*) (equal c3 *nil*))))
+              ((('lambda & body) . &)
+               (and lambda-okp
+                    (and-orp body bool lambda-okp)))))
 
 (defun find-and-or-lemma (term bool lemmas ens wrld)
 
@@ -521,7 +531,7 @@
               (geneqv-refinementp (access rewrite-rule (car lemmas) :equiv)
                                  *geneqv-iff*
                                  wrld)
-              (and-orp (access rewrite-rule (car lemmas) :rhs) bool))
+              (and-orp (access rewrite-rule (car lemmas) :rhs) bool t))
          (mv-let
              (wonp unify-subst)
            (one-way-unify (access rewrite-rule (car lemmas) :lhs) term)
@@ -550,9 +560,8 @@
 ; rewrite rules when the result is a conjunction or disjunction (depending on
 ; bool) -- even when the rule being applied is not an abbreviation rule.  Below
 ; are event sequences that illustrate this extra work being done.  In both
-; cases, evaluation of (getprop 'foo 'lemmas nil 'current-acl2-world (w state))
-; shows that we are expanding with a rewrite-rule structure that is not of
-; subclass 'abbreviation.
+; cases, evaluation of (getpropc 'foo 'lemmas) shows that we are expanding with
+; a rewrite-rule structure that is not of subclass 'abbreviation.
 
 ; (defstub bar (x) t)
 ; (defun foo (x) (and (bar (car x)) (bar (cdr x))))
@@ -570,7 +579,7 @@
         ((member-equal (ffn-symb term) fns-to-be-ignored-by-rewrite)
          (mv step-limit nil term ttree))
         ((flambda-applicationp term)
-         (cond ((and-orp (lambda-body (ffn-symb term)) bool)
+         (cond ((and-orp (lambda-body (ffn-symb term)) bool nil)
                 (sl-let
                  (term ttree)
                  (expand-abbreviations
@@ -590,10 +599,11 @@
             ((and def-body
                   (null (access def-body def-body :recursivep))
                   (null (access def-body def-body :hyp))
+                  (member-eq (access def-body def-body :equiv)
+                             '(equal iff))
                   (enabled-numep (access def-body def-body :nume)
                                  ens)
-                  (and-orp (access def-body def-body :concl)
-                           bool))
+                  (and-orp (access def-body def-body :concl) bool nil))
              (sl-let
               (term ttree)
               (with-accumulated-persistence
@@ -618,8 +628,7 @@
                 (wonp cr-rune lemma unify-subst)
                 (find-and-or-lemma
                  term bool
-                 (getprop (ffn-symb term) 'lemmas nil
-                          'current-acl2-world wrld)
+                 (getpropc (ffn-symb term) 'lemmas nil wrld)
                  ens wrld)
                 (cond
                  (wonp
@@ -656,9 +665,7 @@
 
   (cond
    ((equal term (if bool *nil* *t*)) (mv step-limit nil ttree))
-   ((and (nvariablep term)
-         (not (fquotep term))
-         (eq (ffn-symb term) 'if))
+   ((ffn-symb-p term 'if)
     (let ((t1 (fargn term 1))
           (t2 (fargn term 2))
           (t3 (fargn term 3)))
@@ -848,7 +855,7 @@
               ((eq fn 'IMPLIES)
                (subcor-var (formals 'implies wrld)
                            expanded-args
-                           (body 'implies t wrld)))
+                           (bbody 'implies)))
               (t term)))))))
 
 (defun expand-any-final-implies1-lst (term-lst wrld)
@@ -928,7 +935,7 @@
 ; Given a clause cl, we build a type-alist and linear pot-lst with all of the
 ; literals in cl assumed false.  The pot-lst is built with the cheap-linearp
 ; flag on, which means we do not rewrite terms before turning them into polys
-; and we add no linear lemmas.  We insure that the type-alist has no
+; and we add no linear lemmas.  We ensure that the type-alist has no
 ; assumptions or forced hypotheses.  FYI: Just to be doubly sure that we are
 ; not ignoring assumptions and forced hypotheses, you will note that in
 ; relieve-dependent-hyps, after calling type-set, we check that no such entries
@@ -1058,63 +1065,68 @@
 
   (let ((rcnst (access prove-spec-var pspv :rewrite-constant)))
     (mv-let
-     (built-in-clausep ttree)
-     (cond
-      ((or (eq (car (car hist)) 'simplify-clause)
-           (eq (car (car hist)) 'settled-down-clause))
+      (built-in-clausep ttree)
+      (cond
+       ((or (eq (car (car hist)) 'simplify-clause)
+            (eq (car (car hist)) 'settled-down-clause))
 
 ; If the hist shows that cl has just come from simplification, there is no
 ; need to check that it is built in, because the simplifier does that.
 
-       (mv nil nil))
-      (t
-       (built-in-clausep 'preprocess-clause
-                         cl
-                         (access rewrite-constant
-                                 rcnst
-                                 :current-enabled-structure)
-                         (access rewrite-constant
-                                 rcnst
-                                 :oncep-override)
-                         wrld
-                         state)))
+        (mv nil nil))
+       (t
+        (built-in-clausep 'preprocess-clause
+                          cl
+                          (access rewrite-constant
+                                  rcnst
+                                  :current-enabled-structure)
+                          (access rewrite-constant
+                                  rcnst
+                                  :oncep-override)
+                          wrld
+                          state)))
 
 ; Ttree is known to be 'assumption free.
 
-     (cond
-      (built-in-clausep
-       (mv step-limit 'hit nil ttree pspv))
-      (t
+      (cond
+       (built-in-clausep
+        (mv step-limit 'hit nil ttree pspv))
+       (t
 
 ; Here is where we expand the "original" IMPLIES in the conclusion but
 ; leave any IMPLIES in the hypotheses.  These IMPLIES are thought to
 ; have been introduced by :USE hints.
 
-       (let ((term (disjoin (expand-any-final-implies cl wrld))))
-         (sl-let (term ttree)
-                 (expand-abbreviations term nil
-                                       *geneqv-iff* nil
-                                       (access rewrite-constant
-                                               rcnst
-                                               :fns-to-be-ignored-by-rewrite)
-                                       (rewrite-stack-limit wrld)
-                                       step-limit
-                                       (access rewrite-constant
-                                               rcnst
-                                               :current-enabled-structure)
-                                       wrld state nil)
-                 (sl-let (clauses ttree)
-                         (clausify-input term
-                                         (access rewrite-constant
-                                                 rcnst
-                                                 :fns-to-be-ignored-by-rewrite)
-                                         (access rewrite-constant
-                                                 rcnst
-                                                 :current-enabled-structure)
-                                         wrld
-                                         state
-                                         ttree
-                                         step-limit)
+; Historical Note: We used to call possibly-clean-up-dirty-lambda-objects here
+; but that was wrong because we don't have hyps to establish warrants and
+; preprocess-clause shouldn't be applying conditional rewrite rules or forcing
+; things anyway.
+
+        (let ((term (disjoin (expand-any-final-implies cl wrld))))
+          (sl-let (term ttree)
+                  (expand-abbreviations term nil
+                                        *geneqv-iff* nil
+                                        (access rewrite-constant
+                                                rcnst
+                                                :fns-to-be-ignored-by-rewrite)
+                                        (rewrite-stack-limit wrld)
+                                        step-limit
+                                        (access rewrite-constant
+                                                rcnst
+                                                :current-enabled-structure)
+                                        wrld state nil)
+                  (sl-let (clauses ttree)
+                          (clausify-input term
+                                          (access rewrite-constant
+                                                  rcnst
+                                                  :fns-to-be-ignored-by-rewrite)
+                                          (access rewrite-constant
+                                                  rcnst
+                                                  :current-enabled-structure)
+                                          wrld
+                                          state
+                                          ttree
+                                          step-limit)
 ;;;                         (let ((clauses
 ;;;                                (expand-some-non-rec-fns-in-clauses
 ;;;                                 '(iff implies)
@@ -1135,7 +1147,7 @@
 ; ; open so that they can contribute to the type-alist stored in each assumption.
 ; ; For example, in Version 1.4 the concl of (IMPLIES hyps concl) was rewritten
 ; ; first without the hyps being manifest in the type-alist since IMPLIES is a
-; ; function.  Not until the IMPLIES was opened did the hyps become "governers"
+; ; function.  Not until the IMPLIES was opened did the hyps become "governors"
 ; ; in this sense.  In Version 1.5 we decided to throw caution to the wind and
 ; ; just clausify the clausified input.  Well, it bit us as mentioned above and
 ; ; we are now backing off to simply expanding the non-rec fns that might
@@ -1162,11 +1174,11 @@
 
 ; in type-set-b for more details on this latter criterion.
 
-                         (let ((tau-completion-alist
-                                (access prove-spec-var pspv :tau-completion-alist)))
-                           (mv-let
-                            (clauses1 ttree1 new-tau-completion-alist)
-                            (if (or (null hist)
+                          (let ((tau-completion-alist
+                                 (access prove-spec-var pspv :tau-completion-alist)))
+                            (mv-let
+                              (clauses1 ttree1 new-tau-completion-alist)
+                              (if (or (null hist)
 
 ; If (null (cdr hist)) and (null (cddr hist)) are tested in this disjunction,
 ; then tau is tried during the first three simplifications and then again when
@@ -1176,44 +1188,44 @@
 ; where the more aggressive use of tau speeds things up.  But of course it
 ; slows down many more proofs.  Overall, experiments on the regression suggest
 ; that the more aggressive approach slows total reported book certification
-; time down by about 1.5% compared to the less agressive approach.  However, we
+; time down by about 1.5% compared to the less aggressive approach.  However, we
 ; think it might be worth it as more tau-based proofs scripts are developed.
 
-                                    (null (cdr hist))
-                                    (null (cddr hist))
-                                    (eq (car (car hist)) 'settled-down-clause))
-                                (let ((ens (access rewrite-constant
-                                                   rcnst
-                                                   :current-enabled-structure)))
-                                  (if (enabled-numep *tau-system-xnume* ens)
-                                      (tau-clausep-lst clauses
-                                                       ens
-                                                       wrld
-                                                       nil
-                                                       nil
-                                                       state
-                                                       tau-completion-alist)
-                                      (mv clauses nil tau-completion-alist)))
-                                (mv clauses nil tau-completion-alist))
-                            (let ((pspv (if (equal tau-completion-alist
-                                                   new-tau-completion-alist)
-                                            pspv
-                                            (change prove-spec-var pspv
-                                                    :tau-completion-alist
-                                                    new-tau-completion-alist))))
-                              (cond
-                               ((equal clauses1 (list cl))
+                                      (null (cdr hist))
+                                      (null (cddr hist))
+                                      (eq (car (car hist)) 'settled-down-clause))
+                                  (let ((ens (access rewrite-constant
+                                                     rcnst
+                                                     :current-enabled-structure)))
+                                    (if (enabled-numep *tau-system-xnume* ens)
+                                        (tau-clausep-lst clauses
+                                                         ens
+                                                         wrld
+                                                         nil
+                                                         nil
+                                                         state
+                                                         tau-completion-alist)
+                                        (mv clauses nil tau-completion-alist)))
+                                  (mv clauses nil tau-completion-alist))
+                              (let ((pspv (if (equal tau-completion-alist
+                                                     new-tau-completion-alist)
+                                              pspv
+                                              (change prove-spec-var pspv
+                                                      :tau-completion-alist
+                                                      new-tau-completion-alist))))
+                                (cond
+                                 ((equal clauses1 (list cl))
 
 ; In this case, preprocess-clause has made no changes to the clause.
 
-                                (mv step-limit 'miss nil nil nil))
-                               ((and (consp clauses1)
-                                     (null (cdr clauses1))
-                                     (no-op-histp hist)
-                                     (equal (prettyify-clause-simple
-                                             (car clauses1))
-                                            (access prove-spec-var pspv
-                                                    :user-supplied-term)))
+                                  (mv step-limit 'miss nil nil nil))
+                                 ((and (consp clauses1)
+                                       (null (cdr clauses1))
+                                       (no-op-histp hist)
+                                       (equal (prettyify-clause-simple
+                                               (car clauses1))
+                                              (access prove-spec-var pspv
+                                                      :user-supplied-term)))
 
 ; In this case preprocess-clause has produced a singleton set of clauses whose
 ; only element is the translated user input.  For example, the user might have
@@ -1230,14 +1242,14 @@
 ; where we print explanations and clauses to the user we will look for
 ; this tag.
 
-; At one point we called prettify-clause below instead of
-; prettify-clause-simple, and compared the (untranslated) result to the
+; At one point we called prettyify-clause below instead of
+; prettyify-clause-simple, and compared the (untranslated) result to the
 ; (untranslated) displayed-goal of the pspv.  But we have decided to avoid the
 ; expense of untranslating, especially since often the potentially-confusing
 ; printing will never take place!  Let's elaborate.  Suppose that the input
 ; user-level term t1 translates to termp tt1, and suppose that the result of
 ; preprocessing the clause set (list (list tt1)) is a single clause for which
-; prettify-clause-simple returns the (translated) term tt1.  Then we are in
+; prettyify-clause-simple returns the (translated) term tt1.  Then we are in
 ; this case and we set 'hidden-clause in the returned ttree.  However, suppose
 ; that instead prettyify-clause-simple returns tt2 not equal to tt1, although
 ; tt2 nevertheless untranslates (perhaps surprisingly) to t1.  Then we are not
@@ -1250,9 +1262,9 @@
 ;                 (ACL2-NUMBERP J)
 ;                 ...)
 ;            ...)
-; 
+;
 ;   By case analysis we reduce the conjecture to
-; 
+;
 ;   Subgoal 3'
 ;   (IMPLIES (AND (< I -1)
 ;                 (ACL2-NUMBERP J)
@@ -1266,18 +1278,18 @@
 ; do such a check for all preprocess-clause transformations, but only when
 ; actually printing output (so as to avoid the overhead of untranslation).
 
-                                (mv step-limit
-                                    'hit
-                                    clauses1
-                                    (add-to-tag-tree
-                                     'hidden-clause t
-                                     (cons-tag-trees ttree1 ttree))
-                                    pspv))
-                               (t (mv step-limit
+                                  (mv step-limit
                                       'hit
                                       clauses1
-                                      (cons-tag-trees ttree1 ttree)
-                                      pspv))))))))))))))
+                                      (add-to-tag-tree
+                                       'hidden-clause t
+                                       (cons-tag-trees ttree1 ttree))
+                                      pspv))
+                                 (t (mv step-limit
+                                        'hit
+                                        clauses1
+                                        (cons-tag-trees ttree1 ttree)
+                                        pspv))))))))))))))
 
 ; And here is the function that reports on a successful preprocessing.
 
@@ -1410,12 +1422,13 @@
            t))
         (t t)))
 
-(defun delete-assoc-eq-lst (lst alist)
-  (declare (xargs :guard (or (symbol-listp lst)
-                             (symbol-alistp alist))))
+(defun remove1-assoc-eq-lst (lst alist)
+  (declare (xargs :guard (if (symbol-listp lst)
+                             (alistp alist)
+                           (symbol-alistp alist))))
   (if (consp lst)
-      (delete-assoc-eq-lst (cdr lst)
-                           (delete-assoc-eq (car lst) alist))
+      (remove1-assoc-eq-lst (cdr lst)
+                            (remove1-assoc-eq (car lst) alist))
     alist))
 
 (defun delete-assumptions-1 (recs only-immediatep)
@@ -1593,7 +1606,10 @@
                                        old-pspv-pool-lst forcing-round
                                        state)))))
 
-(defun@par push-clause (cl hist pspv wrld state)
+(defun induction-depth-limit (wrld)
+  (cdr (assoc-eq t (table-alist 'induction-depth-limit-table wrld))))
+
+(defun@par push-clause (cl-id cl hist pspv wrld state)
 
 ; Roughly speaking, we drop cl into the pool of pspv and return.
 ; However, we sometimes cause the waterfall to abort further
@@ -1663,32 +1679,6 @@
                                      :clause-set '(nil)
                                      :hint-settings nil)
                                pool))))
-      ((and (or (and (not (access prove-spec-var pspv :otf-flg))
-                     (eq do-not-induct-hint-val t))
-                (eq do-not-induct-hint-val :otf-flg-override))
-            (not (assoc-eq :induct (access prove-spec-var pspv
-                                           :hint-settings))))
-
-; We need induction but can't use it.  Stop the waterfall by aborting.  Produce
-; the ttree that expains the abort.  Drop the clause set containing the empty
-; clause into the pool so that when we look for the next goal we see it and
-; quit.  Note that if :otf-flg is specified, then we skip this case because we
-; do not want to quit just yet.  We will see the :do-not-induct value again in
-; prove-loop1 when we return to the goal we are pushing.
-
-       (mv 'abort
-           nil
-           (add-to-tag-tree! 'abort-cause
-                             (if (eq do-not-induct-hint-val :otf-flg-override)
-                                 'do-not-induct-otf-flg-override
-                               'do-not-induct)
-                             nil)
-           (change prove-spec-var pspv
-                   :pool (cons (make pool-element
-                                     :tag 'TO-BE-PROVED-BY-INDUCTION
-                                     :clause-set '(nil)
-                                     :hint-settings nil)
-                               pool))))
       ((and do-not-induct-hint-val
             (not (member-eq do-not-induct-hint-val '(t :otf :otf-flg-override)))
             (not (assoc-eq :induct
@@ -1699,6 +1689,46 @@
 ; a :BY.  We can't do it here, as explained above.  So we will 'MISS instead.
 
        (mv 'miss nil nil nil))
+      ((and (or (and (not (access prove-spec-var pspv :otf-flg))
+                     (eq do-not-induct-hint-val t))
+                (eq do-not-induct-hint-val :otf-flg-override)
+                (let ((limit (induction-depth-limit wrld)))
+
+; It is tempting just to use eql instead of <= below.  But a hint of :induct t
+; takes priority, in which case we want to stop the next level of induction,
+; where we have already exceeded the "maximum".
+
+                  (and limit
+                       (<= limit
+                           (length (access clause-id cl-id :pool-lst))))))
+            (not (assoc-eq :induct (access prove-spec-var pspv
+                                           :hint-settings))))
+
+; We need induction but can't use it.  Stop the waterfall by aborting.  Produce
+; the ttree that explains the abort.  Drop the clause set containing the empty
+; clause into the pool so that when we look for the next goal we see it and
+; quit.  Note that if :otf-flg is specified, then we skip this case because we
+; do not want to quit just yet.  We will see the :do-not-induct value again in
+; prove-loop1 when we return to the goal we are pushing.
+
+       (mv 'abort
+           nil
+           (add-to-tag-tree! 'abort-cause
+                             (cond
+                              ((eq do-not-induct-hint-val :otf-flg-override)
+                               'do-not-induct-otf-flg-override)
+                              ((and (not (access prove-spec-var pspv :otf-flg))
+                                    (eq do-not-induct-hint-val t))
+                               'do-not-induct)
+                              (t
+                               'induction-depth-limit-exceeded))
+                             nil)
+           (change prove-spec-var pspv
+                   :pool (cons (make pool-element
+                                     :tag 'TO-BE-PROVED-BY-INDUCTION
+                                     :clause-set '(nil)
+                                     :hint-settings nil)
+                               pool))))
       ((and (not (access prove-spec-var pspv :otf-flg))
             (not (eq do-not-induct-hint-val :otf))
             (or
@@ -1786,7 +1816,7 @@
 ; apply before we got to push-clause.
 
                                      :hint-settings
-                                     (delete-assoc-eq-lst
+                                     (remove1-assoc-eq-lst
                                       (cons ':reorder *top-hint-keywords*)
 
 ; We could also delete :induct, but we know it's not here!
@@ -1838,7 +1868,7 @@
 ; See above comment that starts with "Below we set the :hint-settings for..."
 
                                  :hint-settings
-                                 (delete-assoc-eq-lst
+                                 (remove1-assoc-eq-lst
                                   (cons ':reorder *top-hint-keywords*)
 
 ; We could also delete :induct, but we know it's not here!
@@ -1964,6 +1994,12 @@
             (if (eq temp 'do-not-induct)
                 t
               :otf-flg-override)))
+      (induction-depth-limit-exceeded
+       (msg "Normally we would attempt to prove ~@0 by induction.  However, ~
+             that would cause the induction-depth-limit of ~x1 to be ~
+             exceeded.  See :DOC induction-depth-limit.~|"
+            cl-id-phrase
+            (length (access clause-id cl-id :pool-lst))))
       (otherwise
        (msg "Normally we would attempt to prove ~@0 by induction.  However, ~
              we prefer in this instance to focus on the original input ~
@@ -2064,7 +2100,7 @@
 ; it is a tautology.  Note too that the constraints generated by the
 ; production of the hyps are conjoined into a single clause in temp.
 ; But we hit that constraint-cl with preprocess-clause to pick out its
-; (non-tautologial) cases and that code will readily unpack the if
+; (non-tautological) cases and that code will readily unpack the if
 ; structure of a typical conjunct.  We remove the :use hint from the
 ; hint-settings so we don't fire the same :use again on the subgoals.
 
@@ -2191,13 +2227,6 @@
                                        pspv
                                        :hint-settings))))))
 
-(defun term-list-listp (l w)
-  (declare (xargs :guard t))
-  (if (atom l)
-      (equal l nil)
-    (and (term-listp (car l) w)
-         (term-list-listp (cdr l) w))))
-
 (defun non-term-listp-msg (x w)
 
 ; Perhaps ~Y01 should be ~y below.  If someone complains about a large term
@@ -2233,7 +2262,108 @@
          (non-term-listp-msg (car l) w)))
    (t (non-term-list-listp-msg (cdr l) w))))
 
-(defun eval-clause-processor (clause term stobjs-out pspv ctx state)
+(defun all-ffn-symbs-lst-lst (lst ans)
+  (cond ((null lst) ans)
+        (t (all-ffn-symbs-lst-lst (cdr lst)
+                                  (all-ffn-symbs-lst (car lst) ans)))))
+
+(defun tilde-@-unknown-names-phrase (lst field wrld acc)
+
+; This function returns nil if every element of lst references a known name.
+; Otherwise, a message is returned suitable for printing after "..., because ".
+
+  (declare (xargs :guard (and (true-listp lst)
+                              (plist-worldp wrld)
+                              (null (collect-non-hint-events lst t)))))
+  (cond ((endp lst)
+         (and acc
+              (msg "its ~x0 field contains the following that ~#1~[does not ~
+                    name an event~/do not name events~]: ~&1"
+                   field acc)))
+        (t (let ((name (if (symbolp (car lst))
+                           (car lst)
+                         (cadr (car lst)))))
+             (cond ((getpropc name 'absolute-event-number nil wrld)
+                    (tilde-@-unknown-names-phrase (cdr lst) field wrld acc))
+                   (t (tilde-@-unknown-names-phrase (cdr lst)
+                                                    field
+                                                    wrld
+                                                    (cons name acc))))))))
+
+(defun tilde-@-illegal-hint-events-phrase (lst field wrld)
+
+; This function returns nil if lst is a true list of objects suitable for the
+; given summary field, all of whose elements reference a known name.
+; Otherwise, a message is returned suitable for printing after "..., because ".
+
+  (declare (xargs :guard (and (member-eq field '(:use-names
+                                                 :by-names
+                                                 :clause-processor-fns))
+                              (plist-worldp wrld))))
+  (cond
+   ((not (true-listp lst))
+    (msg "its ~x0 field, ~x1, is not a true-list"
+         field
+         lst))
+   (t (let* ((non-symbols-okp (member-eq field '(:use-names :by-names)))
+             (bad (collect-non-hint-events lst non-symbols-okp)))
+        (cond (bad (msg "its ~x0 field contains the following illegal ~
+                         object~#1~[/s~]: ~&1"
+                        field bad))
+              (t (tilde-@-unknown-names-phrase lst field wrld nil)))))))
+
+(defun collect-non-runes-from-summary-data (runes wrld)
+  (declare (xargs :mode :program
+                  :guard ; partial guard
+                  (and (true-listp runes)
+                       (plist-worldp wrld))))
+  (cond ((endp runes) nil)
+        ((let ((r (car runes)))
+           (and (consp r)
+                (consp (cdr r))
+                (or (null (cadr r)) ; fake rune
+                    (runep r wrld))))
+         (collect-non-runes-from-summary-data (cdr runes) wrld))
+        (t (cons (car runes)
+                 (collect-non-runes-from-summary-data (cdr runes) wrld)))))
+
+(defun tilde-@-illegal-summary-data-phrase (x wrld)
+
+; Returns a msg suitable for printing after "is not a valid summary-data
+; record: ", which should not include the closing period.
+
+  (declare (xargs :mode :program))
+  (and x ; nil is legal
+       (or (and (not (weak-summary-data-p x))
+                (msg "it is not a summary-data record.  Use ~x0 to ~
+                      create such a record (see :DOC make-summary-data)"
+                     'make-summary-data))
+           (let ((runes (access summary-data x :runes)))
+             (or (and (not (true-listp runes))
+                      (msg "its :runes field, ~x0, is not a true-list"
+                           runes))
+                 (let ((bad (collect-non-runes-from-summary-data runes wrld)))
+                   (and bad
+                        (msg "its :runes field contains the following list of ~
+                              unknown runes: ~x0"
+                             bad)))))
+           (tilde-@-illegal-hint-events-phrase (access summary-data x
+                                                       :use-names)
+                                               :use-names
+                                               wrld)
+           (tilde-@-illegal-hint-events-phrase (access summary-data x
+                                                       :by-names)
+                                               :by-names
+                                               wrld)
+           (tilde-@-illegal-hint-events-phrase (access summary-data x
+                                                       :clause-processor-fns)
+                                               :clause-processor-fns
+                                               wrld))))
+
+(defun eval-clause-processor (clause term stobjs-out verified-p pspv ctx state)
+
+; Verified-p is either nil, t, or a well-formedness-guarantee of the form
+; ((name fn thm-name1) . arity-alist).
 
 ; Should we do our evaluation in safe-mode?  For a relevant discussion, see the
 ; comment in protected-eval about safe-mode.
@@ -2244,16 +2374,22 @@
    (let ((original-wrld (w state))
          (cl-term (subst-var (kwote clause) 'clause term)))
      (protect-system-state-globals
-      (pprogn
-       (mv-let
+      (mv-let
         (erp trans-result state)
-        (ev-for-trans-eval cl-term (all-vars cl-term) stobjs-out ctx state
+        (ev-for-trans-eval cl-term stobjs-out ctx state
 
 ; See chk-evaluator-use-in-rule for a discussion of how we restrict the use of
 ; evaluators in rules of class :meta or :clause-processor, so that we can use
 ; aok = t here.
 
-                           t)
+; Note that unlike trans-eval, ev-for-trans-eval never prints a warning when a
+; user-defined stobj is modified.  Our feeling is that such warnings would be
+; very distracting, since they would appear in the middle of proofs as
+; clause-processor hints are processed.
+
+                           t
+                           (f-get-global 'ld-user-stobjs-modified-warning
+                                         state))
         (cond
          (erp (mv (msg "Evaluation failed for the :clause-processor hint.")
                   nil
@@ -2282,24 +2418,69 @@
                      (set-w! original-wrld state)
                      (cond
                       ((equal val (list clause)) ; avoid checks below
-                       (value val))
+                       (value (cons val nil)))   ; no point to summary-data
                       (t
-                       (let ((not-skipped
-                              (not (skip-meta-termp-checks
-                                    (ffn-symb term) original-wrld))))
+                       (let* ((user-says-skip-termp-checkp
+                               (skip-meta-termp-checks
+                                (ffn-symb term) original-wrld))
+                              (well-formedness-guarantee
+                               (if (consp verified-p)
+                                   verified-p
+                                 nil))
+                              (not-skipped
+                               (and (not user-says-skip-termp-checkp)
+                                    (not well-formedness-guarantee)))
+                              (bad-arity-info
+                               (if (and well-formedness-guarantee
+                                        (not user-says-skip-termp-checkp))
+                                   (collect-bad-fn-arity-info
+                                    (cdr well-formedness-guarantee)
+                                    original-wrld nil nil)
+                                 nil)))
                          (cond
+                          (bad-arity-info
+                           (let ((name (nth 0 (car well-formedness-guarantee)))
+                                 (fn (nth 1 (car well-formedness-guarantee)))
+                                 (thm-name1
+                                  (nth 2 (car well-formedness-guarantee))))
+                             (mv (bad-arities-msg
+                                  name
+                                  :CLAUSE-PROCESSOR
+                                  fn
+                                  nil ; hyp-fn
+                                  thm-name1
+                                  nil ; wf-thm-name2
+                                  bad-arity-info)
+                                 nil state)))
                           ((and not-skipped
-                                (not (term-list-listp val original-wrld)))
-                           (mv (msg
-                                "The :CLAUSE-PROCESSOR hint~|~%  ~Y01~%did ~
-                                 not evaluate to a list of clauses, but ~
-                                 instead to~|~%  ~Y23~%~@4"
-                                term nil
-                                val nil
-                                (non-term-list-listp-msg
-                                 val original-wrld))
-                               nil
-                               state))
+                                (not (logic-term-list-listp val
+                                                            original-wrld)))
+                           (cond
+                            ((not (term-list-listp val original-wrld))
+                             (mv (msg
+                                  "The :CLAUSE-PROCESSOR hint~|~%  ~Y01~%did ~
+                                   not evaluate to a list of clauses, but ~
+                                   instead to~|~%  ~Y23~%~@4"
+                                  term nil
+                                  val nil
+                                  (non-term-list-listp-msg
+                                   val original-wrld))
+                                 nil
+                                 state))
+                            (t
+                             (mv (msg
+                                  "The :CLAUSE-PROCESSOR hint~|~%  ~
+                                   ~Y01~%evaluated to a list of clauses,~%  ~
+                                   ~Y23,~%which however has a call of the ~
+                                   following :program mode ~
+                                   function~#4~[~/s~]:~|~&4."
+                                  term nil
+                                  val nil
+                                  (collect-programs
+                                   (all-ffn-symbs-lst-lst val nil)
+                                   original-wrld))
+                                 nil
+                                 state))))
                           ((and not-skipped
                                 (forbidden-fns-in-term-list-list
                                  val
@@ -2314,7 +2495,8 @@
                                  function symbol~#3~[, ~&3, which is~/s ~&3, ~
                                  which are~] forbidden in that context.  See ~
                                  :DOC clause-processor and :DOC ~
-                                 set-skip-meta-termp-checks."
+                                 set-skip-meta-termp-checks and :DOC ~
+                                 well-formedness-guarantee."
                                 term nil val
                                 (forbidden-fns-in-term-list-list
                                  val
@@ -2324,10 +2506,40 @@
                                          :forbidden-fns)))
                                nil
                                state))
-                          (t (value val)))))))))))))))))))
+                          (t
+                           (let* ((summary-data
+
+; Result is an object either of the form (eval-erp val st1 ... stn) or of the
+; form (eval-erp val st1 ... stn summary-data), where n could be 0.
+
+                                   (and (cddr stobjs-out)
+                                        (null (car (last stobjs-out)))
+                                        (car (last result))))
+                                  (msg (tilde-@-illegal-summary-data-phrase
+                                        summary-data
+                                        original-wrld)))
+                             (cond
+                              (msg
+                               (mv (msg
+                                    "The :CLAUSE-PROCESSOR ~
+                                     hint~|~%~Y01~%evaluated to multiple ~
+                                     values whose last value, ~X23, is not a ~
+                                     valid summary-data record, because ~@4.  ~
+                                     See :DOC clause-processor."
+                                    term
+                                    nil
+                                    summary-data
+                                    (term-evisc-tuple t state)
+                                    msg)
+                                   nil
+                                   state))
+                              (t (value
+                                  (cons val
+                                        summary-data))))))))))))))))))))))
 
 #+acl2-par
-(defun eval-clause-processor@par (clause term stobjs-out pspv ctx state)
+(defun eval-clause-processor@par (clause term stobjs-out verified-p pspv ctx
+                                         state)
 
 ; Keep in sync with eval-clause-processor.
 
@@ -2341,98 +2553,165 @@
 ; are not stobjs and the st_ik are all stobjs.  Since we want to rule out
 ; stobjs, we therefore check that stobjs-out is (nil) or (nil nil).
 
-     (not (or (equal stobjs-out '(nil))
-              (equal stobjs-out '(nil nil))))
+     (not (all-nils stobjs-out))
      (not (cdr (assoc-eq 'hacks-enabled
                          (table-alist 'waterfall-parallelism-table
                                       (w state))))))
     (mv (msg
-         "Clause-processors that do not return exactly one or two values are ~
-          not officially supported when waterfall parallelism is enabled.  If ~
-          you wish to use such a clause-processor anyway, you can call ~x0. ~
-          See :DOC set-waterfall-parallelism-hacks-enabled for more ~
-          information.  "
+         "Clause-processors that return one or more stobjs are not officially ~
+          supported when waterfall parallelism is enabled.  If you wish to ~
+          use such a clause-processor anyway, you can call ~x0. See :DOC ~
+          set-waterfall-parallelism-hacks-enabled for more information.  "
          '(set-waterfall-parallelism-hacks-enabled t))
         nil))
    (t
-    (let ((wrld (w state))
+    (let ((original-wrld (w state))
           (cl-term (subst-var (kwote clause) 'clause term)))
-      (mv-let
-       (erp trans-result)
+      (mv-let (erp trans-result)
 
 ; Parallelism blemish: we could consider making an ev@par, which calls ev-w,
 ; and tests that the appropriate preconditions for ev-w are upheld (like state
 ; not being in the alist).
 
-       (ev-w-for-trans-eval cl-term (all-vars cl-term) stobjs-out ctx state
+        (ev-w-for-trans-eval cl-term stobjs-out ctx state
 
 ; See chk-evaluator-use-in-rule for a discussion of how we restrict the use of
 ; evaluators in rules of class :meta or :clause-processor, so that we can use
 ; aok = t here.
 
-                            t)
-       (cond
-        (erp (mv (msg "Evaluation failed for the :clause-processor hint.")
-                 nil))
-        (t
-         (assert$
-          (equal (car trans-result) stobjs-out)
-          (let* ((result (cdr trans-result))
-                 (eval-erp (and (cdr stobjs-out) (car result)))
-                 (val (if (cdr stobjs-out) (cadr result) result)))
-            (cond ((stringp eval-erp)
-                   (mv (msg "~s0" eval-erp) nil))
-                  ((tilde-@p eval-erp) ; a message
-                   (mv (msg "Error in clause-processor hint:~|~%  ~@0"
-                            eval-erp)
-                       nil))
-                  (eval-erp
-                   (mv (msg "Error in clause-processor hint:~|~%  ~Y01"
-                            term
-                            nil)
-                       nil))
-                  ((equal val (list clause)) ; avoid checks below
-                   (value@par val))
-                  (t
-                   (let ((not-skipped
-                          (not (skip-meta-termp-checks
-                                (ffn-symb term) wrld))))
-                     (cond
-                      ((and not-skipped
-                            (not (term-list-listp val wrld)))
-                       (mv (msg
-                            "The :CLAUSE-PROCESSOR hint~|~%  ~Y01~%did not ~
-                             evaluate to a list of clauses, but instead ~
-                             to~|~%  ~Y23~%~@4"
-                            term nil
-                            val nil
-                            (non-term-list-listp-msg
-                             val wrld))
-                           nil))
-                      ((and not-skipped
-                            (forbidden-fns-in-term-list-list
-                             val
-                             (access rewrite-constant
-                                     (access prove-spec-var pspv
-                                             :rewrite-constant)
-                                     :forbidden-fns)))
-                       (mv (msg
-                            "The :CLAUSE-PROCESSOR ~
-                                 hint~|~%~Y01~%evaluated to a list of ~
-                                 clauses~|~%~y2~%that contains a call of the ~
-                                 function symbol~#3~[, ~&3, which is~/s ~&3, ~
-                                 which are~] forbidden in that context.  See ~
-                                 :DOC clause-processor and :DOC ~
-                                 set-skip-meta-termp-checks."
-                            term nil val
-                            (forbidden-fns-in-term-list-list
-                             val
-                             (access rewrite-constant
-                                     (access prove-spec-var pspv
-                                             :rewrite-constant)
-                                     :forbidden-fns)))
-                           nil))
-                      (t (value@par val)))))))))))))))
+                             t
+                             (f-get-global 'ld-user-stobjs-modified-warning
+                                           state))
+        (cond
+         (erp (mv (msg "Evaluation failed for the :clause-processor hint.")
+                  nil))
+         (t
+          (assert$
+           (equal (car trans-result) stobjs-out)
+           (let* ((result (cdr trans-result))
+                  (eval-erp (and (cdr stobjs-out) (car result)))
+                  (val (if (cdr stobjs-out) (cadr result) result)))
+             (cond ((stringp eval-erp)
+                    (mv (msg "~s0" eval-erp) nil))
+                   ((tilde-@p eval-erp) ; a message
+                    (mv (msg "Error in clause-processor hint:~|~%  ~@0"
+                             eval-erp)
+                        nil))
+                   (eval-erp
+                    (mv (msg "Error in clause-processor hint:~|~%  ~Y01"
+                             term
+                             nil)
+                        nil))
+                   ((equal val (list clause)) ; avoid checks below
+                    (value@par (cons val nil))) ; no point to summary-data
+                   (t
+                    (let* ((user-says-skip-termp-checkp
+                            (skip-meta-termp-checks
+                             (ffn-symb term) original-wrld))
+                           (well-formedness-guarantee
+                            (if (consp verified-p)
+                                verified-p
+                              nil))
+                           (not-skipped
+                            (and (not user-says-skip-termp-checkp)
+                                 (not well-formedness-guarantee)))
+                           (bad-arity-info
+                            (if (and well-formedness-guarantee
+                                     (not user-says-skip-termp-checkp))
+                                (collect-bad-fn-arity-info
+                                 (cdr well-formedness-guarantee)
+                                 original-wrld nil nil)
+                              nil)))
+                      (cond
+                       (bad-arity-info
+                        (let ((name (nth 0 (car well-formedness-guarantee)))
+                              (fn (nth 1 (car well-formedness-guarantee)))
+                              (thm-name1 (nth 2 (car well-formedness-guarantee))))
+                          (mv (bad-arities-msg
+                               name
+                               :CLAUSE-PROCESSOR
+                               fn
+                               nil ; hyp-fn
+                               thm-name1
+                               nil ; wf-thm-name2
+                               bad-arity-info)
+                              nil)))
+                       ((and not-skipped
+                             (not (logic-term-list-listp val original-wrld)))
+                        (cond
+                         ((not (term-list-listp val original-wrld))
+                          (mv (msg
+                               "The :CLAUSE-PROCESSOR hint~|~%  ~Y01~%did not ~
+                                evaluate to a list of clauses, but instead ~
+                                to~|~%  ~Y23~%~@4"
+                               term nil
+                               val nil
+                               (non-term-list-listp-msg
+                                val original-wrld))
+                              nil))
+                         (t
+                          (mv (msg
+                               "The :CLAUSE-PROCESSOR hint~|~%  ~
+                                ~Y01~%evaluated to a list of clauses,~%  ~
+                                ~Y23,~%which however has a call of the ~
+                                following :program mode ~
+                                function~#4~[~/s~]:~|~&4."
+                               term nil
+                               val nil
+                               (collect-programs
+                                (all-ffn-symbs-lst-lst val nil)
+                                original-wrld))
+                              nil))))
+                       ((and not-skipped
+                             (forbidden-fns-in-term-list-list
+                              val
+                              (access rewrite-constant
+                                      (access prove-spec-var pspv
+                                              :rewrite-constant)
+                                      :forbidden-fns)))
+                        (mv (msg
+                             "The :CLAUSE-PROCESSOR hint~|~%~Y01~%evaluated ~
+                              to a list of clauses~|~%~y2~%that contains a ~
+                              call of the function symbol~#3~[, ~&3, which ~
+                              is~/s ~&3, which are~] forbidden in that ~
+                              context.  See :DOC clause-processor and :DOC ~
+                              set-skip-meta-termp-checks and :DOC ~
+                              well-formedness-guarantee."
+                             term nil val
+                             (forbidden-fns-in-term-list-list
+                              val
+                              (access rewrite-constant
+                                      (access prove-spec-var pspv
+                                              :rewrite-constant)
+                                      :forbidden-fns)))
+                            nil))
+                       (t (let* ((summary-data
+
+; Result is an object either of the form (eval-erp val st1 ... stn) or of the
+; form (eval-erp val st1 ... stn summary-data), where n could be 0.
+
+                                  (and (cddr stobjs-out)
+                                       (null (car (last stobjs-out)))
+                                       (car (last result))))
+                                 (msg (tilde-@-illegal-summary-data-phrase
+                                       summary-data
+                                       original-wrld)))
+                            (cond
+                             (msg
+                              (mv (msg
+                                   "The :CLAUSE-PROCESSOR ~
+                                    hint~|~%~Y01~%evaluated to multiple ~
+                                    values whose last value, ~X23, is not a ~
+                                    valid summary-data record, because ~@4.  ~
+                                    See :DOC clause-processor."
+                                   term
+                                   nil
+                                   summary-data
+                                   (term-evisc-tuple t state)
+                                   msg)
+                                  nil))
+                             (t (value@par
+                                 (cons val summary-data)))))))))))))))))))
 
 (defun apply-top-hints-clause1 (temp cl-id cl pspv wrld state step-limit)
 
@@ -2513,7 +2792,8 @@
 ; reporting of the use of (:DEFINITION NOT) in some cases but not in others
 ; (e.g., when we use strip-not).
 
-                   (caddr temp)))
+                   (caddr temp)
+                   wrld))
              (constraint-cl (cadddr temp))
              (sr-limit (car (access rewrite-constant
                                     (access prove-spec-var pspv
@@ -2536,7 +2816,7 @@
 
 ; WARNING: See the warning about the processing in translate-by-hint.
 
-         (let* ((cl (remove-guard-holders-lst cl))
+         (let* ((cl (remove-guard-holders-lst cl wrld))
                 (cl (remove-equal *nil* cl))
                 (easy-winp
                  (cond ((null cl) ; very weird case!
@@ -2675,7 +2955,7 @@
                          which denotes the formula ~p2 (when converted to a ~
                          set of clauses and then printed as a formula).  This ~
                          formula was not found to subsume the goal clause, ~
-                         ~p3.~|~%Consider a :use hint instead ; see :DOC ~
+                         ~p3.~|~%Consider a :use hint instead; see :DOC ~
                          hints."
                         (car lmi-lst)
 
@@ -2770,9 +3050,9 @@
                                 nil)
               (change prove-spec-var pspv
                       :hint-settings
-                      (delete-assoc-eq :or
-                                       (access prove-spec-var pspv
-                                               :hint-settings)))
+                      (remove1-assoc-eq :or
+                                        (access prove-spec-var pspv
+                                                :hint-settings)))
               state))
      ((eq (car temp) :clause-processor) ; special case as state can be returned
 
@@ -2780,30 +3060,38 @@
 ; translate-clause-processor-hint.
 
       (mv-let@par
-       (erp new-clauses state)
+       (erp new-clauses/summary-data state)
        (eval-clause-processor@par cl
-                                  (access clause-processor-hint (cdr temp) :term)
-                                  (access clause-processor-hint (cdr temp) :stobjs-out)
+                                  (access clause-processor-hint (cdr temp)
+                                          :term)
+                                  (access clause-processor-hint (cdr temp)
+                                          :stobjs-out)
+                                  (access clause-processor-hint (cdr temp)
+                                          :verified-p)
                                   pspv ctx state)
        (cond (erp (mv@par step-limit 'error erp nil nil state))
-             (t (mv@par step-limit
-                        'hit
-                        new-clauses
-                        (cond ((and new-clauses
-                                    (null (cdr new-clauses))
-                                    (equal (car new-clauses) cl))
-                               (add-to-tag-tree! 'hidden-clause t nil))
-                              (t (add-to-tag-tree!
-                                  :clause-processor
-                                  (cons (cdr temp) new-clauses)
-                                  nil)))
-                        (change prove-spec-var pspv
-                                :hint-settings
-                                (remove1-equal temp
-                                               (access prove-spec-var
-                                                       pspv
-                                                       :hint-settings)))
-                        state)))))
+             (t (let ((new-clauses (car new-clauses/summary-data))
+                      (summary-data (cdr new-clauses/summary-data)))
+                  (mv@par step-limit
+                          'hit
+                          new-clauses
+                          (cond ((and new-clauses
+                                      (null (cdr new-clauses))
+                                      (equal (car new-clauses) cl))
+                                 (add-to-tag-tree! 'hidden-clause t nil))
+                                (t (add-to-tag-tree!
+                                    :clause-processor
+                                    (list* (cdr temp)
+                                           summary-data
+                                           new-clauses)
+                                    nil)))
+                          (change prove-spec-var pspv
+                                  :hint-settings
+                                  (remove1-equal temp
+                                                 (access prove-spec-var
+                                                         pspv
+                                                         :hint-settings)))
+                          state))))))
      (t (sl-let
          (signal clauses ttree new-pspv)
          (apply-top-hints-clause1 temp cl-id cl pspv wrld state step-limit)
@@ -2836,8 +3124,8 @@
 ; indicated by the hint, which CAN BE ...".
 
   (let* ((seeds (lmi-seed-lst lmi-lst))
-         (lemma-names (filter-atoms t seeds))
-         (thms (filter-atoms nil seeds))
+         (lemma-names (lmi-seeds-info 'hint-events seeds))
+         (thms (lmi-seeds-info nil seeds))
          (techs (lmi-techs-lst lmi-lst)))
     (cond ((null techs)
            (cond ((null thms)
@@ -3084,7 +3372,7 @@
                                                :verified-p)
                                        "verified")
                                       (t "trusted")))
-                (new-clauses (cdr clause-processor-obj))
+                (new-clauses (cddr clause-processor-obj))
                 (cl-proc-fn (ffn-symb (access clause-processor-hint
                                               (car clause-processor-obj)
                                               :term))))
@@ -3244,13 +3532,6 @@
 
 ; Before we resume development of the waterfall, we introduce functions in
 ; support of gag-mode.
-
-(defmacro initialize-pspv-for-gag-mode (pspv)
-  `(if (gag-mode)
-       (change prove-spec-var ,pspv
-               :gag-state
-               *initial-gag-state*)
-     ,pspv))
 
 ; For debug only:
 ; (progn
@@ -3429,6 +3710,14 @@
                     ((equal (tagged-objects 'abort-cause ttree)
                             '(empty-clause))
                      (change gag-state gagst :abort-stack 'empty-clause))
+                    ((member-equal (tagged-objects 'abort-cause ttree)
+                                   '((do-not-induct)
+                                     (do-not-induct-otf-flg-override)))
+                     (change gag-state gagst :abort-stack 'do-not-induct))
+                    ((equal (tagged-objects 'abort-cause ttree)
+                            '(induction-depth-limit-exceeded))
+                     (change gag-state gagst :abort-stack
+                             'induction-depth-limit-exceeded))
                     (t gagst))
               (and msg-p
                    (msg "~@0~@1"
@@ -3694,66 +3983,71 @@
 (defmacro set-splitter-output (val)
   `(f-put-global 'splitter-output ,val state))
 
-(defun waterfall-msg1
-  (processor cl-id signal clauses new-hist msg ttree pspv state)
-  (pprogn
+(defun waterfall-msg1 (processor cl-id signal clauses new-hist msg ttree pspv
+                                 state)
+  (with-output-lock
+   (let ((gag-mode (gag-mode)))
+     (pprogn
 
 ;  (maybe-show-gag-state cl-id pspv state) ; debug
 
-   (cond
+      (cond
 
 ; Suppress printing for :OR splits; see also other comments with this header.
 
-;   ((and (eq signal 'OR-HIT)
-;         (gag-mode))
-;    (fms "~@0~|~%~@1~|"
-;         (list (cons #\0 (or msg ""))
-;               (cons #\1 (or-hit-msg t cl-id ttree)))
-;         (proofs-co state) state nil))
+;      ((and (eq signal 'OR-HIT)
+;            gag-mode)
+;       (fms "~@0~|~%~@1~|"
+;            (list (cons #\0 (or msg ""))
+;                  (cons #\1 (or-hit-msg t cl-id ttree)))
+;            (proofs-co state) state nil))
 
-    ((and msg (gag-mode))
-     (fms "~@0~|" (list (cons #\0 msg)) (proofs-co state) state nil))
-    (t state))
-   (cond
-    ((gag-mode)
-     (print-splitter-rules-summary cl-id clauses ttree (proofs-co state)
-                                   state))
-    (t
-     (case
-       processor
-       (apply-top-hints-clause
+       ((and msg gag-mode)
+        (fms "~@0~|" (list (cons #\0 msg)) (proofs-co state) state nil))
+       (t state))
+      (cond
+       ((or gag-mode
+            (f-get-global 'raw-proof-format state))
+        (print-splitter-rules-summary cl-id clauses ttree state))
+       (t state))
+      (cond
+       (gag-mode state)
+       (t
+        (case
+          processor
+          (apply-top-hints-clause
 
 ; Note that the args passed to apply-top-hints-clause, and to
 ; simplify-clause-msg1 below, are nonstandard.  This is what allows the
 ; simplify message to detect and report if the just performed simplification
 ; was specious.
 
-        (apply-top-hints-clause-msg1
-         signal cl-id clauses
-         (consp (access history-entry (car new-hist)
-                        :processor))
-         ttree pspv state))
-       (preprocess-clause
-        (preprocess-clause-msg1 signal clauses ttree pspv state))
-       (simplify-clause
-        (simplify-clause-msg1 signal cl-id clauses
-                              (consp (access history-entry (car new-hist)
-                                             :processor))
-                              ttree pspv state))
-       (settled-down-clause
-        (settled-down-clause-msg1 signal clauses ttree pspv state))
-       (eliminate-destructors-clause
-        (eliminate-destructors-clause-msg1 signal clauses ttree
-                                           pspv state))
-       (fertilize-clause
-        (fertilize-clause-msg1 signal clauses ttree pspv state))
-       (generalize-clause
-        (generalize-clause-msg1 signal clauses ttree pspv state))
-       (eliminate-irrelevance-clause
-        (eliminate-irrelevance-clause-msg1 signal clauses ttree
-                                           pspv state))
-       (otherwise
-        (push-clause-msg1 cl-id signal clauses ttree pspv state)))))))
+           (apply-top-hints-clause-msg1
+            signal cl-id clauses
+            (consp (access history-entry (car new-hist)
+                           :processor))
+            ttree pspv state))
+          (preprocess-clause
+           (preprocess-clause-msg1 signal clauses ttree pspv state))
+          (simplify-clause
+           (simplify-clause-msg1 signal cl-id clauses
+                                 (consp (access history-entry (car new-hist)
+                                                :processor))
+                                 ttree pspv state))
+          (settled-down-clause
+           (settled-down-clause-msg1 signal clauses ttree pspv state))
+          (eliminate-destructors-clause
+           (eliminate-destructors-clause-msg1 signal clauses ttree
+                                              pspv state))
+          (fertilize-clause
+           (fertilize-clause-msg1 signal clauses ttree pspv state))
+          (generalize-clause
+           (generalize-clause-msg1 signal clauses ttree pspv state))
+          (eliminate-irrelevance-clause
+           (eliminate-irrelevance-clause-msg1 signal clauses ttree
+                                              pspv state))
+          (otherwise
+           (push-clause-msg1 cl-id signal clauses ttree pspv state)))))))))
 
 (defmacro io?-prove-cw (vars body &rest keyword-args)
 
@@ -3775,18 +4069,19 @@
   `(io?-prove-cw ,@rst))
 
 (defun waterfall-print-clause-body (cl-id clause state)
-  (pprogn
-   (increment-timer 'prove-time state)
-   (fms "~@0~|~q1.~|"
-        (list (cons #\0 (tilde-@-clause-id-phrase cl-id))
-              (cons #\1 (prettyify-clause
-                         clause
-                         (let*-abstractionp state)
-                         (w state))))
-        (proofs-co state)
-        state
-        (term-evisc-tuple nil state))
-   (increment-timer 'print-time state)))
+  (with-output-lock
+   (pprogn
+    (increment-timer 'prove-time state)
+    (fms "~@0~|~q1.~|"
+         (list (cons #\0 (tilde-@-clause-id-phrase cl-id))
+               (cons #\1 (prettyify-clause
+                          clause
+                          (let*-abstractionp state)
+                          (w state))))
+         (proofs-co state)
+         state
+         (term-evisc-tuple nil state))
+    (increment-timer 'print-time state))))
 
 (defmacro waterfall-print-clause-id-fmt1-call (cl-id)
 
@@ -3846,6 +4141,12 @@
 ; we avoid the wormhole call in the #-acl2-loop-only case, which is the
 ; actually executed inside the prover.
 
+; Note: Recall the invariant on the wormhole-data of comment-window-io: it is
+; an alist and any key that is string-equal to one of the
+; *tracked-warning-summaries* must be bound to a true-list.  See defmacro io?
+; for details.  But this function doesn't touch the data field, so it maintains
+; the invariant.
+
   #+acl2-loop-only
   `(wormhole 'comment-window-io
              '(lambda (whs)
@@ -3890,7 +4191,8 @@
               (state-mac@par))
             (io?-prove@par
              (cl-id clause)
-             (waterfall-print-clause-body cl-id clause state))))))
+             (waterfall-print-clause-body cl-id clause state)
+             :io-marker cl-id)))))
 
 #+acl2-par
 (defun some-parent-is-checkpointp (hist state)
@@ -3949,7 +4251,8 @@
        (io? prove nil state
             (pspv ttree new-hist clauses signal cl-id processor msg)
             (waterfall-msg1 processor cl-id signal clauses new-hist msg ttree
-                            pspv state))
+                            pspv state)
+            :io-marker cl-id)
 
 ; Parallelism wart: consider replacing print-splitter-rules-summary below.  A
 ; version of printing that does not involve wormholes will be required.  See
@@ -3967,13 +4270,15 @@
                    state
                    (pspv ttree new-hist clauses signal cl-id processor msg)
                    (waterfall-msg1 processor cl-id signal clauses new-hist msg
-                                   ttree pspv state)))
+                                   ttree pspv state)
+                   :io-marker cl-id))
              (t 'nothing-to-print
 ;               (io? prove t
 ;                    state
 ;                    (cl-id ttree clauses)
 ;                    (print-splitter-rules-summary
-;                     cl-id clauses ttree (proofs-co state) state))
+;                     cl-id clauses ttree state)
+;                    :io-marker cl-id)
                 )))
       (increment-timer@par 'print-time state)
       (mv@par (cond ((eq processor 'push-clause)
@@ -4065,448 +4370,10 @@
 ; the vicinity of our definition of defun and verify-guards.  But we
 ; need it now.
 
-(defun sublis-var-lst-lst (alist clauses)
-  (cond ((null clauses) nil)
-        (t (cons (sublis-var-lst alist (car clauses))
-                 (sublis-var-lst-lst alist (cdr clauses))))))
-
-(defun add-segments-to-clause (clause segments)
-  (cond ((null segments) nil)
-        (t (conjoin-clause-to-clause-set
-            (disjoin-clauses clause (car segments))
-            (add-segments-to-clause clause (cdr segments))))))
-
-(defun split-initial-extra-info-lits (cl hyps-rev)
-  (cond ((endp cl) (mv hyps-rev cl))
-        ((extra-info-lit-p (car cl))
-         (split-initial-extra-info-lits (cdr cl)
-                                        (cons (car cl) hyps-rev)))
-        (t (mv hyps-rev cl))))
-
-(defun conjoin-clause-to-clause-set-extra-info1 (tags-rev cl0 cl cl-set
-                                                          cl-set-all)
-
-; Roughly speaking, we want to extend cl-set-all by adding cl = (revappend
-; tags-rev cl0), where tags-rev is the reversed initial prefix of negated calls
-; of *extra-info-fn*.  But the situation is a bit more complex:
-
-; Cl is (revappend tags-rev cl0) and cl-set is a tail of cl-set-all.  Let cl1
-; be the first member of cl-set, if any, such that removing its initial negated
-; calls of *extra-info-fn* yields cl0.  We replace the corresponding occurrence
-; of cl1 in cl-set-all by the result of adding tags-rev (reversed) in front of
-; cl0, except that we drop each tag already in cl1; otherwise we return
-; cl-set-all unchanged.  If there is no such cl1, then we return the result of
-; consing cl on the front of cl-set-all.
-
-  (cond
-   ((endp cl-set)
-    (cons cl cl-set-all))
-   (t
-    (mv-let
-     (initial-extra-info-lits-rev cl1)
-     (split-initial-extra-info-lits (car cl-set) nil)
-     (cond
-      ((equal cl0 cl1)
-       (cond
-        ((not tags-rev) ; seems unlikely
-         cl-set-all)
-        (t (cond
-            ((subsetp-equal tags-rev initial-extra-info-lits-rev)
-             cl-set-all)
-            (t
-             (append (take (- (length cl-set-all) (length cl-set))
-                           cl-set-all)
-                     (cons (revappend initial-extra-info-lits-rev
-                                      (mv-let
-                                       (changedp new-tags-rev)
-                                       (set-difference-equal-changedp
-                                        tags-rev
-                                        initial-extra-info-lits-rev)
-                                       (cond
-                                        (changedp (revappend new-tags-rev cl0))
-                                        (t cl))))
-                           (cdr cl-set))))))))
-      (t (conjoin-clause-to-clause-set-extra-info1 tags-rev cl0 cl (cdr cl-set)
-                                                   cl-set-all)))))))
-
-(defun conjoin-clause-to-clause-set-extra-info (cl cl-set)
-
-; Cl, as well as each clause in cl-set, may start with zero or more negated
-; calls of *extra-info-fn*.  Semantically (since *extra-info-fn* always returns
-; T), we return the result of conjoining cl to cl-set, as with
-; conjoin-clause-to-clause-set.  However, we view a prefix of negated
-; *extra-info-fn* calls in a clause as a set of tags indicating a source of
-; that clause, and we want to preserve that view when we conjoin cl to cl-set.
-; In particular, if a member cl1 of cl-set agrees with cl except for the
-; prefixes of negated calls of *extra-info-fn*, it is desirable for the merge
-; to be achieved simply by adding the prefix of negated calls of
-; *extra-info-fn* in cl to the prefix of such terms in cl1.  This function
-; carries out that desire.
-
-  (cond ((member-equal *t* cl) cl-set)
-        (t (mv-let (tags-rev cl0)
-                   (split-initial-extra-info-lits cl nil)
-                   (conjoin-clause-to-clause-set-extra-info1
-                    tags-rev cl0 cl cl-set cl-set)))))
-
-(defun conjoin-clause-sets-extra-info (cl-set1 cl-set2)
-
-; Keep in sync with conjoin-clause-sets.
-
-; It is unfortunatel that each clause in cl-set2 is split into a prefix (of
-; negated *extra-info-fn* calls) and the rest for EACH member of cl-set1.
-; However, we expect the sizes of clause-sets to be relatively modest;
-; otherwise presumably the simplifier would choke.  So even though we could
-; preprocess by splitting cl-set2 into a list of pairs (prefix . rest), for now
-; we'll avoid thus complicating the algorithm (which also could perhaps
-; generate extra garbage as it reconstitutes cl-set2 from such pairs).
-
-  (cond ((null cl-set1) cl-set2)
-        (t (conjoin-clause-to-clause-set-extra-info
-            (car cl-set1)
-            (conjoin-clause-sets-extra-info (cdr cl-set1) cl-set2)))))
-
-(defun maybe-add-extra-info-lit (debug-info term clause wrld)
-  (cond (debug-info
-         (cons (fcons-term* 'not
-                            (fcons-term* *extra-info-fn*
-                                         (kwote debug-info)
-                                         (kwote (untranslate term nil wrld))))
-               clause))
-        (t clause)))
-
-(defun conjoin-clause-sets+ (debug-info cl-set1 cl-set2)
-  (cond (debug-info (conjoin-clause-sets-extra-info cl-set1 cl-set2))
-        (t (conjoin-clause-sets cl-set1 cl-set2))))
-
-(defconst *equality-aliases*
-
-; This constant should be a subset of *definition-minimal-theory*, since we do
-; not track the corresponding runes in simplify-tests and related code below.
-
-  '(eq eql =))
-
-(defun term-equated-to-constant (term)
-  (case-match term
-    ((rel x y)
-     (cond ((or (eq rel 'equal)
-                (member-eq rel *equality-aliases*))
-            (cond ((quotep x) (mv y x))
-                  ((quotep y) (mv x y))
-                  (t (mv nil nil))))
-           (t (mv nil nil))))
-    (& (mv nil nil))))
-
-(defun simplify-clause-for-term-equal-const-1 (var const cl)
-
-; This is the same as simplify-tests, but where cl is a clause: here we are
-; considering their disjunction, rather than the disjunction of their negations
-; (i.e., an implication where all elements are considered true).
-
-  (cond ((endp cl)
-         (mv nil nil))
-        (t (mv-let (changedp rest)
-                   (simplify-clause-for-term-equal-const-1 var const (cdr cl))
-                   (mv-let (var2 const2)
-                           (term-equated-to-constant (car cl))
-                           (cond ((and (equal var var2)
-                                       (not (equal const const2)))
-                                  (mv t rest))
-                                 (changedp
-                                  (mv t (cons (car cl) rest)))
-                                 (t
-                                  (mv nil cl))))))))
-
-(defun simplify-clause-for-term-equal-const (var const cl)
-
-; See simplify-clause-for-term-equal-const.
-
-  (mv-let (changedp new-cl)
-          (simplify-clause-for-term-equal-const-1 var const cl)
-          (declare (ignore changedp))
-          new-cl))
-
-(defun add-literal-smart (lit cl at-end-flg)
-
-; This version of add-literal can remove literals from cl that are known to be
-; false, given that lit is false.
-
-  (mv-let (term const)
-          (cond ((and (nvariablep lit)
-;                     (not (fquotep lit))
-                      (eq (ffn-symb lit) 'not))
-                 (term-equated-to-constant (fargn lit 1)))
-                (t (mv nil nil)))
-          (add-literal lit
-                       (cond (term (simplify-clause-for-term-equal-const
-                                    term const cl))
-                             (t cl))
-                       at-end-flg)))
-
-(mutual-recursion
-
-(defun guard-clauses (term debug-info stobj-optp clause wrld ttree)
-
-; See also guard-clauses+, which is a wrapper for guard-clauses that eliminates
-; ground subexpressions.
-
-; We return two results.  The first is a set of clauses whose conjunction
-; establishes that all of the guards in term are satisfied.  The second result
-; is a ttree justifying the simplification we do and extending ttree.
-; Stobj-optp indicates whether we are to optimize away stobj recognizers.  Call
-; this with stobj-optp = t only when it is known that the term in question has
-; been translated with full enforcement of the stobj rules.  Clause is the list
-; of accumulated, negated tests passed so far on this branch.  It is maintained
-; in reverse order, but reversed before we return it.
-
-; We do not add the definition rune for *extra-info-fn* in ttree.  The caller
-; should be content with failing to report that rune.  Prove-guard-clauses is
-; ultimately the caller, and is happy not to burden the user with mention of
-; that rune.
-
-; Note: Once upon a time, this function took an additional argument, alist, and
-; was understood to be generating the guards for term/alist.  Alist was used to
-; carry the guard generation process into lambdas.
-
-  (cond ((variablep term) (mv nil ttree))
-        ((fquotep term) (mv nil ttree))
-        ((flambda-applicationp term)
-         (mv-let
-          (cl-set1 ttree)
-          (guard-clauses-lst (fargs term) debug-info stobj-optp clause wrld
-                             ttree)
-          (mv-let
-           (cl-set2 ttree)
-           (guard-clauses (lambda-body (ffn-symb term))
-                          debug-info
-                          stobj-optp
-
-; We pass in the empty clause here, because we do not want it involved in
-; wrapping up the lambda term that we are about to create.
-
-                          nil
-                          wrld ttree)
-           (let* ((term1 (make-lambda-application
-                          (lambda-formals (ffn-symb term))
-                          (termify-clause-set cl-set2)
-                          (remove-guard-holders-lst (fargs term))))
-                  (cl (reverse (add-literal-smart term1 clause nil)))
-                  (cl-set3 (if (equal cl *true-clause*)
-                               cl-set1
-                             (conjoin-clause-sets+
-                              debug-info
-                              cl-set1
-
-; Instead of cl below, we could use (maybe-add-extra-info-lit debug-info term
-; cl wrld).  But that can cause a large number of lambda (let) terms in the
-; output that are probabably more unhelpful (as noise) than helpful.
-
-                              (list cl)))))
-             (mv cl-set3 ttree)))))
-        ((eq (ffn-symb term) 'if)
-         (let ((test (remove-guard-holders (fargn term 1))))
-           (mv-let
-            (cl-set1 ttree)
-
-; Note:  We generate guards from the original test, not the one with guard
-; holders removed!
-
-            (guard-clauses (fargn term 1) debug-info stobj-optp clause wrld
-                           ttree)
-            (mv-let
-             (cl-set2 ttree)
-             (guard-clauses (fargn term 2)
-                            debug-info
-                            stobj-optp
-
-; But the additions we make to the two branches is based on the simplified
-; test.
-
-                            (add-literal-smart (dumb-negate-lit test)
-                                               clause
-                                               nil)
-                            wrld ttree)
-             (mv-let
-              (cl-set3 ttree)
-              (guard-clauses (fargn term 3)
-                             debug-info
-                             stobj-optp
-                             (add-literal-smart test
-                                                clause
-                                                nil)
-                             wrld ttree)
-              (mv (conjoin-clause-sets+
-                   debug-info
-                   cl-set1
-                   (conjoin-clause-sets+ debug-info cl-set2 cl-set3))
-                  ttree))))))
-        ((eq (ffn-symb term) 'wormhole-eval)
-
-; Because of translate, term is necessarily of the form
-
-; (wormhole-eval '<name> '(lambda (<whs>) <body>) <name-dropper-term>)
-; or
-; (wormhole-eval '<name> '(lambda (     ) <body>) <name-dropper-term>)
-
-; the only difference being whether the lambda has one or no formals.  The
-; <body> of the lambda has been translated despite its occurrence inside a
-; quoted lambda.  The <name-dropper-term> is always of the form 'NIL or a
-; variable symbol or a PROG2$ nest of variable symbols and thus has a guard of
-; T.  Furthermore, translate insures that the free variables of the lambda are
-; those of the <name-dropper-term>.  Thus, all the variables we encounter in
-; <body> are variables known in the current context, except <whs>.  By the way,
-; ``whs'' stands for ``wormhole status'' and if it is the lambda formal we know
-; it occurs in <body>.
-
-; The raw lisp macroexpansion of the first wormhole-eval form above is (modulo
-; the name of var)
-
-; (let* ((<whs> (cdr (assoc-equal '<name> *wormhole-status-alist*)))
-;        (val <body>))
-;   (or (equal <whs> val)
-;       (put-assoc-equal '<name> val *wormhole-status-alist*))
-;   nil)
-;
-; We wish to make sure this form is Common Lisp compliant.  We know that
-; *wormhole-status-alist* is an alist satisfying the guard of assoc-equal and
-; put-assoc-equal.  The raw lisp macroexpansion of the second form of
-; wormhole-eval is also like that above.  Thus, the only problematic form in
-; either expansion is <body>, which necessarily mentions the variable symbol
-; <whs> if it's mentioned in the lambda.  Furthermore, at runtime we know
-; absolutely nothing about the last wormhole status of <name>.  So we need to
-; generate a fresh variable symbol to use in place of <whs> in our guard
-; clauses.
-
-         (let* ((whs (car (lambda-formals (cadr (fargn term 2)))))
-                (body (lambda-body (cadr (fargn term 2))))
-                (name-dropper-term (fargn term 3))
-                (new-var (if whs
-                             (genvar whs (symbol-name whs) nil
-                                     (all-vars1-lst clause
-                                                    (all-vars name-dropper-term)))
-                           nil))
-                (new-body (if (eq whs new-var)
-                              body
-                            (subst-var new-var whs body))))
-           (guard-clauses new-body debug-info stobj-optp clause wrld ttree)))
-        ((throw-nonexec-error-p term :non-exec nil)
-
-; It would be sound to replace the test above by (throw-nonexec-error-p term
-; nil nil).  However, through Version_4.3 we have always generated guard proof
-; obligations for defun-nx, and indeed for any form (prog2$
-; (throw-nonexec-error 'fn ...) ...).  So we restrict this special treatment to
-; forms (prog2$ (throw-nonexec-error :non-exec ...) ...), as may be generated
-; by calls of the macro, non-exec.  The corresponding translated term is of the
-; form (return-last 'progn (throw-non-exec-error ':non-exec ...) targ3); then
-; only the throw-non-exec-error call needs to be considered for guard
-; generation, not targ3.
-
-         (guard-clauses (fargn term 2) debug-info stobj-optp clause wrld ttree))
-
-; At one time we optimized away the guards on (nth 'n MV) if n is an integerp
-; and MV is bound in (former parameter) alist to a call of a multi-valued
-; function that returns more than n values.  Later we changed the way mv-let is
-; handled so that we generated calls of mv-nth instead of nth, but we
-; inadvertently left the code here unchanged.  Since we have not noticed
-; resulting performance problems, and since this was the only remaining use of
-; alist when we started generating lambda terms as guards, we choose for
-; simplicity's sake to eliminate this special optimization for mv-nth.
-
-        (t
-
-; Here we generate the conclusion clauses we must prove.  These clauses
-; establish that the guard of the function being called is satisfied.  We first
-; convert the guard into a set of clause segments, called the
-; guard-concl-segments.
-
-; We optimize stobj recognizer calls to true here.  That is, if the function
-; traffics in stobjs (and is not non-executablep!), then it was so translated
-; (except in cases handled by the throw-nonexec-error-p case above), and we
-; know that all those stobj recognizer calls are true.
-
-; Once upon a time, we normalized the 'guard first.  Is that important?
-
-         (let ((guard-concl-segments (clausify
-                                      (guard (ffn-symb term)
-                                             stobj-optp
-                                             wrld)
-
-; Warning: It might be tempting to pass in the assumptions of clause into the
-; second argument of clausify.  That would be wrong!  The guard has not yet
-; been instantiated and so the variables it mentions are not the same ones in
-; clause!
-
-                                      nil
-
-; Should we expand lambdas here?  I say ``yes,'' but only to be conservative
-; with old code.  Perhaps we should change the t to nil?
-
-                                      t
-
-; We use the sr-limit from the world, because we are above the level at which
-; :hints or :guard-hints would apply.
-
-                                      (sr-limit wrld))))
-           (mv-let
-            (cl-set1 ttree)
-            (guard-clauses-lst
-             (cond
-              ((and (eq (ffn-symb term) 'return-last)
-                    (quotep (fargn term 1)))
-               (case (unquote (fargn term 1))
-                 (mbe1-raw
-
-; Since (return-last 'mbe1-raw exec logic) macroexpands to exec in raw Common
-; Lisp, we need only verify guards for the :exec part of an mbe call.
-
-                  (list (fargn term 2)))
-                 (ec-call1-raw
-
-; Since (return-last 'ec-call1-raw ign (fn arg1 ... argk)) leads to the call
-; (*1*fn arg1 ... argk) or perhaps (*1*fn$inline arg1 ... argk) in raw Common
-; Lisp, we need only verify guards for the argi.
-
-                  (fargs (fargn term 3)))
-                 (otherwise
-
-; Consider the case that (fargn term 1) is not syntactically equal to 'mbe1-raw
-; or 'ec-call1-raw but reduces to one of these.  Even then, return-last is a
-; macro in Common Lisp, so we shouldn't produce the reduced obligations for
-; either of the two cases above.  But this is a minor issue anyhow, because
-; it's certainly safe to avoid those reductions, so in the worst case we would
-; still be sound, even if producing excessively strong guard obligations.
-
-                  (fargs term))))
-              (t (fargs term)))
-             debug-info stobj-optp clause wrld ttree)
-            (mv (conjoin-clause-sets+
-                 debug-info
-                 cl-set1
-                 (add-segments-to-clause
-                  (maybe-add-extra-info-lit debug-info term (reverse clause)
-                                            wrld)
-                  (add-each-literal-lst
-                   (and guard-concl-segments ; optimization (nil for ec-call)
-                        (sublis-var-lst-lst
-                         (pairlis$
-                          (formals (ffn-symb term) wrld)
-                          (remove-guard-holders-lst
-                           (fargs term)))
-                         guard-concl-segments)))))
-                ttree))))))
-
-(defun guard-clauses-lst (lst debug-info stobj-optp clause wrld ttree)
-  (cond ((null lst) (mv nil ttree))
-        (t (mv-let
-            (cl-set1 ttree)
-            (guard-clauses (car lst) debug-info stobj-optp clause wrld ttree)
-            (mv-let
-             (cl-set2 ttree)
-             (guard-clauses-lst (cdr lst) debug-info stobj-optp clause wrld
-                                ttree)
-             (mv (conjoin-clause-sets+ debug-info cl-set1 cl-set2) ttree))))))
-
-)
+; NOTE: Conjoin-clause-sets+ and some other relevant functions were once
+; defined here, but have been moved to history-management.lisp in order to
+; support the definition of termination-theorem-clauses and
+; guard-clauses-for-clique.
 
 ; And now disvaring...
 
@@ -4595,10 +4462,8 @@
          (or (contains-constrained-constantp-lst (fargs term) wrld)
              (contains-constrained-constantp (lambda-body (ffn-symb term))
                                              wrld)))
-        ((and (getprop (ffn-symb term) 'constrainedp nil
-                       'current-acl2-world wrld)
-              (null (getprop (ffn-symb term) 'formals t
-                             'current-acl2-world wrld)))
+        ((and (getpropc (ffn-symb term) 'constrainedp nil wrld)
+              (null (getpropc (ffn-symb term) 'formals t wrld)))
          t)
         (t (contains-constrained-constantp-lst (fargs term) wrld))))
 
@@ -4672,7 +4537,7 @@
 ; binding of a term that is not linked to the variables used by term.
 ; For example, if term is (RATIONALP X) then we won't keep a
 ; hypothesis about (PRIMEP Y) unless some kept hypothesis links X and
-; Y.  This is called ``disvaring'' and is applied after diguarding
+; Y.  This is called ``disvaring'' and is applied after disguarding
 ; because the terms thrown out by disguarding are likely to link
 ; variables in a bogus way.  For example, (< X Y) would link X and Y,
 ; but is thrown out by disguarding since it requires (RATIONALP X).
@@ -5004,7 +4869,7 @@
    (partition-according-to-assumption-term assumptions nil)
    nil))
 
-; Now we move on to the problem of converting an unemcumbered and subsumption
+; Now we move on to the problem of converting an unencumbered and subsumption
 ; cleansed assumption into a clause to prove.
 
 (defun clausify-type-alist (type-alist cl ens w seen ttree)
@@ -5121,9 +4986,9 @@
 ; of the third result are irrelevant.  We know that only-immediatep = 'non-nil
 ; is used only in waterfall-step to do CASE-SPLITs and immediate FORCEs.  We
 ; know that only-immediatep = nil is used for forcing-round applications and in
-; the proof checker.  When CASE-SPLIT type assumptions are collected with
+; the proof-builder.  When CASE-SPLIT type assumptions are collected with
 ; only-immediatep = nil, then they are given the semantics of FORCE rather
-; than CASE-SPLIT.  This could happen in the proof checker, but it is thought
+; than CASE-SPLIT.  This could happen in the proof-builder, but it is thought
 ; not to happen otherwise.
 
 ; In the case that only-immediatep is nil: we strip all assumptions out of
@@ -5269,7 +5134,7 @@
           (eliminate-irrelevance-clause clause hist pspv wrld state)))
         (otherwise
          (pstk
-          (push-clause@par clause hist pspv wrld state))))))))
+          (push-clause@par cl-id clause hist pspv wrld state))))))))
 
 (defun@par process-backtrack-hint (cl-id clause clauses processor new-hist
                                          new-pspv ctx wrld state)
@@ -5434,9 +5299,7 @@
       clause
       ttree
       'non-nil ; collect CASE-SPLIT and immediate FORCE assumptions
-      (access rewrite-constant
-              (access prove-spec-var new-pspv :rewrite-constant)
-              :current-enabled-structure)
+      (ens-from-pspv new-pspv)
       wrld
       (access rewrite-constant
               (access prove-spec-var new-pspv :rewrite-constant)
@@ -5536,9 +5399,37 @@
         (cond
          ((consp (access history-entry ; (SPECIOUS . processor)
                          (car new-hist) :processor))
-          (mv@par 'MISS nil ttree new-hist
-                  (accumulate-rw-cache-into-pspv processor ttree pspv)
-                  state))
+
+; A more complete "specious simplification" message is printed when gag-mode is
+; off, because it is presumably unnecessary to see such detail in gag-mode.  We
+; avoid using io? or io?@par because we do not want to save this form to print
+; with :pso, which will already print the more complete message mentioned
+; above.
+
+          (pprogn@par
+           (cond ((and (gag-mode)
+                       (not (member-eq 'prove
+                                       (f-get-global 'inhibit-output-lst
+                                                     state))))
+                  (mv-let (str cl-id-phrase assumption-1-0)
+                    (mv "~@0The goal, ~@1, ~#2~[~/forcibly ~]simplifies to a ~
+                         set of conjectures including itself!  Therefore, we ~
+                         ignore this specious simp~-li~-fi~-ca~-tion.  See ~
+                         :DOC specious-simplification.~|"
+                        (tilde-@-clause-id-phrase cl-id)
+                        (if (tagged-objectsp 'assumption ttree) 1 0))
+                    (serial-first-form-parallel-second-form@par
+                     (fms str
+                          (list (cons #\0 "")
+                                (cons #\1 cl-id-phrase)
+                                (cons #\2 assumption-1-0))
+                          (proofs-co state) state nil)
+                     (cw str
+                         "~%" cl-id-phrase assumption-1-0))))
+                 (t (state-mac@par)))
+           (mv@par 'MISS nil ttree new-hist
+                   (accumulate-rw-cache-into-pspv processor ttree pspv)
+                   state)))
          (t (mv@par signal clauses ttree new-hist
                     (cond
                      ((or (member-eq processor *simplify-clause-ledge-complement*)
@@ -5553,6 +5444,76 @@
                                            (maybe-set-rw-cache-state-disabled
                                             (erase-rw-cache-from-pspv new-pspv)))))
                     state))))))))
+
+#-acl2-loop-only
+(defvar *iprint-read-state*
+
+; Possible values are:
+
+; nil      - no requirement on current iprint index
+; t        - either all indices must exceed iprint-last-index, or none does
+; (n . <=) - n, already read, is <= iprint-last-index; index must be too
+; (n .  >) - n, already read, is  > iprint-last-index; index must be too
+
+; The value is initially nil.  At a top-level read, it is set to nil if
+; iprint-fal is nil, else to t.  For the first index i that is read when the
+; value is t, we set the value to <= if (<= i iprint-last-index) and to >
+; otherwise.
+
+  nil)
+
+#-acl2-loop-only
+(defun iprint-oracle-updates-raw (state)
+
+; Warning: Keep in sync with iprint-oracle-updates.
+
+  (let* ((ar *wormhole-iprint-ar*))
+    (when ar
+      (f-put-global 'iprint-ar (compress1 'iprint-ar ar) state)
+      (f-put-global 'iprint-fal *wormhole-iprint-fal* state)
+      (f-put-global 'iprint-hard-bound *wormhole-iprint-hard-bound* state)
+      (f-put-global 'iprint-soft-bound *wormhole-iprint-soft-bound* state)
+      (setq *wormhole-iprint-ar* nil))
+    (setq *iprint-read-state*
+          (if (f-get-global 'iprint-fal state)
+              t
+            nil)))
+  state)
+
+(defun iprint-oracle-updates (state)
+
+; Warning: Keep in sync with iprint-oracle-updates-raw.
+
+  #+acl2-loop-only
+  (mv-let (erp val state)
+    (read-acl2-oracle state)
+    (declare (ignore erp))
+
+; If we intend to reason about this function, then we might want to check that
+; val is a reasonable value.  But that seems not to be important, since very
+; little reasoning would be possible anyhow for this function.
+
+    (let ((val (fix-true-list val)))
+      (pprogn (f-put-global 'iprint-ar
+                            (nth 0 val)
+                            state)
+              (f-put-global 'iprint-hard-bound
+                            (nfix (nth 1 val))
+                            state)
+              (f-put-global 'iprint-soft-bound
+                            (nfix (nth 2 val))
+                            state)
+              (f-put-global 'iprint-fal
+                            (nth 3 val)
+                            state)
+              state)))
+  #-acl2-loop-only
+  (iprint-oracle-updates-raw state))
+
+(defun iprint-oracle-updates@par ()
+  #-acl2-loop-only
+  (iprint-oracle-updates-raw *the-live-state*)
+  nil)
 
 (defun@par waterfall-step (processor cl-id clause hist pspv wrld ctx state
                                      step-limit)
@@ -5643,31 +5604,56 @@
             (waterfall-step1@par processor cl-id clause hist pspv wrld state
                                  step-limit)
             (mv@par step-limit signal clauses ttree new-pspv state)))))
-   (cond
-    (erp ; from out-of-time or clause-processor failure; treat as 'error signal
-     (mv-let@par (erp val state)
-                 (er@par soft ctx "~@0" erp)
-                 (declare (ignore erp val))
-                 (mv@par step-limit 'error nil nil nil nil state)))
-    (t
-     (pprogn@par ; account for bddnote in case we do not have a hit
-      (cond ((and (eq processor 'apply-top-hints-clause)
-                  (member-eq signal '(error miss))
-                  ttree) ; a bddnote; see bdd-clause
-             (error-in-parallelism-mode@par
+   (pprogn@par
+
+; Since wormholes (in particular, brr wormholes) don't change the global values
+; of the iprint structures, we make such changes here so that iprinting done
+; in brr is reflected in the global state.
+
+    (serial-first-form-parallel-second-form@par
+     (iprint-oracle-updates state)
+     (iprint-oracle-updates@par))
+    (cond
+     (erp ; from out-of-time or clause-processor failure; treat as 'error signal
+      (mv-let@par (erp2 val state)
+                  (er@par soft ctx "~@0" erp)
+                  (declare (ignore erp2 val))
+                  (pprogn@par
+                   (assert$
+                    (null ttree)
+                    (mv-let@par
+                     (erp3 val state)
+                     (accumulate-ttree-and-step-limit-into-state@par
+                      (add-to-tag-tree! 'abort-cause
+                                        (if (equal erp *interrupt-string*)
+                                            'interrupt
+                                          'time-limit-reached)
+                                        nil)
+                      step-limit
+                      state)
+                     (declare (ignore val))
+                     (assert$ (null erp3)
+                              (state-mac@par))))
+                   (mv@par step-limit 'error nil nil nil nil state))))
+     (t
+      (pprogn@par ; account for bddnote in case we do not have a hit
+       (cond ((and (eq processor 'apply-top-hints-clause)
+                   (member-eq signal '(error miss))
+                   ttree) ; a bddnote; see bdd-clause
+              (error-in-parallelism-mode@par
 
 ; Parallelism blemish: we disable the following addition of BDD notes to the
 ; state.  Until a user requests it, we don't see a need to implement this.
 
-              (state-mac@par)
-              (f-put-global 'bddnotes
-                            (cons ttree
-                                  (f-get-global 'bddnotes state))
-                            state)))
-            (t (state-mac@par)))
-      (mv-let@par
-       (signal clauses new-hist new-pspv jppl-flg state)
-       (cond ((eq signal 'error)
+               (state-mac@par)
+               (f-put-global 'bddnotes
+                             (cons ttree
+                                   (f-get-global 'bddnotes state))
+                             state)))
+             (t (state-mac@par)))
+       (mv-let@par
+        (signal clauses new-hist new-pspv jppl-flg state)
+        (cond ((eq signal 'error)
 
 ; As of this writing, the only processor which might cause an error is
 ; apply-top-hints-clause.  But processors can't actually cause errors in the
@@ -5677,48 +5663,49 @@
 ; (fmt-string . alist) suitable for giving error1.  Moreover, in this case
 ; ttree is an alist assigning state global variables to values.
 
-              (mv-let@par (erp val state)
-                          (error1@par ctx (car clauses) (cdr clauses) state)
-                          (declare (ignore erp val))
-                          (mv@par 'error nil nil nil nil state)))
-             ((eq signal 'miss)
-              (mv@par 'miss nil hist
-                      (accumulate-rw-cache-into-pspv processor ttree pspv)
-                      nil state))
-             (t
-              (mv-let@par
-               (signal clauses ttree new-hist new-pspv state)
-               (waterfall-step-cleanup@par processor cl-id clause hist wrld
-                                           state signal clauses ttree pspv
-                                           new-pspv step-limit)
+               (mv-let@par (erp val state)
+                           (error1@par ctx "Prove" (car clauses) (cdr clauses)
+                                       state)
+                           (declare (ignore erp val))
+                           (mv@par 'error nil nil nil nil state)))
+              ((eq signal 'miss)
+               (mv@par 'miss nil hist
+                       (accumulate-rw-cache-into-pspv processor ttree pspv)
+                       nil state))
+              (t
                (mv-let@par
-                (erp new-hint-settings new-hints state)
-                (cond
-                 ((or (eq signal 'miss) ; presumably specious
-                      (eq processor 'settled-down-clause)) ; not user-visible
-                  (mv@par nil nil nil state))
-                 (t (process-backtrack-hint@par cl-id clause clauses processor
-                                                new-hist new-pspv ctx wrld
-                                                state)))
-                (cond
-                 (erp
-                  (mv@par 'error nil nil nil nil state))
-                 (new-hint-settings
-                  (mv@par 'top-of-waterfall-hint
-                          new-hint-settings
-                          processor
-                          :pspv-for-backtrack
-                          new-hints
-                          state))
-                 (t
-                  (mv-let@par
-                   (jppl-flg new-pspv state)
-                   (waterfall-msg@par processor cl-id clause signal clauses
-                                      new-hist ttree new-pspv state)
-                   (mv@par signal clauses new-hist new-pspv jppl-flg
-                           state))))))))
-       (mv@par step-limit signal clauses new-hist new-pspv jppl-flg
-               state)))))))
+                (signal clauses ttree new-hist new-pspv state)
+                (waterfall-step-cleanup@par processor cl-id clause hist wrld
+                                            state signal clauses ttree pspv
+                                            new-pspv step-limit)
+                (mv-let@par
+                 (erp new-hint-settings new-hints state)
+                 (cond
+                  ((or (eq signal 'miss) ; presumably specious
+                       (eq processor 'settled-down-clause)) ; not user-visible
+                   (mv@par nil nil nil state))
+                  (t (process-backtrack-hint@par cl-id clause clauses processor
+                                                 new-hist new-pspv ctx wrld
+                                                 state)))
+                 (cond
+                  (erp
+                   (mv@par 'error nil nil nil nil state))
+                  (new-hint-settings
+                   (mv@par 'top-of-waterfall-hint
+                           new-hint-settings
+                           processor
+                           :pspv-for-backtrack
+                           new-hints
+                           state))
+                  (t
+                   (mv-let@par
+                    (jppl-flg new-pspv state)
+                    (waterfall-msg@par processor cl-id clause signal clauses
+                                       new-hist ttree new-pspv state)
+                    (mv@par signal clauses new-hist new-pspv jppl-flg
+                            state))))))))
+        (mv@par step-limit signal clauses new-hist new-pspv jppl-flg
+                state))))))))
 
 ; Section:  FIND-APPLICABLE-HINT-SETTINGS
 
@@ -5923,17 +5910,20 @@
                                       (override-hints wrld)
                                       state))
 
-(defun@par thanks-for-the-hint (goal-already-printed-p hint-settings state)
+(defun@par thanks-for-the-hint (goal-already-printed-p hint-settings cl-id
+                                                       state)
 
 ; This function prints the note that we have noticed the hint.  We have to
 ; decide whether the clause to which this hint was attached was printed out
 ; above or below us.  We return state.  Goal-already-printed-p is either t,
 ; nil, or a pair (cons :backtrack processor) where processor is a member of
-; *preprocess-clause-ledge*.
+; *preprocess-clause-ledge*.  Cl-id may be a clause-id, but any value (in
+; particular, nil) is legal, as it is only used in construction of the
+; :io-marker of a io-record.
 
-  (declare (ignorable state))
+  (declare (ignorable state cl-id))
   (cond ((cdr (assoc-eq :no-thanks hint-settings))
-         (mv@par (delete-assoc-eq :no-thanks hint-settings) state))
+         (mv@par (remove1-assoc-eq :no-thanks hint-settings) state))
         ((alist-keys-subsetp hint-settings '(:backtrack))
          (mv@par hint-settings state))
         (t
@@ -5985,7 +5975,8 @@
                                 (cdr goal-already-printed-p)))))))
                   (proofs-co state)
                   state
-                  nil))))
+                  nil)
+             :io-marker cl-id)))
           (mv@par hint-settings state)))))
 
 ; We now develop the code for warning users about :USEing enabled
@@ -5993,14 +5984,27 @@
 
 (defun lmi-name-or-rune (lmi)
 
-; See also lmi-seed, which is similar except that it returns a base
-; symbol where we are happy to return a rune, and when it returns a
-; term we return nil.
+; See also lmi-seed, which is similar except that it returns a base symbol
+; where we are happy to return a rune, and when it returns a term we return
+; nil.  The symbols returned by this function are those for which we want to
+; provide a warning about using an enabled rule; see enabled-lmi-names.
 
   (cond ((atom lmi) lmi)
-        ((eq (car lmi) :theorem) nil)
-        ((or (eq (car lmi) :instance)
-             (eq (car lmi) :functional-instance))
+        ((member-eq (car lmi) '(:theorem
+
+; There is no reason to warn about using a termination or guard theorem.  (See
+; comment above about the purpose being to provide a warning.)
+
+                                :termination-theorem
+                                :termination-theorem!
+                                :guard-theorem
+
+; Through Version_7.1 we warned when using a functional instance of an enabled
+; rule.  As Eric Smith has pointed out, this is rarely appropriate.
+
+                                :functional-instance))
+         nil)
+        ((eq (car lmi) :instance)
          (lmi-name-or-rune (cadr lmi)))
         (t lmi)))
 
@@ -6033,12 +6037,16 @@
          ((symbolp x)
           (union-equal (enabled-lmi-names1
                         ens
-                        (getprop x 'runic-mapping-pairs nil
-                                 'current-acl2-world wrld))
+                        (getpropc x 'runic-mapping-pairs nil wrld))
                        (enabled-lmi-names ens (cdr lmi-lst) wrld)))
-         ((enabled-runep x ens wrld)
-          (add-to-set-equal x (enabled-lmi-names ens (cdr lmi-lst) wrld)))
-         (t (enabled-lmi-names ens (cdr lmi-lst) wrld)))))))
+         (t (let ((x (if (and (consp x)
+                              (eq (car x) :executable-counterpart))
+                         (list :definition (cadr x))
+                       x)))
+              (cond
+               ((enabled-runep x ens wrld)
+                (add-to-set-equal x (enabled-lmi-names ens (cdr lmi-lst) wrld)))
+               (t (enabled-lmi-names ens (cdr lmi-lst) wrld))))))))))
 
 (defun@par maybe-warn-for-use-hint (pspv cl-id ctx wrld state)
   (cond
@@ -6047,18 +6055,16 @@
    (t
     (let ((enabled-lmi-names
            (enabled-lmi-names
-            (access rewrite-constant
-                    (access prove-spec-var pspv :rewrite-constant)
-                    :current-enabled-structure)
+            (ens-from-pspv pspv)
             (cadr (assoc-eq :use
                             (access prove-spec-var pspv :hint-settings)))
             wrld)))
       (cond
        (enabled-lmi-names
         (warning$@par ctx ("Use")
-          "It is unusual to :USE an enabled :REWRITE or :DEFINITION rule, so ~
-           you may want to consider disabling ~&0 in the hint provided for ~
-           ~@1.  See :DOC using-enabled-rules."
+          "It is unusual to :USE the formula of an enabled :REWRITE or ~
+           :DEFINITION rule, so you may want to consider disabling ~&0 in the ~
+           hint provided for ~@1.  See :DOC using-enabled-rules."
           enabled-lmi-names
           (tilde-@-clause-id-phrase cl-id)))
        (t (state-mac@par)))))))
@@ -6100,7 +6106,7 @@
      (t
 
 ; The new theory is being constructed from the user's hint and the ACL2 world.
-; The most coherent thing to do is contruct the warning in an analogous manner,
+; The most coherent thing to do is construct the warning in an analogous manner,
 ; which is why we use ens below rather than ens1.
 
       (maybe-warn-about-theory-simple@par ens1 ens2 ctx wrld state)))))
@@ -6207,7 +6213,7 @@
 
 ; This message is printed when we have swept all the disjunctive
 ; branches and have chosen cl-id as the one to pursue.  If results is
-; empty, then cl-id and summary are all irrelevent (and probably nil).
+; empty, then cl-id and summary are all irrelevant (and probably nil).
 
   (cond
    ((null results)
@@ -6345,7 +6351,7 @@
 ; Inside the :pool of the pspv are a bunch of
 ; TO-BE-PROVED-BY-INDUCTION pool-elements.  We have to decide which of
 ; the pspv's is the "best" one, i.e., the one to which we will commit
-; to puruse by inductions.  We choose the one that has the least
+; to pursue by inductions.  We choose the one that has the least
 ; difficulty.  We measure the difficulty of the pool-elements until we
 ; get to element0.
 
@@ -6397,7 +6403,7 @@
 ; Inside the :pool of the pspv are a bunch of
 ; TO-BE-PROVED-BY-INDUCTION pool-elements.  We have to decide which of
 ; the pspv's is the "best" one, i.e., the one to which we will commit
-; to puruse by inductions.  We choose the one that has the least
+; to pursue by inductions.  We choose the one that has the least
 ; difficulty.
 
 ; We return (mv (cl-id . pspv) summary) where cl-id and pspv are the
@@ -6454,7 +6460,7 @@
 ; around.  But it is silly to inspect that ttree to find out the
 ; history of the clause, since you need the history for that.)
 
-; The basic rule is that in a history recovered from an uninterupted
+; The basic rule is that in a history recovered from an uninterrupted
 ; proof attempt the entries with :signal OR-HIT will have a ttree with
 ; a tag :OR on an object (parent-cl-id i uhs-lst).
 
@@ -6909,14 +6915,17 @@
            (let ((new-ht (make-hash-table :test 'equal :size (expt 2 13)
 
 ; Parallelism blemish: CCL locks these hashtable operations automatically
-; because of the argument :shared t below.  However in SBCL and LispWorks, we
-; should really lock these hashtable operations ourselves.  Note that the SBCL
-; documentation at http://www.sbcl.org/manual/Hash-Table-Extensions.html
-; describes a keyword, :synchronized, that is like CCL's :shared but is labeled
-; as "experimental".  At any rate, we are willing to take our chances for now
-; with SBCL and Lispworks.
+; because of the argument :shared t below.  SBCL documentation at
+; http://www.sbcl.org/manual/#Hash-Table-Extensions introduces the keyword,
+; :synchronized, that provides such a locking mechanism, but warns: "This
+; keyword argument is experimental, and may change incompatibly or be removed
+; in the future."  However, it has been around since at least 2011.  Using this
+; experimental feature is easier (and probably performs better) than
+; implementing the locking ourselves.  We would ideally do something similar
+; for LispWorks as well, but for now we are willing to take our chances.
 
-                                          #+ccl :shared #+ccl t)))
+                                          #+ccl :shared #+ccl t
+                                          #+sbcl :synchronized #+sbcl t)))
              (setf *waterfall-parallelism-timings-ht-alist*
                    (acons name
                           new-ht
@@ -7174,7 +7183,7 @@
 
   (mv-let@par
    (hint-settings state)
-   (thanks-for-the-hint@par goal-already-printedp hint-settings state)
+   (thanks-for-the-hint@par goal-already-printedp hint-settings cl-id state)
    (pprogn@par
     (waterfall-print-clause@par goal-already-printedp cl-id clause state)
     (mv-let@par
@@ -7216,7 +7225,7 @@
     ((null ledge)
 
 ; The only way that the ledge can be nil is if the push-clause at the
-; bottom of the waterfall signalled 'MISS.  This only happens if
+; bottom of the waterfall signal led 'MISS.  This only happens if
 ; push-clause found a :DO-NOT-INDUCT name hint.  That being the case,
 ; we want to act like a :BY name' hint was attached to that clause,
 ; where name' is the result of extending the supplied name with the
@@ -7399,9 +7408,9 @@
 ; the tag-tree, which is part of the rewrite-constant of the pspv).
 
                      (change prove-spec-var pspv :hint-settings
-                             (delete-assoc-eq :backtrack
-                                              (access prove-spec-var pspv
-                                                      :hint-settings)))
+                             (remove1-assoc-eq :backtrack
+                                               (access prove-spec-var pspv
+                                                       :hint-settings)))
                      (cons :backtrack new-hist) ; see thanks-for-the-hint
                      ))
                 (t
@@ -7464,7 +7473,7 @@
                              step-limit)
            (mv@par step-limit
                    (er hard 'waterfall0
-                       "The empty ledge signalled 'MISS!  This can only ~
+                       "The empty ledge signaled 'MISS!  This can only ~
                         happen if we changed APPLY-TOP-HINTS-CLAUSE so that ~
                         when given a single :BY name hint it fails to hit.")
                    nil nil state)))
@@ -7523,7 +7532,7 @@
                                     results step-limit)
 
 ; Cl-id is the clause id of clause, of course, and we are to disjunctively
-; apply each of the hints in ush-lst to it.  Uhs-lst is of the form
+; apply each of the hints in uhs-lst to it.  Uhs-lst is of the form
 ; (...(user-hinti . hint-settingsi)...) and branch-cnt is the length of that
 ; list initially, i.e., the maximum value of i.
 
@@ -7565,7 +7574,8 @@
         (io? prove nil state
              (cl-id revert-info)
              (waterfall-or-hit-msg-c cl-id nil (car revert-info) nil nil
-                                     state)))
+                                     state)
+             :io-marker cl-id))
 
        (mv@par step-limit
                'abort
@@ -7611,7 +7621,8 @@
                                                nil
                                                (car choice) ; new goal cl-id
                                                summary
-                                               state)))
+                                               state)
+                       :io-marker cl-id))
                  (mv@par step-limit
                          'continue
                          (cdr choice) ; chosen pspv
@@ -7646,7 +7657,8 @@
               (increment-timer 'prove-time state)
               (waterfall-or-hit-msg-a cl-id user-hinti d-cl-id i branch-cnt
                                       state)
-              (increment-timer 'print-time state))))
+              (increment-timer 'print-time state))
+             :io-marker cl-id))
        (sl-let@par
         (d-signal d-new-pspv d-new-jppl-flg state)
         (waterfall1-wrapper@par
@@ -7714,7 +7726,8 @@
                  (pprogn
                   (increment-timer 'prove-time state)
                   (waterfall-or-hit-msg-b cl-id d-cl-id branch-cnt state)
-                  (increment-timer 'print-time state))))
+                  (increment-timer 'print-time state))
+                 :io-marker cl-id))
            (mv@par step-limit
                    'continue
                    d-new-pspv
@@ -7879,7 +7892,7 @@
 ; the calculation of cl-id in sync with waterfall1-lst@par.
 
 ; Since waterfall1-tree@par-pseudo-parallel is just a refactoring of
-; waterfall1-tree@par-parallel, I remove many comments from this defintion.  So,
+; waterfall1-tree@par-parallel, I remove many comments from this definition.  So,
 ; see waterfall1-tree@par-parallel for a more complete set of comments.
 
   (declare (ignorable ens))
@@ -8091,7 +8104,7 @@
 
 ; Variable names that end with "1" (as in signal1) store results from proving
 ; the first half of the clauses (the part of the spec-mv-let that is always
-; peformed), and variable names that end with "2" (as in signal2) store results
+; performed), and variable names that end with "2" (as in signal2) store results
 ; from speculatively proving the second half of the clauses.
 
           (step-limit2 signal2 pspv2 jppl-flg2)
@@ -8374,7 +8387,7 @@
                                        wrld ctx state step-limit))
         ((pseudo-parallel)
 
-; The psuedo-parallel mode is just like parallel mode, except both calls occur
+; The pseudo-parallel mode is just like parallel mode, except both calls occur
 ; in the current thread.
 
          (waterfall1-tree@par-pseudo-parallel n parent-cl-id clauses hist pspv
@@ -8471,7 +8484,7 @@
                              ens wrld ctx state step-limit)
              (cond ((eq signal 'error)
 
-; If the waterfall signalled an error then it printed the message and we
+; If the waterfall signaled an error then it printed the message and we
 ; just pass the error up.
 
                     (mv step-limit t nil nil state))
@@ -8915,7 +8928,7 @@
                            (null (base-symbol (access assumnote (car lst) :rune))))
                       " ~@0~%  by primitive type reasoning about~%  ~q2.~|")
                      ((eq (access assumnote (car lst) :rune) 'equal)
-                      " ~@0~%  by the linearization of~%  ~q2.~|")
+                      " ~@0~%  by the use of linear arithmetic on~%  ~q2.~|")
                      ((symbolp (access assumnote (car lst) :rune))
                       " ~@0~%  by assuming the guard for ~x1 in~%  ~q2.~|")
                      (t " ~@0~%  by applying ~x1 to~%  ~q2.~|")))
@@ -8971,24 +8984,21 @@
        (let* ((cl-id-phrase
                (tilde-@-clause-id-phrase
                 (access assumnote (car lst) :cl-id)))
+              (rune (access assumnote (car lst) :rune))
               (x
-               (cond ((and (consp (access assumnote (car lst) :rune))
-                           (null (base-symbol (access assumnote (car lst)
-                                                      :rune))))
+               (cond ((and (consp rune)
+                           (null (base-symbol rune)))
                       (list " ~@0 by primitive type reasoning"
                             (cons #\0 cl-id-phrase)))
-                     ((eq (access assumnote (car lst) :rune) 'equal)
+                     ((eq rune 'equal)
                       (list " ~@0 by linearization"
                             (cons #\0 cl-id-phrase)))
-                     ((symbolp (access assumnote (car lst) :rune))
-                      (list " ~@0 by assuming the guard for ~x1"
-                            (cons #\0 cl-id-phrase)
-                            (cons #\1 (access assumnote (car lst) :rune))))
                      (t
-                      (list " ~@0 by applying ~x1"
-                            (cons #\0 cl-id-phrase)
-                            (cons #\1 (access assumnote (car lst)
-                                              :rune)))))))
+                      (assert$ ; Check that we no longer assume a guard.
+                       (not (symbolp rune))
+                       (list " ~@0 by applying ~x1"
+                             (cons #\0 cl-id-phrase)
+                             (cons #\1 rune)))))))
          (add-to-set-equal x acc))))))
 
 (defun tilde-*-assumnotes-column-phrase-gag-mode (assumnotes)
@@ -9067,8 +9077,7 @@
                (cons #\2 (if (= forcing-round 0) 0 1))
                (cons #\3 forcing-round)
                (cons #\4 (if (= n0 n) 0 1))
-               (cons #\5 n0)
-               (cons #\6 (1+ forcing-round)))
+               (cons #\5 n0))
          (proofs-co state)
          state
          nil)
@@ -9278,7 +9287,9 @@
                         (t (prove-loop2 (1+ forcing-round)
                                         nil
                                         pairs
-                                        (initialize-pspv-for-gag-mode new-pspv)
+                                        (change prove-spec-var new-pspv
+                                                :gag-state
+                                                *initial-gag-state*)
                                         hints ens wrld ctx state
                                         step-limit)))))))
 
@@ -9379,11 +9390,15 @@
 ; gag-state under these conditions.  However, this is effectively a no-op,
 ; because the parallel waterfall does not save anything to gag-state anyway.
 
-  (let ((chan (proofs-co state)))
+  (let ((chan (proofs-co state))
+        (acc-ttree (f-get-global 'accumulated-ttree state)))
     (pprogn
-     (io? summary nil state (chan)
-          (newline chan state))
-     (print-rules-and-hint-events-summary state)
+     (clear-event-data state)
+     (io? summary nil state (chan acc-ttree)
+          (pprogn
+           (newline chan state)
+           (print-rules-and-hint-events-summary acc-ttree state)
+           (print-system-attachments-summary state)))
      (cond
       #+acl2-par
       ((and (f-get-global 'waterfall-parallelism state)
@@ -9396,7 +9411,7 @@
         (mv-let (erp val state)
                 (pstack)
                 (declare (ignore erp val))
-                (print-gag-state state))))))))
+                (save-and-print-gag-state state))))))))
 
 (defun prove-loop0 (clauses pspv hints ens wrld ctx state)
 
@@ -9435,10 +9450,8 @@
           (pprogn
            (increment-timer 'other-time state)
            (f-put-global 'bddnotes nil state)
-           (if (gag-mode)
-               (pprogn (f-put-global 'gag-state *initial-gag-state* state)
-                       (f-put-global 'gag-state-saved nil state))
-             state)
+           (pprogn (f-put-global 'gag-state *initial-gag-state* state)
+                   (f-put-global 'gag-state-saved nil state))
            (mv-let (erp ttree state)
                    (bind-acl2-time-limit ; make *acl2-time-limit* be let-bound
                     (prove-loop0 clauses pspv hints ens wrld ctx state))
@@ -9524,6 +9537,62 @@
              (merge-pathnames home "write-arithmetic-goals.lisp"))
             (t (error "Unable to determine (user-homedir-pathname)."))))))
 
+(defun push-current-acl2-world (name state)
+  (declare (xargs :guard (and (symbolp name)
+                              (f-boundp-global 'acl2-world-alist state)
+                              (alistp (f-get-global 'acl2-world-alist state)))))
+  (prog2$ (or (symbolp name) ; always true if guard is checked
+              (er hard 'push-current-acl2-world
+                  "It is illegal to call push-current-acl2-world with ~x0, ~
+                   because it is not a symbol."
+                  name))
+          (f-put-global 'acl2-world-alist
+                        (acons name
+                               (w state)
+                               (f-get-global 'acl2-world-alist state))
+                        state)))
+
+(defun pop-current-acl2-world (name state)
+  (declare (xargs :guard (and (symbolp name)
+                              (f-boundp-global 'acl2-world-alist state)
+                              (alistp (f-get-global 'acl2-world-alist state))
+                              (assoc-eq name (f-get-global 'acl2-world-alist
+                                                           state)))))
+  (prog2$
+   (or (symbolp name) ; always true if guard is checked
+       (er hard 'pop-current-acl2-world
+           "It is illegal to call pop-current-acl2-world with ~x0, because ~
+            it is not a symbol."
+           name))
+   (let ((pair (assoc-eq name (f-get-global 'acl2-world-alist state))))
+     (cond
+      ((null pair)
+       (prog2$
+        (er hard 'pop-current-acl2-world
+            "Attempted to pop the name ~x0, which is not bound in ~x1."
+            name
+            '(@ acl2-world-alist))
+        state))
+      (t
+       (pprogn
+        (set-w! (cdr pair) state)
+        (f-put-global 'acl2-world-alist
+                      (remove1-assoc-eq name
+                                        (f-get-global 'acl2-world-alist state))
+                      state)))))))
+
+(defmacro revert-world (form)
+
+; This variant of revert-world-on-error reverts the world after execution of
+; form, whether or not there is an error.
+
+  `(acl2-unwind-protect
+    "revert-world"
+    (pprogn (push-current-acl2-world 'revert-world state)
+            ,form)
+    (pop-current-acl2-world 'revert-world state)
+    (pop-current-acl2-world 'revert-world state)))
+
 (defun prove (term pspv hints ens wrld ctx state)
 
 ; Term is a translated term.  Hints is a list of pairs as returned by
@@ -9606,51 +9675,75 @@
                            :direction :output
                            :if-exists :append
                            :if-does-not-exist :create)
-                      (let ((*print-pretty* nil)
-                            (*package* (find-package-fast "ACL2"))
-                            (*readtable* *acl2-readtable*)
-                            (*print-escape* t)
-                            *print-level*
-                            *print-length*)
-                        (prin1 term str)
-                        (terpri str)
-                        (force-output str))))
+        (let ((*print-pretty* nil)
+              (*package* (find-package-fast "ACL2"))
+              (*readtable* *acl2-readtable*)
+              (*print-escape* t)
+              *print-level*
+              *print-length*)
+          (prin1 term str)
+          (terpri str)
+          (force-output str))))
     (progn$
      (initialize-brr-stack state)
      (initialize-fc-wormhole-sites)
-     (er-let* ((ttree1 (prove-loop (list (list term))
-                                   (change prove-spec-var pspv
-                                           :user-supplied-term term
-                                           :orig-hints hints)
-                                   hints ens wrld ctx state)))
-       (er-progn
-        (chk-assumption-free-ttree ttree1 ctx state)
-        (let ((byes (tagged-objects :bye ttree1)))
-          (cond
-           (byes
-            (pprogn
+     (pprogn
+      (f-put-global 'saved-output-reversed nil state)
+      (push-current-acl2-world 'saved-output-reversed state)
+      (f-put-global 'saved-output-p
+                    (not (member-eq 'PROVE
+                                    (f-get-global 'inhibit-output-lst state)))
+                    state)
+      (push-io-record
+       :ctx
+       (list 'mv-let
+             '(col state)
+             '(fmt "Output replay for: "
+                   nil (standard-co state) state nil)
+             (list 'mv-let
+                   '(col state)
+                   (list 'fmt-ctx
+                         (list 'quote ctx)
+                         'col
+                         '(standard-co state)
+                         'state)
+                   '(declare (ignore col))
+                   '(newline (standard-co state) state)))
+       state)
+      (er-let* ((ttree1 (prove-loop (list (list term))
+                                    (change prove-spec-var pspv
+                                            :user-supplied-term term
+                                            :orig-hints hints)
+                                    hints ens wrld ctx state)))
+        (er-progn
+         (chk-assumption-free-ttree ttree1 ctx state)
+         (let ((byes (tagged-objects :bye ttree1)))
+           (cond
+            (byes
+             (pprogn
 
 ; The use of ~*1 below instead of just ~&1 forces each of the defthm forms
 ; to come out on a new line indented 5 spaces.  As is already known with ~&1,
 ; it can tend to scatter the items randomly -- some on the left margin and others
 ; indented -- depending on where each item fits flat on the line first offered.
 
-             (io? prove nil state
-                  (wrld byes)
-                  (fms "To complete this proof you could try to admit the ~
+              (io? prove nil state
+                   (wrld byes)
+                   (fms "To complete this proof you could try to admit the ~
                         following event~#0~[~/s~]:~|~%~*1~%See the discussion ~
                         of :by hints in :DOC hints regarding the ~
-                        name~#0~[~/s~] displayed above."
-                       (list (cons #\0 byes)
-                             (cons #\1
-                                   (list ""
-                                         "~|~     ~q*."
-                                         "~|~     ~q*,~|and~|"
-                                         "~|~     ~q*,~|~%"
-                                         (make-defthm-forms-for-byes
-                                          byes wrld))))
-                       (proofs-co state)
-                       state
-                       (term-evisc-tuple nil state)))
-             (silent-error state)))
-           (t (value ttree1))))))))))
+                        name~#0~[~/s~] displayed above.~|"
+                        (list (cons #\0 byes)
+                              (cons #\1
+                                    (list ""
+                                          "~|~     ~q*."
+                                          "~|~     ~q*,~|and~|"
+                                          "~|~     ~q*,~|~%"
+                                          (make-defthm-forms-for-byes
+                                           byes wrld))))
+                        (proofs-co state)
+                        state
+                        (term-evisc-tuple nil state)))
+              (silent-error state)))
+            (t (value ttree1)))))))))))
+

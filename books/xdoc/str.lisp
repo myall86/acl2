@@ -1,5 +1,5 @@
 ; XDOC Documentation System for ACL2
-; Copyright (C) 2009-2014 Centaur Technology
+; Copyright (C) 2009-2015 Centaur Technology
 ;
 ; Contact:
 ;   Centaur Technology Formal Verification Group
@@ -38,7 +38,7 @@
 
 (in-package "XDOC")
 (include-book "std/util/bstar" :dir :system)
-(include-book "std/basic/defs" :dir :system)
+(include-book "std/strings/printtree" :dir :system)
 (local (include-book "std/util/defredundant" :dir :system))
 (local (include-book "make-event/acl2x-help" :dir :system))
 ; (include-book "std/lists/list-defuns" :dir :system)
@@ -88,7 +88,7 @@
                           (include-book
                            "std/strings/decimal" :dir :system
                            :uncertified-okp :ignore-certs)))
-   
+
    (make-event
     (er hard? 'xdoc/str
         "~%************************** XDOC/STR FAILURE **************************~%~
@@ -108,10 +108,7 @@
                                          acl2::implode$inline
                                          str::explode
                                          acl2::explode$inline
-                                         str::rchars-to-string
                                          str::fast-concatenate
-                                         str::fast-string-append
-                                         str::fast-string-append-lst
                                          str::revappend-chars-aux
                                          str::revappend-chars
                                          str::revappend-chars$inline
@@ -152,12 +149,12 @@
                                          str::join-aux
                                          str::join
                                          str::join$inline
-                                         str::basic-natchars
-                                         str::natchars-aux
-                                         str::natchars
-                                         str::natchars$inline
-                                         str::natstr
-                                         str::natstr$inline
+                                         str::basic-nat-to-dec-chars
+                                         str::nat-to-dec-chars-aux
+                                         str::nat-to-dec-chars
+                                         str::nat-to-dec-chars$inline
+                                         str::nat-to-dec-string
+                                         str::nat-to-dec-string$inline
                                          )
                    t
                    state)))

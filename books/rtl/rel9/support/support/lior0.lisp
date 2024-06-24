@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -103,7 +91,7 @@ prove (elsewhere) lemmas mixing lior0 with other functions
                               (consp (cddr x)))))
   (cond ((endp (cdddr x)) ;(lior0 x y n) -- the base case
          `(binary-lior0 ,@x))
-        (t         
+        (t
          `(binary-lior0 ,(car x)
                        (lior0 ,@(cdr x))
                        ,(car (last x))))))
@@ -185,8 +173,8 @@ prove (elsewhere) lemmas mixing lior0 with other functions
                 (case-split (integerp n))
                 )
            (equal (bits (lior0 x y n) i j)
-                  (lior0 (bits x i j) 
-                        (bits y i j) 
+                  (lior0 (bits x i j)
+                        (bits y i j)
                         (+ 1 i (- j))))))
 
 (defthmd bits-lior0-2
@@ -195,8 +183,8 @@ prove (elsewhere) lemmas mixing lior0 with other functions
                 (case-split (integerp n))
                 )
            (equal (bits (lior0 x y n) i j)
-                  (lior0 (bits x i j) 
-                        (bits y i j) 
+                  (lior0 (bits x i j)
+                        (bits y i j)
                         (+ n (- j))))))
 
 ;notice the call to MIN in the conclusion
@@ -206,8 +194,8 @@ prove (elsewhere) lemmas mixing lior0 with other functions
                 (case-split (integerp i))
                 )
            (equal (bits (lior0 x y n) i j)
-                  (lior0 (bits x i j) 
-                        (bits y i j) 
+                  (lior0 (bits x i j)
+                        (bits y i j)
                         (+ (min n (+ 1 i)) (- j))))))
 
 (defthmd bitn-lior0-1
@@ -216,8 +204,8 @@ prove (elsewhere) lemmas mixing lior0 with other functions
                 (case-split (integerp n))
                 )
            (equal (bitn (lior0 x y n) m)
-                  (lior0 (bitn x m) 
-                        (bitn y m) 
+                  (lior0 (bitn x m)
+                        (bitn y m)
                         1))))
 
 (defthmd bitn-lior0-2
@@ -236,8 +224,8 @@ prove (elsewhere) lemmas mixing lior0 with other functions
                 )
            (equal (bitn (lior0 x y n) m)
                   (if (< m n)
-                      (lior0 (bitn x m) 
-                            (bitn y m) 
+                      (lior0 (bitn x m)
+                            (bitn y m)
                             1)
                     0))))
 

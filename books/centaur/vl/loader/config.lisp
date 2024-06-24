@@ -32,6 +32,7 @@
 (include-book "preprocessor/defines")
 (local (include-book "../util/arithmetic"))
 (local (include-book "../util/osets"))
+(include-book "std/testing/assert-bang" :dir :system)
 
 (local (defthm string-listp-of-remove-equal
          (implies (force (string-listp x))
@@ -129,12 +130,24 @@
                     see @(see vl-make-initial-defines), and you should probably
                     be aware of the @(see scope-of-defines).")
 
+   (plusargs       string-listp
+                   "List of plusargs for functions like @('$test$plusargs').
+                    These should have no leading @('+') characters.  For
+                    instance, using @(':plusargs (list \"foo\" \"bar\")') is
+                    intended to be equivalent to passing @('+foo +bar') to a
+                    Verilog simulator as command-line options.")
+
    (filemapp       booleanp
                    :rule-classes :type-prescription
                    :default t
                    "This flag controls whether a @(see vl-filemap-p) will be
                     constructed for the files we have loaded.  You may wish to
                     turn this off to save some memory.")
+
+   (debugp         booleanp
+                   :rule-classes :type-prescription
+                   "Enable high-level loader debugging features that may be
+                    expensive.")
 
    (flush-tries    posp
                    :rule-classes :type-prescription

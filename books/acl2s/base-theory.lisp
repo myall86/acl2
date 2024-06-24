@@ -7,46 +7,44 @@
 (in-package "ACL2S")
 
 (include-book "defdata/top" :ttags :all)
-(include-book "cgen/top" :ttags :all)
 (include-book "std/lists/top" :dir :system)
 (include-book "std/alists/top" :dir :system)
 (include-book "ordinals/lexicographic-ordering-without-arithmetic" :dir :system)
+(include-book "misc/meta-lemmas" :dir :system)
 
-; I (Pete) went through the built-in functions and added
-; signature rules where appropriate. This list is not complete
-; for two reasons. First, there are some cases in which we fail
-; due to the algorithm not being as general as it can be. See the
-; acl2s-issues file. Second, I made one pass through the
-; documentation of ACL2-built-ins. I should check again and I
-; should check functions defined in the books we load 
+; Pete 9/14/2018: Useful for must-fail
+(include-book "std/testing/eval" :dir :system)
 
-(sig append ((listof :a) (listof :a)) => (listof :a))
-(sig acl2::rev ((listof :a)) => (listof :a))
-(sig nth (nat (listof :a)) => :a 
-     :satisfies (< x1 (len x2)))
-(sig acl2::fix-true-list ((listof :a)) => (listof :a))
-(sig last ((listof :a)) => (listof :a))
-(sig acl2::repeat (nat :a) => (listof :a)) ;renamed from replicate-fn
-(sig make-list-ac (nat :a (listof :a)) => (listof :a))
-(sig nthcdr (nat (listof :a)) => (listof :a))
-(sig remove (all (listof :a)) => (listof :a))
-(sig remove1-equal (all (listof :a)) => (listof :a))
-(sig remove-duplicates ((listof :a)) => (listof :a))
-(sig cdr ((listof :a)) => (listof :a))
-(sig revappend ((listof :a) (listof :a)) => (listof :a))
-(sig reverse ((listof :a)) => (listof :a))
-(sig set-difference$ ((listof :a) (listof :a)) => (listof :a))
-(sig first-n-ac (nat (listof :a) (listof :a)) => (listof :a)
-     :satisfies (< x1 (len x2)))
-(sig take (nat (listof :a)) => (listof :a)
-     :satisfies (<= x1 (len x2))
-     :hints (("Goal" :cases ((equal x1 (len x2))))))
-(sig subseq-list ((listof :a) nat nat) => (listof :a)
-     :satisfies (and (<= x3 (len x1)) (<= x2 x3)))
-(sig subseq ((listof :a) nat nat) => (listof :a)
-     :satisfies (and (<= x3 (len x1)) (<= x2 x3)))
+; Pete 9/16/2018: Better range support
+(include-book "tau/bounders/elementary-bounders" :dir :system)
 
-(sig put-assoc-equal (:a :b (alistof :a :b)) => (alistof :a :b))
+; Pete 9/27/2018: Include utilities book
+(include-book "utilities")
+(include-book "definec" :ttags :all)
+(include-book "cons-size")
+(include-book "properties")
+(include-book "check-equal")
 
-(include-book "arithmetic-5/top" :dir :system)
+(include-book "std/strings/top" :dir :system)
+(include-book "system/doc/developers-guide" :dir :system)
+
+(include-book "acl2s/acl2s-size" :dir :system)
+(include-book "acl2s/ccg/ccg" :dir :system 
+  :uncertified-okp nil :ttags ((:ccg))
+  :load-compiled-file nil)
+(include-book "base-arithmetic" :ttags :all)
+(include-book "base-lists" :ttags :all)
+(include-book "acl2s/cgen/base-cgen-rules" :dir :system)
+(include-book "match" :ttags :all)
+
+(set-termination-method :ccg)
+
+(local (set-defunc-timeout 1000))
+
+; inhibit all ccg output.
+; comment out to debug termination failures in the book.
+(make-event
+ (er-progn
+  (set-ccg-inhibit-output-lst acl2::*ccg-valid-output-names*)
+  (value '(value-triple :invisible))))
 

@@ -35,7 +35,7 @@
 (local (std::add-default-post-define-hook :fix))
 
 (defxdoc drop-user-submodules
-  :parents (lint)
+  :parents (vl-lint)
   :short "(Unsound transform) Remove modules that the user says to drop, and
 simultaneously remove all instances of these submodules."
 
@@ -77,14 +77,16 @@ they are, say, owned by some other logic designer.</p>")
                             :warnings warnings))))
     x))
 
-(defprojection vl-modulelist-drop-user-submodules-aux ((x     vl-modulelist-p)
-                                                       (names string-listp)
-                                                       (fal   (equal fal (make-lookup-alist names))))
+(defprojection vl-modulelist-drop-user-submodules-aux
+  ((x     vl-modulelist-p)
+   (names string-listp)
+   (fal   (equal fal (make-lookup-alist names))))
   :returns (new-x vl-modulelist-p)
   (vl-module-drop-user-submodules x names fal))
 
-(define vl-modulelist-drop-user-submodules ((x    vl-modulelist-p "Module list to filter.")
-                                            (drop string-listp    "Names of modules to drop."))
+(define vl-modulelist-drop-user-submodules
+  ((x    vl-modulelist-p "Module list to filter.")
+   (drop string-listp    "Names of modules to drop."))
   :returns (new-x vl-modulelist-p)
   (b* ((drop    (string-list-fix drop))
        (x       (vl-delete-modules drop x))

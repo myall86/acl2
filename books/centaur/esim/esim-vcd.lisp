@@ -220,7 +220,7 @@
                                 (stringp idcode)
                                 (vl-printedlist-p ostream))))
     (b* ((ostream (cons "$var wire " ostream))
-         (ostream (revappend (str::natchars (len msb-wires)) ostream))
+         (ostream (revappend (str::nat-to-dec-chars (len msb-wires)) ostream))
          (ostream (cons #\Space ostream))
          (ostream (cons idcode ostream))
          (ostream (cons #\Space ostream))
@@ -237,7 +237,7 @@
                 (if msb-idx
                     ;; Only a single wire, but there's an index.
                     (b* ((ostream (cons #\[ ostream))
-                         (ostream (revappend (str::natchars msb-idx) ostream))
+                         (ostream (revappend (str::nat-to-dec-chars msb-idx) ostream))
                          (ostream (cons #\] ostream)))
                       ostream)
                   ;; Else, a single wire with no index -- don't print any
@@ -249,9 +249,9 @@
                ((unless (and msb-idx lsb-idx))
                 (er hard? 'vcd-vardecl "Multiple wires but not indices: ~x0" msb-wires))
                (ostream (cons #\[ ostream))
-               (ostream (revappend (str::natchars msb-idx) ostream))
+               (ostream (revappend (str::nat-to-dec-chars msb-idx) ostream))
                (ostream (cons #\: ostream))
-               (ostream (revappend (str::natchars lsb-idx) ostream))
+               (ostream (revappend (str::nat-to-dec-chars lsb-idx) ostream))
                (ostream (cons #\] ostream)))
             ostream))
 
@@ -286,7 +286,7 @@
    idcode     ;; base-93 encoded identifier code for this net, as a string
    )
   :tag :vcd-vector
-  :legiblep nil
+  :layout :fulltree
   :require ((stringp-of-vcd-vector->idcode
              (stringp idcode)
              :rule-classes :type-prescription)))
@@ -401,7 +401,7 @@
                      :verify-guards nil
                      :measure (two-nats-measure (acl2-count mod) 2)))
      (b* ((dwires     (esim-vl-designwires mod))
-          (dwires-fal (pairlis$ (redundant-list-fix dwires) nil))
+          (dwires-fal (pairlis$ (list-fix dwires) nil))
           (walist     (esim-vl-wirealist mod))
           ((with-fast walist dwires-fal))
           ((mv acc n ostream)
@@ -455,9 +455,9 @@
 
   (flag::make-flag flag-vcd-vectors-for-mod
                    vcd-vectors-for-mod
-                   :flag-mapping ((vcd-vectors-for-mod . mod)
-                                  (vcd-vectors-for-occs . occs)
-                                  (vcd-vectors-for-occ . occ)))
+                   :flag-mapping ((vcd-vectors-for-mod mod)
+                                  (vcd-vectors-for-occs occs)
+                                  (vcd-vectors-for-occ occ)))
 
   (defthm-flag-vcd-vectors-for-mod
 
@@ -610,7 +610,7 @@
 (defaggregate vcd-multivector
   (bits idcodes)
   :tag :vcd-multivector
-  :legiblep nil
+  :layout :fulltree
   :require ((string-listp-of-vcd-multivector->idcodes
              (string-listp idcodes))))
 
@@ -1213,10 +1213,10 @@ $dumpall
 
 
 
-(defconst *vecs* 
+(defconst *vecs*
   (vcd-gather-vectors acl2::|*fadd*|))
 
-(time$ (load-vcdarr *vecs* vcd$)) ;; 0.1 second 
+(time$ (load-vcdarr *vecs* vcd$)) ;; 0.1 second
 
 (defconsts *pathmap*
   (vcd-pathmap 0 *vecs* (* 2 (len *vecs*))))
@@ -1265,7 +1265,7 @@ $dumpall
 
 (defconsts (*fadd-vecs* *fadd-hier*)
   (vcd-gather-vectors acl2::|*fadd*|))
-  
+
 (defconsts *iu-mvecs*
   (vcd-compress-vectors *iu-vecs*))
 

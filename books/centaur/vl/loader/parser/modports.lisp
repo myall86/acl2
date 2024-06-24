@@ -33,7 +33,6 @@
 (include-book "utils")
 (include-book "../../parsetree")
 (include-book "expressions")
-(include-book "datatypes")
 (include-book "functions")
 (local (include-book "../../util/arithmetic"))
 
@@ -53,7 +52,7 @@
           (name := (vl-match-token :vl-idtoken))
           (return (make-vl-modport-port :name (vl-idtoken->name name)
                                         :dir dir
-                                        :expr (vl-idexpr (vl-idtoken->name name) nil nil)
+                                        :expr (vl-idexpr (vl-idtoken->name name))
                                         :atts atts
                                         :loc loc)))
         (:= (vl-match))
@@ -61,7 +60,7 @@
         (:= (vl-match-token :vl-lparen))
         (unless (vl-is-token? :vl-rparen)
           (expr := (vl-parse-expression)))
-        
+
         (:= (vl-match-token :vl-rparen))
         (return (make-vl-modport-port :name (vl-idtoken->name name)
                                       :dir dir
@@ -139,7 +138,7 @@
                   ((return-raw (vl-parse-method-prototype)))
                   ((:= (vl-match-token :vl-idtoken))
                    (return nil))))
-  
+
 
 (defparser vl-parse-modport-port ()
   :result (vl-modport-portlist-p val)
@@ -150,7 +149,7 @@
         (atts := (vl-parse-0+-attribute-instances))
         (when (vl-is-some-token? *vl-directions-kwds*)
           (dir := (vl-match-some-token *vl-directions-kwds*))
-          (ports := (vl-parse-1+-simple-modport-ports 
+          (ports := (vl-parse-1+-simple-modport-ports
                      (cdr (assoc-eq (vl-token->type dir)
                                     *vl-directions-kwd-alist*))
                      atts))

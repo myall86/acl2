@@ -114,7 +114,8 @@
 (include-book "coi/syntax/syntax" :dir :system)
 (include-book "coi/util/mv-nth" :dir :system)
 (include-book "compiler-proof")
-(include-book "misc/eval" :dir :system)
+(include-book "std/testing/must-not-prove" :dir :system)
+(include-book "std/testing/must-prove" :dir :system)
 (include-book "coi/util/pseudo-translate" :dir :system)
 (include-book "coi/util/recursion-support" :dir :system)
 
@@ -1419,9 +1420,9 @@
        ;; Make sure case is not vacuously true or false
        ;;
 
-       (not-thm? ,case)
+       (must-not-prove ,case)
 
-       (not-thm? (not ,case))
+       (must-not-prove (not ,case))
 
        (local
         (defthm base_check

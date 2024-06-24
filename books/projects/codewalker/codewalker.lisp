@@ -321,7 +321,7 @@
 ; those components, develop a collection of lemmas about your model for
 ; reducing finite-length runs of program segments to those terms, and develop
 ; the ``opener'' and ``seqential execution'' lemmas you'd need if you were
-; doing code profos about your model.  To see the lemmas actually proved about
+; doing code proofs about your model.  To see the lemmas actually proved about
 ; the M1 model here, see the tail end of the file m1-version-3.lisp which
 ; contains the most basic code proof lemmas, plus the lemmas in the encapsulate
 ; after (hyps s) is defined in the basic-demo.lsp script.
@@ -331,7 +331,7 @@
 ; (def-model-api
 ;   :run M1                  ; the run function of the model
 ;   :svar S                  ; name of state variable
-;   :stobjp T                ;  and whether it's a stobj 
+;   :stobjp T                ;  and whether it's a stobj
 ;   :hyps ((HYPS S))         ; invariant to assume about state
 ;   :step STEP               ; name of step function
 ;   :get-pc (LAMBDA (S) (RD :PC S))      ; how to fetch the pc
@@ -458,7 +458,7 @@
 ;   (declare (xargs :stobjs (s)))
 ;   (equal (rd :program s) *program1*))
 
-; and then strengthened the :hyps of the API when we issued the 
+; and then strengthened the :hyps of the API when we issued the
 ; following command to explore the code:
 
 ; (def-semantics
@@ -851,7 +851,7 @@
 
 ;   function symbol or lambda from state to state.  This is a required field.
 
-;   Your :run and :step functions must satisfy 
+;   Your :run and :step functions must satisfy
 
 ;   Constraint:
 ;   (run s n) = (if (zp n) s (run (step s) (- n 1))),
@@ -945,7 +945,7 @@
 ;   updaters) around the model's :svar should match the canonical form of
 ;   states produced by ACL2's simplifier on the model.  All those accessor
 ;   nests should be orthogonal in the sense that updating the value of one
-;   accessor nest should not change the value of a different nest.  
+;   accessor nest should not change the value of a different nest.
 
 ;   This is a required field, unless the simplified canonical state expressions
 ;   from the model are expressed entirely in the updater paradigm.
@@ -1076,7 +1076,7 @@
 ;   and fancier uses of the list of tuples form.  In all cases, given a state
 ;   component x, :var-names determines a string which is used to generate a
 ;   unique variable symbol in the same symbol package as the :package-witness
-;   of the API.  
+;   of the API.
 
 ;   The general handling of (pattern fmt-string term_0 ...)  is as follows:
 ;   Pattern must be a term, fmt-string is a string suitable for printing with
@@ -1184,7 +1184,7 @@
 ;   having one or more lemmas that force step to expand when syntactic
 ;   conditions are right and then disabling step.
 
-; * the ``sequential execution'' lemma that states that 
+; * the ``sequential execution'' lemma that states that
 ;   (run s (clk+ i j)) is (run (run s i) j).  Typically, clk+ is disabled in
 ;   the data base so that arithmetic canonicalization does not apply to it.
 
@@ -1449,13 +1449,13 @@
 ; states that have not yet reached cutpoints.  This is called ``snorkeling''
 ; because it is as though the rewriter has to come up periodically for air.
 
-; Every 300 steps, Codewalker prints a snorkel report such as: 
+; Every 300 steps, Codewalker prints a snorkel report such as:
 
 ; SNORKEL REPORT: pc: 6; steps 600
 ; number of continuations: = 1
 ; nesting depth: 1
 ; splitter pcs: (337)
-; partial-path-tree = 
+; partial-path-tree =
 ; (IF (EQUAL (NTH '0 (RD ':LOCALS S)) '0) :TIP (:CONTINUATION-FROM-PC 410))
 
 ; In a snorkel report, pc is the program counter at which the current path
@@ -1846,7 +1846,7 @@
 ; or the function/lambda expression form.  The list of tuples would be:
 
 ; :var-names:
-;   (((PC S)             "PC")      ; general form: 
+;   (((PC S)             "PC")      ; general form:
 ;    ((NTH I (REGS S)) "R~x0" I)  ; (pattern fmt-string term_0 term_1...)
 ;    ((NTH I (MEM S))  "WORD-~x0-BYTE-~x1" (floor I 8) (mod i 8))
 ;    ((STACK S)          "STK")
@@ -1981,7 +1981,7 @@
 ; It is possible to mitigate some of these limitations some of the time.
 ; Imagine that the code of interest contains instructions that would cause
 ; Codewalker to fail.  Def-semantics can still be used to explore that portion
-; of the code that Codewalker can handle.  Two obvious ways to do this are: 
+; of the code that Codewalker can handle.  Two obvious ways to do this are:
 
 ; * use the :focus-regionp argument of def-semantics to limit the exploration
 ;   to regions of code containing instructions Codewalker can handle
@@ -1994,7 +1994,7 @@
 ; sometimes admits a way to partially handle some limitations.  For example, if
 ; the code doesn't in general terminate but can be shown to terminate under
 ; some hypothesis, then adding that hypotheses to :hyps or :hyps+ might be
-; helpful.  
+; helpful.
 
 ; Similarly, if the program contains the instruction ``jump to the unknown
 ; value of register 2'' you might add the hypothesis that register 2 contains
@@ -2385,7 +2385,7 @@
 
 ; Recall our goal is to define a new function FN1-LOOP and the expression above
 ; is the beginning of a body for it.  There are two things to note about this
-; expression.  First, the occurrence of the expression 
+; expression.  First, the occurrence of the expression
 
 ; (NTH 1 (RD :LOCALS
 ;             (SEM-6
@@ -2627,7 +2627,7 @@
 ;   (if (zp (nth 2 st))
 ;       st
 ;       (foo (update-nth 1 (+ (nth 1 st) (nth 2 st))
-;             (update-nth 2 (+ (nth 2 st) -1) 
+;             (update-nth 2 (+ (nth 2 st) -1)
 ;               st)))))
 
 ; Clearly, the decreasing measure is (acl2-count (nth 2 st)).  But ACL2's
@@ -2653,7 +2653,7 @@
 ; virtual formals and their assignments more obvious.  Given a call like:
 
 ;       (foo (update-nth 1 (+ (nth 1 st) (nth 2 st))
-;             (update-nth 2 (+ (nth 2 st) -1) 
+;             (update-nth 2 (+ (nth 2 st) -1)
 ;               st)))
 
 ; we sometimes re-represent it as a ``call on virtual formals'' (or ``virtual
@@ -2727,7 +2727,7 @@
 
 ; (table constructor-drivers
 ;        :list
-;        '(((cons a b)                        ; lists consisting of a 
+;        '(((cons a b)                        ; lists consisting of a
 ;           (car :base) (cdr :base))))        ; constructor expression and
 ;                                             ; the corresponding n accessor
 ;                                             ; expressons.  Accessors may
@@ -2744,7 +2744,7 @@
 ; The second table, constructor-drivers, is only relevant for machine models
 ; that use the ``state constructor paradigm'' -- where each instruction's
 ; semantics explicitly constructs a new state with CONS or some higher level
-; function like M1's MAKE-STATE.  
+; function like M1's MAKE-STATE.
 
 ; Almost all practical ACL2 machine models are stobj-based and thus are in the
 ; updater paradigm.  But these tables are used by Terminatricks and
@@ -2766,7 +2766,7 @@
 
 ; -----------------------------------------------------------------------------
 ; Overviews of How the Def-Semantics and Def-Projection Commands Work
- 
+
 ; Below we give overviews of the steps taken by both def-semantics and
 ; def-projection.  Each step is identified by a token, (A.1), (A.2), ...
 ; for def-semantics and (B.1), (B.2), ... for def-projection.  After these two
@@ -3019,7 +3019,7 @@
 ;                               splitters
 ;                               (+ 1 depth)
 ;                               (,step ,s)))))
-; 
+;
 ; (defthm codewalker-wrapper-rule-1
 ;   (implies
 ;    (and (natp depth)
@@ -3028,7 +3028,7 @@
 ;                               splitters depth ,s)
 ;           (codewalker-wrapper-snorkeler cnt rpath known-cutpoints
 ;                                         splitters depth ,s))))
-; 
+;
 ; (defthm codewalker-wrapper-rule-2
 ;   (implies
 ;    (and (natp depth)
@@ -3044,7 +3044,7 @@
 ;                           (revappend (cons pc rpath) nil)
 ;                           splitters
 ;                           ,s))))
-; 
+;
 ; (defthm codewalker-wrapper-rule-3
 ;   (implies
 ;    (and (natp depth)
@@ -3284,7 +3284,7 @@
 ; def-semantics allows the user to specify some :annotations that may
 ; modify the automatically generated events.
 
-; Annotations will be an alist and each pair in it will be of one of two 
+; Annotations will be an alist and each pair in it will be of one of two
 ; shapes:
 
 ; (name (DECLARE ...)) -- means that name is the name of a generated defun-like
@@ -3431,7 +3431,7 @@
 ; example, the ``outside'' components might be R0 and R1, but as the function
 ; recurs, R1 might become R1+R2.  That means that R2 is relevant to the final value
 ; of R1, even though R2 does not occur ``outside.''  So the computation done
-; in this step is really in two phases.  
+; in this step is really in two phases.
 
 ; First, given a set of so-far-recognized as relevant state components, we
 ; collect their new values in each of the states occurring inside the
@@ -3619,6 +3619,49 @@
 
 (set-state-ok t)
 
+; The following two definitions from Matt Kaufmann are essentially versions of
+; remove-guard-holders[-lst] from before July 2021, to preserve the existing
+; behavior of codewalker.
+
+(defun remove-guard-holders-legacy (term wrld)
+
+; Warning: Keep in sync with ACL2 source function remove-guard-holders.
+
+; Return a term equal to term, but slightly simplified, even perhaps inside
+; quoted lambda objects.  See remove-guard-holders-weak for a version that does
+; not take a world argument and does not simplify quoted lambda objects.
+
+; See the warning in remove-guard-holders1.
+
+  (declare (xargs :guard (and (pseudo-termp term)
+                              (plist-worldp wrld))))
+  (let ((lamp nil)) ; (remove-guard-holders-lamp)
+    (cond (wrld (possibly-clean-up-dirty-lambda-objects
+                 nil
+                 (remove-guard-holders-weak term lamp)
+                 wrld
+                 lamp))
+          (t (remove-guard-holders-weak term lamp)))))
+
+(defun remove-guard-holders-lst-legacy (lst wrld)
+
+; Warning: Keep in sync with ACL2 source function remove-guard-holders.
+
+; Return a list of terms element-wise equal to lst, but slightly simplified,
+; even perhaps inside quoted lambda objects.  See remove-guard-holders-weak-lst
+; for a version that does not take a world argument and does not simplify
+; quoted lambda objects.
+
+  (declare (xargs :guard (and (pseudo-term-listp lst)
+                              (plist-worldp wrld))))
+  (let ((lamp nil)) ; (remove-guard-holders-lamp)
+    (cond (wrld (possibly-clean-up-dirty-lambda-objects-lst
+                 nil
+                 (remove-guard-holders-weak-lst lst lamp)
+                 wrld
+                 lamp))
+          (t (remove-guard-holders-weak-lst lst lamp)))))
+
 (defun update-codewalker-splitters (s0 s1 pc splitters)
   (cond ((or (not (quotep pc))
              (not (quotep splitters)))
@@ -3701,9 +3744,11 @@ to be quoted evgs, but pc = ~x0; splitters = ~x1."
       (er-let* ((call (translate (cons fn (cadr fn))
                                  t t nil ctx
                                  w state)))
-        (value (ffn-symb (remove-guard-holders call)))))
+        (value (ffn-symb (remove-guard-holders-legacy call
+; Matt K. mod 3/2019 for new argument of remove-guard-holders:
+                                                      w)))))
      (t (er soft ctx
-            "The ~x0 argument must be either a an existing function symbol or ~
+            "The ~x0 argument must be either an existing function symbol or ~
              a well-formed LAMBDA expression.  The arity of the function ~
              symbol or LAMBDA expression must be ~x1 and ~#2~[the formals ~
              must not include~/the ~n3 formal must be~] the state variable ~
@@ -3742,7 +3787,9 @@ to be quoted evgs, but pc = ~x0; splitters = ~x1."
                                'translate-list-of-terms
                                (w state) state))
               (rest (translate-list-of-terms (cdr terms) state)))
-      (value (remove-guard-holders-lst (cons term rest)))))))
+      (value (remove-guard-holders-lst-legacy (cons term rest)
+; Matt K. mod 3/2019 for new argument of remove-guard-holders:
+                                              (w state)))))))
 
 (defun translate-list-of-terms-list (lst state)
   (cond
@@ -3764,8 +3811,9 @@ to be quoted evgs, but pc = ~x0; splitters = ~x1."
                                 'translate-list-of-term-term-doublets
                                 (w state) state))
               (rest (translate-list-of-term-term-doublets (cdr doublets) state)))
-      (value (cons (list (remove-guard-holders term1)
-                         (remove-guard-holders term2))
+; Matt K. mod 3/2019 by adding new world argument of remove-guard-holders:
+      (value (cons (list (remove-guard-holders-legacy term1 (w state))
+                         (remove-guard-holders-legacy term2 (w state)))
                    rest))))
    (t (er soft 'translate-list-of-term-term-doublets
           "This function takes a true list of doublets, each of the form ~
@@ -4556,7 +4604,9 @@ to be quoted evgs, but pc = ~x0; splitters = ~x1."
                   :run run
                   :svar svar
                   :stobjp stobjp
-                  :hyps (remove-guard-holders-lst hyps)
+                  :hyps (remove-guard-holders-lst-legacy hyps
+; Matt K. mod 3/2019 for new argument of remove-guard-holders:
+                                                         (w state))
                   :step step
                   :get-pc get-pc
                   :put-pc put-pc
@@ -4677,8 +4727,9 @@ to be quoted evgs, but pc = ~x0; splitters = ~x1."
   (mv-let (erp val)
           (cond
            ((symbolp pred)
-            (ev-fncall-w pred (list pc)
-                         (w state) nil nil nil nil nil))
+; Matt K. mod, 10/2017: Replaced call of ev-fncall-w, now untouchable, by call
+; of magic-ev-fncall.
+            (magic-ev-fncall pred (list pc) state nil nil))
            (t
 ; If we were allowed to call ev-w we would use:
 ;             (ev-w (list pred (kwote pc))
@@ -5330,7 +5381,7 @@ to be quoted evgs, but pc = ~x0; splitters = ~x1."
                (all-fnnames (lambda-body fn)) wrld)))))))
 
 (defun generate-def-semantics-name (str1 pc-lst str2 dsem-alist api)
-; Note:  The :root-name in the api is always a string ending in #\-.  
+; Note:  The :root-name in the api is always a string ending in #\-.
   (let ((root-name (cdr (assoc-eq :root-name dsem-alist)))
         (base (access model-api api :name-print-base)))
     (intern-in-package-of-symbol
@@ -5348,7 +5399,9 @@ to be quoted evgs, but pc = ~x0; splitters = ~x1."
                                    (cons #\2 str2))
                              0
                              :fmt-control-alist
-                             (list (cons 'print-base base)))
+                             (list (cons 'print-base base)
+                                   (cons 'current-package
+                                         (access model-api api :package-witness))))
              (declare (ignore col))
              str)
      (access model-api api :package-witness))))
@@ -5463,7 +5516,7 @@ to be quoted evgs, but pc = ~x0; splitters = ~x1."
                        (equal (nth (- (cadr k) 1)
                                    (cadr path))
                               pck))
-; Path terminated in a stutter, pc0 --> pc1 --> ... --> pck --> pck. 
+; Path terminated in a stutter, pc0 --> pc1 --> ... --> pck --> pck.
                   s1)
                  (t `(,(generate-def-semantics-name
                         (fnsymbol-name-prefix :semantic)
@@ -5502,7 +5555,11 @@ to be quoted evgs, but pc = ~x0; splitters = ~x1."
 ; admitted in :logic mode after the definition of tip-cnt above.
 
 (defun undistribute-ifs (term)
-  (declare (xargs :measure (tip-cnt term)))
+
+; Commented out by Matt K. after v7-2 since tip-cnt is undefined but :program
+; mode measures must now be terms:
+; (declare (xargs :measure (tip-cnt term)))
+
   (cond
    ((variablep term) term)
    ((fquotep term) term)
@@ -6313,7 +6370,7 @@ to be quoted evgs, but pc = ~x0; splitters = ~x1."
 ; This completes the identification of disguised constants.  We stitch all this together in
 ; def-semantics-post-events below.
 
-; Preview of coming attractions: 
+; Preview of coming attractions:
 
 ; We will create the call graph of the clock and semantic functions from the
 ; start/terminal pc components of the path-tree-tuples.  Then we'll close it
@@ -7598,7 +7655,7 @@ to be quoted evgs, but pc = ~x0; splitters = ~x1."
 ; resulting meta-msg or nil if there is no triggered vnrule.
 
 ; If the user provides list a of vnrules in place of the :var-names in the
-; def-model-api, then at translate time we set the :var-names to 
+; def-model-api, then at translate time we set the :var-names to
 
 ; `(lambda (term)
 ;    (trigger-var-name-rule term ',svar ',vnrules)).
@@ -7698,20 +7755,26 @@ to be quoted evgs, but pc = ~x0; splitters = ~x1."
                               (w state)
                               state
                               t)))
-               (value 
+               (value
                 (mv-let (col str)
                         (fmt1-to-string fmt-string
                                         (pairlis2
                                          '(#\0 #\1 #\2 #\3 #\4
                                            #\5 #\6 #\7 #\8 #\9)
                                          args)
-                                        0)
+                                        0
+                                        :fmt-control-alist
+                                        (list (cons 'current-package
+                                                    (current-package state))))
                         (declare (ignore col))
                         str)))))
           (t ; gmm is a msg
            (value
             (mv-let (col str)
-                    (fmt1-to-string (car gmm) (cdr gmm) 0)
+                    (fmt1-to-string (car gmm) (cdr gmm) 0
+                                    :fmt-control-alist
+                                    (list (cons 'current-package
+                                                (current-package state))))
                     (declare (ignore col))
                     str)))))
    ((stringp gmm) (value gmm))
@@ -7747,10 +7810,13 @@ to be quoted evgs, but pc = ~x0; splitters = ~x1."
             (fmt1-to-string "~s0-~x1"
                             (list (cons #\0 root-str)
                                   (cons #\1 i))
-                            0)
+                            0
+                            :fmt-control-alist
+                            (list (cons 'current-package
+                                        (access model-api api :package-witness))))
             (declare (ignore col))
             (ensure-uniqueness-of-variable-name
-             root-str 
+             root-str
              (intern-in-package-of-symbol
               str
               (access model-api api :package-witness))
@@ -8313,7 +8379,7 @@ to be quoted evgs, but pc = ~x0; splitters = ~x1."
 ; basic-demo.lsp
 
 ; To certify all these books (except the last, which is not a book) execute the
-; following in ACL2 or ACL2(h):
+; following in ACL2:
 
 ; (certify-book "if-tracker")          ; used by Terminatricks and Codewalker via
 ; (u)                                  ;  this one:

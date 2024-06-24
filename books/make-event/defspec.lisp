@@ -34,7 +34,7 @@ instantiation provides only a partial answer, in that if we had proven a
 *property* of the abstract model then we could functionally instantiate this
 abstract property to derive the corresponding property for the concrete one.
 But there are situations in which we do not have a specific property that we
-want to funtionally instantiate, but rather just want to say in some formal way
+want to functionally instantiate, but rather just want to say in some formal way
 that "all the abstract constraints are satisfied by the concrete functions".
 An example for that might be a security policy implemented by a system.  One
 wants to model the security policy in as abstract a manner as possible so that
@@ -57,7 +57,7 @@ defined the security policy as a closed form formula parameterized with
 policy could have been written as an instance of the same formula with the
 concrete functions.  But in first-order logic this is not possible.  Although
 functional instantiation gives the illusion of higher-order reasoning, it is
-after all a derived rule of inference. 
+after all a derived rule of inference.
 
 The Approach
 -------------
@@ -138,8 +138,8 @@ TODOS
 
 1. Address issues due to variable capture.
 
- [ Relevant part of Matt's email: 
- 
+ [ Relevant part of Matt's email:
+
  The comment on sublis-fn (in history-management.lisp) says:
 
   It is assumed that alist will not allow capturing of its free
@@ -148,7 +148,7 @@ TODOS
  It goes on to say that a "draconion check" ensures this.  So I wonder
  if you need a similar draconian check. ]
 
-Note on this: 
+Note on this:
 
 Kaufmann has extended the built-in system function sublis-fn to incorporate the
 check in there [and thereby got rid of the "draconican check" mentioned above.
@@ -157,8 +157,8 @@ sublis-fn.
 
 2. Add error-checking.
 
-  [ Relevant part of Matt's email: 
-    
+  [ Relevant part of Matt's email:
+
    I notice that you didn't do any error checking for the
    functional substitution in definstance.  The ACL2 source function
    translate-functional-substitution might be of use here.  Maybe you
@@ -167,10 +167,10 @@ sublis-fn.
 
 3. Think about implicit constraints.
 
-  [ Relevant part of Matt's email: 
-   
-  The constraints introduced by an encapsulate aren't necessarily 
-  what the user might expect, because definitions of functions not 
+  [ Relevant part of Matt's email:
+
+  The constraints introduced by an encapsulate aren't necessarily
+  what the user might expect, because definitions of functions not
   in the signature might or might not contribute to the constraint. ]
 
 |#
@@ -191,12 +191,11 @@ sublis-fn.
   (mv-let (sym x)
           (constraint-info fn wrld)
           (cond
-           ((eq x *unknown-constraints*)
+           ((unknown-constraints-p x)
             (er hard 'constraint
                 "Unable to determine constraints on ~x0!  Presumably this ~
-                 function was introduced with ~
-                 define-trusted-clause-processor; see :DOC ~
-                 define-trusted-clause-processor."))
+                 function was introduced with a partial-encapsulate; see :DOC ~
+                 partial-encapsulate."))
            (sym (conjoin x))
            (t x))))
 
@@ -226,7 +225,7 @@ sublis-fn.
              ;; the first function symbol that has been introduced during the
              ;; encapsulation.  I just care about that since the constraints
              ;; are all associated with this function.
-             (farg (if (consp (first sig)) 
+             (farg (if (consp (first sig))
                        (first (first sig))
                      (first sig)))
 
@@ -237,12 +236,12 @@ sublis-fn.
              (val-term (constraint farg (w state)))
 
              (name (quote ,name)))
-        
+
         ;; Now generate the final event.
 
-        `(progn 
+        `(progn
            (table spec-table (quote ,name) (quote ,val-term))
-           
+
            ;; I generated the table event but I want to insure that this entry
            ;; will remain in this table.  I do so by now geneating a deflabel
            ;; with the key.  Notice that the table-guard for the table says
@@ -269,13 +268,13 @@ sublis-fn.
 ;; theorem.  The functional substitution is implemented with the same functions
 ;; that are used to compute substitution for functional instance in ACL2.
 
-(defmacro definstance 
-  (spec-name thm-name 
-             &key 
+(defmacro definstance
+  (spec-name thm-name
+             &key
              (functional-substitution 'nil)
              instructions hints otf-flg rule-classes doc)
-  `(make-event 
-    (mv-let 
+  `(make-event
+    (mv-let
 
      ;; I should really start using er-let*.  I like the mv-let form since it
      ;; makes the arguments explicit.
@@ -286,12 +285,12 @@ sublis-fn.
 
      (assert$
       (null erp)
-      (let* 
+      (let*
           (
            ;; First create the alist as necessary for this function.  Going from
            ;; aesthetic to practical.
 
-           (substitution 
+           (substitution
             (create-alist-from-func-list (quote ,functional-substitution)))
 
            ;; Use the theorem name for creating the defthm.
@@ -304,24 +303,27 @@ sublis-fn.
            (doc ,doc)
            (rule-classes ,rule-classes)
            (otf-flg ,otf-flg)
-        
+
            ;; Here is where I create the appropriate form.
-           (thm-form 
+           (thm-form
             (mv-let (erp thm)
                     (sublis-fn substitution term nil)
                     (declare (ignore erp))
                     thm)))
-        (value 
+; Matt K. mod: :doc is no longer supported for defthm after v7-1:
+        (declare (ignore doc))
+        (value
 
          ;; And finally I lay out the defthm event.  Notice that the default is
          ;; rule-classes nil, and the reason is that I didn't see the
          ;; constraints as particularly good rewrite rules in the first place.
 
-         `(defthm ,thm-name 
+         `(defthm ,thm-name
             ,thm-form
             :hints ,hints
             :instructions ,instructions
-            :doc ,doc
+; Matt K. mod: :doc is no longer supported for defthm after v7-1
+            ;; :doc ,doc
             :rule-classes ,rule-classes
             :otf-flg ,otf-flg)))))))
 
@@ -330,7 +332,7 @@ sublis-fn.
 ;; use the must-succeed and must-fail macros.
 
 (local
- (include-book "misc/eval" :dir :system))
+ (include-book "std/testing/eval" :dir :system))
 
 ;; All the tests are marked local.  I do it this way rather than in comments
 ;; since I want to make sure that the tests execute when I certify the book,
@@ -344,18 +346,18 @@ sublis-fn.
    (encapsulate
     ()
     (local
-     (defspec foo 
-       (((f *) => *)) 
-       (local (defun f (x) x)) 
+     (defspec foo
+       (((f *) => *))
+       (local (defun f (x) x))
        (defthm foo-identity (equal (f x) x))))
-    
+
     (local (defun g (x) x))
-    
+
     (local
      (definstance foo g-is-identity
        :functional-substitution
        ((f (lambda (x) (g x))))))))))
- 
+
 ;; The following succeeds, surprisingly.  Should it fail?  I think the current
 ;; behavior is actually correct.  Here we introduce an "empty" encapsulate, and
 ;; then instantiate it with an arbitrary concrete function.  The instantiation
@@ -369,14 +371,14 @@ sublis-fn.
     ()
     (local
      (defspec bar () (local (defun f (x) x))))
-       
+
     (local (defun g (x) (cons x x)))
-    
+
     (local
      (definstance bar g-is-arbitrary
        :functional-substitution
        ((f (lambda (x) (g x))))))))))
-             
+
 
 ;; This one fails since the constraints don't hold.
 
@@ -387,19 +389,19 @@ sublis-fn.
     ()
     (local
      (defspec baz
-       (((f *) => *)) 
-       (local (defun f (x) x)) 
+       (((f *) => *))
+       (local (defun f (x) x))
        (defthm f-is-identity (equal (f x) x))))
-    
+
     (local (defun g (x) (cons x x)))
-    
+
     (local
      (definstance baz g-is-identity
        :functional-substitution
        ((f (lambda (x) (g x))))))))))
 
 ;; Now we do a sequence of tests to justify the security of the table event
-;; with deflabel.  
+;; with deflabel.
 
 ;; This one fails since we cannot introduce two defspecs with the same h.  The
 ;; first one lays down a deflabel and the next one cannot succeed because of
@@ -412,12 +414,12 @@ sublis-fn.
     ()
     (local
      (defspec h
-       (((f *) => *)) 
-       (local (defun f (x) x)) 
+       (((f *) => *))
+       (local (defun f (x) x))
        (defthm f-is-identity (equal (f x) x))))
 
-    (local 
-     (defspec h 
+    (local
+     (defspec h
        (((g *) => *))
        (local (defun g (x) x))
        (defthm g-is-identity (equal (g x) x))))))))
@@ -432,8 +434,8 @@ sublis-fn.
     ()
     (local
      (defspec i
-       (((f *) => *)) 
-       (local (defun f (x) x)) 
+       (((f *) => *))
+       (local (defun f (x) x))
        (defthm f-is-identity (equal (f x) x))))
 
     (table spec-table 'i 10)))))

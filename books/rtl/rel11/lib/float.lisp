@@ -1,68 +1,24 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
 ;
 ; Contact:
-;   David Russinoff
+;   David M. Russinoff
 ;   1106 W 9th St., Austin, TX 78703
-;   http://www.russsinoff.com/
+;   david@russinoff.com
+;   http://www.russinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
+; See license file books/rtl/rel11/license.txt.
 ;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
-;
-; Author: David M. Russinoff (david@russinoff.com)
 
 (in-package "RTL")
 
-(set-enforce-redundancy t) 
+(set-enforce-redundancy t)
 
 (local (include-book "../support/top"))
 
 (set-inhibit-warnings "theory") ; avoid warning in the next event
 (local (in-theory nil))
 
-;; From basic.lisp:
-
-(defund fl (x)
-  (declare (xargs :guard (real/rationalp x)))
-  (floor x 1))
-
-;; From bits.lisp:
-
-(defund bvecp (x k)
-  (declare (xargs :guard (integerp k)))
-  (and (integerp x)
-       (<= 0 x)
-       (< x (expt 2 k))))
-
-(defund bits (x i j)
-  (declare (xargs :guard (and (integerp x)
-                              (integerp i)
-                              (integerp j))))
-  (mbe :logic (if (or (not (integerp i))
-                      (not (integerp j)))
-                  0
-                (fl (/ (mod x (expt 2 (1+ i))) (expt 2 j))))
-       :exec  (if (< i j)
-                  0
-                (logand (ash x (- j)) (1- (ash 1 (1+ (- i j))))))))
-
-(defund bitn (x n)
-  (declare (xargs :guard (and (integerp x)
-                              (integerp n))))
-  (mbe :logic (bits x n n)
-       :exec  (if (evenp (ash x (- n))) 0 1)))
-
+(include-book "defs")
 
 ;;;**********************************************************************
 ;;;                 Sign, Significand, and Exponent
@@ -70,28 +26,45 @@
 
 (defsection-rtl |Floating-Point Decomposition| |Floating-Point Numbers|
 
-(defund sgn (x) 
-  (declare (xargs :guard t))
+(defnd sgn (x)
   (if (or (not (rationalp x)) (equal x 0))
       0
     (if (< x 0) -1 +1)))
 
-(defund expo (x)
-  (declare (xargs :guard t
-                  :measure (:? x)))
-  (cond ((or (not (rationalp x)) (equal x 0)) 0)
-	((< x 0) (expo (- x)))
-	((< x 1) (1- (expo (* 2 x))))
-	((< x 2) 0)
-	(t (1+ (expo (/ x 2))))))
+(defnd expo (x)
+  (declare (xargs :measure (:? x)))
+  (mbe :logic (cond ((or (not (rationalp x)) (equal x 0)) 0)
+                    ((< x 0) (expo (- x)))
+                    ((< x 1) (1- (expo (* 2 x))))
+                    ((< x 2) 0)
+                    (t (1+ (expo (/ x 2)))))
+       :exec (if (rationalp x)
+                 (let* ((n (abs (numerator x)))
+                        (d (denominator x))
+                        (ln (integer-length n))
+                        (ld (integer-length d))
+                        (l (- ln ld)))
+                   (if (>= ln ld)
+                       (if (>= (ash n (- l)) d) l (1- l))
+                     (if (> ln 1)
+                         (if (> n (ash d l)) l (1- l))
+                       (- (integer-length (1- d))))))
+               0)))
 
-(defund sig (x)
-  (declare (xargs :guard t))
+(defnd sig (x)
   (if (rationalp x)
       (if (< x 0)
           (- (* x (expt 2 (- (expo x)))))
         (* x (expt 2 (- (expo x)))))
     0))
+
+(defthm expo-minus
+  (implies (rationalp x)
+           (equal (expo (- x)) (expo x))))
+
+(defthm sig-minus
+  (implies (rationalp x)
+           (equal (sig (- x)) (sig x))))
 
 (defthmd expo-lower-bound
     (implies (and (rationalp x)
@@ -142,6 +115,10 @@
 	     (equal (expo (expt 2 n))
 		    n)))
 
+(defthmd bitn-expo
+  (implies (not (zp x))
+           (equal (bitn x (expo x)) 1)))
+
 (defthmd expo-monotone
   (implies (and (<= (abs x) (abs y))
                 (case-split (rationalp x))
@@ -170,6 +147,10 @@
   (< (sig x) 2)
   :rule-classes (:rewrite :linear))
 
+(defthm expo-sig
+  (implies (rationalp x)
+           (equal (expo (sig x)) 0)))
+
 (defthmd sig-self
   (implies (and (rationalp x)
                 (<= 1 x)
@@ -177,7 +158,7 @@
            (equal (sig x) x)))
 
 (defthm sig-sig
-    (equal (sig (sig x)) 
+    (equal (sig (sig x))
 	   (sig x)))
 
 (defthm fp-rep-unique
@@ -199,11 +180,11 @@
   (implies (and (rationalp x)
                 (not (equal x 0))
                 (integerp n))
-           (equal (expo (* (expt 2 n) x)) 
+           (equal (expo (* (expt 2 n) x))
                   (+ n (expo x)))))
 
 (defthmd sig-shift
-  (equal (sig (* (expt 2 n) x)) 
+  (equal (sig (* (expt 2 n) x))
          (sig x)))
 
 (defthmd sgn-prod
@@ -247,6 +228,18 @@
 		    (if (< (* (sig x) (sig y)) 2)
 			(* (sig x) (sig y))
 		      (* 1/2 (sig x) (sig y))))))
+
+(defthmd expo-fl
+  (implies (and (rationalp x)
+                (>= x 1))
+	   (equal (expo (fl x)) (expo x))))
+
+(defthmd expo-logior
+  (implies (and (natp x)
+                (natp y)
+		(<= (expo x) (expo y)))
+	   (equal (expo (logior x y))
+	          (expo y))))
 )
 
 ;;;**********************************************************************
@@ -256,6 +249,8 @@
 (defsection-rtl |Exactness| |Floating-Point Numbers|
 
 (defund exactp (x n)
+  (declare (xargs :guard (and (real/rationalp x)
+                              (integerp n))))
   (integerp (* (sig x) (expt 2 (1- n)))))
 
 (defthmd exactp2
@@ -268,8 +263,8 @@
   (equal (exactp (sig x) n)
          (exactp x n)))
 
-(defthm exactp-minus
-  (equal (exactp (* -1 x) n)
+(defthm minus-exactp
+  (equal (exactp (- x) n)
          (exactp x n)))
 
 (defthm exactp-abs
@@ -394,6 +389,8 @@
   :rule-classes ())
 
 (defun fp+ (x n)
+  (declare (xargs :guard (and (real/rationalp x)
+                              (integerp n))))
   (+ x (expt 2 (- (1+ (expo x)) n))))
 
 (defthm fp+-positive
@@ -444,6 +441,8 @@
   :rule-classes ())
 
 (defun fp- (x n)
+  (declare (xargs :guard (and (real/rationalp x)
+                              (integerp n))))
   (if (= x (expt 2 (expo x)))
       (- x (expt 2 (- (expo x) n)))
     (- x (expt 2 (- (1+ (expo x)) n)))))
@@ -463,8 +462,7 @@
                 (integerp n)
                 (> n 0)
                 (exactp x n))
-           (exactp (fp- x n) n))
-  :hints (("Goal" :use (fp-1))))
+           (exactp (fp- x n) n)))
 
 (defthm fp+-
   (implies (and (rationalp x)

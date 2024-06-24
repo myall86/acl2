@@ -28,6 +28,9 @@
 ;
 ; Original author: Jared Davis <jared@centtech.com>
 
+; (depends-on "build/defrec-certdeps/DEFSTOBJ-FIELD-TEMPLATE.certdep" :dir :system)
+; (depends-on "build/defrec-certdeps/DEFSTOBJ-TEMPLATE.certdep" :dir :system)
+
 (in-package "RSTOBJ")
 (include-book "def-typed-record")
 (include-book "g-delete-keys")
@@ -380,7 +383,7 @@
                  (not (,arr-rec-name ,stobj-name))
                  ;; This part shouldn't get executed:
                  (equal (,arr-rec-name ,stobj-name)
-                        (,tr-delete-indices (- (,length-name ,stobj-name) 1)
+                        (,tr-delete-indices (,length-name ,stobj-name)
                                             (,arr-rec-name ,stobj-name)))))
           (good-stp-conjuncts stobj-name (cdr ftas) wrld))))
 
@@ -431,15 +434,15 @@
     `(progn
 
        (defund-nx ,getter (,stobj-name)
-         (,array-to-tr (- (,length-name ,stobj-name) 1)
+         (,array-to-tr (,length-name ,stobj-name)
                        (nth ,offset ,stobj-name)
                        (,arr-rec-name ,stobj-name)))
 
        (defund-nx ,setter (val ,stobj-name)
          (let* ((arr (nth ,offset ,stobj-name))
                 (len (,length-name ,stobj-name))
-                (arr (,tr-to-array (- len 1) val arr))
-                (rec (,tr-delete-indices (- len 1) val))
+                (arr (,tr-to-array len val arr))
+                (rec (,tr-delete-indices len val))
                 (,stobj-name  (update-nth ,offset arr ,stobj-name))
                 (,stobj-name  (,update-arr-rec-name rec ,stobj-name)))
            ,stobj-name))
@@ -532,7 +535,7 @@
                                               ,field2-setter))))
           (defthm ,(mksym field1-setter '-of- field2-setter)
             (implies (and (,weak-stp ,stobj-name)
-                          (syntaxp (symbol-< ',field1 ',field2))
+                          (syntaxp (symbol< ',field1 ',field2))
                           )
                      (equal (,field1-setter val1 (,field2-setter val2 ,stobj-name))
                             (,field2-setter val2 (,field1-setter val1 ,stobj-name))))
@@ -853,14 +856,16 @@
   (let ((recognizer (access-defstobj-template x :recognizer))
         (creator (access-defstobj-template x :creator))
         (field-templates (access-defstobj-template x :field-templates))
-        (doc (access-defstobj-template x :doc))
+; Matt K. mod: :doc is no longer supported for defstobj after v7-1
+        ;; (doc (access-defstobj-template x :doc))
         (inline (access-defstobj-template x :inline))
         (congruent-to (access-defstobj-template x :congruent-to))
         (non-memoizable (access-defstobj-template x :non-memoizable)))
     (list recognizer
           creator
           field-templates
-          doc
+; Matt K. mod: :doc is no longer supported for defstobj after v7-1
+          ;; doc
           inline
           congruent-to
           non-memoizable)))
@@ -881,7 +886,10 @@
        (st-fields     (eat-typed-records rsfs))
        (st-kw-part    (alist-to-keyword-alist st-kw-alist nil))
        (st-template   (defstobj-template name (append st-fields st-kw-part) wrld))
-       ((list namep create-name st-fld-templates ?doc ?inline ?congruent-to
+       ((list namep create-name st-fld-templates
+; Matt K. mod: :doc is no longer supported for defthm after v7-1
+              ;; ?doc
+              ?inline ?congruent-to
               ?non-memoizable)
         ;; BOZO this has to be kept in sync with defstobj-template.
         (destructure-defstobj-template st-template))

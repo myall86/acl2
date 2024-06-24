@@ -150,13 +150,13 @@
   (let ((lst (unprettyify term))) ; pair = (hyps . concl)
     (cond
      ((equal (length lst) 1)
-      (mv-let (equiv lhs rhs ttree)
+      (mv-let (equiv lhs0 lhs rhs ttree)
               (interpret-term-as-rewrite-rule1
                (remove-lambdas (cdr (car lst)))
                t ; equiv-ok
                (ens state)
                wrld)
-              (declare (ignore equiv rhs ttree))
+              (declare (ignore equiv lhs0 rhs ttree))
               (value lhs)))
      (t (er soft ctx
             "We cannot determine the :lhs of a formula because it ~
@@ -247,7 +247,7 @@
          (t (translate-consider-hint1 lst ctx wrld state)))))))
 
 (defxdoc consideration
-  :parents (miscellaneous)
+  :parents (hints)
   :short "An object indicating that some instantiation is relevant."
 
   :long "<p>Considerations are the objects one provides as part of

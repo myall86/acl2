@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -831,8 +819,8 @@
   :rule-classes ())
 
 
-(encapsulate () 
-   (local 
+(encapsulate ()
+   (local
     (defthmd rnd-sticky-support
       (implies (and (> n (1+ k))
                     (common-rounding-mode-p mode)
@@ -851,19 +839,19 @@
    (defthmd rnd-sticky
      (implies (and (common-rounding-mode-p mode)
                    (rationalp x)
-                   (integerp m) 
+                   (integerp m)
                    (> m 0)
-                   (integerp n) 
+                   (integerp n)
                    (>= n (+ m 2)))
               (equal (rnd (sticky x n) mode m)
                      (rnd x mode m)))
      :hints (("Goal" :cases ((not (equal x 0)))
               :in-theory (enable rnd-minus flip rnd sticky-minus))
              ("Subgoal 1" :cases ((not (> x 0))))
-             ("Subgoal 1.2" 
+             ("Subgoal 1.2"
               :use ((:instance rnd-sticky-support
                                (k m))))
-             ("Subgoal 1.1" 
+             ("Subgoal 1.1"
               :use ((:instance rnd-sticky-support
                                (k m)
                                (mode (flip mode))
@@ -919,7 +907,7 @@
            :use ())))
 
 (defthm rnd-0
-  (equal (rnd 0 mode n) 
+  (equal (rnd 0 mode n)
          0)
   :hints (("Goal" :in-theory (enable rnd common-rounding-mode-p ieee-mode-p inf minf)
            :use (trunc-0 away-0))))
@@ -960,7 +948,7 @@
                 )
            (equal (sgn (rnd x mode n))
                   (sgn x)))
-  :hints (("Goal" :in-theory (enable ieee-mode-p common-rounding-mode-p rnd near+ inf minf) 
+  :hints (("Goal" :in-theory (enable ieee-mode-p common-rounding-mode-p rnd near+ inf minf)
            :use (sgn-trunc
                  sgn-away
                  sgn-near-2))))
@@ -969,7 +957,7 @@
 (defthmd rnd-exactp-b
   (implies (and (rationalp x)
                 (common-rounding-mode-p mode)
-                (integerp n) 
+                (integerp n)
                 (> n 0))
            (equal (equal x (rnd x mode n))
                   (exactp x n)))
@@ -995,7 +983,7 @@
 		  (exactp a n)
 		  (>= a x))
 	     (>= a (rnd x mode n)))
-    :hints (("Goal" :in-theory (enable trunc-minus inf minf 
+    :hints (("Goal" :in-theory (enable trunc-minus inf minf
                                        common-rounding-mode-p
                                        ieee-mode-p flip rnd)
              :use ((:instance trunc-exactp-c
@@ -1191,12 +1179,12 @@
                    mode
                    (+ k (- (expo (+ x y)) (expo y))))))
   :rule-classes nil
-  :hints (("Goal" :in-theory (enable rnd ieee-mode-p COMMON-ROUNDING-MODE-P) 
+  :hints (("Goal" :in-theory (enable rnd ieee-mode-p COMMON-ROUNDING-MODE-P)
            :use (plus-near
                  plus-near+
                  plus-away
-                 plus-trunc 
-                 plus-minf 
+                 plus-trunc
+                 plus-minf
                  plus-inf
                  (:instance exactp-<= (m (+ -1 k (- (expo x) (expo y))))
                             (n (+  k (- (expo x) (expo y)))))))))

@@ -67,20 +67,10 @@ library."
 
   (encapsulate
     ()
-    (local (defthmd lemma1
-             (implies (true-listp x)
-                      (true-listp (nthcdr n x)))
-             :hints(("Goal" :in-theory (enable nthcdr)))))
-
-    (local (defthmd lemma2
-             (implies (< (len x) (nfix n))
-                      (true-listp (nthcdr n x)))
-             :hints(("Goal" :in-theory (enable nthcdr)))))
-
-    (local (defthmd lemma3
-             (implies (and (not (true-listp x))
-                           (not (< (len x) (nfix n))))
-                      (not (true-listp (nthcdr n x))))
+    (local (defthm lemma
+             (iff (true-listp (nthcdr n x))
+                    (or (true-listp x)
+                        (< (len x) (nfix n))))
              :hints(("Goal" :in-theory (enable nthcdr)))))
 
     (defthm true-listp-of-nthcdr
@@ -93,36 +83,19 @@ library."
 ;                    (:type-prescription :corollary (implies (true-listp x)
 ;                                                            (true-listp
 ;                                                             (nthcdr n x))))
-                     )
-      :hints(("Goal"
-              :in-theory (disable nthcdr)
-              :use ((:instance lemma1)
-                    (:instance lemma2)
-                    (:instance lemma3))))))
-
-  (encapsulate
-    ()
-    (local (defthmd l0
-             (implies (< (nfix n) (len x))
-                      (consp (nthcdr n x)))
-             :hints(("Goal" :induct (nthcdr n x)))))
-
-    (local (defthmd l1
-             (implies (not (< (nfix n) (len x)))
-                      (not (consp (nthcdr n x))))
-             :hints(("goal" :induct (nthcdr n x)))))
-
-    (defthm consp-of-nthcdr
-      (equal (consp (nthcdr n x))
-             (< (nfix n) (len x)))
-      :hints(("Goal" :use ((:instance l0)
-                           (:instance l1))))))
-
+                     )))
 
   (defthm len-of-nthcdr
     (equal (len (nthcdr n l))
            (nfix (- (len l) (nfix n))))
     :hints (("Goal" :in-theory (enable nthcdr))))
+
+  (defthm consp-of-nthcdr
+    (equal (consp (nthcdr n x))
+           (< (nfix n) (len x)))
+    :hints(("Goal" :in-theory (disable len-of-nthcdr)
+            :use ((:instance len-of-nthcdr (l x)))
+            :expand (len (nthcdr n x)))))
 
   (defthm open-small-nthcdr
     (implies (syntaxp (and (quotep n)
@@ -197,8 +170,7 @@ library."
 
 
   (defthm append-of-take-and-nthcdr
-    ;; BOZO questionable forcing here
-    (implies (force (<= n (len x)))
+    (implies (<= (nfix n) (len x))
              (equal (append (take n x)
                             (nthcdr n x))
                     x)))
@@ -211,7 +183,7 @@ library."
     (equal (nthcdr n (list-fix x))
            (list-fix (nthcdr n x))))
 
-  
+
   (def-listp-rule element-list-p-of-nthcdr
     (implies (element-list-p (double-rewrite x))
              (element-list-p (nthcdr n x))))
@@ -219,7 +191,42 @@ library."
 
   (def-projection-rule nthcdr-of-elementlist-projection
     (equal (nthcdr n (elementlist-projection x))
-           (elementlist-projection (nthcdr n x)))))
+           (elementlist-projection (nthcdr n x))))
+
+  (encapsulate
+    ()
+
+    (local
+     (defthm subsetp-trans
+       (implies (and (subsetp x y) (subsetp y z))
+                (subsetp x z))))
+
+    (local
+     (defthm
+       subsetp-member
+       (implies (and (member a x) (subsetp x y))
+                (member a y))
+       :rule-classes
+       ((:rewrite)
+        (:rewrite :corollary (implies (and (subsetp x y) (member a x))
+                                      (member a y)))
+        (:rewrite
+         :corollary (implies (and (not (member a y)) (subsetp x y))
+                             (not (member a x))))
+        (:rewrite
+         :corollary (implies (and (subsetp x y) (not (member a y)))
+                             (not (member a x)))))))
+
+    (defthm
+      subsetp-of-nthcdr
+      (subsetp-equal (nthcdr n l) l)
+      :hints (("Goal" :induct (nthcdr n l)
+               :in-theory
+               (disable
+                (:rewrite nthcdr-of-cons)
+                (:rewrite nthcdr-when-atom)
+                (:rewrite nthcdr-when-zp)
+                (:rewrite open-small-nthcdr)))))))
 
 
 (defsection rest-n

@@ -32,6 +32,11 @@
 (include-book "delays")
 (local (include-book "../../util/arithmetic"))
 
+(defsection parse-eventctrl
+  :parents (parser)
+  :short "Functions for parsing event controls.")
+
+(local (xdoc::set-default-parents parse-eventctrl))
 
 ; delay_control ::=
 ;    '#' delay_value
@@ -51,38 +56,6 @@
           (return (vl-delaycontrol ret)))
         (ret := (vl-parse-delay-value))
         (return (vl-delaycontrol ret))))
-
-
-; event_expression ::=
-;    expression
-;  | 'posedge' expression
-;  | 'negedge' expression
-;  | event_expression 'or' event_expression
-;  | event_expression ',' event_expression
-
-(defparser vl-parse-event-expression ()
-  ;; Matches "1 or more evatoms"
-  :result (vl-evatomlist-p val)
-  :resultp-of-nil t
-  :true-listp t
-  :fails gracefully
-  :count strong
-  (seq tokstream
-        (when (vl-is-some-token? '(:vl-kwd-posedge :vl-kwd-negedge))
-          (edge := (vl-match)))
-        (expr := (vl-parse-expression))
-        (when (vl-is-some-token? '(:vl-kwd-or :vl-comma))
-          (:= (vl-match))
-          (rest := (vl-parse-event-expression)))
-        (return
-         (let ((edgetype (if (not edge)
-                             :vl-noedge
-                           (case (vl-token->type edge)
-                             (:vl-kwd-posedge :vl-posedge)
-                             (:vl-kwd-negedge :vl-negedge)
-                             (t (er hard 'vl-parse-event-expression "Impossible"))))))
-           (cons (vl-evatom edgetype expr)
-                 rest)))))
 
 
 ; event_control ::=
@@ -113,7 +86,12 @@
 
         (unless (vl-is-token? :vl-lparen)
           (hid := (vl-parse-hierarchical-identifier nil))
-          (return (vl-eventcontrol nil (list (vl-evatom :vl-noedge hid)))))
+          (return (vl-eventcontrol nil (list (vl-evatom :vl-noedge
+                                                        (make-vl-index
+                                                         :scope
+                                                         (make-vl-scopeexpr-end
+                                                          :hid hid)
+                                                         :part (make-vl-partselect-none)))))))
 
         (:= (vl-match-token :vl-lparen))
 

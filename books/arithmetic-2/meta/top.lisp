@@ -1,19 +1,5 @@
-; Arithmetic-2 Library
-; Copyright (C) 1999 Robert Krug <rkrug@cs.utexas.edu>
-;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT
-; ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-; FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
-; details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; if not, write to the Free Software Foundation, Inc., 51
-; Franklin Street, Suite 500, Boston, MA 02110-1335, USA.
+; See the top-level arithmetic-2 LICENSE file for authorship,
+; copyright, and license information.
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
@@ -69,7 +55,7 @@
   '(collect-factors-scatter-exponents-thm
     cancel-factors-scatter-exponents-equal-thm
     cancel-factors-scatter-exponents-<-thm
-    |(expt x (+ i j))| 
+    |(expt x (+ i j))|
     |(expt x (+ i j)) with non-negative exponents|
     |(expt x (+ i j)) with non-positive exponents|
     |(expt x (+ i j)) with non-zero base|))
@@ -213,13 +199,13 @@
                     Default-unary-/
                     Commutativity-of-+
                     Commutativity-of-*
-                    
+
 		    Associativity-of-+
                     Unicity-of-0
 		    Associativity-of-*
 		    Unicity-of-1
 		    Distributivity
-                    
+
 		    Inverse-of-+ Rationalp-+
 		    Rationalp-unary--
 		    Inverse-of-* Rationalp-*

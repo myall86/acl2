@@ -40,6 +40,7 @@
 (include-book "faig-equivs")       ;; bozo?
 
 (in-theory (disable aig-env-lookup))
+(in-theory (disable aig-alist-lookup))
 (in-theory (disable aig-restrict))
 (in-theory (disable aig-partial-eval))
 (in-theory (disable aig-compose))
@@ -89,6 +90,7 @@
 
 (defcong aig-alist-equiv iff (hons-assoc-equal x al) 2
   :hints((witness)))
+
 
 
 
@@ -290,7 +292,7 @@
            (aig-eval x (aig-eval-alist al1 al2)))
     :hints(("Goal"
             :induct t
-            :in-theory (enable aig-env-lookup))))
+            :in-theory (enable aig-alist-lookup aig-env-lookup))))
 
   (defcong aig-equiv aig-equiv (aig-compose x al) 1
     :hints((witness :ruleset aig-equiv-witnessing)))
@@ -301,7 +303,7 @@
   (defcong alist-equiv equal (aig-compose x env) 2
     :hints(("Goal"
              :induct t
-             :in-theory (enable aig-env-lookup)))))
+             :in-theory (enable aig-alist-lookup)))))
 
 
 
@@ -384,6 +386,13 @@
 
 
 
+(defund faig-vars (x)
+  (declare (xargs :guard t))
+  (if (atom x)
+      nil
+    (set::union (aig-vars (car x))
+                (aig-vars (cdr x)))))
+
 
 (defsection faig-eval-thms
   :parents (faig-eval)
@@ -396,11 +405,11 @@
     :hints((witness)))
 
   (defthm faig-eval-append-when-not-intersecting-alist-keys
-    (implies (not (intersectp-equal (alist-keys env) (aig-vars x)))
+    (implies (not (intersectp-equal (alist-keys env) (faig-vars x)))
              (equal (faig-eval x (append env rest))
                     (faig-eval x rest)))
     :hints(("Goal"
-            :in-theory (e/d (faig-eval) (aig-eval))))))
+            :in-theory (e/d (faig-eval faig-vars) (aig-eval))))))
 
 
 

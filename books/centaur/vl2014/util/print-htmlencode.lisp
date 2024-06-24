@@ -33,9 +33,9 @@
 (include-book "std/util/defval" :dir :system)
 (include-book "centaur/fty/fixequiv" :dir :system)
 (include-book "centaur/fty/basetypes" :dir :system)
-(local (include-book "misc/assert" :dir :system))
+(local (include-book "std/testing/assert-bang" :dir :system))
 (local (include-book "arithmetic"))
-(local (include-book "centaur/misc/arith-equivs" :dir :system))
+(local (include-book "std/basic/arith-equivs" :dir :system))
 (local (in-theory (enable acl2::arith-equiv-forwarding)))
 (local (std::add-default-post-define-hook :fix))
 
@@ -165,7 +165,9 @@ for what we are trying to accomplish in VL.</p>")
   :guard (<= n xl)
   :returns (mv new-col new-acc)
   :long "<p>We just leave this enabled since its logical definition is so simple.</p>"
-  :measure (nfix (- (nfix xl) (nfix n)))
+; Removed after v7-2 by Matt K. since logically, the definition is
+; non-recursive:
+; :measure (nfix (- (nfix xl) (nfix n)))
   (declare (type string x)
            (type integer n xl col tabsize))
   :split-types t
@@ -200,6 +202,3 @@ for what we are trying to accomplish in VL.</p>")
   (b* (((mv ?col acc)
         (vl-html-encode-string-aux x 0 (length x) 0 tabsize nil)))
     (str::rchars-to-string acc)))
-
-
-

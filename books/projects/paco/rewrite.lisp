@@ -44,7 +44,7 @@
 
 (defun clausify (term ens wrld)
   (strip-branches (normalize term t nil ens wrld) nil nil))
-    
+
 (defun if-tautologyp (term ens wrld)
 
 ; The main application of this function is to determine whether a
@@ -211,7 +211,7 @@
 
 ; We determine whether (sublis-var alist1 term1) is equal to term2.
 ; We just chase vars in term1 and use equal at the tips.  There is
-; one subtlety.  Consider 
+; one subtlety.  Consider
 
 ; (equal-mod-alist '(foo x z (cons x y))
 ;                  '((x . '1) (y . '2))
@@ -848,58 +848,18 @@
                             (plist-to-alist (cdr args)))))
 
 
-; Theorems used to speed up the admission of the rewrite clique.
-
-(defthm rewrite-clique-speedup-26
-  (implies
-   (not (zp nnn))
-   (e0-ord-<
-    (cons (cons (cons (+ 1 (nfix (+ -1 nnn))) 6)
-                (acl2-count (mv-nth 1
-                                    (let nil
-                                      (cond ((atom term) (list nil term))
-                                            ((equal 'quote (car term))
-                                             (list nil term))
-                                            ((equal (car term) 'not)
-                                             (list 'not (cadr term)))
-                                            ((and (equal (car term) 'if)
-                                                  (equal (caddr term) ''nil)
-                                                  (equal (cadddr term) ''t))
-                                             (list 'if (cadr term)))
-                                            (t (list nil term)))))))
-          0)
-    (cons (cons (cons (+ 1 (nfix nnn)) 0) 0)
-          0))))
-
-(defthm rewrite-clique-speedup-5
-  (implies
-   (not (zp nnn))
-   (e0-ord-<
-    (cons
-     (cons
-      (cons (+ 1 (nfix nnn)) 1)
-      any)
-     0)
-    (cons (cons (cons (+ 1 (nfix nnn)) 4) 0)
-          0)))
-  :rule-classes nil)
-
-(defthm rewrite-clique-speedup-4
-  (implies
-   (not (zp nnn))
-   (e0-ord-<
-    (cons
-     (cons
-      (cons (+ 1 (nfix (+ -1 nnn))) 6)
-      any)
-     0)
-    (cons (cons (cons (+ 1 (nfix nnn)) 4) 0)
-          0)))
-  :rule-classes nil)
-
 ; The rewrite clique:
 
-(ACL2::SET-WELL-FOUNDED-RELATION e0-ord-<)
+(local (defthm rewrite-admission-lemma1
+         (implies (consp x)
+                  (acl2::posp (acl2-count x)))))
+
+(local (defthm rewrite-admission-lemma2
+         (implies (not (equal (caddr x) (cadddr x)))
+                  (< (+ 1 (acl2-count (cadr x))
+                        (acl2-count (caddr x))
+                        (acl2-count (cadddr x)))
+                     (acl2-count x)))))
 
 (mutual-recursion
 
@@ -911,18 +871,18 @@
                   :hints (("Goal"
                            :in-theory
                            (disable assume-true-false
-                                    type-set))
-                          ("Subgoal 26" :do-not '(preprocess)
-                           :by rewrite-clique-speedup-26)
-                          ("Subgoal 17" :do-not '(preprocess)
-                           :by rewrite-clique-speedup-5)
-                          ("Subgoal 16" :do-not '(preprocess)
-                           :by rewrite-clique-speedup-4)
-;                         ("Subgoal 5" :do-not '(preprocess)
-;                          :by rewrite-clique-speedup-5)
-;                         ("Subgoal 4" :do-not '(preprocess)
-;                          :by rewrite-clique-speedup-4)
-                          )))
+                                    type-set
+                                    ancestors-check
+                                    sublis-var
+                                    enabled-numep
+                                    one-way-unify acl2-count
+                                    member-eq acl2::member-equal
+                                    refinementp
+                                    legal-variablep
+                                    apply
+                                    search-type-alist
+                                    var-fn-count
+                                    logand)))))
 
   (cond ((zp nnn) (sublis-var alist term))
         ((variablep term)
@@ -1235,7 +1195,7 @@
               (not (fquotep term))
               (eq (ffn-symb term) 'synp))
          (let ((mfc (if (member-eq 'mfc (all-vars (cadr (fargn term 3))))
-                        (make metafunction-context 
+                        (make metafunction-context
                               :type-alist type-alist
                               :obj '?
                               :iff-flg nil
@@ -1272,7 +1232,8 @@
         (t
          (mv-let
           (flg unify-subst)
-          (lookup-hyp term type-alist wrld unify-subst)
+          (lookup-hyp term type-alist wrld unify-subst
+		      (access rewrite-constant rcnst :ens))
           (cond
            (flg (mv t unify-subst))
            ((free-varsp term unify-subst) (mv nil unify-subst))
@@ -1335,7 +1296,7 @@
                                     :obj nil
                                     :iff-flg nil))
                     (t (mv nil unify-subst)))))))
-           
+
 (defun rewrite-with-lemma (term lemma
                    ; &extra formals
                    type-alist obj iff-flg wrld fnstack ancestors rcnst nnn)
@@ -1365,7 +1326,7 @@
                ((eq (access rewrite-rule lemma :rhs)
                     'extended)
                 (list term
-                      (make metafunction-context 
+                      (make metafunction-context
                             :type-alist type-alist
                             :obj obj
                             :iff-flg iff-flg
@@ -1503,7 +1464,7 @@
                              (access rewrite-constant rcnst :ens)))
          (rewrite-entry
           (rewrite-with-lemmas1 term (cdr lemmas))))
-        (t 
+        (t
          (mv-let
           (rewrittenp rewritten-term)
           (<rewrite-with-lemmas1-id>
@@ -1599,7 +1560,7 @@
                        (access rewrite-constant rcnst
                                :current-clause)
                        (cdr (access rewrite-rule rule :heuristic-info)))
-                      (cond 
+                      (cond
                        ((contains-rewriteable-callp
                          fn rewritten-body
                          (if (cdr recursivep)
@@ -1652,7 +1613,7 @@
                                                  fnstack)
                                   :nnn (- nnn 1))))
                             rewritten-body))))
-                       (t 
+                       (t
                         rewritten-body)))
                      (t (rewrite-solidify term type-alist iff-flg ens wrld)))))
                   (t (rewrite-solidify term type-alist iff-flg ens wrld)))))

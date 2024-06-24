@@ -1,31 +1,19 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
 (in-package "ACL2")
 
 #|
-;This book is intended to include lemmas mixing two or types of functions.  
+;This book is intended to include lemmas mixing two or types of functions.
 
 History of this file:
 David Russinoff created the original version of this file.  In
@@ -60,8 +48,8 @@ See also merge2.lisp.
 
 (defund decode (x n)
   (declare (xargs :guard (rationalp n)))
-  (if (and (natp x) (< x n)) 
-      (ash 1 x) 
+  (if (and (natp x) (< x n))
+      (ash 1 x)
     0))
 
 (defund logior1 (x)
@@ -72,16 +60,16 @@ See also merge2.lisp.
 (include-book "log")
 (include-book "float")  ;can't drop this, since exactp is used below...
 
-(local (include-book "../../arithmetic/top")) 
+(local (include-book "../../arithmetic/top"))
 
 (local (include-book "bvecp"))
 (local (include-book "bitn"))
 (local (include-book "lnot")) ;make non-local?
 (local (include-book "bits")) ;try making non-local?
-(local (include-book "logior")) 
-(local (include-book "logand")) 
-(local (include-book "logxor")) 
-(local (include-book "ocat")) 
+(local (include-book "logior"))
+(local (include-book "logand"))
+(local (include-book "logxor"))
+(local (include-book "ocat"))
 
 (local (in-theory (enable expt-minus)))
 (local (in-theory (enable expt-split)))
@@ -115,8 +103,8 @@ See also merge2.lisp.
                                       (enable expt-split)
                                       '( *-weakly-monotonic))
                    :use ((:instance mod-bnd-1 (m a) (n (expt 2  (1+ n))))
-                         (:instance *-weakly-monotonic 
-                                    (x (expt 2 n)) 
+                         (:instance *-weakly-monotonic
+                                    (x (expt 2 n))
                                     (y 2)
                                     (y+ (/ (mod a (expt 2 (1+ n))) (expt 2 n)))))))))
 
@@ -222,7 +210,7 @@ See also merge2.lisp.
 (defthm mod-n-n+1
     (implies (and (rationalp a)
 		  (integerp n)
-		  (>= n 0) 
+		  (>= n 0)
                   )
 	     (iff (= (mod a (expt 2 (1+ n))) 0)
 		  (and (= (mod a (expt 2 n)) 0)
@@ -240,7 +228,7 @@ See also merge2.lisp.
            (equal (bitn (+ a b) 0)
                   (bitn (logxor a b) 0)))
   :rule-classes ()
-  :hints (("goal" :in-theory (enable 
+  :hints (("goal" :in-theory (enable
                               bits bitn
                               mod-by-2
                               integerp-sum-of-odds-over-2
@@ -279,7 +267,7 @@ See also merge2.lisp.
                                    (mod (logand y (lnot x m)) (expt 2 n)))))
                :rule-classes ()
                :hints (("goal" :use ((:instance logxor-rewrite (n m))
-                                     (:instance mod-logior 
+                                     (:instance mod-logior
                                                 (x (logand x (lnot y m)))
                                                 (y (logand y (lnot x m)))))))))
 
@@ -347,7 +335,7 @@ See also merge2.lisp.
                   (:instance expo>= (n (max n (max (1+ (expo x)) (1+ (expo y))))))
                   (:instance expo>= (n (max n (max (1+ (expo x)) (1+ (expo y))))) (x y)))))))
 
-(defthm exact-bits-1 
+(defthm exact-bits-1
   (implies (and (equal (expo x) (1- n))
                 (rationalp x)
                 (integerp k)
@@ -584,7 +572,7 @@ See also merge2.lisp.
             (= (fl (/ (mod (- (1- (expt 2 n)) (expt 2 l)) (expt 2 n))
                       (expt 2 k)))
                (fl (/ (- (1- (expt 2 n)) (expt 2 l))
-                      (expt 2 k)))))		       
+                      (expt 2 k)))))
    :rule-classes ()
    :hints (("goal" :in-theory (enable mod-does-nothing)
             :use (logand-expt-4-3
@@ -628,7 +616,7 @@ See also merge2.lisp.
             :use (logand-expt-4-6
 ;                  logand-expt-4-7
                   (:instance expt-2-integerp (i (- n k)))
-                  (:instance fl-unique 
+                  (:instance fl-unique
                              (x (- (expt 2 (- n k)) (/ (1+ (expt 2 l)) (expt 2 k))))
                              (n (- (expt 2 (- n k)) 1))))))))
 
@@ -659,7 +647,7 @@ See also merge2.lisp.
 
 ;BOZO is this used anywhere?
 ;move?
-;rename! 
+;rename!
 (defthm logand-expt-4
   (implies (and (integerp n) (>= n 0)
                 (integerp k) (>= k 0)
@@ -775,7 +763,7 @@ See also merge2.lisp.
 		  (natp k))
 	     (= (logior x (expt 2 k))
 		(+ x
-		   (* (expt 2 k) 
+		   (* (expt 2 k)
 		      (- 1 (bitn x k))))))
   :rule-classes ()
   :hints (("Goal" :use (and-bits-b))))
@@ -875,7 +863,7 @@ test of having this commented out:
                        (= (logior x (1- (expt 2 k)))
                           (1- (expt 2 (1+ k)))))
               :rule-classes ()
-              :hints (("Goal" :in-theory (e/d( expt-split) (EXPO-COMPARISON-REWRITE-TO-BOUND 
+              :hints (("Goal" :in-theory (e/d( expt-split) (EXPO-COMPARISON-REWRITE-TO-BOUND
                                                             expo-bound-eric
                                                             MOVE-NEGATIVE-CONSTANT-1
                                                             EXPO-COMPARISON-REWRITE-TO-BOUND-2))
@@ -1456,7 +1444,7 @@ test of having this commented out:
                                  j))
                         (- i j) 0)))
   :rule-classes nil
-  :hints (("Goal" :use (bits-sum-2 
+  :hints (("Goal" :use (bits-sum-2
 ;			bits-sum-6
 			(:instance bits-plus-mult-1
 				   (x (bits (+ (bits x (1- j) 0)
@@ -1533,7 +1521,7 @@ if we know that (bits x i j) = a constant, then we know what any sub-vector of (
                                    (m j)
                                    (p (+ 1 i)))))))
 
-                  
+
 
 (defthm bits-sum-special-case-helper
   (implies (and (equal 0 (bits (+ x y) (1- j) 0))
@@ -1565,7 +1553,7 @@ if we know that (bits x i j) = a constant, then we know what any sub-vector of (
                   (logior (bitn x (1- j)) (bitn y (1- j)))))
   :otf-flg t
   :hints (("Goal" :in-theory (disable BITN-KNOWN-NOT-0-REPLACE-WITH-1)
-           :use ((:instance  bitn-sum (n (+ -1 j))) 
+           :use ((:instance  bitn-sum (n (+ -1 j)))
 ))))
                  )))
 
@@ -1637,11 +1625,11 @@ if we know that (bits x i j) = a constant, then we know what any sub-vector of (
 
 
 
- )      
+ )
 
 
-                 
-                        
+
+
 
 (defthm bits-sum-special-case
     (implies (and (= (bits (+ x y) (1- j) 0) 0)
@@ -1659,7 +1647,7 @@ if we know that (bits x i j) = a constant, then we know what any sub-vector of (
   :hints (("Goal" :in-theory (disable BITN-IN-SUM-SPLIT-CASES
                                       BITN-KNOWN-NOT-0-REPLACE-WITH-1)
            :use (bits-sum-original
-                 bits-sum-special-case-helper)))) 
+                 bits-sum-special-case-helper))))
 
 
 (defthm bits-of-negative-integer
@@ -2130,7 +2118,7 @@ rewrite:
 ;;This should be in lib/ ???:
 ;prove from bits-sum-original ?
 #|
-When we add two bit vectors of length n, we only need to look at 1 bit of carry.  
+When we add two bit vectors of length n, we only need to look at 1 bit of carry.
 
 When we add three bitvectors of length n, we need to consider 2 bits of carry.  However, when one of those
 three bit vectors is 1, we need only consider 1 bit of carry.
@@ -2152,7 +2140,7 @@ three bit vectors is 1, we need only consider 1 bit of carry.
 				   j))
 			  (- i j) 0)))
   :rule-classes ()
-  :hints (("Goal" :use (bits-sum-1-5 
+  :hints (("Goal" :use (bits-sum-1-5
 			bits-sum-1-6
 			(:instance bits-plus-mult-1
 				   (x (bits (+ 1
@@ -2220,7 +2208,7 @@ three bit vectors is 1, we need only consider 1 bit of carry.
                             ;BITS-REDUCE-EXACTP
                             )))))
 
-;add a bits-0-0-of-sig rule?  
+;add a bits-0-0-of-sig rule?
 (defthm bitn-0-of-sig
   (implies (and (rationalp x)
                 (not (equal x 0)))
@@ -2245,7 +2233,7 @@ three bit vectors is 1, we need only consider 1 bit of carry.
            :use ((:instance exact-bits-2 (n (+ 1 i)) (k j))
                  ;(:instance exact-bits-2 (x (- x)) (n (+ 1 i)) (k j))
                  ))))
-                        
+
 
 (defthm fp-rep-collapse
   (implies (rationalp x)
@@ -2266,7 +2254,7 @@ three bit vectors is 1, we need only consider 1 bit of carry.
            (>= x (expt 2 k)))
   :hints (("Goal"
            :use ((:instance bvecp-bitn-0 (x x) (n k)))
-           :in-theory (enable bvecp))) 
+           :in-theory (enable bvecp)))
   :rule-classes nil
   )
 

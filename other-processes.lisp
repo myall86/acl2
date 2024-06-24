@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 8.4 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2022, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -64,12 +64,13 @@
 ; of those listed we prefer to use the variables given.  The first
 ; variable in each family is additionally used as the root for a
 ; gensym, should it come to that.  This list can be extended
-; arbitarily without affecting soundness, as long as (a) the car of
+; arbitrarily without affecting soundness, as long as (a) the car of
 ; each pair below is a type set and (b) the cdr is a true-list of
 ; symbols.  Arbitrary overlaps between the types and between the
 ; symbols are permitted.
 
-;; RAG - I changed rational to real and complex-rational to complex in
+;; Historical Comment from Ruben Gamboa:
+;; I changed rational to real and complex-rational to complex in
 ;; the list below, since the new types are supersets of the old types,
 ;; so it should be harmless.
 
@@ -287,11 +288,13 @@
 ; crucial variable occurs and for these purposes we enumerate the args
 ; from 0 (as by nth) rather than from 1 (as by fargn).)
 
-(defrec elim-rule
-  (((nume . crucial-position) . (destructor-term . destructor-terms))
-   (hyps . equiv)
-   (lhs . rhs)
-   . rune) nil)
+; The following is now defined in rewrite.lisp.
+
+; (defrec elim-rule
+;   (((nume . crucial-position) . (destructor-term . destructor-terms))
+;    (hyps . equiv)
+;    (lhs . rhs)
+;    . rune) nil)
 
 (defun occurs-nowhere-else (var args c i)
 
@@ -417,8 +420,8 @@
 
   (cond
    ((flambda-applicationp term) nominations)
-   (t (let ((rule (getprop (ffn-symb term) 'eliminate-destructors-rule
-                           nil 'current-acl2-world wrld)))
+   (t (let ((rule (getpropc (ffn-symb term) 'eliminate-destructors-rule nil
+                            wrld)))
         (cond
          ((or (null rule)
               (not (enabled-numep (access elim-rule rule :nume) ens)))
@@ -562,8 +565,8 @@
   (cond ((null lst) 0)
         (t (+ (if (flambda-applicationp (car lst))
                   (max-level-no (lambda-body (ffn-symb (car lst))) wrld)
-                  (or (getprop (ffn-symb (car lst)) 'level-no
-                               nil 'current-acl2-world wrld)
+                  (or (getpropc (ffn-symb (car lst)) 'level-no
+                                nil wrld)
                       0))
               (sum-level-nos (cdr lst) wrld)))))
 
@@ -616,8 +619,8 @@
      ((null nominations) nil)
      (t
       (let* ((dterm (pick-highest-sum-level-nos nominations wrld nil -1))
-             (rule (getprop (ffn-symb dterm) 'eliminate-destructors-rule
-                            nil 'current-acl2-world wrld))
+             (rule (getpropc (ffn-symb dterm) 'eliminate-destructors-rule
+                             nil wrld))
              (alist (pairlis$ (fargs (access elim-rule rule :destructor-term))
                               (fargs dterm))))
         (change elim-rule rule
@@ -756,7 +759,9 @@
 
 )
 
-(defrec generalize-rule (nume formula . rune) nil)
+; The following is now defined in rewrite.lisp.
+
+; (defrec generalize-rule (nume formula . rune) nil)
 
 (defun apply-generalize-rule (gen-rule term ens)
 
@@ -1031,7 +1036,7 @@
 ; best rule on each round from scratch, Nqthm kept an ordered list of
 ; candidates (which it culled appropriately when eliminations removed some of
 ; them from the clause or when the crucial variables were no longer among
-; eliminables).  Finally, and most obscurely, Nqthm used an incrutable test on
+; eliminables).  Finally, and most obscurely, Nqthm used an inscrutable test on
 ; the "process history" (related to our elim-sequence) and a subtle invariant
 ; about the candidates to switch from our top-flg t mode to top-flg nil mode.
 ; We have spent about a week coding destructor elimination in ACL2 and we have
@@ -1190,7 +1195,7 @@
 ; removed from those two fixed sets the variables that occurred in the
 ; input clause.  Thereafter, if a variable was found to be in the (locally)
 ; fixed sets, it was known to be introduced by the given process.  The
-; limitation to a fixed set caused the famous set-dif-n error message
+; limitation to a fixed set caused the famous set-diff-n error message
 ; when the set was exhausted:
 
 ;    FATAL ERROR:  SET-DIFF-N called with inappropriate arguments.
@@ -1216,6 +1221,12 @@
                    (owned-vars process mine-flg (cdr history))))
         (t (owned-vars process mine-flg (cdr history)))))
 
+(defun ens-from-pspv (pspv)
+  (access rewrite-constant
+          (access prove-spec-var pspv
+                  :rewrite-constant)
+          :current-enabled-structure))
+
 (defun eliminate-destructors-clause (clause hist pspv wrld state)
 
 ; This is the waterfall processor that eliminates destructors.
@@ -1232,11 +1243,7 @@
                                                hist))
                                   (owned-vars 'eliminate-destructors-clause nil
                                               hist)
-                                  (access rewrite-constant
-                                          (access prove-spec-var
-                                                  pspv
-                                                  :rewrite-constant)
-                                          :current-enabled-structure)
+                                  (ens-from-pspv pspv)
                                   wrld
                                   t)
    (cond (elim-seq (mv 'hit clauses
@@ -1442,11 +1449,11 @@
             state
             (term-evisc-tuple nil state)))
       (t
-       (fms "The destructor term~#p~[~/s~] ~*0 can be eliminated.  Furthermore, ~
-             ~#p~[that term is~/those terms are~] at the root of a ~
-             chain of ~n1 rounds of destructor elimination. ~*2  ~
-             These steps produce ~#3~[no nontautological goals~/the ~
-             following goal~/the following ~n4 goals~].~|"
+       (fms "The destructor term~#p~[~/s~] ~*0 can be eliminated.  ~
+             Furthermore, ~#p~[that term is~/those terms are~] at the root of ~
+             a chain of ~n1 rounds of destructor elimination.  ~*2These steps ~
+             produce ~#3~[no nontautological goals~/the following goal~/the ~
+             following ~n4 goals~].~|"
             (list (cons #\p (nth 3 (car lst)))
                   (cons #\0 (tilde-*-untranslate-lst-phrase
                              (strip-cars (nth 3 (car lst)))
@@ -1503,9 +1510,10 @@
         ((fquotep term) nil)
         ((flambda-applicationp term) nil)
         (t (and (all-variablep (fargs term))
-                (let ((rule (getprop (ffn-symb term)
-                                     'eliminate-destructors-rule
-                                     nil 'current-acl2-world wrld)))
+                (let ((rule (getpropc (ffn-symb term)
+                                      'eliminate-destructors-rule
+                                      nil
+                                      wrld)))
                   (and rule
                        (enabled-numep (access elim-rule rule :nume)
                                       ens)))))))
@@ -1909,11 +1917,7 @@
 
   (mv-let (direction lit equiv lhs rhs len-tail)
           (first-fertilize-lit cl cl hist
-                               (access rewrite-constant
-                                       (access prove-spec-var
-                                               pspv
-                                               :rewrite-constant)
-                                       :current-enabled-structure)
+                               (ens-from-pspv pspv)
                                wrld)
           (cond
            ((null direction) (mv 'miss nil nil nil))
@@ -1932,11 +1936,7 @@
                                            direction
                                            cross-fert-flg
                                            delete-lit-flg
-                                           (access rewrite-constant
-                                                   (access prove-spec-var
-                                                           pspv
-                                                           :rewrite-constant)
-                                                   :current-enabled-structure)
+                                           (ens-from-pspv pspv)
                                            wrld
                                            state
                                            nil)
@@ -2023,8 +2023,7 @@
 
   (cond ((flambdap fn) nil)
         ((eq fn 'cons) nil)
-        (t (let ((rule (getprop fn 'eliminate-destructors-rule nil
-                                'current-acl2-world wrld)))
+        (t (let ((rule (getpropc fn 'eliminate-destructors-rule nil wrld)))
              (cond ((and rule
                          (enabled-numep (access elim-rule rule :nume) ens))
                     nil)
@@ -2259,11 +2258,7 @@
    ((not (assoc-eq 'being-proved-by-induction
                    (access prove-spec-var pspv :pool)))
     (mv 'miss nil nil nil))
-   (t (let* ((ens (access rewrite-constant
-                          (access prove-spec-var
-                                  pspv
-                                  :rewrite-constant)
-                          :current-enabled-structure))
+   (t (let* ((ens (ens-from-pspv pspv))
              (terms (generalizable-terms cl ens wrld)))
         (cond
          ((null terms)

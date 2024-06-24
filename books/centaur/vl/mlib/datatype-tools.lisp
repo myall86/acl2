@@ -30,13 +30,13 @@
 ;      (this file) Sol Swords <sswords@centtech.com>
 
 (in-package "VL")
-(include-book "scopestack")
-(include-book "range-tools")
+(include-book "expr-tools")
+(include-book "../util/warnings")
 (include-book "coretypes")
 (include-book "../util/sum-nats")
+(local (include-book "arithmetic/top" :dir :system))
+(local (include-book "../util/default-hints"))
 (local (std::add-default-post-define-hook :fix))
-(local (in-theory (disable (tau-system))))
-(local (in-theory (disable append)))
 
 (defxdoc datatype-tools
   :parents (mlib)
@@ -44,685 +44,423 @@
 
 (local (xdoc::set-default-parents datatype-tools))
 
-(define vl-usertype-resolve ((x vl-datatype-p)
-                             (ss vl-scopestack-p)
-                             (rec-limit natp))
-  :guard (eq (vl-datatype-kind x) :vl-usertype)
-  :short "Resolves a datatype of usertype kind to a concrete
-datatype, i.e. anything but a user typename."
-  :long "<p>The input is guarded to be a usertype.  If it is defined as another
-usertype (possibly with packed/unpacked dimensions), then we recur until it is
-defined as something other than a usertype.  However, the final type may still
-have usertypes within it, i.e. as struct/union member types.</p>
 
-<p>Also returns the scopestack representing the scope in which the
-final type declaration was found.</p>
+(define vl-hidexpr-name1 ((x vl-hidexpr-p))
+  :returns (name vl-hidname-p
+                 :hints ((and stable-under-simplificationp
+                              '(:in-theory (enable vl-hidname-p)))))
+  (vl-hidexpr-case x
+    :end x.name
+    :dot (vl-hidindex->name x.first)))
+    
 
-<p>This function is strict with respect to packed vs. unpacked dimensions;
-i.e., if a usertype is defined as having unpacked dimensions, it will warn if
-any packed dimensions are applied to that type.  Arguably this check should be
-done elsewhere, in which case this function could ignore the distinction
-between packed and unpacked dimensions.  However, it is important to preserve
-the order of dimensions, and it's not clear how to handle cases that mix the
-two: packed dimensions are always treated as \"inner\" or \"most rapidly
-varying\" dimensions.  So if we have (illegal) nested typedefs that place
-unpacked dimensions inside of packed dimensions, we have no way to express that
-as a single, usertype-free datatype, unless we change some packed dimensions
-into unpacked ones or vice versa:</p>
 
-@({
- typedef logic t1 [5:1];  // unpacked dimension
- typedef t1 [3:0] t2;     // packed dimension applied to unpacked datatype
+(defines vl-datatype-resolved-p
+  (define vl-datatype-resolved-p ((x vl-datatype-p))
+    :measure (vl-datatype-count x)
+    (vl-datatype-case x
+      :vl-coretype t
+      :vl-struct (vl-structmemberlist-resolved-p x.members)
+      :vl-union  (vl-structmemberlist-resolved-p x.members)
+      :vl-enum   (vl-datatype-resolved-p x.basetype)
+      :vl-usertype (and x.res
+                        (vl-datatype-resolved-p x.res))))
 
- typedef logic [3:0] t3 [5:1];  // not the same as t2
+  (define vl-structmemberlist-resolved-p ((x vl-structmemberlist-p))
+    :measure (vl-structmemberlist-count x)
+    (if (atom x)
+        t
+      (and (vl-datatype-resolved-p (vl-structmember->type (car x)))
+           (vl-structmemberlist-resolved-p (cdr x)))))
+  ///
+  (deffixequiv-mutual vl-datatype-resolved-p)
 
- typedef logic [5:1] [3:0] t4;  // same dimensions as t2, but all dimensions packed
- typedef logic t5 [5:1] [3:0];  // same dimensions as t2, but all dimensions unpacked
- })
+  (defthm vl-datatype-resolved-p-of-make-coretype
+    (vl-datatype-resolved-p (vl-coretype name signedp pdims udims)))
 
-<p>We don't have this problem for the (also illegal) case where packed
-dimensions are applied to an unpacked structure or union, so we don't warn in
-this case; this should be checked separately.</p>"
+  (defthm vl-datatype-resolved-p-of-make-struct
+    (equal (vl-datatype-resolved-p (make-vl-struct :packedp packedp
+                                                   :signedp signedp
+                                                   :members members
+                                                   :pdims pdims
+                                                   :udims udims))
+           (vl-structmemberlist-resolved-p members))
+    :hints (("goal" :expand ((vl-datatype-resolved-p
+                              (make-vl-struct :packedp packedp
+                                              :signedp signedp
+                                              :members members
+                                              :pdims pdims
+                                              :udims udims))))))
 
-  :returns (mv (warning (iff (vl-warning-p warning) warning))
-               (type vl-datatype-p)
-               (scope vl-scopestack-p))
-  :measure (nfix rec-limit)
-  :verify-guards nil
-  (b* ((ss (vl-scopestack-fix ss))
-       (x (vl-datatype-fix x))
-       ((vl-usertype x))
-       ((when (zp rec-limit))
-        (mv (make-vl-warning :type :vl-resolve-usertypes-fail
-                             :msg "Rec-limit ran out: recursively defined ~
-                                       datatype? ~a0"
-                             :args (list x.kind))
-            x ss))
-       ((unless (and (vl-atom-p x.kind)
-                     (member (tag (vl-atom->guts x.kind)) '(:vl-id :vl-typename))))
-        (mv (make-vl-warning :type :vl-resolve-usertypes-fail
-                             :msg "We don't yet support usertypes that are ~
-                                   not simple identifiers: ~a0"
-                             :args (list x.kind))
-            x ss))
-       (guts (vl-atom->guts x.kind))
-       (name (if (eq (tag guts) :vl-id)
-                 (vl-id->name guts)
-               (vl-typename->name guts)))
-       ((mv item new-ss)
-        (vl-scopestack-find-item/ss name ss))
-       ((unless item)
-        (mv (make-vl-warning :type :vl-resolve-usertypes-fail
-                             :msg "No typedef found for ~a0"
-                             :args (list x.kind))
-            x ss))
-       ((unless (eq (tag item) :vl-typedef))
-        (mv (make-vl-warning :type :vl-resolve-usertypes-fail
-                             :msg "Didn't find a typedef ~a0, instead ~
-                                       found ~a1"
-                             :args (list x.kind item))
-            x ss))
-       ((vl-typedef item))
-       ((mv warning subtype final-ss)
-        (if (eq (vl-datatype-kind item.type) :vl-usertype)
-            (vl-usertype-resolve item.type new-ss (1- rec-limit))
-          (mv nil item.type new-ss)))
-       ((when warning)
-        (mv warning x ss))
-       (sub-udims (vl-datatype->udims subtype))
-       ((when (and (consp x.pdims) (consp (vl-datatype->udims item.type))))
-        ;; Bad case: we have unpacked dimensions from the inner call but
-        ;; we're trying to add packed ones.  Warn and return x.
-        (mv (make-vl-warning :type :vl-usertype-packed-dims
-                             :msg "Usertype ~a0 was declared with packed ~
-                                       dimensions, but its definition ~a1 already ~
-                                       has unpacked dimensions."
-                             :args (list x item.type))
-            x ss))
-       (subtype (mbe :logic (vl-datatype-update-dims
-                             (append-without-guard x.pdims (vl-datatype->pdims subtype))
-                             (append-without-guard x.udims sub-udims)
-                             subtype)
-                     :exec
-                     (if (or x.udims x.pdims)
-                         (vl-datatype-update-dims
-                          (append-without-guard x.pdims (vl-datatype->pdims subtype))
-                          (append-without-guard x.udims sub-udims)
-                          subtype)
-                       subtype))))
-    (mv nil subtype final-ss))
+  (defthm vl-datatype-resolved-p-of-make-union
+    (equal (vl-datatype-resolved-p (make-vl-union :packedp packedp
+                                                  :signedp signedp
+                                                  :taggedp taggedp
+                                                  :members members
+                                                  :pdims pdims
+                                                  :udims udims))
+           (vl-structmemberlist-resolved-p members))
+    :hints (("Goal" :expand ((vl-datatype-resolved-p
+                              (make-vl-union :packedp packedp
+                                             :signedp signedp
+                                             :taggedp taggedp
+                                             :members members
+                                             :pdims pdims
+                                             :udims udims))))))
+
+  (defthm vl-datatype-resolved-p-of-make-enum
+    (equal (vl-datatype-resolved-p (make-vl-enum :basetype basetype
+                                                 :items items
+                                                 :values values
+                                                 :pdims pdims
+                                                 :udims udims))
+           (vl-datatype-resolved-p basetype))
+    :hints (("goal" :expand (vl-datatype-resolved-p (make-vl-enum :basetype basetype
+                                                                  :items items
+                                                                  :values values
+                                                                  :pdims pdims
+                                                                  :udims udims)))))
+
+  (defthm vl-datatype-resolved-p-of-make-usertype
+    (equal (vl-datatype-resolved-p (make-vl-usertype :name name
+                                                     :res res
+                                                     :pdims pdims
+                                                     :udims udims
+                                                     :virtual-intfc virtual-intfc
+                                                     :intfc-params intfc-params))
+           (and res (vl-datatype-resolved-p res)))
+    :hints (("Goal" :expand (vl-datatype-resolved-p (make-vl-usertype :name name
+                                                                      :res res
+                                                                      :pdims pdims
+                                                                      :udims udims
+                                                                      :virtual-intfc virtual-intfc
+                                                                      :intfc-params intfc-params)))))
+
+  (defthm vl-structmemberlist-resolved-p-of-struct-members
+    (implies (and (vl-datatype-case x :vl-struct)
+                  (vl-datatype-resolved-p x))
+             (vl-structmemberlist-resolved-p (vl-struct->members x))))
+
+  (defthm vl-structmemberlist-resolved-p-of-union-members
+    (implies (and (vl-datatype-case x :vl-union)
+                  (vl-datatype-resolved-p x))
+             (vl-structmemberlist-resolved-p (vl-union->members x))))
+
+  (defthm vl-datatype-resolved-p-of-enum-basetype
+    (implies (and (vl-datatype-case x :vl-enum)
+                  (vl-datatype-resolved-p x))
+             (vl-datatype-resolved-p (vl-enum->basetype x))))
+
+  (defthm vl-datatype-resolved-p-of-usertype-basetype
+    (implies (and (vl-datatype-case x :vl-usertype)
+                  (vl-datatype-resolved-p x))
+             (and (vl-datatype-resolved-p (vl-usertype->res x))
+                  (vl-usertype->res x))))
+
+  (defthm vl-structmemberlist-resolved-p-of-cons
+    (equal (vl-structmemberlist-resolved-p (cons a b))
+           (and (vl-datatype-resolved-p (vl-structmember->type a))
+                (vl-structmemberlist-resolved-p b))))
+
+  (defthm vl-datatype-resolved-p-of-car-structmember-type
+    (implies (vl-structmemberlist-resolved-p x)
+             (vl-datatype-resolved-p (vl-structmember->type (car x)))))
+
+  (defthm vl-structmemberlist-resolved-p-of-cdr
+    (implies (vl-structmemberlist-resolved-p x)
+             (vl-structmemberlist-resolved-p (cdr x))))
+
+  (defthm vl-datatype-resolved-p-of-update-dims
+    (implies (vl-datatype-resolved-p x)
+             (vl-datatype-resolved-p (vl-datatype-update-dims pdims udims x)))
+    :hints(("Goal" :in-theory (enable vl-datatype-update-dims)))))
+
+
+(fty::deflist maybe-nat-list :elt-type maybe-natp
+  ///
+  (defthm nat-listp-when-maybe-nat-list-and-no-nils
+    (implies (and (maybe-nat-list-p x)
+                  (not (member nil x)))
+             (nat-listp x))
+    :hints(("Goal" :in-theory (enable maybe-nat-list-p member nat-listp)))))
+
+(define vl-dimension-size ((x vl-dimension-p))
+  :returns (mv (unresolved-flg)
+               (size maybe-posp :rule-classes :type-prescription))
+  (vl-dimension-case x
+    :unsized  (mv nil nil) ;; Dynamic array, not unresolved, but has no sensible size
+    :star     (mv nil nil) ;; Sparse associative array, similar
+    :datatype (mv nil nil) ;; Sparse associative array, similar
+    :queue
+    (cond ((not x.maxsize)
+           ;; An unbounded queue -- resolved but sizeless, like an unsized dimension
+           (mv nil nil))
+          ((vl-expr-resolved-p x.maxsize)
+           ;; Possibly we could regard bounded queues as having a particular
+           ;; size, but I'm not sure what size makes sense.  For now I'm going
+           ;; to say they have no size.
+           (mv nil nil))
+          (t
+           ;; The queue has a max size that isn't resolved.  Should we treat
+           ;; these as having unresolved size?  What does unresolved-flg even
+           ;; mean?  For now I'm going to still regard these as resolved, but
+           ;; simply size-less.
+           (mv t nil)))
+    :range
+    (if (vl-range-resolved-p x.range)
+        (mv nil (vl-range-size x.range))
+      (mv t nil))))
+
+(define vl-maybe-dimension-size ((x vl-maybe-dimension-p))
+  :returns (mv (unresolved-flg)
+               (size maybe-posp :rule-classes :type-prescription))
+  (if x
+      (vl-dimension-size x)
+    (mv nil nil)))
+
+(define vl-dimensionlist-resolved-p ((x vl-dimensionlist-p))
+  :short "Returns true if all sized dimensions are resolved."
+  (b* (((when (atom x)) t)
+       ((mv unresolved ?size) (vl-dimension-size (car x))))
+    (and (not unresolved)
+         (vl-dimensionlist-resolved-p (cdr x))))
   ///
 
-  (verify-guards vl-usertype-resolve))
+  (defthm vl-dimensionlist-resolved-p-when-atom
+    (implies (atom x)
+             (vl-dimensionlist-resolved-p x)))
 
+  (defthm vl-dimensionlist-resolved-p-of-cons
+    (equal (vl-dimensionlist-resolved-p (cons a x))
+           (and (b* (((mv unresolved ?size) (vl-dimension-size a)))
+                  (not unresolved))
+                (vl-dimensionlist-resolved-p x))))
 
+  (defthm vl-dimensionlist-resolved-p-of-cdr
+    (implies (vl-dimensionlist-resolved-p x)
+             (vl-dimensionlist-resolved-p (cdr x))))
 
-(defines vl-datatype-usertype-elim
+  (defthm vl-dimensionlist-resolved-p-of-append
+    (equal (vl-dimensionlist-resolved-p (append x y))
+           (and (vl-dimensionlist-resolved-p x)
+                (vl-dimensionlist-resolved-p y)))))
+
+(define vl-dimensionlist-total-size ((x vl-dimensionlist-p))
+  :short "Given a dimensionlist like [5:0][3:1][0:8], multiplies the
+dimensions together to get the total number of bits, or returns nil if there
+are unsized dimensions (e.g., associative dimensions, queue dimensions, or
+dynamic array dimensions)."
+  :guard (vl-dimensionlist-resolved-p x)
   :verify-guards nil
-  (define vl-datatype-usertype-elim ((x vl-datatype-p)
-                                         (ss vl-scopestack-p)
-                                         (reclimit natp))
-    :measure (two-nats-measure reclimit (vl-datatype-count x))
-    :returns (mv (warning (iff (vl-warning-p warning) warning))
-                 (type vl-datatype-p))
-    :short "Resolves all usertypes within a datatype, recursively."
-    :long "<p>A recursion limit is needed in case a usertype is defined in
-terms of itself.</p>
-
-<p>Always returns a datatype; however, when a warning is present, it may still
-contain usertypes.</p>
-
-<p>This function (actually its subroutine, @(see vl-usertype-resolve)) is
-somewhat strict with respect to packed vs. unpacked dimensions; see @(see
-vl-usertype-resolve) for a more extensive discussion.</p>
-
-<p>An example to work through: suppose we want to resolve the usertype memchunk
-into a usertype-free datatype --</p>
-
-@({
-  typedef logic [3:0] mynibble;
-  typedef mynibble [7:0] my32;
-  typedef my32 [0:3] membank [63:0];
-  // error: since membank now has unpacked dims, we can't give it more packed dims:
-  // typedef membank [3:0] memchunk;
-  // this works:
-  typedef membank memchunk [3:0];
- })"
-    (b* ((x (vl-datatype-fix x)))
-      (vl-datatype-case x
-        :vl-coretype (mv nil x)
-        :vl-enum (mv nil x) ;; bozo 
-        :vl-usertype
-        (b* (((mv warning newx newss) (vl-usertype-resolve x ss 100))
-             ((when warning) (mv warning newx))
-             ((when (zp reclimit))
-              (mv (make-vl-warning :type :vl-datatype-usertype-elim-fail
-                                   :msg "Recursion limit ran out: ~a0"
-                                   :args (list x.kind))
-                  newx)))
-          (vl-datatype-usertype-elim newx newss (1- reclimit)))
-        :vl-struct
-        (b* (((mv warning members) (vl-structmembers-usertype-elim x.members ss reclimit))
-             (newx (change-vl-struct x :members members)))
-          (mv warning newx))
-        :vl-union
-        (b* (((mv warning members) (vl-structmembers-usertype-elim x.members ss reclimit))
-             (newx (change-vl-union x :members members)))
-          (mv warning newx)))))
-  (define vl-structmembers-usertype-elim ((x vl-structmemberlist-p)
-                                              (ss vl-scopestack-p)
-                                              (reclimit natp))
-    :measure (two-nats-measure reclimit (vl-structmemberlist-count x))
-    :returns (mv (warning (iff (vl-warning-p warning) warning))
-                 (newx vl-structmemberlist-p))
-    (b* (((when (atom x)) (mv nil nil))
-         ((mv warning type1) (vl-datatype-usertype-elim
-                              (vl-structmember->type (car x)) ss reclimit))
-         (first (change-vl-structmember (car x) :type type1))
-         ((when warning) (mv warning (cons first (vl-structmemberlist-fix (cdr x)))))
-         ((mv warning membs2) (vl-structmembers-usertype-elim (cdr x) ss reclimit)))
-      (mv warning (cons first membs2))))
-  ///
-  (verify-guards vl-datatype-usertype-elim)
-  (deffixequiv-mutual vl-datatype-usertype-elim))
-
-
-(define vl-datatype->structmembers ((x vl-datatype-p))
-  :short "Finds the struct members of x when it is a struct or union."
-  :returns (mv ok (members vl-structmemberlist-p))
-  (vl-datatype-case x
-    :vl-struct (mv t x.members)
-    :vl-union  (mv t x.members)
-    :otherwise (mv nil nil)))
-  
-(define vl-find-structmember ((name stringp) (membs vl-structmemberlist-p))
-  :returns (memb (iff (vl-structmember-p memb) memb))
-  (if (atom membs)
-      nil
-    (if (equal (string-fix name) (vl-structmember->name (car membs)))
-        (vl-structmember-fix (car membs))
-      (vl-find-structmember name (cdr membs)))))
-
-
-(define vl-packeddimensionlist-total-size ((x vl-packeddimensionlist-p))
-  :short "Given a packeddimensionlist like [5:0][3:1][0:8], multiplies the
-dimensions together to get the total number of bits, or returns nil on
-failure."
   :returns (size maybe-posp :rule-classes :type-prescription)
   (b* (((when (atom x)) 1)
-       (rest (vl-packeddimensionlist-total-size (cdr x)))
-       ((unless rest) nil)
-       (first (vl-packeddimension-fix (car x)))
-       ((when (eq first :vl-unsized-dimension)) nil)
-       ((unless (vl-range-resolved-p first)) nil))
-    (* (vl-range-size first) rest)))
-
-
-(define vl-datatype-range
-  :short "Get the range, if any, for a data type."
-  :long "<p>The datatype should be fully resolved, as in the output from @(see
-vl-datatype-usertype-elim).</p>
-
-<p>What exactly do we mean by the range of a datatype?  Most data types can
-have multiple array dimensions.  What we mean is the range of indices that are
-valid to apply directly to the data structure: that is, the range of the
-\"first\" array dimension.  This means: the leftmost unpacked dimension if
-there are unpacked dimensions; otherwise the leftmost packed dimension,
-otherwise nil.  When types are composed, e.g. by declaring a type to be another
-type with some additional dimensions, the additional dimensions go to the left.
-Examples:</p>
-
-@({
-    typedef logic [3:0] nibble;
-    typedef nibble [7:0] quadword [1:0];
-    typedef quadword cacheline [15:0];
-})
-
-<p>These are equivalent to:</p>
-@({
- typedef logic [3:0] nibble;
- typedef logic [7:0] [3:0] quadword [1:0];
- typedef logic [7:0] [3:0] cacheline [15:0] [1:0];
- })
-
-<p>A tricky part here is that a variable declaration's datatype doesn't
-necessarily include all of the unpacked array dimensions.  In the declaration
-of my_kbyte, the type of my_kbyte is dword but it has additional dimensions
-stored in the variable declaration itself.  So we take as an extra argument the
-unpacked dimensions of the datatype.  If there are any unpacked dimensions,
-then the first unpacked dimension is transformed into the range; otherwise,
-it's the first packed dimension (or the declared range of a net type).</p>"
-  ((x vl-datatype-p))
-  :returns
-  (mv (warning (iff (vl-warning-p warning) warning))
-      (range  vl-maybe-range-p
-              "On success: the range of this datatype."))
-  (b* (((fun (fail msg args)) 
-        (mv (make-vl-warning :type :vl-datatype-range-fail
-                             :msg msg
-                             :args args)
-            nil))
-       ((fun (success range)) (mv nil range))
-       (x (vl-datatype-fix x))
-       (udims (vl-datatype->udims x))
-       ((when (consp udims))
-        (b* ((dim (vl-packeddimension-fix (car udims)))
-             ((when (eq dim :vl-unsized-dimension))
-              (fail "Most significant dimension is unsized: ~a0" (list x))))
-          (success dim)))
-       (pdims (vl-datatype->pdims x))
-       ((when (consp pdims))
-        (b* (((when (eq (car pdims) :vl-unsized-dimension))
-              (fail "Most significant dimension is unsized: ~a0" (list x))))
-          (success (car pdims)))))
-    ;; No array dimensions, and not a nettype.  Do we succeed with NIL or fail?
-    ;; What we want depends on whether we only call this due to some indexing
-    ;; operation, or whether we call this in an exploratory fashion.  At the
-    ;; moment, we return NIL and the caller should produce an error if this is
-    ;; bad.
-    (success nil)))
-
-
-
-
-(define vl-datatype-range-conservative
-  :short "Get the range, if any, for a data type."
-  :long "<p>The datatype should be fully resolved, as in the output from @(see
-vl-datatype-usertype-elim).</p>
-
-<p>This is like @(see vl-datatype-range), but it only works on
-single-dimensional vectors of basic 1-bit types.  Why?  A lot of existing code
-is built around an assumption that the range of a variable determines its
-width.  In that code, if we use vl-datatype-range, then we'll be silently doing
-the wrong thing in a lot of cases.</p>."
-  ((x vl-datatype-p))
-  :returns
-  (mv (warning (iff (vl-warning-p warning) warning))
-      (range  vl-maybe-range-p
-              "On success: the range of this datatype."))
-  (b* (((fun (fail msg args)) 
-        (mv (make-vl-warning :type :vl-datatype-range-fail
-                             :msg msg
-                             :args args)
-            nil))
-       ((fun (success range)) (mv nil range))
-       (x (vl-datatype-fix x))
-       (udims (vl-datatype->udims x))
-       ((when (consp udims))
-        (fail "Unpacked dims present." nil))
-       ((when (and (eq (vl-datatype-kind x) :vl-coretype)
-                   (member (vl-coretype->name x)
-                           '(:vl-logic :vl-reg :vl-bit))))
-        (b* ((dims (vl-coretype->pdims x))
-             ((when (atom dims)) (success nil))
-             ((when (and (atom (cdr dims))
-                         (not (eq (car dims) :vl-unsized-dimension))))
-              (success (car dims))))
-          (fail "Multiple packed dims present" nil))))
-    (fail "Complex type." nil)))
-
-
-
-(defines vl-packed-datatype-size
-  :verify-guards nil
-  :prepwork ((local (defthm posp-sum-nats-of-pos-listp
-                      (implies (and (pos-listp x) (consp x))
-                               (posp (sum-nats x)))
-                      :hints(("Goal" :in-theory (enable sum-nats)))
-                      :rule-classes (:rewrite :type-prescription)))
-             (local (defthm posp-max-nats-of-pos-listp
-                      (implies (and (pos-listp x) (consp x))
-                               (posp (max-nats x)))
-                      :hints(("Goal" :in-theory (enable max-nats)))
-                      :rule-classes (:rewrite :type-prescription)))
-             (local (defthm posp-product
-                      (implies (and (posp x) (posp y))
-                               (posp (* x y))))))
-  (define vl-packed-datatype-size
-    :short "Get the size for any packed data type."
-    :long "<p>The type should be fully resolved (i.e. no usertypes) and be
-packed or we'll fail.</p>"
-    ((x vl-datatype-p))
-    :returns
-    (mv (warning (iff (vl-warning-p warning) warning))
-        (size    (implies (not warning) (posp size)) :rule-classes :type-prescription))
-    :measure (vl-datatype-count x)
-    (b* (((fun (fail reason args)) 
-          (mv (make-vl-warning :type :vl-datatype-size-fail
-                               :msg reason
-                               :args args)
-              nil))
-         ((fun (success width)) (mv nil width))
-         (x (vl-datatype-fix x))
-         ((when (consp (vl-datatype->udims x)))
-          (fail "Has unpacked dimensions: ~a0" (list x))))
-
-      (vl-datatype-case x
-
-        (:vl-coretype
-         (b* ((totalsize (vl-packeddimensionlist-total-size x.pdims)))
-           (if totalsize
-               (case x.name
-                 ;; See SystemVerilog-2012 Section 6.11, Integer Data Types.
-
-                 ;; integer atom types -- these don't have any dimensions, they're just fixed sizes
-                 (:vl-byte     (success (* 8 totalsize)))
-                 (:vl-shortint (success (* 16 totalsize)))
-                 (:vl-int      (success (* 32 totalsize)))
-                 (:vl-longint  (success (* 64 totalsize)))
-                 (:vl-integer  (success (* 32 totalsize)))
-                 (:vl-time     (success (* 64 totalsize)))
-
-                 ;; integer vector types -- these have arbitrary packed dimensions.
-                 ((:vl-bit :vl-logic :vl-reg)
-                  (success totalsize))
-
-                 (otherwise
-                  ;; Something like a real, shortreal, void, realtime, chandle, etc.
-                  ;; We don't try to size these, but we still claim success: these just
-                  ;; don't have ranges.
-                  (fail "bad coretype ~a0" (list x))))
-             (fail "Dimensions of vector type ~a0 not resolvd"
-                   (list x)))))
-
-        (:vl-struct
-         (b* (((unless x.packedp) (fail "unpacked struct ~a0" (list x)))
-              ;; bozo is there a correct thing to do for a struct with no members?
-              ((unless (consp x.members)) (fail "empty struct: ~a0" (list x)))
-              ((mv warning widths) (vl-packed-structmemberlist-sizes x.members))
-              ((when warning) (mv warning nil))
-              (packedsize (vl-packeddimensionlist-total-size x.pdims))
-              ((unless packedsize)
-               (fail "Dimensions of struct type ~a0 not resolvd"
-                      (list x))))
-           (success (* packedsize (sum-nats widths)))))
-
-        (:vl-union
-         (b* (((unless x.packedp) (fail "unpacked union ~a0" (list x)))
-              ;; bozo is there a correct thing to do for a union with no members?
-              ((unless (consp x.members)) (fail "empty union ~a0" (list x)))
-              ((mv warning widths) (vl-packed-structmemberlist-sizes x.members))
-              ((when warning) (mv warning nil))
-              (packedsize (vl-packeddimensionlist-total-size x.pdims))
-              ((unless packedsize)
-               (fail "Dimensions of struct type ~a0 not resolvd"
-                      (list x))))
-           (success (* packedsize (max-nats widths)))))
-
-        (:vl-enum ;; need to compute size from the base type?
-         (fail "bozo: implement enum range" nil))
-
-        (:vl-usertype
-         (fail "unresolved usertype: ~a0" (list x.kind))))))
-
-  (define vl-packed-structmemberlist-sizes ((x vl-structmemberlist-p))
-    :returns (mv (warning (iff (vl-warning-p warning) warning))
-                 (sizes   (and (pos-listp sizes)
-                               (implies (not warning)
-                                        (equal (consp sizes) (consp x))))))
-    :measure (vl-structmemberlist-count x)
-    (b* (((when (atom x)) (mv nil nil))
-         ((vl-structmember first) (vl-structmember-fix (car x)))
-         ((mv warning size) (vl-packed-datatype-size first.type))
-         ((when warning) (mv warning nil))
-         ((mv warning rest) (vl-packed-structmemberlist-sizes (cdr x)))
-         ((when warning) (mv warning nil)))
-      (mv nil (cons size rest))))
+       (rest-size (vl-dimensionlist-total-size (cdr x)))
+       ((unless rest-size) nil)
+       ((mv first-unresolved first-size) (vl-dimension-size (car x)))
+       ((when (or first-unresolved
+                  (not first-size)))
+        nil))
+    (* first-size rest-size))
   ///
-  (defthm-vl-packed-datatype-size-flag
-    (defthm len-of-vl-packed-structmemberlist-sizes
-      (b* (((mv warning sizes) (vl-packed-structmemberlist-sizes x)))
-        (implies (not warning)
-                 (equal (len sizes) (len x))))
-      :flag vl-packed-structmemberlist-sizes)
-    :skip-others t)
+  (verify-guards vl-dimensionlist-total-size
+    :hints (("goal" :in-theory (enable vl-dimensionlist-resolved-p))))
 
-  (local (defthm nat-listp-when-pos-listp
-           (implies (pos-listp x)
-                    (nat-listp x))
-           :hints(("Goal" :in-theory (enable nat-listp)))))
+  (defthm vl-dimensionlist-total-size-of-cdr
+    (implies (vl-dimensionlist-total-size x)
+             (vl-dimensionlist-total-size (cdr x)))
+    :rule-classes (:rewrite :type-prescription))
 
-  (verify-guards vl-packed-datatype-size)
-
-  (deffixequiv-mutual vl-packed-datatype-size))
+  (defthm vl-dimensionlist-total-size-of-append
+    (equal (vl-dimensionlist-total-size (append x y))
+           (and (vl-dimensionlist-total-size x)
+                (vl-dimensionlist-total-size y)
+                (* (vl-dimensionlist-total-size x)
+                   (vl-dimensionlist-total-size y))))))
 
 (defines vl-datatype-size
-  :verify-guards nil
-  :prepwork ((local (defthm posp-sum-nats-of-pos-listp
-                      (implies (and (pos-listp x) (consp x))
-                               (posp (sum-nats x)))
-                      :hints(("Goal" :in-theory (enable sum-nats)))
-                      :rule-classes (:rewrite :type-prescription)))
-             (local (defthm posp-max-nats-of-pos-listp
-                      (implies (and (pos-listp x) (consp x))
-                               (posp (max-nats x)))
-                      :hints(("Goal" :in-theory (enable max-nats)))
-                      :rule-classes (:rewrite :type-prescription)))
-             (local (defthm posp-product
-                      (implies (and (posp x) (posp y))
-                               (posp (* x y))))))
-  (define vl-datatype-size
-    :short "Get the size for a data type, including unpacked dimensions."
-    :long "<p>The type should be fully resolved (i.e. no usertypes) or we'll fail.</p>"
-    ((x vl-datatype-p))
-    :returns
-    (mv (warning (iff (vl-warning-p warning) warning))
-        (size    (implies (not warning) (posp size)) :rule-classes :type-prescription))
+  :prepwork ((local (in-theory (disable all-equalp
+                                        default-*-1
+                                        rationalp-implies-acl2-numberp
+                                        double-containment)))
+             (std::set-returnspec-mrec-default-hints
+              ((acl2::just-expand-mrec-default-hint 'std::fnname id nil world))))
+  (define vl-datatype-size ((x vl-datatype-p "The datatype to size"))
+    :short "Computes the number of bits in the datatype."
+    :long "<p>This works for unpacked datatypes as well as packed ones; you
+should check separately that the datatype is packed if that is what you want.
+Returns nil without error if given a datatype that has no fixed bit size,
+e.g. if it contains a real number or has unsized dimensions.  We produce an
+error message if a usertype is not found, if the recursion limit runs out, or
+if unresolved dimensions are present.</p>"
+
     :measure (vl-datatype-count x)
-    (b* (((fun (fail reason args)) 
-          (mv (make-vl-warning :type :vl-datatype-size-fail
-                               :msg reason
-                               :args args)
+    :guard (vl-datatype-resolved-p x)
+    :returns (mv (err (iff (vl-msg-p err) err))
+                 (size maybe-natp :rule-classes :type-prescription))
+    :verify-guards nil
+    (b* ((x (vl-datatype-fix x))
+         (udims (vl-datatype->udims x))
+         (pdims (vl-datatype->pdims x))
+         ((unless (vl-dimensionlist-resolved-p udims))
+          (mv (vmsg "Unresolved unpacked dimensions: ~a0" x)
               nil))
-         ((fun (success width)) (mv nil width))
-         (x (vl-datatype-fix x)))
+         ((unless (vl-dimensionlist-resolved-p pdims))
+          (mv (vmsg "Unresolved packed dimensions: ~a0" x)
+              nil))
+         (udim-size (vl-dimensionlist-total-size udims))
+         (pdim-size (vl-dimensionlist-total-size pdims))
+         (dim-size (and udim-size pdim-size (* udim-size pdim-size))))
 
       (vl-datatype-case x
-
         (:vl-coretype
-         (b* ((udim-size (vl-packeddimensionlist-total-size x.udims))
-              (pdim-size (vl-packeddimensionlist-total-size x.pdims)))
-           (if (and udim-size pdim-size)
-               (case x.name
-                 ;; See SystemVerilog-2012 Section 6.11, Integer Data Types.
-                 
-                 ;; integer atom types -- these don't have any dimensions, they're just fixed sizes
-                 (:vl-byte     (success (* pdim-size udim-size 8)))
-                 (:vl-shortint (success (* pdim-size udim-size 16)))
-                 (:vl-int      (success (* pdim-size udim-size 32)))
-                 (:vl-longint  (success (* pdim-size udim-size 64)))
-                 (:vl-integer  (success (* pdim-size udim-size 32)))
-                 (:vl-time     (success (* pdim-size udim-size 64)))
-                 
-                 ;; integer vector types -- these have arbitrary packed dimensions.
-                 ((:vl-bit :vl-logic :vl-reg)
-                  (success (* udim-size pdim-size)))
-
-                 (otherwise
-                  ;; Something like a real, shortreal, void, realtime, chandle, etc.
-                  ;; We don't try to size these, but we still claim success: these just
-                  ;; don't have ranges.
-                  (fail "bad coretype ~a0" (list x))))
-             (fail "Dimensions of vector type ~a0 not resolvd"
-                   (list x)))))
+         (b* (((vl-coredatatype-info typinfo) (vl-coretypename->info x.name)))
+           (mv nil (and typinfo.size dim-size
+                        (* typinfo.size dim-size)))))
 
         (:vl-struct
-         (b* (;; bozo is there a correct thing to do for a struct with no members?
-              ((unless (consp x.members)) (fail "empty struct: ~a0" (list x)))
-              ((mv warning widths) (vl-structmemberlist-sizes x.members))
-              ((when warning) (mv warning nil))
-              (packedsize (vl-packeddimensionlist-total-size x.pdims))
-              (unpackedsize (vl-packeddimensionlist-total-size x.udims))
-              ((unless (and packedsize unpackedsize))
-               (fail "Dimensions of struct type ~a0 not resolvd"
-                     (list x))))
-           (success (* packedsize unpackedsize (sum-nats widths)))))
+         (b* (((mv err widths) (vl-structmemberlist-sizes x.members))
+              ((when err) (mv err nil))
+              ((when (member nil widths)) (mv nil nil)))
+           (mv nil (and dim-size (* (sum-nats widths) dim-size)))))
 
         (:vl-union
-         (b* (;; bozo is there a correct thing to do for a union with no members?
-              ((unless (consp x.members)) (fail "empty union: ~a0" (list x)))
-              ((mv warning widths) (vl-structmemberlist-sizes x.members))
-              ((when warning) (mv warning nil))
-              (packedsize (vl-packeddimensionlist-total-size x.pdims))
-              (unpackedsize (vl-packeddimensionlist-total-size x.udims))
-              ((unless (and packedsize unpackedsize))
-               (fail "Dimensions of union type ~a0 not resolvd"
-                     (list x))))
-           (success (* packedsize unpackedsize (max-nats widths)))))
+         (b* (((mv err widths) (vl-structmemberlist-sizes x.members))
+              ((when err) (mv err nil))
+              ((when (member nil widths)) (mv nil nil)))
+           (mv nil (and dim-size (* (max-nats widths) dim-size)))))
 
-        (:vl-enum ;; need to compute size from the base type?
-         (fail "bozo: implement enum range" nil))
+        (:vl-enum
+         (b* (((mv err sub-size)
+               (vl-datatype-size x.basetype))
+              ((when (or err (not sub-size)))
+               (mv err nil)))
+           (mv nil (and dim-size (* sub-size dim-size)))))
 
         (:vl-usertype
-         (fail "unresolved usertype: ~a0" (list x.kind))))))
+         (b* (((unless (mbt (and x.res t)))
+               (mv (vmsg "Usertype unresolved: ~a0" x) nil))
+              ((mv err sub-size)
+               (vl-datatype-size x.res))
+              ((when (or err (not sub-size)))
+               (mv err nil)))
+           (mv nil (and dim-size (* sub-size dim-size))))))))
 
   (define vl-structmemberlist-sizes ((x vl-structmemberlist-p))
-    :returns (mv (warning (iff (vl-warning-p warning) warning))
-                 (sizes   (and (pos-listp sizes)
-                               (implies (not warning)
-                                        (equal (consp sizes) (consp x))))))
+    :returns (mv (err (iff (vl-msg-p err) err))
+                 (sizes maybe-nat-list-p))
+    :guard (vl-structmemberlist-resolved-p x)
     :measure (vl-structmemberlist-count x)
     (b* (((when (atom x)) (mv nil nil))
-         ((vl-structmember first) (vl-structmember-fix (car x)))
-         ((mv warning size) (vl-datatype-size first.type))
-         ((when warning) (mv warning nil))
-         ((mv warning rest) (vl-structmemberlist-sizes (cdr x)))
-         ((when warning) (mv warning nil)))
-      (mv nil (cons size rest))))
+         ((mv err1 size1) (vl-datatype-size (vl-structmember->type (car x))))
+         ((mv err2 size2) (vl-structmemberlist-sizes (cdr x))))
+      (mv (or err1 err2) (cons size1 size2)))
+    ///
+    (defret len-of-vl-structmemberlist-sizes
+      (equal (len sizes)
+             (len x))
+      :hints (("goal" :induct (len x)
+               :expand ((vl-structmemberlist-sizes x)))))
+    (defret true-listp-of-vl-structmemberlist-sizes
+      (true-listp sizes)
+      :hints (("goal" :induct (len x)
+               :expand ((vl-structmemberlist-sizes x))))
+      :rule-classes :type-prescription))
   ///
-  (defthm-vl-datatype-size-flag
-    (defthm len-of-vl-structmemberlist-sizes
-      (b* (((mv warning sizes) (vl-structmemberlist-sizes x)))
-        (implies (not warning)
-                 (equal (len sizes) (len x))))
-      :flag vl-structmemberlist-sizes)
-    :skip-others t)
 
-  (local (defthm nat-listp-when-pos-listp
-           (implies (pos-listp x)
-                    (nat-listp x))
-           :hints(("Goal" :in-theory (enable nat-listp)))))
+  (defthm-vl-datatype-size-flag
+    (defthm vl-datatype-size-not-err-when-size
+      (b* (((mv err size) (vl-datatype-size x)))
+        (implies size
+                 (not err)))
+      :hints ('(:expand ((vl-datatype-size x))))
+      :flag vl-datatype-size)
+    (defthm vl-structmemberlist-sizes-not-err-when-sizes
+      (b* (((mv err sizes) (vl-structmemberlist-sizes x)))
+        (implies (not (member nil sizes))
+                 (not err)))
+      :hints ('(:expand ((vl-structmemberlist-sizes x))))
+      :flag vl-structmemberlist-sizes))
+
 
   (verify-guards vl-datatype-size)
-
   (deffixequiv-mutual vl-datatype-size))
 
 
-
-(define vl-datatype-set-unsigned ((x vl-datatype-p))
-  :returns (new-x vl-datatype-p)
-  (vl-datatype-case x
-    :vl-coretype (mbe :logic (change-vl-coretype x :signedp nil)
-                      :exec (if x.signedp (change-vl-coretype x :signedp nil) x))
-    :vl-struct   (mbe :logic (change-vl-struct   x :signedp nil)
-                      :exec (if x.signedp (change-vl-struct   x :signedp nil) x))
-    :vl-union    (mbe :logic (change-vl-union    x :signedp nil)
-                      :exec (if x.signedp (change-vl-union    x :signedp nil) x))
-    :otherwise   (vl-datatype-fix x)))
-
-#||
-
-(trace$
- #!VL (vl-datatype-exprtype
-       :entry (list* 'vl-datatype-exprtype
-                     x
-                     (with-local-ps (vl-pp-datatype x))
-                     (and (eq (vl-datatype-kind x) :vl-coretype)
-                          (list :name (vl-coretype->name x)
-                                :signedp (vl-coretype->signedp x))))
-       :exit (cons 'vl-datatype-exprtype
-                   (b* (((mv & err type) values))
-                     (if err
-                         (list err)
-                       (list :type type))))))
-
-||#
-
-
-(define vl-datatype-exprtype
-  :parents (datatype-tools vl-expr-typedecide)
-  :short "Get the self-determined type for a datatype."
-  ((x vl-datatype-p))
-  :returns
-  (mv (successp booleanp :rule-classes :type-prescription
-                "NOTE: type may still be NIL on success.")
-      (errmsg maybe-stringp :rule-classes :type-prescription
-              "On failure: a very brief explanation of the failure reason.")
-      (type vl-maybe-exprtype-p
-            "On success: the self-determined type of this expression.  Note
-             that some expressions (e.g., real numbers) have type NIL."))
-  :long "<p>BOZO we don't try very hard yet.  Eventually this will need to know
-         how to look up the sizes of user-defined types, etc.</p>
-
-        <p>BOZO At the moment we treat unpacked stuff just like packed stuff,
-        and there's not much error checking for using unpacked stuff improperly.</p>"
-  (b* (((fun (fail reason))   (mv nil reason nil))
-       ((fun (success width)) (mv t nil width))
-       ((when (consp (vl-datatype->udims x)))
-        ;; (fail "Can't decide signedness of unpacked array")
-        ;; Can we just say unpacked stuff is always unsigned?
-        (success :vl-unsigned)
-        ))
+(defines vl-datatype-has-usertypes
+  (define vl-datatype-has-usertypes ((x vl-datatype-p))
+    :measure (Vl-datatype-count x)
     (vl-datatype-case x
-
-      (:vl-coretype
-       (case x.name
-         ((:vl-byte :vl-shortint :vl-int :vl-longint :vl-integer :vl-time
-           :vl-bit :vl-logic :vl-reg)
-          ;; See also vl-parse-core-data-type.  When using any of the above
-          ;; types, a logic designer can provide an optional `signed` or
-          ;; `unsigned` keyword that, presumably, overrides the default
-          ;; signedness.  The parser handles this and must set up the
-          ;; coretype.signedp field appropriately.  So, here, we just need to
-          ;; look at that field.
-          (success (if x.signedp :vl-signed :vl-unsigned)))
-
-         (otherwise
-          ;; Some other kind of core type like void, string, chandle, event,
-          ;; or similar.  We're not going to assign any type to these, but
-          ;; it's not any kind of error.
-          (success nil))))
-
-      (:vl-enum ;; just need to look at the base type, right?
-       (fail "bozo: implement enum typing"))
-      
-      (:vl-struct ;; just need to look at signedp and packed?
-       (b* (((unless x.packedp) ;; (fail "non-packed struct")
-             ;; Can we just say unpacked stuff is always unsigned?
-             (success :vl-unsigned)))
-         (success (if x.signedp :vl-signed :vl-unsigned))))
-
-      (:vl-union ;; just need to look at signedp and packed?
-       (b* (((unless x.packedp) ;; (fail "non-packed union")
-             ;; Can we just say unpacked stuff is always unsigned?
-             (success :vl-unsigned)))
-         (success (if x.signedp :vl-signed :vl-unsigned))))
-
-      (:vl-usertype
-       ;; BOZO maybe some day extend this to be able to do lookups
-       (fail "vl-datatype-exprtype can't handle unresolved usertypes")))))
+      :vl-coretype nil
+      :vl-struct (vl-structmemberlist-has-usertypes x.members)
+      :vl-union (vl-structmemberlist-has-usertypes x.members)
+      :vl-enum (vl-datatype-has-usertypes x.basetype)
+      :vl-usertype t))
+  (define vl-structmemberlist-has-usertypes ((x vl-structmemberlist-p))
+    :measure (vl-structmemberlist-count x)
+    (if (atom x)
+        nil
+      (or (vl-datatype-has-usertypes (vl-structmember->type (car x)))
+          (vl-structmemberlist-has-usertypes (cdr x))))))
 
 
-(define vl-datatype-bitselect-ok ((x vl-datatype-p))
-  :returns (okp)
-  :parents (datatype-tools)
-  :short "Determines whether this datatype can be bitselected."
-  :long "<p>The input datatype should not have packed or unpacked dimensions;
-if it does, then it's definitely OK to index into it (though it's only a
-bitselect if it's the last packed dimension).  The input datatype should have
-usertypes resolved.</p>"
-  :guard (and (not (consp (vl-datatype->pdims x)))
-              (not (consp (vl-datatype->udims x))))
-  (vl-datatype-case x
-    (:vl-coretype
-     (b* (((vl-coredatatype-info xinfo) (vl-coretypename->info x.name)))
-       ;; Checks whether this is an integer atom type.  If it's an integer
-       ;; vector type, it's only selectable if it has dims.
-       (and xinfo.size (not (eql xinfo.size 1)))))
-    (:vl-struct x.packedp)
-    (:vl-union  x.packedp)
-    (:vl-enum   nil) ;; BOZO is this correct?
-    (:vl-usertype nil)))
-       
-     
+(define vl-maybe-usertype-resolve ((x vl-datatype-p))
+  :guard (vl-datatype-resolved-p x)
+  :returns (new-x vl-datatype-p)
+  :measure (vl-datatype-count x)
+  (b* ((x (vl-datatype-fix x))
+       ((when (or (consp (vl-datatype->pdims x))
+                  (consp (vl-datatype->udims x))))
+        x))
+    (vl-datatype-case x
+      :vl-usertype (if x.res
+                       (vl-maybe-usertype-resolve x.res)
+                     x)
+      :otherwise x))
+  ///
+  (defret vl-datatype-count-of-vl-maybe-usertype-resolve
+    (<= (vl-datatype-count new-x)
+        (vl-datatype-count x))
+    :rule-classes :linear)
+
+  (defret vl-datatype-resolved-p-of-vl-maybe-usertype-resolve
+    (implies (vl-datatype-resolved-p x)
+             (vl-datatype-resolved-p new-x)))
+
+  (local (defret vl-maybe-usertype-resolve-nonnil
+           new-x
+           :rule-classes :type-prescription))
+
+  (defret not-usertype-of-vl-maybe-usertype-resolve
+    (implies (and (not (consp (vl-datatype->pdims new-x)))
+                  (not (consp (vl-datatype->udims new-x)))
+                  (vl-datatype-resolved-p x))
+             (not (equal (vl-datatype-kind new-x)  :vl-usertype)))
+    :rule-classes
+    ((:forward-chaining :trigger-terms
+      ((vl-datatype-kind (vl-maybe-usertype-resolve x)))))))
+
+
+
+
+(define vl-datatype-packedp ((x vl-datatype-p))
+  :guard (vl-datatype-resolved-p x)
+  :short "Decide whether the datatype is packed or not."
+  :long "<p>A shallow check; e.g. we don't check for invalid things such as a
+packed struct with a member that's an unpacked array.</p>
+
+<p>Note that the question of whether something is packed is subtly different
+from the question of whether you can select from it: namely, simple bit types
+such as @('logic') are packed but not selectable.</p>"
+  :returns (packedp)
+  (b* ((x (vl-maybe-usertype-resolve x))
+       ((when (consp (vl-datatype->udims x))) nil)
+       ((when (consp (vl-datatype->pdims x))) t))
+    (vl-datatype-case x
+      :vl-coretype
+      (b* (((vl-coredatatype-info xinfo) (vl-coretypename->info x.name)))
+        (and xinfo.size t))
+      :vl-struct x.packedp
+      :vl-union x.packedp
+      :vl-enum t
+      :vl-usertype (impossible))))
 

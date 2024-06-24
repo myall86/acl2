@@ -11,6 +11,10 @@
 
 (in-package "ACL2")
 
+; The following comment line tells the build system that if *acl2-exports*
+; changes, this book should be recertified:
+; (depends-on "build/acl2-exports.certdep" :dir :system)
+
 (defun raw-acl2-exports1 (x pkg-witness wrld allp acc)
 
 ; Extend acc with a list of all documented symbols in the package of symbol
@@ -55,13 +59,13 @@
 ; keep that list of properties in sync with raw-acl2-exports1.
 
   (declare (xargs :guard (plist-worldp wrld)))
-  (let ((doc-alist (global-val 'documentation-alist wrld)))
+  (let ((doc-alist *acl2-system-documentation*))
     (cond ((alistp doc-alist)
            (raw-acl2-exports1 doc-alist
-                                   (pkg-witness "ACL2")
-                                   wrld
-                                   allp
-                                   nil))
+                              (pkg-witness "ACL2")
+                              wrld
+                              allp
+                              nil))
           (t (er hard? 'raw-acl2-exports
                  "Expected ~x0 to be an alistp!")))))
 
@@ -81,9 +85,9 @@
 
 (defconst *acl2-exports-exclusions*
   '(*UNTROUBLESOME-CHARACTERS*
-    #+acl2-legacy-doc *TERMINAL-MARKUP-TABLE*
     ADD-DIVE-INTO-MACRO
     BDD
+    BOOK-HASH
     CHECK-SUM
     COMP-GCL
     COUNT ; defined in books/coi/bags/basic.lisp
@@ -91,17 +95,149 @@
     DIVE-INTO-MACROS-TABLE
     ERROR1
     FIND-RULES-OF-RUNE
-    INTERSECTP ; defined in books/finite-set-theory/osets/outer.lisp
     LOOP-STOPPER
     MBE1
     NON-LINEAR-ARITHMETIC
     NORMALIZE
-    PROOF-CHECKER
+
+; The addition of pos-listp to *acl2-exports* interferes with certification
+; books/centaur/vl/util/defs.lisp.
+
+    POS-LISTP
+    PROOF-BUILDER
     REDEFINED-NAMES
     REMOVE-DIVE-INTO-MACRO
     REWRITE
+    SAFE-MODE
+    TAG-TREE
     TYPE-SET
+    USELESS-RUNES
     WATERFALL
+
+; Some of the following might be added to *acl2-exports*, but perhaps not; they
+; come from defpointers to system-utilities.
+
+    ARGLISTP
+    ALIST-KEYS-SUBSETP
+    ALIST-TO-DOUBLETS
+    ALL-CALLS
+    ALL-FNNAMES
+    ALL-FNNAMES-LST
+    ALL-FNNAMES1
+    BODY
+    CONJOIN
+    CONJOIN2
+    CONS-COUNT-BOUNDED
+    CONS-TERM
+    CONS-TERM*
+    DEFINED-CONSTANT
+    DISJOIN
+    DISJOIN2
+    DUMB-NEGATE-LIT
+    ENABLED-NUMEP
+    ENABLED-RUNEP
+    EVENS
+    FARGN
+    FARGS
+    FCONS-TERM
+    FCONS-TERM*
+    FDEFUN-MODE
+    FFN-SYMB
+    FFN-SYMB-P
+    FFNNAMEP
+    FFNNAMEP-LST
+    FIRST-KEYWORD
+    FLAMBDA-APPLICATIONP
+    FLAMBDAP
+    FLATTEN-ANDS-IN-LIT
+    FN-RUNE-NUME
+    FN-SYMB
+    FORMALS
+    FSUBCOR-VAR
+    FQUOTEP
+    GENVAR
+    GET-BRR-LOCAL
+    GET-EVENT
+    GET-SKIPPED-PROOFS-P
+    IMPLICATE
+    IO?
+    KEYWORD-LISTP
+    KNOWN-PACKAGE-ALIST
+    LAMBDA-APPLICATIONP
+    LAMBDA-BODY
+    LAMBDA-FORMALS
+    LEGAL-CONSTANTP
+    LEGAL-VARIABLEP
+    LOGICP
+    MAKE-LAMBDA
+    MAKE-LAMBDA-APPLICATION
+    MAKE-LAMBDA-TERM
+    MERGE-SORT-LEXORDER
+    NVARIABLEP
+    ODDS
+    PACKN
+    PACKN-POS
+    PAIRLIS-X1
+    PAIRLIS-X2
+    PRETTYIFY-CLAUSE
+    PROGRAMP
+    RECURSIVEP
+    REWRITE-LAMBDA-OBJECT
+    RW-CACHE-STATE
+    STOBJP
+    STOBJS-IN
+    STOBJS-OUT
+    SUBCOR-VAR
+    SUBLIS-VAR
+    SUBST-EXPR
+    SUBST-VAR
+    SYMBOL-CLASS
+    TRANS-EVAL
+    TRANSLATE
+    TRANSLATE-HINTS
+    TRANSLATE-CMP
+    TRANSLATE1
+    TRANSLATE1-CMP
+    TRANSLATE11
+    VARIABLEP
+
+; Symbols below should probably be added to *acl2-exports*.
+
+    GET-SERIALIZE-CHARACTER
+    TRUST-MFC
+    WITH-GLOBAL-STOBJ
+  ))
+
+(defconst *special-ops*
+
+; This list includes the operators that get special treatment when their calls
+; are translated (in translate11).  Our expectation is that these are are all
+; in *acl2-exports*.  (This list might be incomplete; e.g., probably loop$
+; should be included.)
+
+  '(quote
+    lambda
+    lambda$
+    let
+    mv
+    mv-let
+    pargs
+    check-vars-not-free
+    translate-and-test
+    with-local-stobj
+    stobj-let
+    flet
+    declare
+    if
+    mv-list
+    return-last
+
+; The following are not included because even though they get special handling
+; in translate11, they don't need to be documented.
+
+;   synp
+;   makunbound-global
+;   put-global
     ))
 
 (defun missing-from-acl2-exports (wrld)
@@ -114,8 +250,11 @@
   (declare (xargs :guard (plist-worldp wrld)
                   :mode ; because of sort-symbol-listp
                   :program))
-  (set-difference-eq (raw-acl2-exports nil wrld)
-                     (append *acl2-exports-exclusions* *acl2-exports*)))
+  (let ((expected (append *acl2-exports-exclusions* *acl2-exports*)))
+    (union-eq (set-difference-eq *special-ops*
+                                 expected)
+              (set-difference-eq (raw-acl2-exports nil wrld)
+                                 expected))))
 
 (assert-event
  (null (missing-from-acl2-exports (w state)))

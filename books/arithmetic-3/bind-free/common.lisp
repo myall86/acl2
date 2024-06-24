@@ -1,19 +1,5 @@
-; Arithmetic-3 Library
-; Copyright (C) 2004 Robert Krug <rkrug@cs.utexas.edu>
-;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT
-; ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-; FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
-; details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; if not, write to the Free Software Foundation, Inc., 51
-; Franklin Street, Suite 500, Boston, MA 02110-1335, USA.
+; See the top-level arithmetic-3 LICENSE file for authorship,
+; copyright, and license information.
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
@@ -125,11 +111,11 @@
 
 (defun factor-pattern-gather-exponents (factor)
   (declare (xargs :guard (pseudo-termp factor)))
-  
+
 ; We only consider the base of an exponential when determining
 ; a match.  We handle quotep's carefully.  We want 2 to match
 ; with (expt 1/2 n), but not with 3 or (expt 3 n).  We
-; also want (expt 2 n) to match with (expt 3 n) and 
+; also want (expt 2 n) to match with (expt 3 n) and
 ; (expt 2 m) but not with (expt 3 i).  See pattern-matchp.
 
   (cond ((variablep factor)

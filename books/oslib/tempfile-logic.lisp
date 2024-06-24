@@ -35,6 +35,8 @@
 (include-book "std/strings/decimal" :dir :system)
 (include-book "std/strings/cat" :dir :system)
 
+(local (in-theory (disable w)))
+
 (defsection tempfile
   :parents (oslib)
   :short "Generate a suitable name for a temporary file."
@@ -80,7 +82,11 @@ fail for whatever reason, @('filename') may be @('nil').</p>
 
     (defthm state-p1-of-tempfile-fn
       (implies (force (state-p1 state))
-               (state-p1 (mv-nth 1 (tempfile-fn basename state)))))))
+               (state-p1 (mv-nth 1 (tempfile-fn basename state)))))
+
+    (defthm w-state-of-tempfile-fn
+      (equal (w (mv-nth 1 (tempfile-fn basename state)))
+             (w state)))))
 
 
 
@@ -88,11 +94,11 @@ fail for whatever reason, @('filename') may be @('nil').</p>
   ((tempdir stringp "Directory to generate the file in")
    (basename stringp "Base name to use for the new file")
    state)
-  :returns (mv (tempfile "Somethign like @('$TEMPDIR/$USER-$PID-$BASENAME')"
+  :returns (mv (tempfile "Something like @('$TEMPDIR/$USER-$PID-$BASENAME')"
                          (or (stringp tempfile)
                              (not tempfile))
                          :rule-classes :type-prescription)
-               (state state-p1 :hyp (force (state-p1 state))))
+               (new-state state-p1 :hyp (force (state-p1 state))))
 
   :parents (tempfile)
   :short "Join together a temp directory, the user name, the PID, and the base
@@ -106,16 +112,28 @@ name to create a temporary filename."
        ((unless (stringp user))
         (er hard? __function__ "reading $USER failed")
         (mv nil state))
-       (filename (str::cat user "-" (str::natstr pid) "-" basename))
+       (filename (str::cat user "-" (str::nat-to-dec-string pid) "-" basename))
        (path     (catpath tempdir filename)))
-    (mv path state)))
+    (mv path state))
+  ///
+  (defret w-state-of-<fn>
+    (equal (w new-state)
+           (w state))))
 
 
+(defun pathname-to-unix (str)
+  (declare (xargs :guard (stringp str)))
+; Copied from axioms.lisp:pathname-os-to-unix
+  (if (equal str "")
+      str
+    (let* ((sep #\\)
+           (str0 (substitute ACL2::*directory-separator* sep str)))
+      str0)))
 
 (define default-tempdir (state)
   :returns (mv (tempdir "Directory to use for temporary files."
                         stringp :rule-classes :type-prescription)
-               (state state-p1 :hyp (force (state-p1 state))))
+               (new-state state-p1 :hyp (force (state-p1 state))))
 
   :parents (tempfile)
   :short "Figure out what directory to use for temporary files."
@@ -125,11 +143,15 @@ should use @('TEMP').  If either of these is set, we try to respect the choice.
 Otherwise, we just default to @('/tmp').</p>"
 
   (b* (((mv ?err tempdir state) (getenv$ "TMPDIR" state))
-       ((mv ?err temp state)   (getenv$ "TEMP" state)))
-    (mv (or (and (stringp tempdir) tempdir)
-            (and (stringp temp) temp)
-            "/tmp")
-        state)))
+       ((mv ?err temp state)   (getenv$ "TEMP" state))
+       (tmpdir (or (and (stringp tempdir) tempdir)
+                   (and (stringp temp) (pathname-to-unix temp)) ;; ACL2 traffics in unix-style pathnames
+                   "/tmp")))
+    (mv tmpdir state))
+  ///
+  (defret w-state-of-<fn>
+    (equal (w new-state)
+           (w state))))
 
 
 (define default-tempfile ((basename stringp)
@@ -137,13 +159,15 @@ Otherwise, we just default to @('/tmp').</p>"
   :returns (mv (tempfile (or (stringp tempfile)
                              (not tempfile))
                          :rule-classes :type-prescription)
-               (state state-p1 :hyp (force (state-p1 state))))
+               (new-state state-p1 :hyp (force (state-p1 state))))
   :parents (tempfile)
   :short "Default way to generate temporary file names."
   (b* (((mv dir state) (default-tempdir state)))
-    (default-tempfile-aux dir basename state)))
+    (default-tempfile-aux dir basename state))
+  ///
+  (defret w-state-of-<fn>
+    (equal (w new-state)
+           (w state))))
 
 
 (defattach tempfile-fn default-tempfile)
-
-

@@ -19,7 +19,7 @@ ACL2_DIR ?= $(shell cd ../../../.. ; pwd)
 endif
 endif
 
-$(warning ACL2_DIR is $(ACL2_DIR))
+# $(warning ACL2_DIR is $(ACL2_DIR))
 
 export ACL2 ?= $(ACL2_DIR)/saved_acl2
 export ACL2_SYSTEM_BOOKS ?= $(ACL2_DIR)/books
@@ -27,3 +27,7 @@ export ACL2_SYSTEM_BOOKS ?= $(ACL2_DIR)/books
 DIRS = translator examples/thacker
 include $(ACL2_SYSTEM_BOOKS)/Makefile-subdirs
 
+# For target.cert:
+
+include $(ACL2_SYSTEM_BOOKS)/Makefile-generic
+top: target.cert

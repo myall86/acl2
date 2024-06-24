@@ -1,4 +1,32 @@
-
+; GL - A Symbolic Simulation Framework for ACL2
+; Copyright (C) 2008-2013 Centaur Technology
+;
+; Contact:
+;   Centaur Technology Formal Verification Group
+;   7600-C N. Capital of Texas Highway, Suite 300, Austin, TX 78731, USA.
+;   http://www.centtech.com/
+;
+; License: (An MIT/X11-style license)
+;
+;   Permission is hereby granted, free of charge, to any person obtaining a
+;   copy of this software and associated documentation files (the "Software"),
+;   to deal in the Software without restriction, including without limitation
+;   the rights to use, copy, modify, merge, publish, distribute, sublicense,
+;   and/or sell copies of the Software, and to permit persons to whom the
+;   Software is furnished to do so, subject to the following conditions:
+;
+;   The above copyright notice and this permission notice shall be included in
+;   all copies or substantial portions of the Software.
+;
+;   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+;   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+;   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+;   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+;   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+;   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+;   DEALINGS IN THE SOFTWARE.
+;
+; Original author: Sol Swords <sswords@centtech.com>
 
 (in-package "GL")
 
@@ -43,7 +71,7 @@
 ;; To find such literals, we maintain a constraint catalog, a data structure
 ;; that lets us quickly match a new literal to existing ones.  This uses a
 ;; several-levels lookup system, as follows.
-;; 
+;;
 ;; Outermost structure is indexed by the first function symbol of the literal.
 ;; Inside that is a list of tuples:
 ;; (rule existing-lits matching-lit common-variables signature-table)
@@ -130,7 +158,7 @@
       (cons (car alist) (gbc-alist-remove-symmetric (cdr alist))))))
 
 
-    
+
 
 (defun gbc-rule-add-to-catalog (rule ccat)
   ;; Iterate over the constraint-alist.
@@ -162,7 +190,7 @@
                               state))
        ((er rest) (gbc-translate-lit-alist (cdr lit-patterns) state)))
     (value (cons (cons var trans) rest))))
-       
+
 
 
 (defun def-gl-boolean-constraint-fn (name lit-patterns syntaxp body hints state)
@@ -171,7 +199,7 @@
                                       (w state) state))
        ((er alist) (gbc-translate-lit-alist lit-patterns state))
        (body1 `(let ,(pairlis$ (strip-cars lit-patterns)
-                               (pairlis$ (pairlis$ 
+                               (pairlis$ (pairlis$
                                           (make-list-ac (len lit-patterns) 'gl-bool-fix nil)
                                           (strip-cdrs lit-patterns))
                                          nil))
@@ -358,7 +386,7 @@ prior to introducing the constraint rule above, but succeed after:</p>
        (new-existing-vars (set::union (set::mergesort (strip-cars lit-subst))
                                        x.existing-vars))
        ;; unbound lits remaining -- add to ccat
-       (ccat (gbc-unbound-lits-add-tuples 
+       (ccat (gbc-unbound-lits-add-tuples
               rest-litvars
               x.rule
               ;; need to keep these canonical
@@ -371,7 +399,7 @@ prior to introducing the constraint rule above, but succeed after:</p>
     (mv nil ccat)))
 
 
-       
+
 
 (defun gbc-process-new-lit-tuples (lit tuples ccat state)
   (declare (xargs :stobjs state :verify-guards nil))

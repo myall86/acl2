@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -26,10 +14,10 @@
 
 ;this book contains very basic expt stuff (i couldn't include expt.lisp in basic.lisp because of a circular dependency)
 
-;todo: 
+;todo:
 ;make a separate expt-proofs book
 ;there's a distinction between expt and expt-2 rules
-;make consistent names:  expt vs. expt2   
+;make consistent names:  expt vs. expt2
 ;think about the rules to combine and split exponents
 ;generalize some of these rules to be about expt with any base (not just 2)
 
@@ -53,7 +41,7 @@
 (local (include-book "fl")) ;or use floor?
 (local (include-book "arith2"))
 
-(encapsulate 
+(encapsulate
  ()
  (local (include-book "../../../../arithmetic/top"))
  (defthm a16
@@ -192,7 +180,7 @@
   (implies (and (<= 1 (expt 2 i))
                 (< (expt 2 i) 2))
            (equal (expt 2 i) 1))
-  :hints (("goal" 
+  :hints (("goal"
            :in-theory (enable expt zip))
           ("subgoal *1/7" :use (:instance expt-weak-monotone (n (+ i 1)) (m 0)))))
 
@@ -289,7 +277,7 @@ with huge r might be very expensive too, but r is almost always 2 in my work.)  
 (set-compile-fns t)
 (defun expt-execute (r i) (expt r i))
 
-;Allows expt calls with small exponents to be computed  
+;Allows expt calls with small exponents to be computed
 ;You can change 1000 to your own desired bound.
 (defthm expt-execute-rewrite
   (implies (and (syntaxp (and (quotep r) (quotep i) (< (abs (cadr i)) 1000))))
@@ -309,12 +297,12 @@ Note that we could just compute (EXPT 2 1000001) and (EXPT 2 1000000) but that w
 Perhaps we can make this into a complete theory, based on the observation that if a product contains two
 factors of the form (expt 2 k) of (/ (expt 2 k)), where k is a constant, those factors will be brought
 together because they are very close in the term order used order arguments to * (recall that unary-/ is
-ignored when we decide how to order arguments to *).  
+ignored when we decide how to order arguments to *).
 |#
 
 ;this could be made more general (replace the lhs with its second arg...)
 (defthm expt2-constants-collect-special-1
-  (implies (and (syntaxp (and (quotep i1) (quotep i2))) 
+  (implies (and (syntaxp (and (quotep i1) (quotep i2)))
                 (case-split (rationalp y))
                 (case-split (integerp i1))
                 (case-split (integerp i2)))
@@ -328,7 +316,7 @@ ignored when we decide how to order arguments to *).
   )
 
 (defthm expt2-constants-collect-special-2
-  (implies (and (syntaxp (and (quotep i1) (quotep i2))) 
+  (implies (and (syntaxp (and (quotep i1) (quotep i2)))
                 (case-split (integerp i1))
                 (case-split (integerp i2)))
            (equal  (* (EXPT 2 i1)
@@ -341,24 +329,24 @@ ignored when we decide how to order arguments to *).
   )
 
 (defthm expt2-constants-collect-special-4
-  (implies (and (syntaxp (and (quotep i1) (quotep i2))) 
+  (implies (and (syntaxp (and (quotep i1) (quotep i2)))
                 (case-split (rationalp y))
                 (case-split (integerp i1))
                 (case-split (integerp i2)))
            (equal (* (/ (EXPT 2 i2)) (EXPT 2 i1) y)
                   (* (expt 2 (- i1 i2)) y)))
-  
+
   :hints (("Goal" :in-theory (set-difference-theories
                               (enable expt-split)
                               '()))))
 
 (defthm expt2-constants-collect-special-5
-  (implies (and (syntaxp (and (quotep i1) (quotep i2))) 
+  (implies (and (syntaxp (and (quotep i1) (quotep i2)))
                 (case-split (integerp i1))
                 (case-split (integerp i2)))
            (equal  (* (/ (EXPT 2 i2)) (EXPT 2 i1))
                    (expt 2 (- i1 i2))))
-  
+
   :hints (("Goal" :in-theory (set-difference-theories
                               (enable expt-split)
                               '()))))
@@ -367,7 +355,7 @@ ignored when we decide how to order arguments to *).
 
 ;will this happen?
 (defthm expt2-constants-collect-special-6
-  (implies (and (syntaxp (and (quotep i1) (quotep i2))) 
+  (implies (and (syntaxp (and (quotep i1) (quotep i2)))
                 (case-split (rationalp x))
                 (case-split (integerp i1))
                 (case-split (integerp i2)))
@@ -380,13 +368,13 @@ ignored when we decide how to order arguments to *).
 
 ;whoa this one is sort of different... (it rewrites an equality)
 (defthm expt2-constants-collect-special-3
-  (implies (and (syntaxp (and (quotep i1) (quotep i2))) 
+  (implies (and (syntaxp (and (quotep i1) (quotep i2)))
                 (case-split (rationalp x))
                 (case-split (integerp i1))
                 (case-split (integerp i2)))
            (equal (equal (* x (EXPT 2 i1)) (EXPT 2 i2))
                   (equal x (expt 2 (- i2 i1)))))
-  
+
   :hints (("Goal" :in-theory (set-difference-theories
                               (enable expt-split)
                               '())))
@@ -574,7 +562,7 @@ ignored when we decide how to order arguments to *).
 (defthm expt-with-small-n
   (implies (<= n 0)
            (<= (expt 2 n) 1))
-  :hints (("Goal" :use (:instance expt-weak-monotone (m 0)))) 
+  :hints (("Goal" :use (:instance expt-weak-monotone (m 0))))
   :rule-classes (:linear))
 
 
@@ -628,7 +616,7 @@ ignored when we decide how to order arguments to *).
            (equal (* (/ (EXPT 2 i))
                      (/ (EXPT 2 i)))
                   (/ (expt 2 (* 2 i)))))
-  :hints (("Goal" :in-theory (disable 
+  :hints (("Goal" :in-theory (disable
                               expt-2-combine-like-is
                               expt-split)
            :use (:instance  expt-split (r 2) (i (* 1/2 i)) (j (* 1/2 i))))))
@@ -739,21 +727,21 @@ would be nice (use expt2-1-to-1)?
 
 #|
 ;this will get rewritten away?
-(defthm expt-in-product-linear	
-  (implies (and (<= 0 i)	
+(defthm expt-in-product-linear
+  (implies (and (<= 0 i)
 		(<= 0 x)
                 (case-split (rationalp x))
-                )	
+                )
 	   (<= x (* x (expt 2 i))))
   :rule-classes (:linear)
   )
 
 ;this will get rewritten away?
 (defthm expt-in-product-linear-2
-   (implies (and (case-split (<= i 0))	
+   (implies (and (case-split (<= i 0))
                  (case-split (<= 0 x))
                  (case-split (rationalp x))
-                 )	
+                 )
             (<= (* x (expt 2 i)) x))
    :rule-classes (:linear)
    )
@@ -768,7 +756,7 @@ would be nice (use expt2-1-to-1)?
 (defthmd expt-with-product-exponent
   (implies (and (syntaxp (not (quotep i)))
                 (case-split (integerp i)))
-	   (equal (expt 2 (* 2 i))	
+	   (equal (expt 2 (* 2 i))
 		  (* (expt 2 i) (expt 2 i))))
   :hints (("Goal" :in-theory (enable a15))))
 
@@ -804,16 +792,16 @@ these deal with arbitrary bases (not just 2):
 
 ;allows both a and b to be non-integers:
 (defthm expt-non-negative
-  (implies (and (<= 0 a)	
-		(<= 0 b)	 		
-		(case-split (rationalp a))	
-		)					
+  (implies (and (<= 0 a)
+		(<= 0 b)
+		(case-split (rationalp a))
+		)
 	   (<= 0 (expt a b))))
 
 (defthm expt-integerp
-  (implies (and (natp a)	
-		(<= 0 b) 		
-		)					
+  (implies (and (natp a)
+		(<= 0 b)
+		)
 	   (integerp (expt a b))))
 
 |#

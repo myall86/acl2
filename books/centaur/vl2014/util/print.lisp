@@ -36,9 +36,9 @@
 (include-book "cw-unformatted")
 (include-book "std/strings/pretty" :dir :system)
 (local (include-book "arithmetic"))
-(local (include-book "misc/assert" :dir :system))
+(local (include-book "std/testing/assert-bang" :dir :system))
 (local (include-book "std/io/base" :dir :system))
-(local (include-book "centaur/misc/arith-equivs" :dir :system))
+(local (include-book "std/basic/arith-equivs" :dir :system))
 (local (std::add-default-post-define-hook :fix))
 (local (in-theory (enable acl2::arith-equiv-forwarding)))
 
@@ -1087,8 +1087,8 @@ lists.</p>"
   ///
   (defthm acc-of-vl-print-natchars-aux
     (equal (mv-nth 0 (vl-print-natchars-aux n acc col))
-           (str::revappend-natchars-aux n acc))
-    :hints(("Goal" :in-theory (enable str::basic-natchars))))
+           (str::revappend-nat-to-dec-chars-aux n acc))
+    :hints(("Goal" :in-theory (enable str::basic-nat-to-dec-chars))))
   (verify-guards vl-print-natchars-aux))
 
 (define vl-print-nat-main ((n natp) &key (ps 'ps))
@@ -1120,11 +1120,11 @@ strings, so they can be printed at runtime without any coercion.</li>
 <li>Numbers don't have to be encoded, so there's no need to consider whether
 we're in HTML mode.</li>
 
-<li>We essentially use str::revappend-natchars instead of calling natstr or
+<li>We essentially use str::revappend-nat-to-dec-chars instead of calling natstr or
 similar.  This does the minimum amount of consing and doesn't build a
 string.</li>
 
-<li>We manually inline the executable definition of str::revappend-natchars to
+<li>We manually inline the executable definition of str::revappend-nat-to-dec-chars to
 avoid doing the loop.</li>
 
 </ul>"
@@ -2104,8 +2104,7 @@ it right away.</p>"
   (cond ((<= (len args) 10)
          (vl-basic-fmt msg (pairlis$
                             '(#\0 #\1 #\2 #\3 #\4 #\5 #\6 #\7 #\8 #\9)
-                            (redundant-list-fix args))))
+                            (list-fix args))))
         (t
          (progn$ (raise "vl-basic-cw-obj is limited to 10 arguments.")
                  ps))))
-

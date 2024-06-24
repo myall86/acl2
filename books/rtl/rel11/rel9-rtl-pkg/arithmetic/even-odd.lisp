@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -67,7 +55,7 @@
            (integerp (+ x y))))
 
 (defthm x-or-x/2
-  (implies (integerp x) 
+  (implies (integerp x)
            (or (integerp (/ x 2)) (integerp (/ (1+ x) 2))))
   :rule-classes ()
   :hints (("Goal" :in-theory (disable integerp-+)
@@ -112,7 +100,7 @@
 (defthm integerp-sum-of-odds-over-2-leading-constant
   (implies (and (syntaxp (and (quotep x)
                               (integerp (* 2 x)) ;;these two hyps say x is of the form (odd)/2
-                              (not (integerp x)) ;; 
+                              (not (integerp x)) ;;
                               ))
                 (rationalp x)
                 (rationalp y)
@@ -168,7 +156,7 @@
 ;floor of odd/2 is odd/2 -1/2
 
 
- ;; :hints (("Goal" :use ( (:instance  fl-unique 
+ ;; :hints (("Goal" :use ( (:instance  fl-unique
    ;                                  (x (* 1/2 x))
     ;                                 (n (- (* 1/2 x) 1/2)))))))
 

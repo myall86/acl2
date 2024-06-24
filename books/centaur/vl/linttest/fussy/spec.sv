@@ -147,6 +147,56 @@ module top ;
   //@VL LINT_IGNORE_FUSSY
   wire [3:0] supp_normal3 = xx0 & yy0;
 
+  // A right shift followed by an AND seems like a reasonable thing to do.  We won't
+  // warn about any of these.
+  wire shift_mask_normal1 = (xx0 >> 2) & 1'b1;
+  wire shift_mask_normal2 = (xx0 >> 2) & 2'b1;
+  wire shift_mask_normal3 = (xx0 >> 2) & yy0[1:0];
+  wire shift_mask_normal4 = (xx0 >> 2) & yy0[0];
 
+  // For shifts combined with other operators besides and (for masking), we
+  // will check for a more strict agreement
+  wire shift_xor_warn1 = (xx0 >> 2) ^ 1'b1;   // warn because the "intuitive size" of (xx >> 2) is 2
+  wire shift_xor_warn2 = (xx0 >> 2) ^ yy0[0];
+  wire shift_xor_normal1 = (xx0 >> 2) ^ 2'b1; // don't warn because the "intuitive size" matches
+  wire shift_xor_normal2 = (xx0 >> 2) ^ yy0[1:0];
+
+
+endmodule
+
+
+module a0;
+
+   // [Jared] this file isn't the right place to test this, but previously we
+   // failed to parse these expressions, so I'd like to keep them somewhere to
+   // make sure the fix works.
+
+   wire rand1 = $random % 2;
+   wire rand2 = $urandom % 2;
+   wire rand3 = $random() % 2;
+   wire rand4 = $urandom() % 2;
+
+
+  wire [3:0] normal_sysfun1 = xx0 & $countones(xx2);
+  wire [2:0] normal_sysfun2 = yy0 & $countones(xx2);
+  wire [3:0] normal_sysfun3 = xx0 == $bits(xx2);
+  wire [2:0] normal_sysfun4 = yy0 == $bits(xx2);
+
+endmodule
+
+
+module a1 ;
+
+   parameter foo = 7;
+   wire [3:0] bar;
+   parameter [4:0] baz = 6;
+
+   wire x0, x1, x2;
+   wire y0, y1, y2;
+   wire z0, z1, z2;
+
+   assign x0 = foo ? x1 : x2;  // don't warn about wide, untyped parameters like foo
+   assign y0 = bar ? y1 : y2;  // do warn about wide wires like bar
+   assign z0 = baz ? z1 : z2;  // do warn about wide, typed parameters
 
 endmodule

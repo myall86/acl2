@@ -9,7 +9,8 @@
 (make-event (pprogn (show-custom-keyword-hint-expansion t)
                     (value '(value-triple nil))))
 
-(include-book "misc/eval" :dir :system)
+(include-book "std/testing/must-not-prove" :dir :system)
+(include-book "std/testing/must-prove" :dir :system)
 
 (defstub h (x) t)
 
@@ -114,7 +115,7 @@
          (generic-list-iterator v (generic-list-iterator u a))))
 
 
-(thm?
+(must-prove
  (equal (bumper1 (append a b) i j)
         (append (bumper1 a i j)
                 (bumper1 b i j)))
@@ -122,7 +123,7 @@
  (("Goal"
    :consider (map-h-append :target (bumper1 (append a b) i j) ))))
 
-(thm?
+(must-prove
  (equal (bumper1 (append a b) i j)
         (append (bumper1 a i j)
                 (bumper1 b i j)))
@@ -130,7 +131,7 @@
  (("Goal"
    :consider map-h-append)))
 
-(thm?
+(must-prove
  (equal (bumper2 (append a b) i j)
         (append (bumper2 a i j)
                 (bumper2 b i j)))
@@ -138,7 +139,7 @@
  (("Goal"
    :consider map-h-append)))
 
-(thm?
+(must-prove
  (equal (bumper3 (append a b) i j)
         (append (bumper3 a i j)
                 (bumper3 b i j)))
@@ -146,7 +147,7 @@
  (("Goal"
    :consider map-h-append)))
 
-(thm?
+(must-prove
  (equal (bumper1 (append a b) i j)
         (append (bumper1 a i j)
                 (bumper1 b i j)))
@@ -154,7 +155,7 @@
  (("Goal"
    :consider filter-map-h-append)))
 
-(thm?
+(must-prove
  (equal (bumper2 (append a b) i j)
         (append (bumper2 a i j)
                 (bumper2 b i j)))
@@ -162,7 +163,7 @@
  (("Goal"
    :consider filter-map-h-append)))
 
-(thm?
+(must-prove
  (equal (bumper3 (append a b) i j)
         (append (bumper3 a i j)
                 (bumper3 b i j)))
@@ -170,7 +171,7 @@
  (("Goal"
    :consider filter-map-h-append)))
 
-(thm?
+(must-prove
  (equal (bumper4 (append a b) i)
         (append (bumper4 a i)
                 (bumper4 b i)))
@@ -178,7 +179,7 @@
  (("Goal"
    :consider filter-map-h-append)))
 
-(thm?
+(must-prove
  (implies (and (integerp i)
                (<= 0 i)
                (integerp j)
@@ -188,13 +189,13 @@
  :hints (("Goal"
           :consider generic-run-sum)))
 
-(thm?
+(must-prove
  (equal (get-integers (append x y) z)
         (get-integers y (get-integers x z)))
  :hints (("Goal"
           :consider generic-list-iterator-append)))
 
-(thm?
+(must-prove
  (equal (get-big-integers (append x y) u z)
         (get-big-integers y u (get-big-integers x u z)))
  :hints (("Goal"
@@ -204,7 +205,7 @@
  (defthm g-thm (g x y) :rule-classes nil))
 
 
-(thm?
+(must-prove
  (equal a b)
 
                   ;;; ************************************************
@@ -214,7 +215,7 @@
  :hints (("Goal"
           :consider g-thm)))
 
-(not-thm?
+(must-not-prove
  (equal a b)
                   ;;; ***************************
                   ;;; THIS IS SUPPOSED TO FAIL!!!
@@ -223,13 +224,13 @@
  :hints (("Goal"
           :consider (g-thm :instance ((X c))))))
 
-(thm?
+(must-prove
  (equal a b)
 
                   ;;; ***************************
                   ;;; By seeding subst we get just 1
                   ;;; ***************************
- 
+
 
  :hints
  (("Goal"
@@ -244,7 +245,7 @@
 ; This is a test of first-order matching of the lhs of assoc-append, sweeping
 ; through the goal for the first match.
 
-(thm?
+(must-prove
  (equal (append xxx (append a (append a a)))
         (append xxx (append (append a a) a)))
  :hints (("Goal" :consider assoc-append)))
@@ -270,14 +271,14 @@
   (implies (true-listp x) (equal (rev (rev x)) x)))
 
 (defthm true-listp-rev (true-listp (rev x)))
- 
+
 (defthm triple-rev
   (equal (rev (rev (rev a))) (rev a))
   :rule-classes nil)
 
 (in-theory (disable rev-rev true-listp-rev))
 
-(thm?
+(must-prove
  (equal (app (app (rev (rev (rev a)))
                   b)
              c)
@@ -306,8 +307,8 @@
                                `(:or ,val)
                                keyword-alist))
                            (value nil)))
-                          
-(not-thm?
+
+(must-not-prove
  (equal (append a b) (append b a))
  :hints
  (("Subgoal *1/1"
@@ -326,14 +327,14 @@
              (defthm fff-constraint
                (<= u (fff u v))))
 
-(thm?
+(must-prove
  (<= a (+ a (nfix b)))
- :hints (("Goal" ; 
+ :hints (("Goal" ;
           :consider fff-constraint)))
 
 ; By specifying a seed substitution we can select the correct one.
 
-(thm?
+(must-prove
  (<= a (+ a (nfix b)))
  :hints (("Goal"
           :consider (fff-constraint :instance ((v b)) ))))
@@ -394,7 +395,7 @@
              (local (defun ff (x) (declare (ignore x)) 23))
              (defthm constraint-thm
                (propertyp (ff x))))
-                        
+
 (in-theory (disable propertyp (propertyp)))
 
 (defstub gg (x) t)
@@ -420,11 +421,11 @@
 ; make them go away, one way or the other!  Then you can see what
 ; happens.
 
-(not-thm?
+(must-not-prove
  (and (true-listp (app a b))
       (propertyp (app (rev (rev (rev (rev b)))) (rev (rev (rev a))))))
  :hints (("Subgoal 1"
-;             
+;
           :consider derived-fact)
          ("Subgoal 1.D14'" :in-theory (enable propertyp-false))
          ("Subgoal 1.D13'" :in-theory (enable propertyp-false))
@@ -444,11 +445,11 @@
 
  :otf-flg t)
 
-(not-thm?
+(must-not-prove
  (and (true-listp (app a b))
       (propertyp (app (rev (rev (rev (rev b)))) (rev (rev (rev a))))))
  :hints (("Subgoal 1"
-;              
+;
           :consider derived-fact)
          ("Subgoal 1.D14'" :in-theory (enable propertyp-false))
          ("Subgoal 1.D13'" :in-theory (enable propertyp-false))

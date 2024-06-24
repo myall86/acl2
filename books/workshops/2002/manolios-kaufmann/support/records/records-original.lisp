@@ -22,7 +22,7 @@
 (defun field-< (x y)
   (if (symbolp x)
       (and (symbolp y)
-           (symbol-< x y))
+           (symbol< x y))
     (or (symbolp y)
         (< x y))))
 
@@ -171,7 +171,7 @@
 ; $$$ A main theorem
 (defthm s-same-g
   (implies (force (fieldp a))
-           (equal (s a (g a r) r) 
+           (equal (s a (g a r) r)
                   r)))
 
 (local
@@ -210,7 +210,7 @@
 ; $$$ A main theorem
 (defthm g-same-s
   (implies (force (fieldp a))
-           (equal (g a (s a v r)) 
+           (equal (g a (s a v r))
                   v)))
 
 (local

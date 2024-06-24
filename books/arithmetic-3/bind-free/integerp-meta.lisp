@@ -1,19 +1,5 @@
-; Arithmetic-3 Library
-; Copyright (C) 2004 Robert Krug <rkrug@cs.utexas.edu>
-;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT
-; ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-; FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
-; details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; if not, write to the Free Software Foundation, Inc., 51
-; Franklin Street, Suite 500, Boston, MA 02110-1335, USA.
+; See the top-level arithmetic-3 LICENSE file for authorship,
+; copyright, and license information.
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
@@ -34,12 +20,12 @@
 (in-package "ACL2")
 
 
-(local 
+(local
  (include-book "../pass1/top"))
 
 (include-book "default-hint")
 
-(set-default-hints '((nonlinearp-default-hint stable-under-simplificationp 
+(set-default-hints '((nonlinearp-default-hint stable-under-simplificationp
                                               hist pspv)))
 
 (table acl2-defaults-table :state-ok t)
@@ -267,7 +253,7 @@
 	(t
 	 (mv-let (flag new-leaves)
 	   (subtract-leaf leaf (cdr leaves))
-	   (if flag 
+	   (if flag
 	       (mv t (cons (car leaves)
 			   new-leaves))
 	     (mv nil leaves))))))
@@ -325,7 +311,7 @@
 		    (consp new-leaves))
 	       (mv-let (flag bag-list)
 		 (collect-bags-intp new-leaves intp-bags)
-		 (if flag 
+		 (if flag
 		     (mv t
 			 (cons (car non-intp-bags)
 			       bag-list))
@@ -364,7 +350,7 @@
 ;  ==> (integerp (intp-+ (+ a c) (+ b d)))
 
   (if (eq (fn-symb term) 'INTEGERP)
-           
+
       (let ((bin-op (fn-symb (fargn term 1))))
 	(if (and (member-eq bin-op '(BINARY-+ BINARY-*))
 		 (eq (fn-symb (fargn (fargn term 1) 2)) bin-op))
@@ -421,7 +407,7 @@
                          (floor x y))
                       (<= (floor x y)
                           (/ x y))))
-      :rule-classes ((:generalize) 
+      :rule-classes ((:generalize)
                      (:linear :trigger-terms ((floor x y))))))
 
    (local
@@ -431,7 +417,7 @@
                       (integerp (/ x y)))
                  (equal (floor x y)
                         (/ x y)))
-      :rule-classes ((:generalize) 
+      :rule-classes ((:generalize)
                      (:linear :trigger-terms ((floor x y))))))
 
    (local
@@ -441,12 +427,12 @@
                       (not (integerp (/ x y))))
                  (< (floor x y)
                     (/ x y)))
-      :rule-classes ((:generalize) 
+      :rule-classes ((:generalize)
                      (:linear :trigger-terms ((floor x y))))))
-   
+
    (local
     (in-theory (disable floor)))
-   
+
    (local
     (defun ind-hint (x y n)
       (declare (xargs :measure (abs (ifix x))))
@@ -465,7 +451,7 @@
                       (<= (- (EXPT 2 N)) X))
                  (equal (< (FLOOR X 2) (- (* 1/2 (EXPT 2 N))))
                         nil))))
-   
+
    (local
     (defthm two-x
         (implies (and (< x 4)
@@ -503,7 +489,7 @@
                      (< 1 n)
                      (< x (* 1/2 (EXPT 2 N))))
                 (< (+ 1 (* 2 x)) (expt 2 n)))))
-       
+
 
    (local
     (defthm logand-bounds
@@ -528,34 +514,20 @@
               ("Subgoal *1/3.13" :use (two-x two-y))
               )))
 
-   #-:non-standard-analysis
    (defthm logand-thm
        (implies (and (integerp x)
-                     (<= -8192 x)
-                     (<= x 8191)
+                     (<= *min-type-set* x)
+                     (<= x *max-type-set*)
                      (integerp y)
-                     (<= -8192 y)
-                     (<= y 8191))
-                (and (<= -8192 (logand x y))
-                     (<= (logand x y) 8191)))
+                     (<= *min-type-set* y)
+                     (<= y *max-type-set*))
+                (and (<= *min-type-set* (logand x y))
+                     (<= (logand x y) *max-type-set*)))
      :hints (("Goal" :use ((:instance logand-bounds
-                                      (n 13))))))
+                                      (n (length *actual-primitive-types*)))))))
 
-   #+:non-standard-analysis
-   (defthm logand-thm
-     (implies (and (integerp x)
-                   (<= -65536 x)
-                   (<= x 65535)
-                   (integerp y)
-                   (<= -65536 y)
-                   (<= y 65535))
-              (and (<= -65536 (logand x y))
-                   (<= (logand x y) 65535)))
-     :hints (("Goal" :use ((:instance logand-bounds
-                                      (n 16))))))
-   
    ))
-#| 
+#|
  (local
   (encapsulate
    ()
@@ -566,15 +538,15 @@
 
    (defthm logand-thm
        (implies (and (integerp x)
-                     (<= -8192 x)
-                     (<= x 8191)
+                     (<= *min-type-set* x)
+                     (<= x *max-type-set*)
                      (integerp y)
-                     (<= -8192 y)
-                     (<= y 8191))
-                (and (<= -8192 (logand x y))
-                     (<= (logand x y) 8191)))
+                     (<= *min-type-set* y)
+                     (<= y *max-type-set*))
+                (and (<= *min-type-set* (logand x y))
+                     (<= (logand x y) *max-type-set*)))
      :hints (("Goal" :use ((:instance signed-byte-p-logops
-                                      (size 14)
+                                      (size (1+ (length *actual-primitive-types*))
                                       (i x)
                                       (j y)))
                      :in-theory (disable logand signed-byte-p-logops))))
@@ -730,7 +702,7 @@
 
  (local
   (defthm big-tree-big-tree-2
-    (and 
+    (and
      (equal (intp-eva (big-tree bags 'INTP-+ 'BINARY-+) a)
 	    (intp-eva (big-tree-2 bags 'BINARY-+ 'BINARY-+) a))
      (equal (intp-eva (big-tree bags 'INTP-* 'BINARY-*) a)

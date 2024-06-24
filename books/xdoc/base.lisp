@@ -1,5 +1,5 @@
 ; XDOC Documentation System for ACL2
-; Copyright (C) 2009-2011 Centaur Technology
+; Copyright (C) 2009-2015 Centaur Technology
 ;
 ; Contact:
 ;   Centaur Technology Formal Verification Group
@@ -61,45 +61,63 @@
   (declare (xargs :mode :program))
   (cdr (assoc-eq 'default-parents (table-alist 'xdoc world))))
 
-(defun check-defxdoc-args (name parents short long)
+(defun check-defxdoc-args (name parents short long pkg)
   (declare (xargs :guard t))
   (or (and (not (symbolp name))
-           "name is not a symbol!~%")
+           "name is not a symbol!")
       (and (not (symbol-listp parents))
-           ":parents are not a symbol list~%")
+           ":parents are not a symbol list")
       (and short (not (stringp short))
-           ":short is not a string (or nil)~%")
+           ":short is not a string (or nil)")
       (and long (not (stringp long))
-           ":long is not a string (or nil)~%")))
+           ":long is not a string (or nil)")
+      (and pkg (or (not (stringp pkg)) (equal pkg "") (not (pkg-witness pkg)))
+           ":pkg is not a string that is a known package (or nil)")))
 
-(defun guard-for-defxdoc (name parents short long)
+(defun guard-for-defxdoc (name parents short long pkg)
   (declare (xargs :guard t))
-  (let* ((err (check-defxdoc-args name parents short long)))
+  (let* ((err (check-defxdoc-args name parents short long pkg)))
     (or (not err)
-        (cw err))))
+        (cw "~s0~%" err))))
+
+(local (defthm state-p1-implies-all-boundp
+         (implies (state-p1 st)
+                  (all-boundp acl2::*initial-global-table* (global-table st)))
+         :hints(("Goal" :in-theory (enable state-p1)))
+         :rule-classes nil))
 
 (defun normalize-bookname (bookname state)
-  (let* ((dir-system (acl2::f-get-global 'acl2::system-books-dir state))
-         (lds        (length dir-system)))
-    ;; Eventually we could do something fancier to support
-    ;; add-include-book-dirs, but this is probably fine for the Community
-    ;; Books, at least.
-    (if (and (stringp dir-system)
-             (stringp bookname)
-             (<= lds (length bookname))
-             (equal dir-system (subseq bookname 0 lds)))
-        (concatenate 'string "[books]/"
-                     (subseq bookname lds nil))
-      bookname)))
+  (declare (xargs :stobjs (state)
+                  :guard-hints (("goal" :use ((:instance state-p1-implies-all-boundp
+                                               (st state)))
+                                 :in-theory (disable all-boundp assoc)
+                                 :expand ((:free (a b x) (all-boundp (cons a b) x)))))
+                  :guard t))  ;; WAHJr. added guard (see original below)
+  (let ((dir-system (acl2::f-get-global 'acl2::system-books-dir state)))
+    (if (not (and (stringp dir-system) (stringp bookname)))
+        bookname
+      (let ((lds (length dir-system)))
+        ;; Eventually we could do something fancier to support
+        ;; add-include-book-dirs, but this is probably fine for the
+        ;; Community Books, at least.
+        (if (and (<= lds (length bookname))
+                 (equal dir-system (subseq bookname 0 lds)))
+            (concatenate 'string "[books]/"
+                         (subseq bookname lds nil))
+          bookname)))))
 
-(defun defxdoc-fn (name parents short long state)
+;; This book potentially needs recertification after any change to the
+;; CERTIFY-BOOK-INFO record, because the ACCESS call below macroexpands to some
+;; cars/cdrs that depend on the shape of the record.
+;; (depends-on "build/defrec-certdeps/CERTIFY-BOOK-INFO.certdep" :dir :system)
+(defun defxdoc-fn (name parents short long pkg no-override state)
   (declare (xargs :mode :program :stobjs state))
-  (let* ((err (check-defxdoc-args name parents short long)))
+  (let* ((err (check-defxdoc-args name parents short long pkg)))
     (if err
         (er hard? 'defxdoc
             "Bad defxdoc arguments: ~s0" err)
       (let* ((world (w state))
-             (pkg   (acl2::f-get-global 'acl2::current-package state))
+             (pkg   (or pkg (acl2::f-get-global 'acl2::current-package state)))
              (info  (acl2::f-get-global 'acl2::certify-book-info state))
              (bookname (if info
                            (acl2::access acl2::certify-book-info info :full-book-name)
@@ -114,7 +132,12 @@
                           (cons :from bookname)))
              (table-event
               `(table xdoc 'doc
-                      (cons ',entry (get-xdoc-table world))))
+                      ,(if no-override
+                           `(let ((topics (get-xdoc-table world)))
+                              (if (find-topic ',name topics)
+                                  topics
+                                (cons ',entry topics)))
+                         `(cons ',entry (get-xdoc-table world)))))
              (post-event
               (cdr (assoc-eq 'post-defxdoc-event (table-alist 'xdoc world)))))
         `(progn
@@ -122,27 +145,28 @@
            ,@(and post-event (list post-event))
            (value-triple '(defxdoc ,name)))))))
 
-(defmacro defxdoc (name &key parents short long)
+(defmacro defxdoc (name &key parents short long pkg no-override)
   `(with-output :off (event summary)
      (make-event
-      (defxdoc-fn ',name ',parents ,short ,long state))))
+      (defxdoc-fn ',name ',parents ,short ,long ,pkg ,no-override state))))
 
-(defun defxdoc-raw-fn (name parents short long)
+(defun defxdoc-raw-fn (name parents short long pkg)
   (declare (xargs :guard t)
-           (ignore name parents short long))
+           (ignore name parents short long pkg))
   (er hard? 'defxdoc-raw-fn
       "Under-the-hood definition of defxdoc-raw-fn not installed.  You ~
        probably need to load the defxdoc-raw book."))
 
-(defun defxdoc-raw-after-check (name parents short long)
-  (let* ((err (check-defxdoc-args name parents short long)))
+(defun defxdoc-raw-after-check (name parents short long pkg)
+  (declare (xargs :guard t))
+  (let* ((err (check-defxdoc-args name parents short long pkg)))
     (if err
         (er hard? 'defxdoc-raw
-            "Bad defxdoc-raw arguments: ~s0" err)
-      (defxdoc-raw-fn name parents short long))))
+            "Bad defxdoc-raw arguments: ~s0~%" err)
+      (defxdoc-raw-fn name parents short long pkg))))
 
-(defmacro defxdoc-raw (name &key parents short long)
-  `(defxdoc-raw-after-check ',name ',parents ,short ,long))
+(defmacro defxdoc-raw (name &key parents short long pkg)
+  `(defxdoc-raw-after-check ',name ',parents ,short ,long ,pkg))
 
 (defun find-topic (name x)
   (declare (xargs :mode :program))
@@ -154,3 +178,15 @@
     (if (equal (cdr (assoc :name (car x))) name)
         (car x)
       (find-topic name (cdr x)))))
+
+
+(defun gather-topic-names (x)
+  (declare (xargs :mode :program))
+  (if (atom x)
+      nil
+    (cons (cdr (assoc :name (car x)))
+          (gather-topic-names (cdr x)))))
+
+(defun topics-fal (x)
+  (declare (xargs :mode :program))
+  (make-fast-alist (pairlis$ (gather-topic-names x) x)))

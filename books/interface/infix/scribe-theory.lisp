@@ -1,6 +1,6 @@
 ; ACL2 Version 1.9
 
-; Copyright (C) 1989-96 Computational Logic, Inc. (CLI).  All rights reserved.
+; Copyright (C) 1989-1996 Computational Logic, Inc. (CLI).  All rights reserved.
 
 ; Use of this software constitutes agreement with the terms of the
 ; license agreement, found in the file LICENSE.
@@ -110,7 +110,7 @@
 (make-unary-suffix-op zerop   "@congruent @  @t{0}")
 ;; (make-unary-suffix-op nlistp  "@approx @b{nil}"  "@not @approx @b{nil}")
 
-; unary-prefix-ops should be unary function symbols. 
+; unary-prefix-ops should be unary function symbols.
 
 ; (make-unary-prefix-op foo str) makes (foo x) print as ($str$ x).
 
@@ -139,7 +139,7 @@
   (make-unary-suffix-op fact        "@r{!}")
   (make-infix-op        subsetp     "@subset")
   (make-infix-op        intersect   "@inter"))
-  
+
 
 (defun dmg-syntax ()
 
@@ -174,9 +174,9 @@
 	 '(implies and or not if cond
 		   implies iff union
 		   eq = equal
-		   le < > ge leq <= geq >= lessp e0-ord-< 
+		   le < > ge leq <= geq >= lessp e0-ord-<
 		   greaterp
-		   member append 
+		   member append
 		   + - * / remainder
 		   union intersection
 		   car cadr cdr cddr caddr cons consp

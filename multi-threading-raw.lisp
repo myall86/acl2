@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 8.4 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2022, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -57,7 +57,7 @@
 
 ; Without-interrupts and unwind-protect-disable-interrupts-during-cleanup were
 ; originally defined here, but have been moved to acl2-fns.lisp in order to
-; support not only ACL2(p) but also ACL2(h).
+; support not only ACL2(p) but also ACL2.
 
 ;---------------------------------------------------------------------
 ; Section:  Threading Interface
@@ -376,7 +376,7 @@
 ; #+sb-thread
 ; (defmacro with-potential-sbcl-timeout (&rest body &key timeout)
 ;
-; ; The below use of labels is only neccessary because we provide an implicit
+; ; The below use of labels is only necessary because we provide an implicit
 ; ; progn for the body of with-potential-sbcl-timeout.
 ;
 ;   (let ((correct-body
@@ -427,7 +427,7 @@
 ; though that signal occurred in the past.  Fortunately, this isn't a
 ; contradiction of the semantics of condition variables, since with condition
 ; variables there is no specification of how far into the future the waiting
-; thread will receive a signal from the signalling thread.
+; thread will receive a signal from the signaling thread.
 
 ; Note: Condition variables should not be used to store state.  They are only a
 ; signaling mechanism, and any state update implied by receiving a condition
@@ -580,7 +580,7 @@
 
 ; Followup: SBCL has recently (as of November 2010) implemented semaphores, and
 ; the parallelism code could be changed to reflect this.  However, since SBCL
-; does not implement semaphore-nofication-object's, we choose to stick with our
+; does not implement semaphore-notification-object's, we choose to stick with our
 ; own implementation of semaphores for now.
 
   (declare (ignore name))
@@ -814,9 +814,10 @@
     (if timeout received-signal t))
   #+(and sb-thread sbcl-sno-patch)
   (if timeout
-      (sb-thread:wait-on-semaphore semaphore
-                                   :timeout timeout
-                                   :notification notification)
+      (and (sb-thread:wait-on-semaphore semaphore
+                                        :timeout timeout
+                                        :notification notification)
+           t)
     (progn (sb-thread:wait-on-semaphore semaphore
                                         :timeout timeout
                                         :notification notification)

@@ -6,6 +6,9 @@
 (include-book "xdoc/defxdoc-raw" :dir :system)
 (include-book "oslib/mkdir" :dir :system)
 
+(include-book "centaur/misc/tshell" :dir :system)
+(value-triple (acl2::tshell-ensure))
+
 ;; Remove any documentation from XDOC and just get the ACL2 topics.
 (table xdoc::xdoc 'xdoc::doc *acl2-sources-xdoc-topics*)
 
@@ -26,5 +29,6 @@
   documentation from the community books.</p>")
 
 (xdoc::save "../../../doc/manual"
-            :import nil)
+            ; :import nil ; no longer supported
+            )
 

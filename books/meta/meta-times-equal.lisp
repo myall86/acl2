@@ -14,7 +14,7 @@
 (local (include-book "term-lemmas"
                      :load-compiled-file nil))
 
-(local (include-book "arithmetic/equalities" :dir :system 
+(local (include-book "arithmetic/equalities" :dir :system
                      :load-compiled-file nil))
 
 (defevaluator ev-times-equal ev-times-equal-list
@@ -78,7 +78,7 @@
 
 (defun cancel_times-equal (x)
   (declare (xargs :guard (pseudo-termp x)))
-  (if (and (consp x) 
+  (if (and (consp x)
 	   (eq (car x) 'equal))
       (cond
        ((and (consp (cadr x))
@@ -415,5 +415,5 @@
   (equal (ev-times-equal x a)
          (ev-times-equal (cancel_times-equal x) a))
   :rule-classes ((:meta :trigger-fns (equal)))
-  :hints (("Goal" :in-theory (disable ev-times-equal-constraint-6
+  :hints (("Goal" :in-theory (disable ev-times-equal-constraint-8
                                       ev-times-equal-formal-some-zerop-0))))

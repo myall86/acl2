@@ -7,10 +7,6 @@
 
 (in-package "CGEN")
 
-;Useful Macros for concise/convenient code.
-(include-book "std/util/bstar" :dir :system)
-;(include-book "basis")
-
 (include-book "type")
 
 (include-book "simple-graph-array")
@@ -65,59 +61,10 @@
 
 
 
-;The following 2 function only look at the outermost implies form
-;get hypothesis from acl2 term being proved.
-(defun get-hyp (form)
-  (declare (xargs :guard t))
-  (if (atom form)
-    t;no hyps is equivalent to true
-    (if (and (consp (cdr form))
-             (eq 'implies (first form)))
-      (second form)
-      t)));;no hyps is equivalent to true
-
-; use expand-assumptions-1 instead when you have a term
-(defun get-hyps (pform)
-  (declare (xargs :guard t))
-  (b* ((hyp (get-hyp pform))
-       ((when (eq hyp 't)) nil)
-       ((unless (and (consp hyp)
-                     (consp (cdr hyp))
-                     (eq (car hyp) 'and)))
-        (list hyp))
-       (rst (cdr hyp)))
-    rst))
-
-
-;get conclusion from acl2 term being proved
-(defun get-concl (form)
-  (declare (xargs :guard t))
-  (if (atom form)
-    form
-    (if (and (consp (cdr form))
-             (consp (cddr form))
-             (eq 'implies (first form)))
-      (third form)
-      form)))
 
 (set-state-ok t)
 (program)
-(defun partition-hyps-concl (term str state)
-  ;; (decl :mode :program
-  ;;       :sig ((pseudo-termp stringp state) -> (mv pseudo-term-listp pseudo-termp state))
-  ;;       :doc "expand lambdas, extracts hyps and concl from term")
-;expensive operation
-  ;; get rid of lambdas i.e let/let*
-  (b* ((term  (defdata::expand-lambda term))
-       (wrld (w state))
-       (pform (acl2::prettyify-clause (list term) nil wrld))
-       ((mv phyps pconcl)  (mv (get-hyps pform) (get-concl pform)))
-       
-       ((er hyps) (acl2::translate-term-lst phyps 
-                                            t nil t str wrld state)) 
-       ((er concl) (acl2::translate pconcl t nil t str wrld state)))
-    (mv hyps concl state)))
-  
+
 
 ;-- 2 utility functions by Matt, to get elided variable replaced term information --
 (defun get-dest-elim-replaced-terms (elim-sequence)
@@ -173,25 +120,16 @@
    "helper function for test-checkpoint. It basically sets up 
    everything for the call to csearch."
   (declare (xargs :stobjs (state) :mode :program))
-  (b* (((mv erp type-alist &)
-       (acl2::forward-chain cl
-                            (acl2::enumerate-elements cl 0)
-                            nil ; do not force
-                            nil ; do-not-reconsiderp
-                            (w state)
-                            ens
-                            (acl2::match-free-override (w state))
-                            state))
-;Use forward-chain ACL2 system function to build the context
-;This context, gives us the type-alist ACL2 inferred from the
-;the current subgoal i.e. cl
+  (b* ((type-alist (get-acl2-type-alist-fn cl ens state))
        (vars (all-vars1-lst cl '()))
-       (vt-acl2-alst (if erp ;contradiction
-                         (pairlis$ vars (make-list (len vars)
-                                                   :initial-element 
-                                                   (list 'ACL2::ALL)))
-                       (decode-acl2-type-alist type-alist vars)))
+       
        ((mv hyps concl) (clause-mv-hyps-concl cl))
+       ((mv hyps concl state) (if (and (consp cl) (null (cdr cl))
+                                       (consp (car cl))
+                                       (eq (caar cl) 'ACL2::IMPLIES))
+; [2016-02-29 Mon] For the Preprocess/Goal cl, explicitly take care of the implies and lambda/let
+                                  (partition-into-hyps-concl-and-preprocess (car cl) "cgen-search-clause" state)
+                                (mv hyps concl state)))
 ;       (wrld (w state))
        (elided-var-map (append (collect-replaced-terms hist nil)
                                elim-elided-var-map))
@@ -204,8 +142,9 @@
        (ord-elide-map (do-let*-ordering elided-var-map (system-debug-flag vl)))
        (tau-interval-alist (tau-interval-alist-clause cl vars ens))
        ((mv erp cgen-state state)  (cgen-search-fn name hyps concl 
-                                                   vt-acl2-alst tau-interval-alist ord-elide-map 
-                                                   NIL
+                                                   type-alist tau-interval-alist
+                                                   ord-elide-map 
+                                                   (eq (default-defun-mode (w state)) :program)
                                                    cgen-state
                                                    ctx state)))
     (mv erp cgen-state state)))
@@ -268,17 +207,19 @@
                      acl2::generalize-clause
                      acl2::eliminate-irrelevance-clause)))
 
-(defabbrev update-cgen-state-givens/callback (term)
+(defun update-cgen-state-givens/callback (term ctx vl state)
   "update cgen-state fields user-supplied-term,top-vt-alist etc from test-checkpoint"
-  (b* ((cgen-state (cput user-supplied-term term))
+  (b* ((cgen-state (@ cgen-state))
+       (cgen-state (cput top-ctx ctx))
+       (cgen-state (cput user-supplied-term term))
        (cgen-state (cput displayed-goal term)) ;ASK: shud I prettify it?
 ; ACHTUNG - get-hyps only looks at outermost implies.
        ((mv hyp concl) (mv (get-hyp term) (get-concl term)))
        (hyps (if (eq hyp 't) '() (acl2::expand-assumptions-1 hyp)))
        (vars (vars-in-dependency-order hyps concl vl (w state)))
        (d-typ-al (dumb-type-alist-infer
-                   (cons (dumb-negate-lit concl) hyps) vars 
-                   vl wrld))
+                   (cons (cgen-dumb-negate-lit concl) hyps) vars 
+                   vl (w state)))
        (cgen-state (cput top-vt-alist d-typ-al))
        (- (cw? (system-debug-flag vl)
                "~|CEgen/Sysdebug: update-gcs%-top-level : ~x0 dumb top vt-alist: ~x1 ~|"
@@ -286,6 +227,8 @@
 ;   in 
     cgen-state))
 
+;Turned into an acl2s parameter
+;(def-const *check-bad-generalizations-and-backtrack* t)
         
 ;; The following function implements a callback function (computed hint)
 ;; which calls the counterexample generation testing code. Thus the
@@ -324,6 +267,7 @@ then it returns (value '(:do-not '(acl2::generalize)
    (b* (
 ;TODObug: test? defaults should be the one to be used
        (vl (acl2s-defaults :get verbosity-level))
+       (backtrack? (acl2s-defaults :get backtrack-bad-generalizations))
        
        ((unless (and (f-boundp-global 'cgen-state state)
                      (cgen-state-p (@ cgen-state)))) 
@@ -342,14 +286,14 @@ then it returns (value '(:do-not '(acl2::generalize)
        ((unless all-execp) (value nil))
 ; 21st March 2013 - catch stobj taking and constrained functions, skip testing.
        ((when unsupportedp) (value nil))
-
-       (- (cw? (system-debug-flag vl)
-               "test-checkpoint : id=~x0 processor=~x1 ctx= ~x2 hist-len=~x3~|" 
+       (hist-len (len hist))
+       (- (cw? (debug-flag vl)
+               "test-checkpoint : id = ~x0 processor = ~x1 ctx = ~x2 hist-len = ~x3~|" 
                id processor ctx ;(acl2::prettyify-clause cl nil (w state)) 
-               (len hist)))
+               hist-len))
  
        ((unless (member-eq processor
-                           '(;acl2::preprocess-clause
+                           '(acl2::preprocess-clause
                              ;;acl2::simplify-clause
                              acl2::settled-down-clause 
                              acl2::eliminate-destructors-clause
@@ -361,25 +305,45 @@ then it returns (value '(:do-not '(acl2::generalize)
         (value nil));no-op
        
        (name (acl2::string-for-tilde-@-clause-id-phrase id))
+       ((when (and (eq processor 'acl2::preprocess-clause) ;;[2016-02-26 Fri]
+                   ;;ignore all preprocess except the first
+                   (not (equal name "Goal"))))             
+        (value nil));no-op
        (wrld (w state))
        (cgen-state (@ cgen-state))
        (pspv-user-supplied-term (acl2::access acl2::prove-spec-var 
-                                     pspv :user-supplied-term))
-       (cgen-state (if (eq (cget user-supplied-term) :undefined)
-                       (update-cgen-state-givens/callback pspv-user-supplied-term)
-                     cgen-state))
-       (user-supplied-term (cget user-supplied-term))
-       ((unless (equal user-supplied-term pspv-user-supplied-term))
-        (prog2$ ;Invariant
+                                              pspv :user-supplied-term))
+       (- (cw? (debug-flag vl) "~| pspv-ust: ~x0 curr ust: ~x1 ctx:~x2 cgen-state.ctx:~x3~%" pspv-user-supplied-term (cget user-supplied-term) ctx (cget top-ctx)))
+
+       ((unless (implies (and (not (eq (cget user-supplied-term) :undefined))
+                              (not (eq (car (cget top-ctx)) :user-defined))) ;allow test?/prove
+                         (equal ctx (cget top-ctx))))
+        (prog2$ ;Invariant 
          (cw? (verbose-flag vl)
-              "~|CEgen/Note: We encountered a new goal ~x0, in the course of testing ~x1. ~ 
+              "~|Cgen/Note: We encountered a new goal ctx ~x0, in the course of testing ctx ~x1. ~ 
+Nested testing not allowed! Skipping testing of new goal...~%" 
+              ctx
+              (cget top-ctx))
+         (value nil)))
+       (user-supplied-term (cget user-supplied-term))
+       ((unless (implies (not (eq user-supplied-term :undefined)) ;already set
+                         (equal user-supplied-term pspv-user-supplied-term)))
+        (prog2$ ;Invariant [2016-04-04 Mon] TODO: this only works for test?, not for thm/defthm
+         (cw? (verbose-flag vl)
+              "~|Cgen/Note: We encountered a new goal ~x0, in the course of testing ~x1. ~ 
 Nested testing not allowed! Skipping testing of new goal...~%" 
               (acl2::prettyify-clause (list pspv-user-supplied-term) nil wrld)
               (acl2::prettyify-clause (list user-supplied-term) nil wrld))
          (value nil)))
+
+       (cgen-state (if (eq (cget user-supplied-term) :undefined)
+                       (update-cgen-state-givens/callback pspv-user-supplied-term ctx vl state)
+                     cgen-state))
+       
+       
         
        (- (cw? (verbose-stats-flag vl)
-               "~%~%~|CEgen/Note: At checkpoint ~x0 ~x1~|" name processor))
+               "~%~%~|Cgen/Note: @Checkpoint Subgoal-name:~x0 Processor:~x1~|" name processor))
        (ens (acl2::access acl2::rewrite-constant
                           (acl2::access 
                            acl2::prove-spec-var pspv :rewrite-constant)
@@ -401,7 +365,7 @@ Nested testing not allowed! Skipping testing of new goal...~%"
        (cgen-state (cput processor-hist processor-hist))
        (abo? (not-equivalid-p processor-hist))
        (- (cw? (and (debug-flag vl) abo?)
-               "~|CEgen/Debug: Top-level cts/wts cannot be constructed now ... ~x0 in ~x1~%" name ctx))
+               "~|Cgen/Debug: Top-level cts/wts cannot be constructed now ... ~x0 in ~x1~%" name ctx))
 
        (state (f-put-global 'cgen-state cgen-state state)) ;put it back in globals
        (gcs% (cget gcs))
@@ -419,7 +383,8 @@ Nested testing not allowed! Skipping testing of new goal...~%"
 
 ; Check for false generalizations. TODO also do the same for
 ; cross-fertilization and eliminate-irrelevance if its worth the trouble
-     (if (equal processor 'acl2::generalize-clause)
+     (if (and backtrack?
+              (equal processor 'acl2::generalize-clause))
          ;NOTE: this pspv (and hist) is for the cl not for cl-list, so there
          ;might be some inconsistency or wierdness here
          (b* ((gen-cl (car cl-list))
@@ -427,9 +392,7 @@ Nested testing not allowed! Skipping testing of new goal...~%"
               ((mv H C) (cgen::clause-mv-hyps-concl gen-cl))
               (vars (vars-in-dependency-order H C vl wrld))
 
-              (vt-alist (pairlis$ vars (make-list (len vars)
-                                                  :initial-element 
-                                                  (list 'ACL2::ALL))))
+              (vt-alist (make-weakest-type-alist vars))
               ;; (term (if (null H)
               ;;           C
               ;;           `(implies (and ,@H) ,C)))
@@ -438,25 +401,31 @@ Nested testing not allowed! Skipping testing of new goal...~%"
 ; hopefully it will not affect any computation based on it, certainly will
 ; not affect all-vars. CHECK! 20th March 2013
               (tau-interval-alist (tau-interval-alist-clause gen-cl vars))
+              (temp-cgen-state (list (cons 'PARAMS (cget params))
+                                     (cons 'GCS *initial-gcs%*)
+                                     (cons 'TOP-CTX ctx)
+                                     (cons 'TOP-VT-ALIST vt-alist)))
               ((mv erp res state) (cgen-search-local name H C 
                                                      type-alist tau-interval-alist 
-                                                     NIL vt-alist
-                                                     (cget params) 
+                                                     NIL 
                                                      *initial-test-outcomes%* 
 ; we dont care about witnesses and the start time and do no accumulation.
                                                      *initial-gcs%*
+                                                     temp-cgen-state
                                                      ctx state))
               ((when erp) (value nil))
               ((list & test-outcomes% &) res)
               (num-cts-found (access test-outcomes% |#cts|)))
           (value (if (> num-cts-found 0)
                      (progn$ 
-                      (cw? (normal-output-flag vl) "~| Generalized subgoal: ~x0~|" 
+                      (cw? (not (f-get-global 'acl2::gag-mode state))
+                           "~| Generalized subgoal: ~x0~|" 
                            (acl2::prettyify-clause gen-cl nil (w state)))
-                      (cw? (normal-output-flag vl)
+                      (cw? (not (f-get-global 'acl2::gag-mode state))
                            "~| Counterexample found: ~x0 ~|"
                            (car (access test-outcomes% cts)))
-                      (cw? (normal-output-flag vl) "~| Backtracking...~|")
+                      (cw? (not (f-get-global 'acl2::gag-mode state))
+                           "~| Bad generalization! Backtracking...~|")
                       '(:do-not '(acl2::generalize)
                                 :no-thanks t))
                    nil)))
@@ -485,7 +454,12 @@ Nested testing not allowed! Skipping testing of new goal...~%"
 ;; expansion result of the make-event in set-acl2s-random-testing-enabled
 `(make-event  
   '(progn 
-     (acl2::add-override-hints 
+;;; PETE: If you call acl2s::enable-acl2s-random-testing multiple
+;;; times you get multiple backtrack hints which causes errors. This
+;;; happens during book certification if you're using an ACL2s
+;;; image. Disabling first fixes the problem.
+     (acl2s::disable-acl2s-random-testing)
+     (acl2::add-override-hints!
       '((list* :backtrack 
 ;take parent pspv and hist, not the ones returned by clause-processor
 
@@ -522,7 +496,7 @@ Nested testing not allowed! Skipping testing of new goal...~%"
 (defmacro acl2s::disable-acl2s-random-testing ()
 `(make-event  
      '(progn
-        (acl2::remove-override-hints 
+        (acl2::remove-override-hints!
          '((list* :backtrack 
                   `(acl2::test-checkpoint acl2::id 
                                           acl2::clause 
@@ -556,15 +530,19 @@ Nested testing not allowed! Skipping testing of new goal...~%"
 ;Dont print the "Thanks" message:
 (defmacro acl2::dont-print-thanks-message-override-hint ()
 `(make-event  
-  '(acl2::add-override-hints 
-    '((cond ((or (null acl2::keyword-alist)
-                 (assoc-keyword :no-thanks acl2::keyword-alist))
-             acl2::keyword-alist)
-            (t
-             (append '(:no-thanks t) acl2::keyword-alist)))))))
-   
-
-
+  '(progn
+     (acl2::remove-override-hints 
+      '((cond ((or (null acl2::keyword-alist)
+                   (assoc-keyword :no-thanks acl2::keyword-alist))
+               acl2::keyword-alist)
+              (t
+               (append '(:no-thanks t) acl2::keyword-alist)))))
+     (acl2::add-override-hints 
+      '((cond ((or (null acl2::keyword-alist)
+                   (assoc-keyword :no-thanks acl2::keyword-alist))
+               acl2::keyword-alist)
+              (t
+               (append '(:no-thanks t) acl2::keyword-alist))))))))
 
 
 ;;; event pre and post functions
@@ -603,6 +581,10 @@ Nested testing not allowed! Skipping testing of new goal...~%"
 
 
 
+
+
+
+
 ; [2014-05-03 Sat] event-stack stores in its entries, either a keyword
 ; :ignore-cgen or the ctx of the current event/form. The former
 ; indicates that cgen has ignored this event, the latter that cgen is
@@ -610,7 +592,8 @@ Nested testing not allowed! Skipping testing of new goal...~%"
 ; conjecture under test. This is crucial to match the actions taken in
 ; initialize-event with actions in finalize-event. At the top-level,
 ; this stack better be empty (how to ensure this invariant?).
-(defun initialize-event-user-cgen (ctx-form body state)
+#|
+(defun initialize-event-user-cgen/old (ctx-form body state)
   (declare (xargs :stobjs state
                   :mode :program
                   :verify-guards nil))
@@ -652,11 +635,12 @@ Nested testing not allowed! Skipping testing of new goal...~%"
        (event-stack~ (cons ctx event-stack)) ;overwrite/update 
        (state (f-put-global 'event-stack event-stack~ state)))
     state))
-
+|#
 
 (defstub print-testing-summary (* * state) => (mv * * state))
-       
-(defun finalize-event-user-cgen (ctx-form body state)
+
+#|
+(defun finalize-event-user-cgen/old (ctx-form body state)
   (declare (xargs :mode :program ;print-testing-summary is program-mode
                   :verify-guards nil :stobjs state))
   (declare (ignorable ctx-form body))
@@ -701,8 +685,78 @@ Nested testing not allowed! Skipping testing of new goal...~%"
               "~|CEgen/Note: CGEN-STATE finalized for ctx ~x0~%" ctx))
        (state (f-put-global 'cgen-state nil state))) ;clean up cgen state
     state))
-          
+|#          
       
+
+;; [2015-02-04 Wed] Simplify the pre/post event hooks used by Cgen.
+;; Assume that no event of concern to use will be nested. i.e thm, defthm, verify-guards, test? will never be nested.
+(defun initialize-event-user-cgen (ctx-form body state)
+  (declare (xargs :stobjs state :mode :program :verify-guards nil))
+  (declare (ignorable body)) 
+; As soon as it sees a testable/cgen-able event it resets/inits the two globals:
+; cgen-state using init-cgen-state/event and event-ctx with ctx-form
+  (b* (((unless (and (f-boundp-global 'cgen-state state)
+                     (f-boundp-global 'event-ctx state)))
+        state) ;ignore
+       (vl (acl2s-defaults :get verbosity-level))
+       (ctx (compute-event-ctx ctx-form))
+       ((unless (allowed-cgen-event-ctx-p ctx))
+        (prog2$
+         (cw? (> vl 8) "~|CEgen/Warning: initialize-event -- ctx ~x0 ignored...~%" ctx)
+         state))
+              
+       ((mv start state) (acl2::read-run-time state))
+       (cgen-state (init-cgen-state/event (acl2s::acl2s-defaults-alist) start :undefined))
+       (- (cw? (debug-flag vl) "~|CEgen/Note: CGEN-STATE initialized for ~x0~%" ctx-form))
+       (state (f-put-global 'cgen-state cgen-state state))
+       (state (f-put-global 'event-ctx ctx-form state)))
+    state))
+       
+(defun finalize-event-user-cgen (ctx-form body state)
+  (declare (xargs :mode :program ;print-testing-summary is program-mode
+                  :verify-guards nil :stobjs state))
+  (declare (ignorable body))
+; If event-ctx global matches ctx-form, we know (sure??) this is the top cgen event and do the following. (if not matched, we ignore/skip).
+; We reset event-ctx to nil.
+; Finalize cgen-state with end-time, print-summary and reset cgen-state to nil.
+  (b* (((unless (and (f-boundp-global 'cgen-state state)
+                     (f-boundp-global 'event-ctx state)))
+        state) ;ignore
+       (vl (acl2s-defaults :get verbosity-level)) ;todo replace with the one from cgen-state
+       (event-ctx (@ event-ctx))
+       ((unless (equal event-ctx ctx-form)) ;check if it is the matching finalize
+        (prog2$
+         (cw? (> vl 8) "~|CEgen/Warning: finalize-event -- ignore non-top event...~%")
+         state))
+       
+       (state (f-put-global 'event-ctx nil state)) ;reset/clean
+
+       ;; symmetric to initialize-event-user-cgen, update end time
+       ((mv end state) (acl2::read-run-time state))
+       (cgen-state (@ cgen-state))
+; removed assert here for valid cgen-state, as there are many events that occur that have nothing to do with testing!
+       (cgen-state (cput end-time end))
+       (state (f-put-global 'cgen-state cgen-state state))
+       (gcs% (cget gcs))
+
+       (ctx (compute-event-ctx ctx-form))
+       (print-summary-p (and (cget print-cgen-summary) 
+                             ;(> (access gcs% cts) 0) ;commented out to collect vacuous stats
+; dont print at the end of defun/defuns events (any help to CCG by cgen is invisible) TODO
+                             (allowed-cgen-event-ctx-p ctx)))
+
+       
+       (- (cw? (system-debug-flag vl) "~|CEgen/SysDebug: Exiting event with gcs% : ~x0. ~ ctx: ~x1 print-cgen-summ : ~x2 ~%" gcs% ctx (cget print-cgen-summary)))
+                        
+       ((mv & & state) ;ignore error in print function
+        (if print-summary-p
+            (print-testing-summary cgen-state ctx state) ;state is important also because we call trans-eval inside this fun
+          (value nil)))
+       (- (cw? (debug-flag vl)
+              "~|CEgen/Note: CGEN-STATE finalized for ctx ~x0~%" ctx))
+       (state (f-put-global 'cgen-state nil state))) ;clean up cgen state
+    state))
+
 
 
 (defun initialize-event-user-cgen-gv (ctx body state)
@@ -724,6 +778,10 @@ Nested testing not allowed! Skipping testing of new goal...~%"
 ;brr which does not end gracefully (no finalize-event is called).
 ; Actually even simple interrupts, leave the event-stack unfinalized, and hence
 ; we might need to manually flush these globals.
+
+; [2015-02-04 Wed] After the above simplification (disallowing nested
+; cgen-relevant events), the above note is mostly irrelevant.
+
 (defmacro flush ()
 ;; ":Doc-Section cgen
   
@@ -737,5 +795,5 @@ Nested testing not allowed! Skipping testing of new goal...~%"
 ;flush any transient/polluted globals due to interrupts
   `(er-progn 
     (assign cgen::cgen-state nil)
-    (assign cgen::event-stack nil)
+    (assign cgen::event-ctx nil)
     (value nil)))

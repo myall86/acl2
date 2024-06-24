@@ -10,13 +10,6 @@
 
 (include-book "base")
 
-(include-book "listof")
-
-(include-book "record")
-
-(include-book "map")
-
-(include-book "alistof")
 
 (include-book "sig" :ttags :all)
 
@@ -183,9 +176,9 @@ is the given by its macroexpansion.
       nil
       (cons (1- n) (make-descending-addresses (- n 1)))))
   
-  (defun nth-imem-custom (n)
+  (defun imem-custom-enum (n)
     (declare (xargs :mode :program))
-    (let* ((m (nth-imem n))
+    (let* ((m (nth-imem-builtin n))
            (vals (strip-cdrs m))
            (keys (make-descending-addresses (len m))))
       (pairlis$ keys vals)))
@@ -203,10 +196,10 @@ is the given by its macroexpansion.
   
   (register-type imem-custom
                  :predicate imem-customp
-                 :enumerator nth-imem-custom)
+                 :enumerator imem-custom-enum)
   
   
-  (defdata-attach imem :test-enumerator nth-imem-custom)
+  (defdata-attach imem :test-enumerator imem-custom-enum)
 })
 
 
@@ -247,13 +240,13 @@ is the given by its macroexpansion.
 
 <h4>Registering a type</h4>
 @({
-  (defun nth-even (n) 
+  (defun nth-even-builtin (n) 
     (declare (xargs :guard (natp n)))
     (* 2 (nth-integer n)))
   
   (register-type even 
                  :predicate evenp 
-                 :enumerator nth-even)
+                 :enumerator nth-even-builtin)
 })
 
 <h4>Registering user-defined combinators</h4>
@@ -298,14 +291,14 @@ package.</p>
 "
 <h3>Example</h3>
 @({
-  (defun nth-odd (n) 
+  (defun nth-odd-builtin (n) 
     (if (evenp n)
         (1+ n)
       (- n)))
   
   (register-type odd
                  :predicate oddp 
-                 :enumerator nth-odd)
+                 :enumerator nth-odd-builtin)
 })
 
 <h3>Introduction</h3>
@@ -320,7 +313,7 @@ macro.
 
 <p>
 As an example, after having <i>registered</i> @('odd') above, we can
-now use @('odd') to define other @'(defdata') types, e.g., a list of
+now use @('odd') to define other @('defdata') types, e.g., a list of
 odd numbers: 
 </p>
 @({
@@ -435,6 +428,7 @@ build product types: @('cons'), @('intern$'), @('/') and @('complex').
   (sig fun-name arg-types => return-type 
        [:satisfies hyp]
        [:hints hints]
+       [:gen-rule-classes rule-classes]
        [:rule-classes rule-classes]
        [:verbose t])
 })
@@ -459,7 +453,8 @@ The following keyword arguments are supported by the @('sig') macro:
 <ul>
 <li> :satisfies -- specify additional dependent type hypotheses.</li>
 <li> :hints -- @(see acl2::hints) option to the generic type signature.</li>
-<li> :rule-classes --  @(see acl2::rule-classes) option to the generic type signature.</li>  
+<li> :gen-rule-classes --  @(see acl2::rule-classes) option to the generic type signature.</li>  
+<li> :rule-classes --  @(see acl2::rule-classes) option to the generated theorems.</li>  
 <li> :verbose -- for debugging.</li>  
 </ul>
 
@@ -511,9 +506,9 @@ Here is how we added <i>alistof</i> to the defdata language:
 "
 <h3>Examples:</h3>
 @({
-  (defdata-attach pos :enum/test nth-small-pos-testing)
+  (defdata-attach pos :enumerator nth-small-pos-testing)
   
-  (defdata-attach imem :enumerator nth-imem-custom :override-ok t)
+  (defdata-attach imem :enum/acc imem-custom-enum2)
 })
 
 <h3>General Form:</h3>
@@ -522,6 +517,7 @@ Here is how we added <i>alistof</i> to the defdata language:
        [:enum/test enum-fn]
        [:equiv eq-rel]
        [:equiv-fixer eq-fix-fn]
+       [:constraint ... ]
        [:sampling constant-list]
        [overridable metadata]
        )
@@ -531,6 +527,25 @@ Here is how we added <i>alistof</i> to the defdata language:
 <p> Defdata-attach can be used to attach custom test enumerators for
 certain types. This provides a method to customize Cgen's test data
 generation capability for certain scenarios.</p>
+
+<p> (Advanced) Type refinement : User can attach rules that
+specify (to Cgen) how to refine/expand a variable of this type when
+certain additional constraints match (or subterm-match). For those who
+are familar with dest-elim rules, the :rule field has a similar form.
+For example: </p>
+
+@({
+(defdata-attach imemory
+         :constraint (mget a x) ;x is the variable of this type
+         :constraint-variable x
+         :rule (implies (and (natp a) ;additional hyps
+                             (instp x.a)
+                             (imemoryp x1))
+                        (equal x (mset a x.a x1))) ;refine/expand
+         :meta-precondition (or (variablep a)
+                                (fquotep a))
+         :match-type :subterm-match)
+})
 
 <p> Warning: Other optional keyword arguments are currently
 unsupported and the use of :override-ok can be unsound.</p>

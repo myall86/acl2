@@ -29,8 +29,8 @@
 ; Original author: Jared Davis <jared@centtech.com>
 
 (in-package "VL")
-(include-book "datatypes")
-(include-book "lvalues")
+(include-book "expressions")
+(include-book "assignments")
 (include-book "delays")
 (include-book "strengths")
 (local (include-book "../../util/arithmetic"))
@@ -43,9 +43,128 @@
                            default-cdr)))
 
 
+
+; PARSING CONTINUOUS ASSIGNMENTS ----------------------------------------------
+
+(local (xdoc::set-default-parents parse-assignments))
+
+(define vl-build-assignments ((loc      vl-location-p)
+                              (pairs    (and (alistp pairs)
+                                             (vl-exprlist-p (strip-cars pairs))
+                                             (vl-exprlist-p (strip-cdrs pairs))))
+                              (strength vl-maybe-gatestrength-p)
+                              (delay    vl-maybe-gatedelay-p)
+                              (atts     vl-atts-p))
+  :returns (assigns vl-assignlist-p)
+  (if (atom pairs)
+      nil
+    (cons (make-vl-assign :loc loc
+                          :lvalue (caar pairs)
+                          :expr (cdar pairs)
+                          :strength strength
+                          :delay delay
+                          :atts atts)
+          (vl-build-assignments loc (cdr pairs) strength delay atts))))
+
+(defparser vl-parse-list-of-net-assignments ()
+  :result (and (alistp val)
+               (vl-exprlist-p (strip-cars val))
+               (vl-exprlist-p (strip-cdrs val)))
+  :short "Parses a @('list_of_net_assignments') into a list of @('(lvalue . expr)') pairs."
+  :long "<p>Both Verilog-2005 and SystemVerilog-2012 agree:</p>
+         @({
+              list_of_net_assignments ::= net_assignment { ',' net_assignment }
+         })"
+  :resultp-of-nil t
+  :true-listp t
+  :fails gracefully
+  :count strong
+  (seq tokstream
+       (first := (vl-parse-net-assignment))
+       (when (vl-is-token? :vl-comma)
+         (:= (vl-match))
+         (rest := (vl-parse-list-of-net-assignments)))
+       (return (cons first rest))))
+
+(defparser vl-parse-list-of-variable-assignments ()
+  :result (and (alistp val)
+               (vl-exprlist-p (strip-cars val))
+               (vl-exprlist-p (strip-cdrs val)))
+  :short "Parses a @('list_of_variable_assignments') into a list of @('(lvalue . expr)') pairs."
+  :long "<p>Both Verilog-2005 and SystemVerilog-2012 agree:</p>
+         @({
+              list_of_variable_assignments ::= variable_assignment { ',' variable_assignment }
+         })"
+  :resultp-of-nil t
+  :true-listp t
+  :fails gracefully
+  :count strong
+  (seq tokstream
+       (first := (vl-parse-variable-assignment))
+       (when (vl-is-token? :vl-comma)
+         (:= (vl-match))
+         (rest := (vl-parse-list-of-net-assignments)))
+       (return (cons first rest))))
+
+(defparser vl-parse-continuous-assign (atts)
+  :short "Parse a @('continuous_assign') into a @(see vl-assignlist-p)."
+  :long "<p>Verilog-2005:</p>
+         @({
+             continuous_assign ::= 'assign' [drive_strength] [delay3] list_of_net_assignments ';'
+         })
+
+         <p>SystemVerilog-2012:</p>
+         @({
+              continuous_assign ::= 'assign' [drive_strength] [delay3] list_of_net_assignments ';'
+                                  | 'assign' [delay_control] list_of_variable_assignments ';'
+         })
+
+         <p>Note that the @('delay_control') here is just a small subset of a @('delay3'):</p>
+
+         @({
+              delay_control ::= '#' delay_value
+                              | '# '(' mintypmax_expression ')'
+
+              delay3 ::= '#' delay_value
+                       | '#' '(' mintypmax_expression [...optional stuff...] ')'
+         })"
+  :guard (vl-atts-p atts)
+  :result (vl-assignlist-p val)
+  :true-listp t
+  :resultp-of-nil t
+  :fails gracefully
+  :count strong
+  (seq tokstream
+       (assignkwd := (vl-match-token :vl-kwd-assign))
+       (when (vl-is-token? :vl-lparen)
+         (strength := (vl-parse-drive-strength-or-charge-strength)))
+       (when (vl-cstrength-p strength)
+         (return-raw
+          (vl-parse-error "Assign statement illegally contains a charge strength.")))
+       (when (vl-is-token? :vl-pound)
+         (delay := (vl-parse-delay3)))
+       ;; BOZO lazy.  We don't currently try to enforce that variable
+       ;; assignments don't have drive strengths or fancy delays.  If we ever
+       ;; care about that, we could tweak this to be smarter.
+       (pairs := (if (eq (vl-loadconfig->edition config) :verilog-2005)
+                     (vl-parse-list-of-net-assignments)
+                   ;; We abuse the fact that any list_of_net_assignments is
+                   ;; also a list_of_variable_assignments, so we don't have to
+                   ;; backtrack and try out both cases.
+                   (vl-parse-list-of-variable-assignments)))
+       (:= (vl-match-token :vl-semi))
+       (return (vl-build-assignments (vl-token->loc assignkwd)
+                                     pairs strength delay atts))))
+
+
+(defxdoc parse-netdecls
+  :parents (parser)
+  :short "Functions for parsing net declarations.")
+
+(local (xdoc::set-default-parents parse-netdecls))
+
 ; net_type ::= supply0 | supply1 | tri | triand | trior | tri0 | tri1
 ;            | uwire | wire | wand | wor
-
 
 ;; BOZO SystemVerilog adds trireg as a valid net_type.  We aren't accounting
 ;; for this correctly.
@@ -118,77 +237,6 @@
 
 
 
-;                      PARSING CONTINUOUS ASSIGNMENTS
-;
-; continuous_assign ::=
-;    'assign' [drive_strength] [delay3] list_of_net_assignments ';'
-;
-; list_of_net_assignments ::=
-;    net_assignment { ',' net_assignment }
-;
-; net_assignment ::=
-;    lvalue '=' expression
-
-(defparser vl-parse-list-of-net-assignments ()
-  ;; Returns a list of (lvalue . expr) pairs
-  :result (and (alistp val)
-               (vl-exprlist-p (strip-cars val))
-               (vl-exprlist-p (strip-cdrs val)))
-  :resultp-of-nil t
-  :true-listp t
-  :fails gracefully
-  :count strong
-  (seq tokstream
-       (first := (vl-parse-assignment))
-       (when (vl-is-token? :vl-comma)
-         (:= (vl-match))
-         (rest := (vl-parse-list-of-net-assignments)))
-       (return (cons first rest))))
-
-
-(define vl-build-assignments ((loc      vl-location-p)
-                              (pairs    (and (alistp pairs)
-                                             (vl-exprlist-p (strip-cars pairs))
-                                             (vl-exprlist-p (strip-cdrs pairs))))
-                              (strength vl-maybe-gatestrength-p)
-                              (delay    vl-maybe-gatedelay-p)
-                              (atts     vl-atts-p))
-  :returns (assigns vl-assignlist-p :hyp :fguard)
-  (if (atom pairs)
-      nil
-    (cons (make-vl-assign :loc loc
-                          :lvalue (caar pairs)
-                          :expr (cdar pairs)
-                          :strength strength
-                          :delay delay
-                          :atts atts)
-          (vl-build-assignments loc (cdr pairs) strength delay atts))))
-
-(encapsulate
-  ()
-  (local (in-theory (enable vl-maybe-gatedelay-p vl-maybe-gatestrength-p)))
-  (defparser vl-parse-continuous-assign (atts)
-    :guard (vl-atts-p atts)
-    :result (vl-assignlist-p val)
-    :true-listp t
-    :resultp-of-nil t
-    :fails gracefully
-    :count strong
-    (seq tokstream
-         (assignkwd := (vl-match-token :vl-kwd-assign))
-         (when (vl-is-token? :vl-lparen)
-           (strength := (vl-parse-drive-strength-or-charge-strength)))
-         (when (vl-cstrength-p strength)
-           (return-raw
-            (vl-parse-error "Assign statement illegally contains a charge strength.")))
-         (when (vl-is-token? :vl-pound)
-           (delay := (vl-parse-delay3)))
-         (pairs := (vl-parse-list-of-net-assignments))
-         (:= (vl-match-token :vl-semi))
-         (return (vl-build-assignments (vl-token->loc assignkwd)
-                                       pairs strength delay atts)))))
-
-
 
 
 ;                            PARSING NET DECLARATIONS
@@ -214,7 +262,9 @@
 ; net_decl_assignment ::= identifier '=' expression
 
 
-
+(fty::deflist vl-rangelist-list
+  :elt-type vl-rangelist
+  :elementp-of-nil t)
 
 (defparser vl-parse-list-of-net-identifiers ()
   ;; Matches: identifier { range } { ',' identifier { range } }
@@ -234,6 +284,42 @@
          (rest := (vl-parse-list-of-net-identifiers)))
        (return (cons (cons id ranges) rest))))
 
+
+(define vl-build-netdecls-aux ((x          vl-vardeclassignlist-p)
+                               (basedecl   vl-vardecl-p)
+                               (baseassign vl-assign-p))
+  :guard (vl-vardeclassignlist-newfree-p x)
+  :returns (mv (nets vl-vardecllist-p)
+               (assigns vl-assignlist-p))
+  (b* (((when (atom x))
+        (mv nil nil))
+       ((vl-vardeclassign x1) (car x))
+       (type (vl-vardecl->type basedecl))
+       (type
+        ;; You can't have udims on the type you just parsed, so we can avoid
+        ;; updating the udims unless there are any, which there very rarely
+        ;; are.
+        (if (consp x1.dims)
+            (vl-datatype-update-udims x1.dims type)
+          type))
+       (vardecl (change-vl-vardecl basedecl
+                                   :name x1.id
+                                   :type type
+                                   :delay (and (not x1.rhs)
+                                               (vl-assign->delay baseassign))))
+       (assign  (and x1.rhs
+                     (change-vl-assign baseassign
+                                       :lvalue (vl-idexpr x1.id)
+                                       :expr (vl-rhsexpr->guts x1.rhs))))
+       ((mv rest-decls rest-assigns)
+        (vl-build-netdecls-aux (cdr x) basedecl baseassign)))
+      (mv (cons vardecl rest-decls)
+          (if assign
+              (cons assign rest-assigns)
+            rest-assigns)))
+  ///
+  (defmvtypes vl-build-netdecls-aux (true-listp true-listp)))
+
 (define vl-build-netdecls
   ((loc         vl-location-p)
    (x           vl-vardeclassignlist-p)
@@ -245,43 +331,56 @@
    (delay       vl-maybe-gatedelay-p)
    (cstrength   vl-maybe-cstrength-p)
    (gstrength   vl-maybe-gatestrength-p))
+  :guard (vl-vardeclassignlist-newfree-p x)
   :returns (mv (nets vl-vardecllist-p)
                (assigns vl-assignlist-p))
   :guard-hints (("goal" :in-theory (disable (force))))
-  (if (atom x)
-      (mv nil nil)
-    (b* (((vl-vardeclassign x1) (car x))
-         (type (vl-datatype-update-udims x1.dims type))
-         (vardecl (make-vl-vardecl :loc loc
-                                   :name x1.id
-                                   :type type
-                                   :nettype nettype
-                                   :atts atts
-                                   :vectoredp vectoredp
-                                   :scalaredp scalaredp
-                                   :delay (and (not x1.expr) delay)
-                                   :cstrength cstrength))
-         (assign (and x1.expr
-                      (make-vl-assign :loc loc
-                                      :lvalue (vl-idexpr x1.id nil nil)
-                                      :expr x1.expr
-                                      :strength gstrength
-                                      :delay delay
-                                      :atts atts)))
-         ((mv rest-decls rest-assigns)
-          (vl-build-netdecls loc (cdr x) nettype type atts
-                             vectoredp scalaredp delay cstrength gstrength)))
-      (mv (cons vardecl rest-decls)
-          (if assign
-              (cons assign rest-assigns)
-            rest-assigns))))
+  (b* (((when (atom x))
+        (mv nil nil))
+       ((vl-vardeclassign x1) (car x))
+       ;; We encountered a design where a single "wire a, b, c" style
+       ;; declaration had ... lots ... of names.  So we now try to build
+       ;; a "base" vardecl and assignment that we can then update.  This
+       ;; results in better structure sharing among the results for things
+       ;; like their locations, etc.  Probably.
+       (base-vardecl (make-vl-vardecl
+                      ;; This name will get overwritten in subsequent
+                      ;; variable declarations.  But in the common case
+                      ;; of a single vardecl, it'll be correct.
+                      :name x1.id
+                      ;; The delay is tricky: the delay may need to be
+                      ;; overwritten with NIL for any decls that have
+                      ;; initial values.  That is,
+                      ;;    wire #3 foo;  <-- delay is on the decl
+                      ;;    wire #3 foo = bar; <-- delay is on the assign
+                      :delay delay
+                      :type (if (atom (cdr x))
+                                (vl-datatype-update-udims x1.dims type)
+                              type)
+                      ;; Then all this stuff will just stay the same.
+                      :loc loc
+                      :nettype nettype
+                      :atts atts
+                      :vectoredp vectoredp
+                      :scalaredp scalaredp
+                      :cstrength cstrength))
 
-  :prepwork
-  ((local (defthm l0
-            (implies (vl-rangelist-p x)
-                     (vl-packeddimensionlist-p x))
-            :hints(("Goal" :induct (len x))))))
+       ((when (and (atom (cdr x))
+                   (not x1.rhs)))
+        ;; Avoid creating an assignment if there's only a single variable
+        ;; declaration and it doesn't need one.
+        (mv (list base-vardecl) nil))
 
+       (base-assign (make-vl-assign
+                     ;; We just need some expression.  It will get overwritten
+                     ;; by any assignment.
+                     :lvalue |*sized-1'b0*|
+                     :expr |*sized-1'b0*|
+                     :loc loc
+                     :strength gstrength
+                     :delay delay
+                     :atts atts)))
+    (vl-build-netdecls-aux x base-vardecl base-assign))
   ///
   (more-returns
    (nets :name true-listp-of-vl-build-netdecls-nets
@@ -316,8 +415,7 @@
                                         (vl-exprlist-p (strip-cdrs x)))))
   (if (atom x)
       nil
-    (cons (cons (make-vl-atom
-                 :guts (make-vl-id :name (vl-idtoken->name (caar x))))
+    (cons (cons (vl-idexpr (vl-idtoken->name (caar x)))
                 (cdar x))
           (vl-atomify-assignpairs (cdr x))))
   ///
@@ -336,7 +434,7 @@
   ;; Checks that there is no declaration that has both dimensions and an expression.
   (b* (((when (atom x)) nil)
        ((vl-vardeclassign x1) (car x))
-       ((when (and x1.dims x1.expr))
+       ((when (and x1.dims x1.rhs))
         "We don't support the combination of a declaration assignment and unpacked
          dimensions on a net declaration."))
     (vl-netdeclassigns-check-array-assigns (cdr x))))
@@ -346,16 +444,21 @@
   (b* (((when (atom x)) nil)
        ((vl-vardeclassign x1) (car x))
        (rest (vl-netdeclassigns-characterize (cdr x)))
-       (first (if x1.expr :all-assigns :no-assigns))
+       (first (if x1.rhs :all-assigns :no-assigns))
        ((when (or (not rest) (eq first rest))) first))
     :both))
 
-(defund vl-netdecls-error (nettype cstrength gstrength vectoredp scalaredp type delay assigns)
+(define vl-netdecls-error (nettype
+                           cstrength
+                           gstrength
+                           vectoredp
+                           scalaredp
+                           (type vl-datatype-p)
+                           delay
+                           (assigns vl-vardeclassignlist-p))
   ;; Semantic checks for okay net declarations.  These were part of
   ;; vl-parse-net-declaration before, but now I pull them out to reduce the
   ;; number of cases in its proofs.
-  (declare (xargs :guard (and (vl-datatype-p type)
-                              (vl-vardeclassignlist-p assigns))))
   (cond ((and (not (eq nettype :vl-trireg)) cstrength)
          "A non-trireg net illegally has a charge strength.")
         ((and vectoredp (not (vl-datatype->pdims type)))
@@ -366,9 +469,8 @@
         ;; assignment.  In ncv, it seems to be an error if at least the first
         ;; decl doesn't have an assignment; in vcs, seems to be an error if not
         ;; all do.
-
         ((and (or (atom assigns)
-                  (not (vl-vardeclassign->expr (car assigns))))
+                  (not (vl-vardeclassign->rhs (car assigns))))
               gstrength)
          "A drive strength has been given to a net declaration, but is only
           valid on assignments.")
@@ -377,8 +479,16 @@
          "A delay has been given to a multiple net declaration where some of the
           nets have assignments and some do not; we don't know what this
           means.  Should the delay be on the nets or the assignments?")
+        ((not (vl-vardeclassignlist-newfree-p assigns))
+         "The 'new' keyword is used on the right-hand side of a net declaration,
+          but this is a continuous assignment so new should not be used here.")
         (t
-         nil)))
+         nil))
+  ///
+  (defthm vl-vardeclassignlist-newfree-p-unless-vl-netdecls-error
+    (implies (not (vl-netdecls-error nettype cstrength gstrength vectoredp scalaredp
+                                     type delay assigns))
+             (vl-vardeclassignlist-newfree-p assigns))))
 
 
 ;; (encapsulate
@@ -480,21 +590,20 @@
              (scalaredp   (vl-is-token-of-type-p rtype :vl-kwd-scalared))
              (gstrength   (vl-disabled-gstrength strength))
              (cstrength   (vl-disabled-cstrength strength))
-             
+
 ; Subtle!  See the documentation for vl-netdecl-p and vl-assign-p.  If there
 ; are assignments, then the delay is ONLY about the assignments and NOT to
 ; be given to the decls.
-             
-             ((mv decls assigns)
-              (vl-build-netdecls loc declassigns nettype type atts vectoredp
-                                 scalaredp delay cstrength gstrength))
 
              (errorstr    (vl-netdecls-error nettype cstrength gstrength
                                              vectoredp scalaredp type delay
-                                             declassigns)))
-          (if errorstr
-              (vl-parse-error errorstr)
-            (mv nil (cons assigns decls) tokstream))))))
+                                             declassigns))
+             ((when errorstr)
+              (vl-parse-error errorstr))
+             ((mv decls assigns)
+              (vl-build-netdecls loc declassigns nettype type atts vectoredp
+                                 scalaredp delay cstrength gstrength)))
+          (mv nil (cons assigns decls) tokstream)))))
 
 
 (local (in-theory (enable vl-parse-drive-strength-or-charge-strength-forward)))

@@ -1,19 +1,5 @@
-; Arithmetic-2 Library
-; Copyright (C) 1999 Robert Krug <rkrug@cs.utexas.edu>
-;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT
-; ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-; FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
-; details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; if not, write to the Free Software Foundation, Inc., 51
-; Franklin Street, Suite 500, Boston, MA 02110-1335, USA.
+; See the top-level arithmetic-2 LICENSE file for authorship,
+; copyright, and license information.
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -26,7 +12,7 @@
 ;; which are too expensive for normal use, but are occasionally
 ;; useful.  They can be enabled as a group with
 ;; (in-theory (enable strong-expt-rules)).
-;; 
+;;
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -110,7 +96,7 @@
            0)))
 
 (defthm |(expt x 1)|
-  (equal (expt x 1) 
+  (equal (expt x 1)
          (fix x)))
 
 (defthm |(expt 1 i)|
@@ -118,7 +104,7 @@
          1))
 
 (defthm |(expt x -1)|
-  (equal (expt x -1) 
+  (equal (expt x -1)
 	 (/ x)))
 
 (defthm case-split-on-non-integer-exponents
@@ -431,7 +417,7 @@
 		(integerp (* 1/2 i)))
            (<= 0 (expt x i)))
   :rule-classes (:type-prescription :generalize)
-  :hints (("Goal" :use ((:instance 
+  :hints (("Goal" :use ((:instance
 			 expt-type-negative-base-even-exponent)))))
 
 (defthm expt-type-nonpositive-base-odd-exponent
@@ -441,7 +427,7 @@
 		(not (integerp (* 1/2 i))))
            (<= (expt x i) 0))
   :rule-classes (:type-prescription :generalize)
-  :hints (("Goal" :use ((:instance 
+  :hints (("Goal" :use ((:instance
 			 expt-type-negative-base-odd-exponent)))))
 
 (defthm expt-negative-base-even-exponents

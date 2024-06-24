@@ -1,5 +1,5 @@
 ; XDOC Documentation System for ACL2
-; Copyright (C) 2009-2014 Centaur Technology
+; Copyright (C) 2009-2015 Centaur Technology
 ;
 ; Contact:
 ;   Centaur Technology Formal Verification Group
@@ -36,7 +36,7 @@
 ; time of top.lisp.
 
 (in-package "XDOC")
-(include-book "import-acl2doc")  ;; For base acl2 documentation
+(include-book "top")
 
 (defxdoc xdoc
   :parents (documentation)
@@ -59,8 +59,9 @@ href='http://dx.doi.org/10.4204/EPTCS.152.2'>Industrial Strength Documentation
 for ACL2</a>.  ACL2 Workshop 2014.  EPTCS 152.  Pages 9-25.
 </blockquote>
 
-<p>See @(see acl2::|Building the ACL2+Books Manual|) for information on
-building the ACL2+Books manual.</p>
+<p>See <i>Building the Manual</i> under @(see acl2::books-certification) for
+information on building the ACL2+Books manual.  See @(see testing) for easy
+instructions for how to test your XDOC strings.</p>
 
 
 <p>To use XDOC to document your own books, the first step is:</p>
@@ -74,24 +75,36 @@ defxdoc) and @(see defsection), the basic commands for adding documentation.
 It also installs a new @(':doc') command, via @(see ld-keyword-aliases), so
 that you can see new documentation from the terminal.</p>
 
+<p>For a possibly more convenient way to construct XDOC strings, do the
+following:</p>
+
+@({
+ (include-book \"xdoc/constructors\" :dir :system)
+})
+
+<p>This book includes @('[books]/xdoc/top.lisp'), and in addition provides
+utilities to construct well-formed XDOC strings in a modular way.  See <see
+topic='@(url xdoc::constructors)'>the documentation</see> for more details.</p>
+
 <p>Once you have documented your books, you may wish to create a manual that
-can be viewed from a web browser.  You can do this quite easily with XDOC's
-@(see save) command.  This command can be embedded in an ordinary ACL2 book, so
-that your manual is automatically regenerated when you build your project.</p>
+can be viewed from a web browser or from the @(see acl2::acl2-doc) Emacs-based
+browser.  You can do this quite easily with XDOC's @(see save) command.
+This command can be embedded in an ordinary ACL2 book, so that your manual is
+automatically regenerated when you build your project.</p>
 
 
 <h3>New Features</h3>
 
-<p><b><color rgb='#ff0000'>NEW</color></b> (experimental): XDOC now
-supports @(see katex-integration) for writing LaTeX-like formulas like
+<p>XDOC now supports @(see katex-integration) for writing LaTeX-like formulas
+like
 @($
 \\left( \\sum_{i=0}^{n} \\sqrt{f(i)} \\right) < \\frac{n^2}{k}
 $)
 within your documentation.</p>
 
-<p><b><color rgb='#ff0000'>NEW</color></b> (experimental): When writing
-documentation, you can now optionally have XDOC topics automatically displayed
-as you submit new @(see defxdoc) forms&mdash;just add:</p>
+<p>When writing documentation, you can now optionally have XDOC topics
+automatically displayed as you submit new @(see defxdoc) forms&mdash;just
+add:</p>
 
 @({
  (include-book \"xdoc/debug\" :dir :system)
@@ -101,6 +114,11 @@ as you submit new @(see defxdoc) forms&mdash;just add:</p>
 developing your book.  Afterward, each @(see defxdoc) form you submit will be
 immediately shown at the terminal, giving you a quick, text-mode preview that
 may help you to diagnose any markup problems.</p>")
+
+(defxdoc missing-parents-test
+  :short "A topic with no @(':parents')."
+  :long "<p>This topic has no @(':parents') and is just meant to ensure that
+@(see missing-parents) is working correctly.</p>")
 
 (local (set-default-parents xdoc))
 
@@ -217,6 +235,11 @@ and \"preformatted,\" i.e., newlines and spaces should be preserved.</li>
 because they automatically escape special HTML characters like &lt; into
 &amp;lt; and also automatically add hyperlinks to documented functions.</p>
 
+<p>(Implementation Note.  The @('<tt>') and @('<code>') tags in XDOC do not
+correspond to the @('<tt>') and @('<code>') tags in HTML.  In fact, @('<tt>')
+is rendered with an HTML @('<span>'), and @('<code>') is rendered with an HTML
+@('<pre>').)</p>
+
 <p>Whenever you include Lisp code fragments in your documentation, you should
 usually keep everything <b>indented one space</b> to prevent Emacs problems.
 For instance:</p>
@@ -255,11 +278,12 @@ links</i> into the source code are handled by the @(see preprocessor).</p>
 links, e.g.,</p>
 
 @({
-<a href=\"http://www.centtech.com/\">Centaur Technology</a>
+<a href=\"https://www.cs.utexas.edu/\">University of Texas Department of
+Computer Science</a>
 })
 
-<p>Produces a link to <a href=\"http://www.centtech.com/\">Centaur
-Technology</a>.</p>
+<p>produces a link to the <a href=\"https://www.cs.utexas.edu/\">University of
+Texas Department of Computer Science</a>.</p>
 
 
 <h3>Typesetting Mathematics (Experimental)</h3>
@@ -394,6 +418,8 @@ an example table:</p>
 images and icons, but this is currently awkward.  In the future, we may add
 other tags that users request.</p>")
 
+(defpointer syntax markup)
+
 
 (defxdoc preprocessor
   :short "In addition to its @(see markup) language, XDOC includes a
@@ -445,8 +471,8 @@ useful for examples and code fragments, where you don't want to have to escape
 special character like @('<') with @('&lt;').</p>
 
 <ul>
-<li><tt>@@('...')</tt> inserts @('...') into @('<tt>') tags.</li>
-<li><tt>@@({...})</tt> inserts @('...') into @('<code>') tags.</li>
+<li><tt>@@('...')</tt> inserts @('...') into @('<tt>') XDOC tags.</li>
+<li><tt>@@({...})</tt> inserts @('...') into @('<code>') XDOC tags.</li>
 </ul>
 
 <p>These have a special feature for automatically linking to documented topics.
@@ -489,7 +515,10 @@ things properly yourself!</p>
 <h3>Emacs Links</h3>
 
 <p>The @('@(srclink name)') directive inserts a source-code link for users who
-have configured their web browser as described in @(see emacs-links).</p>
+have configured their web browser as described in @(see emacs-links).  For
+documentation in the acl2-doc browser @(see acl2::acl2-doc) or at the terminal,
+the name is enclosed in angle brackets (@('<name>')), which essentially
+represent a source-code link when using the acl2-doc `@('/')' command.</p>
 
 <p>It is often unnecessary to use @('srclink') directly, because these links
 are automatically inserted by @('@(def fn)').  One good reason to use
@@ -507,8 +536,10 @@ that are generated by macros.  You can suppress the automatic source links on
 <p>The easiest way to link between topics is to use @('@(see name)'), which
 expands into a link to @('name').  The text shown to the reader is just the
 name of the topic, in lower case.  Note also that @('@(csee name)') can be used
-for links whose first letter should be capitalized, and that @('@(tsee name)')
-can be used for links that should appear in type-writer font.</p>
+for links whose first letter should be capitalized; that @('@(tsee name)') can
+be used for links that should appear in type-writer font; and that @('@(see?
+name)') is useful for macros, since a link is inserted if @('name') is
+documented but otherwise @('name') simply appears in typewriter font.</p>
 
 <p>For most purposes, @('@(see name)') is adequate and it is also recommended.
 Finer-grained control (e.g., changing the link text) is also possible, but then
@@ -541,7 +572,14 @@ name, it may or may not include the package portion of @('name').</li>
 </ul>
 
 <p>You can use these to write your own @('<see>') tags.  You should probably
-<i>never</i> write a @('<see>') tag yourself without using @('@(url ...)').</p>
+<i>never</i> write a @('<see>') tag yourself without using @('@(url ...)').
+Some examples:</p>
+
+<ul>
+<li>@('@(url defxdoc)') expands to @(url defxdoc)</li>
+<li>@('@(sym defxdoc)') expands to @(sym defxdoc)</li>
+<li>@('@(csym defxdoc)') expands to @(csym defxdoc)</li>
+</ul>
 
 <h3>Escaping of @</h3>
 
@@ -557,7 +595,8 @@ need to be escaped.</p>")
   :short "Saves the XDOC database into files for web browsers, etc."
 
   :long "<p>Once you have documented your books with @(see defxdoc), you may
-wish to create a manual that can be viewed from a web browser.</p>
+wish to create a manual that can be viewed from a web browser or from the
+acl2-doc Emacs-based browser (see @(see acl2::acl2-doc)).</p>
 
 <h4>Basic Example</h4>
 
@@ -574,7 +613,7 @@ wish to create a manual that can be viewed from a web browser.</p>
    :short \"My Manual\"
    :long \"<p>This manual explains how to use my books...</p>\")
 
- (xdoc::save \"./mylib-manual\")  ;; write the manual
+ (xdoc::save \"./mylib-manual\" :error t)  ;; write the manual
 })
 
 <p>Notes about this example:</p>
@@ -611,14 +650,17 @@ manual with others, you should read about @(see deploying-manuals).</li>
 
 @({
     (save <target-dir>
-          [:import    import]    ;; default is t
-          [:redef-okp bool]      ;; default is nil
-          [:zip-p     bool]      ;; default is t
+          [:redef-okp  bool]               ;; default is nil
+          [:zip-p      bool]               ;; default is t
+          [:logo-image path]               ;; default is nil
+          [:error      bool]               ;; default is nil
+          [:broken-links-limit nil-or-nat] ;; default is nil
           )
 })
 
 <p>The only (required) argument to the @('save') command is the name of a
-directory where the want the manual to go.  As might be expected:</p>
+directory where the want the manual to go.  All arguments are evaluated.
+As might be expected:</p>
 
 <ul>
 
@@ -629,26 +671,60 @@ overwritten</color>.</li>
 
 </ul>
 
+<h5>Option Summary</h5>
+
+<dl>
+
+<dt>@('redef-okp')</dt>
+
+<dd>By default, the @('save') command will complain if any topic is defined
+more than once.  This is often annoying when you are developing books,
+especially if your books are slow to certify and you don't want to have your
+build fail just because of a documentation problem.  So, if you want to
+suppress this error (and turn it into a printed warning), you can set
+@(':redef-okp t').</dd>
+
+<dt>@('zip-p')</dt>
+
+<dd>To support the <a href='download/'>Download this Manual</a>
+feature (normally accessed from the toolbar button) the @('save') command will
+zip up the manual to create @('.tar.gz'), @('.tar.bz2'), and @('.zip') files.
+If you don't care about generating these files and want to avoid the time to
+build them, you can set @(':zip-p nil').</dd>
+
+<dt>@(':logo-image')</dt>
+
+<dd>You can provide a custom image to use as the logo for the @(see top) topic.
+The path you provide should be relative to whatever book contains the @('save')
+command.</dd>
+
+<dt>@(':error')</dt>
+
+<dd>The value is @('t') or @('nil'), to indicate whether or not (respectively)
+to cause an error upon encountering a syntax error in xdoc source (marked with
+\"xdoc error\").</dd>
+
+<dt>@(':broken-links-limit')</dt>
+
+<dd>The value is @('nil') by default.  Otherwise, it is a natural number
+specifying the maximum allowed number of broken links; if the ``broken topic
+link'' report shows more broken links than that limit, an error occurs.</dd>
+
+</dl>
+
+
 <h3>Avoiding Unwanted Documentation</h3>
 
-<p>By default, the @('save') command will automatically import:</p>
-<ul>
-<li>the documentation for the ACL2 theorem prover</li>
-<li>any @(see defdoc) style documentation from books you have loaded</li>
-<li>the documentation for @('xdoc') itself.</li>
-</ul>
+<p>By default, the @('save') command will generate a manual that covers the
+documentation for all books that you have loaded.  This usually works well
+as long as you know all of the books that you need to include.</p>
 
-<p>You can turn off <b>most</b> of this by setting @(':import nil') in your
-@('save') command.</p>
-
-<p>However, you may find that even after setting @(':import nil'), some
-extraneous documentation is still being included!  For instance, you may find
+<p>One caveat is that @('xdoc/save') includes some supporting books that are,
+themselves, documented.  Accordingly, you may find that your manual includes
 documentation from libraries like @(see acl2::std/strings) and @(see
-oslib::oslib) in your output.</p>
-
-<p>This is because @('xdoc/save') includes some supporting books that are,
-themselves, documented.  If you really want precise control over what goes into
-your manual, then, you may want to do something like this:</p>
+oslib::oslib) in your output even if you haven't loaded these libraries
+yourself.  If you really want precise control over what goes into your manual,
+then, you may want to do something like this:</p>
 
 @({
  ;; nothing-extra-manual.lisp - manual with nothing extra
@@ -670,9 +746,107 @@ your manual, then, you may want to do something like this:</p>
    :short \"My Manual\"
    :long \"<p>This manual explains how to use my books...</p>\")
 
- (xdoc::save \"./mylib-manual\" :import nil)
+ (xdoc::save \"./mylib-manual\" :error t)
 })")
 
+(defxdoc save-rendered
+  :parents (XDOC)
+  :short "Saves the XDOC database into files for the acl2-doc browser"
+  :long "<p>Also see @(see save-rendered-event) for a corresponding macro that
+  provides additional functionality.</p>
+
+ @({
+ General Form:
+
+ (save-rendered outfile
+                header
+                topic-list-name
+                error
+                write-acl2-doc-search-file
+                state)
+ })
+
+ <p>where @('outfile') is the pathname for the output file containing rendered
+ documentation, @('header') is to be written to the top of
+ @('outfile') (typically as a comment), and the value of @('topic-list-name')
+ is a symbol that can be the first argument of @(tsee defconst), hence of the
+ form @('*c*').  The value of @('error') should be @('t') or @('nil') to
+ indicate whether or not (respectively) to cause an error upon encountering a
+ syntax error in xdoc source (marked by \"xdoc error\").  When the value of
+ @('write-acl2-doc-search-file') is not @('nil'), then a file
+ @('\"acl2-doc-search\"') is written, to be used for speeding up @(see
+ acl2::acl2-doc) search commands.</p>
+
+ <p>Upon success, the call displayed above returns the error-triple @('(mv
+ nil (value-triple :ok) state)'); probably the value is unimportant except that
+ it allows an @('xdoc::save-rendered') call to be placed inside
+ @('make-event'), as displayed below.</p>
+
+ <p>For example, the following form may be found in community book
+ @('books/doc/top.lisp').  Its evaluation creates the output file
+ @('books/system/doc/rendered-doc-combined.lsp\"').  That file starts with a
+ comment from the string, @('*rendered-doc-combined-header*'), then contains
+ @('(in-package \"ACL2\")'), and concludes with a form @('(defconst
+ *ACL2+BOOKS-DOCUMENTATION* '<big-alist>)'), where @('<big-alist>') is an alist
+ representing the XDOC database.</p>
+
+ @({
+ (make-event
+  (time$
+   (xdoc::save-rendered
+    (extend-pathname (cbd)
+                     \"../system/doc/rendered-doc-combined.lsp\"
+                     state)
+    *rendered-doc-combined-header*
+    '*acl2+books-documentation*
+    t ; cause error upon encountering xdoc error
+    state)))
+ })
+
+ <p>The output file is typically used by the acl2-doc Emacs-based browser for
+ XDOC.  See @(see acl2::acl2-doc), specifically the discussion of custom
+ manuals, which explains that the @('filename') argument of Emacs function
+ @('extend-acl2-doc-manual-alist') is exactly the output file created by
+ @('xdoc::save-rendered').</p>")
+
+(defxdoc save-rendered-event
+  :parents (XDOC)
+  :short "Event that invokes @(tsee save-rendered), supporting extra functionality"
+  :long "<p>See @(see save-rendered) for relevant background.</p>
+
+ @({
+ General Form:
+
+ (save-rendered-event outfile
+                      header
+                      topic-list-name
+                      error
+                      &key
+                      script-file script-args timep write-acl2-doc-search-file)
+ })
+
+ <p>where the four required arguments correspond to the same arguments of
+ @(tsee save-rendered).  Although @('save-rendered') and
+ @('save-rendered-event') have similar effects &mdash; indeed,
+ @('save-rendered-event') invokes @('save-rendered') with the same first four
+ arguments &mdash; @('save-rendered-event') is a macro that generates an event
+ form (using @(tsee make-event)) that can be placed in a book.  All arguments
+ are evaluated.  The keyword arguments of @('save-rendered-event') provide
+ additional functionality, as follows.</p>
+
+ <p>Suppose @(':script-file') is supplied with a non-@('nil') value.  Then
+ there must be an active trust tag (see @(see defttag).  The value of
+ @(':script-file') should be a string that names a file to be executed as a
+ shell command, using @(tsee sys-call).  The argument list of that command is
+ provided by the value of @(':script-args').  For an example, see the call of
+ @('xdoc::save-rendered-event') in community book @('doc/top.lisp').</p>
+
+ <p>If @(':timep') is non-@('nil') then the entire computation will be wrapped
+ in a call of @(tsee time$).</p>
+
+ <p>The value of keyword option @(':write-acl2-doc-search-file'), which is
+ @('nil') by default, is passed directly to the corresponding parameter of
+ @(tsee save-rendered).</p>")
 
 (defxdoc deploying-manuals
   :parents (save)
@@ -710,9 +884,8 @@ intranet connection, but it can be quite slow over the internet.</p>
 
 <p>The XDOC manuals created by @('save') can be reconfigured to just load the
 @(':long') sections as they are accessed.  This results in a much
-faster-loading manual, and is how, for instance, the <a
-href='http://fv.centtech.com/acl2/latest/doc/'>online XDOC manual</a> at
-Centaur is deployed.</p>
+faster-loading manual, and is how, for instance, the online XDOC manual at
+Centaur was deployed.</p>
 
 <p>This option requires a small amount of configuration, and you may need to
 coordinate with your network administrator to get certain software
@@ -896,7 +1069,7 @@ utilities that comes with ACL2:</p>
 
 <p>For emacs to make sense of the links you follow, it will need to have the
 appropriate <a
-href=\"http://www.gnu.org/software/emacs/manual/html_node/emacs/Tags.html\">tags
+href=\"https://www.gnu.org/software/emacs/manual/html_node/emacs/Tags-Tables.html\">tags
 tables</a> loaded for all of the libraries you are using.</p>
 
 <p>If you aren't familiar with tags, you basically just need to:</p>
@@ -1174,14 +1347,34 @@ not introduce a new local scope, but a @('defsection') does.</p>")
 
 
 (defxdoc undocumented
-  :short "Placeholder for undocumented topics.")
+  :short "Placeholder for documentation topics that lack good @(':parents')."
 
-(defxdoc unselected-parents
-  :short "Placeholder for topics with bad parents."
-  :long "<p>These are topics that we'd like to place somewhere other than, for
-  example, in `acl2-built-ins`.  See <a
-  href=\"https://github.com/acl2/acl2/issues/316\">Github Issue #316</a> for
-  more info.</p>")
+  :long "<p>Many @(see acl2::macros) such as @(see std::deflist) and other
+@(see acl2::std/util) macros can automatically generate @(see xdoc)
+documentation topics.</p>
+
+<p>When someone uses these macros but doesn't give any @(':parents') for the
+resulting documentation, we put the resulting documentation here.  This seems
+better than just dropping the documentation completely, since at least you can
+at least see the boilerplate documentation and any embedded documentation that
+the programmer did provide.</p>
+
+<p>As ongoing documentation improvement work, most topics here can benefit from
+being given more appropriate @(':parents').</p>")
+
+(defxdoc missing-parents
+  :short "Placeholder for documentation topics that lack @(':parents')."
+
+  :long "<p>If a @(see defxdoc) form ends up having no parents, it ends up
+being put here.  See also @(see undocumented).</p>
+
+<p>Historic note.  We used to put these topics directly underneath @(see top)
+instead.  But we found that during development, this sometimes led to a
+strange-looking hierarchy where ``random'' topics were presented as top-level
+topics just because they were new or being moved around or because @(see
+set-default-parents) forms weren't quite in the right places.  To avoid this,
+we now move these topics to @('missing-parents') and print notes about them
+when a manual is saved with @(see xdoc::save).</p>")
 
 (defxdoc set-default-parents
   :short "Set up default parents to use for @(see xdoc)."
@@ -1324,15 +1517,35 @@ guides, you sometimes intend your topics to be read in some particular order,
 and alphabetizing things gets in the way.</p>
 
 <p>The @('order-subtopics') command lets you specify the exact subtopic
-ordering that should be used for a particular topic.  The general form is:</p>
+ordering that should be used for a particular topic.  One general form is:</p>
 
 @({
     (xdoc::order-subtopics parent
-      (subtopic1 subtopic2 ...))
+      (subtopic1 subtopic2 ... subtopicn))
 })
 
 <p>You don't have to give a complete order.  Any subtopics that aren't
 mentioned will be listed last, in the usual alphabetical order.</p>
+
+<p>A second general form has an optional argument of @('t').  This specifies
+that the order for unspecified child topics is the order in which the topics
+were defined, rather than alphabetical.</p>
+
+@({
+    (xdoc::order-subtopics parent
+      (subtopic1 subtopic2 ... subtopicn)
+      t)
+})
+
+<p>A special case of that second general form lists no subtopics, thus
+specifying simply that all children are to be listed in the order in which they
+were defined.</p>
+
+@({
+    (xdoc::order-subtopics parent
+      nil
+      t)
+})
 
 <p>We require @('parent') to refer to some defined topic, but the subtopics
 don't need to be defined at @('order-subtopics') time.  This makes it easy to
@@ -1447,6 +1660,21 @@ and in preprocessor blocks here:</p>
 (defxdoc order-test-o :short "O")
 (defxdoc order-test-k :short "K")
 
+(defxdoc xdoc-test-order-subtopics-flg
+  :short "Parent topic for testing chronological order of subtopics.")
+
+(order-subtopics xdoc-test-order-subtopics-flg
+                 (order-test-flg-move-to-front)
+                 t)
+
+(local (set-default-parents xdoc-test-order-subtopics-flg))
+
+(defxdoc order-test-flg-w :short "W")
+(defxdoc order-test-flg-o :short "O")(defxdoc order-test-flg-o :short "O")
+(defxdoc order-test-flg-move-to-front :short "Move to front")
+(defxdoc order-test-flg-r :short "R")
+(defxdoc order-test-flg-k :short "K")
+(defxdoc order-test-flg-s :short "S")
 
 (local (set-default-parents xdoc))
 
@@ -1466,6 +1694,14 @@ web-based viewer, allowing you to typeset basic formulas.</p>
 
 
 <h3>Basic Usage</h3>
+
+<box><p><b><color rgb='#ff0000'>ESCAPING WARNING</color></b>. LaTeX-style
+formulas may be especially hard to type in ordinary ACL2 string literals
+because you have to escape all the backslashes.  For instance, you have to
+remember to write @('\\\\sqrt{x}') instead of @('\\sqrt{x}').  You can avoid
+this headache by using the @(see acl2::fancy-string-reader). In the rest of
+this document, we will use the concrete xdoc syntax without the escapes for
+simplicity.</p></box>
 
 <p>To typeset block-style formulas, you can use the @('@([...])') @(see
 preprocessor) directive, e.g.,:</p>
@@ -1500,13 +1736,6 @@ instance:</p>
 type in your formula and see how it will be typeset.  It may be especially
 helpful since KaTeX only supports a particular subset of LaTeX.</p>
 
-<h5>Escaping Help.</h5>
-
-<p>LaTeX-style formulas may be especially hard to type in ordinary ACL2 string
-literals because you have to escape all the backslashes.  For instance, you
-have to remember to write @('\\\\sqrt{x}') instead of @('\\sqrt{x}').  You can
-avoid this headache by using the @(see acl2::fancy-string-reader).</p>
-
 <h5>Invalid Formulas.</h5>
 
 <p>Invalid formulas will display as an ugly error message.  For instance, here
@@ -1540,7 +1769,7 @@ terminal with @(':doc') or in the ACL2-Doc Emacs viewer.</p>")
   :long "<p>Examples:</p>
 
 @({
-    (defpointer acl2 acl2-sedan)
+    (defpointer acl2s acl2-sedan)
     (defpointer guard-hints xargs t)
 })
 
@@ -1553,7 +1782,15 @@ terminal with @(':doc') or in the ACL2-Doc Emacs viewer.</p>")
 <p>This is a simple macro that expands to a @(see defxdoc) form.  It introduces
 a new @(see xdoc) topic, @('new-topic'), that merely links to
 @('target-topic').  The new topic will only be listed under @(see
-pointers).</p>")
+pointers).</p>
+
+<p>A common practice when documenting keyword symbols is to create a
+doc topic in in the \"ACL2\" package or some other relevant package,
+rather than the \"KEYWORD\" package to which the keyword symbol
+rightfully belongs.  In keeping with this practice, the @('keywordp')
+argument to @('defpointer'), if non-nil, adds a clarification that the
+doc topic is really about the keyword symbol with the same name as
+@('new-topic'), rather than @('new-topic') itself.</p>")
 
 
 (defxdoc add-resource-directory
@@ -1620,5 +1857,52 @@ all is well, you should see the logo below:</p>
 <img src='res/centaur/centaur-logo.png'/>")
 
 (add-resource-directory "centaur" "centaur")
+
+(defxdoc testing
+  :short "Testing new or revised XDOC strings"
+  :long "<p>Contributors to the XDOC manual should check that their XDOC
+ strings are well-formed.  This topic shows an easy way to check
+ well-formedness of XDOC strings, without the need to build the manual.  Also
+ discussed is a way to check for the absence of broken links by building the
+ manual.</p>
+
+ <p>To test a topic, first submit a suitable @(tsee in-package) form if
+ necessary, and then to test your topic named, say, @('FOO'):</p>
+
+ @({
+ (include-book \"xdoc/top\" :dir :system)
+ (defxdoc ...) ; or whatever form you have that includes an XDOC string
+ :doc foo ; a bit noisy and slow the first time, but could do this twice
+ })
+
+ <p>The output should be free of obvious errors.  Otherwise, you can use the
+ error message to debug the error; then submit your form and @(':doc foo')
+ again.</p>
+
+ <p>A XDOC feature (the second ``NEW'' feature in the @(see xdoc)
+ documentation) avoids the need to invoke @(':doc') explicitly.  In brief: you
+ can simply include community-book @('xdoc/debug'), for example by putting its
+ include-book form in your acl2-customization file (see @(see
+ acl2::acl2-customization)).</p>
+
+ <p>Checking for broken links requires you to build the manual; for
+ instructions, see the section ``Building the manual'' in the topic @(see
+ acl2::books-certification).  This build will create a file
+ @('books/doc/top.cert.out').  Search in that file for the word ``broken'' and
+ you will find the following report of a broken link:</p>
+
+ @({
+ ;;; ACL2____SOME-BROKEN-LINK:
+ ;;;    from ACL2-DOC
+ })
+
+ <p>If any other broken links are reported, you can modify the parent topic
+ (e.g., @('ACL2-DOC') just above &mdash; but please leave that one in place!)
+ to fix the indicated broken link.</p>
+
+ <p>The @(':short') and @(':long') strings, if supplied, must consist entirely
+ of standard characters (see @(see standard-char-p)), except that tabs are also
+ allowed.  Making this check requires you to build the manual (as described
+ just above).</p>")
 
 (defpointer build-the-manual xdoc)

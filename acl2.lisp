@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 8.4 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2022, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -33,11 +33,18 @@
 ; implied, of Computational Logic, Inc., Office of Naval Research, DARPA or the
 ; U.S. Government.
 
+; This file cannot be compiled because it changes packages in the middle.
+
 ; This file, acl2.lisp, (a) builds the packages for the ACL2 system, (b)
 ; defines the functions for loading and compiling ACL2 and for running code
 ; verified using ACL2, and (c) makes a couple of checks concerning minor,
 ; non-CLTL, assumptions that we make about Common Lisps in which ACL2 is to
 ; run.
+
+; Other programs may want a compile-time check for whether ACL2 is running, so
+; we push this feature.
+
+(push :ACL2 *features*)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;                            CLTL1/CLTL2
@@ -109,7 +116,7 @@
 ;     compile, because everything looked compiled already.  But where that
 ;     really got us was that we use that function to create TMP1.lisp during
 ;     the bootstrapping.  TMP1.lisp, recall, contains the mechanically
-;     generated executable counterparts of logic mode functions defined in
+;     generated executable-counterparts of logic mode functions defined in
 ;     axioms.lisp.  By not generating these we built an image in which the
 ;     relevant functions were undefined.  Because of the rugged way we invoke
 ;     them, catching errors and producing a HIDE term if we can't eval them,
@@ -145,8 +152,29 @@
 (defvar *acl2-optimize-form*
   `(optimize #+cltl2 (compilation-speed 0)
 
-; The user is welcome to modify this proclaim form.  Warning: Keep it in sync
-; with the settings in compile-acl2 under #+sbcl.
+; The user is welcome to modify this proclaim form.  For example, in CCL and
+; SBCL, where the "full" target does essentially nothing other than note in
+; file acl2-status.txt that the system has allegedly been compiled, the
+; following procedure works.
+
+;   # Write :COMPILE-SKIPPED to acl2-status.txt.
+;   make full LISP=ccl
+
+;   # Next, edit acl2r.lisp with the desired variant of *acl2-optimize-form*,
+;   # for example as follows.
+;   #   (defparameter cl-user::*acl2-optimize-form*
+;   #     '(OPTIMIZE (COMPILATION-SPEED 0) (DEBUG 0) (SPEED 0) (SPACE 0)
+;   #                (SAFETY 3)))
+;   #
+
+;   # Now start CCL and evaluate:
+
+;   (load "init.lisp") ; loads acl2r.lisp
+;   (in-package "ACL2")
+;   (save-acl2 (quote (initialize-acl2 (quote include-book)
+;                                      acl2::*acl2-pass-2-files*))
+;              "saved_acl2")
+;   (exit-lisp)
 
 ; The following may allow more tail recursion elimination (from "Lisp
 ; Knowledgebase" at lispworks.com); might consider for Allegro CL too.
@@ -166,19 +194,30 @@
 ;   so indiscriminately that the net effect is to slow the program by causing
 ;   cache misses or even swapping.
 
-             (space #+cmu 1 #-cmu 0)
+             (space
+              ,(let ((our-space
+                      #-CLTL2
+                      (if (boundp 'user::*acl2-space*)
+                          (symbol-value 'user::*acl2-space*)
+                        nil)
+                      #+CLTL2
+                      (if (boundp 'common-lisp-user::*acl2-space*)
+                          (symbol-value 'common-lisp-user::*acl2-space*)
+                        nil)))
+                 (if our-space
+                     (progn (format t "Note: Setting SPACE to ~s."
+                                    our-space)
+                            our-space)
+                   #+(or cmu sbcl) 1 ; see :DOC note-8-5 (system-level changes)
+                   #-(or cmu sbcl) 0)))
 
 ; WARNING:  Do not proclaim (cl-user::fixnum-safety 0) for LispWorks.  Any
 ; fixnum-safety less than 3 expects all integers to be fixnums!
 
              (safety
 
-; Consider using (safety 3) if there is a problem with LispWorks.  It enabled
-; us to see a stack overflow involving collect-assumptions in the proof of
-; bitn-lam0 from community book books/rtl/rel2/support/lop3.lisp.  The safety
-; setting of 3 helped in this example, because, when the safety is set to 0,
-; the stack is not always automatically extended upon overflow (despite setting
-; system::*stack-overflow-behaviour* to nil in acl2-init.lisp).
+; Consider using (safety 3) if there is a problem with LispWorks.  It should
+; allow stack overflows to report an error, rather than simply to hang.
 
 ; Safety 1 for CCL has avoided the kernel debugger, e.g. for compiled calls
 ; of car on a non-nil atom.  The following results for CCL show why we have
@@ -228,7 +267,18 @@
                                     our-safety)
                             our-safety)
                    0))
-              )))
+              )
+             #+ccl
+             ,@(let ((our-stack-access
+                      (if (boundp 'common-lisp-user::*acl2-stack-access*)
+                          (symbol-value 'common-lisp-user::*acl2-stack-access*)
+                        nil)))
+                 (if our-stack-access
+                     (progn (format t "Note: Setting :STACK-ACCESS to ~s."
+                                    our-stack-access)
+                            `((:stack-access ,our-stack-access)))
+                   nil))
+              ))
 
 (proclaim *acl2-optimize-form*)
 
@@ -242,7 +292,7 @@
 ; All of ACL2 is written in Common Lisp and we expect that ACL2 will run in any
 ; Common Lisp except for those Common Lisps which fail the tests we execute
 ; upon loading this file, acl2.lisp.  With the exception of this and other
-; initialiation files, files *-raw.lisp, and those constructs after the
+; initialization files, files *-raw.lisp, and those constructs after the
 ; #-acl2-loop-only readtime conditional, ACL2 is written in the applicative
 ; Common Lisp for which ACL2 is a verification system.
 
@@ -341,8 +391,13 @@
 ; our-lispworks-file-encoding below.
   (setq stream::*default-external-format* '(:LATIN-1 :EOL-STYLE :LF))
 
+; The following two symbols are external symbols of the "SB-EXT" package, but
+; that wasn't always the case.  We use the packages below so that these
+; assignments work back through at least SBCL 1.4.14.
   #+sbcl
   (setq sb-impl::*default-external-format* :iso-8859-1)
+  #+sbcl
+  (setq sb-alien::*default-c-string-external-format* :iso-8859-1)
 
 ; ;;;
 ; We have made only limited attempts to set the character encoding at the
@@ -478,12 +533,17 @@
 #+cmu
 (setq ext:*top-level-auto-declare* nil)
 
-; Turn off compiler verbosity going to error stream, since even >& does not
-; seem to redirect that stream to a file.
-#+(or cmu sbcl)
+; Turn off compiler verbosity.  This is important for CMUCL and SBCL because,
+; apparently, even >& does not seem to redirect the error stream to a file
+; during regressions.  For GCL it is useful simply to reduce rather a lot of
+; output on compilation, even for top-level forms (as opposed to file), which
+; doesn't seem necessary for Allegro CL or LispWorks.
+#+(or cmu sbcl gcl)
 (setq *compile-verbose* nil)
 #+(or cmu sbcl)
 (setq *compile-print* nil)
+#+gcl
+(setq *load-verbose* nil)
 
 ; Turn off gc verbosity (same reason as above).
 #+cmu
@@ -492,7 +552,7 @@
 #+ccl
 (when (fboundp 'ccl::gc-verbose) ; not in OpenMCL 1.0 (CCL)
 
-; This gets overridden for ACL2(h) in acl2h-init.
+; This gets overridden (originally only for ACL2(h)) in acl2h-init.
 
   (apply 'ccl::gc-verbose nil nil))
 
@@ -503,13 +563,6 @@
 ; isn't typically exploited by ACL2 users.
 #+ccl
 (setq ccl::*record-source-file* nil)
-
-; Camm Maguire has suggested, on 9/22/2013, the following forms, which allowed
-; him to complete an ACL2 regresssion using 2.6.10pre.
-#+gcl
-(progn
-  (si::allocate 'contiguous 15000 t)
-  (si::allocate-sgc 'contiguous 15000 100000 10))
 
 ; The following avoids errors from extra right parentheses, but we leave it
 ; commented out since it doesn't seem important enough to merit messing around
@@ -699,7 +752,7 @@
                 "~%~%Warning:  There is already a package with the ~
                  name ~a. ~%The ACL2 implementation depends upon ~
                  having complete knowledge of ~%and control over any ~
-                 packge whose name begins with the ~%four letters ``ACL2'', ~
+                 package whose name begins with the ~%four letters ``ACL2'', ~
                  so ACL2 may not work in this Lisp." (package-name p))
         (cond ((package-use-list p)
                (format t "~%~%Warning:  The package with name ~a ~
@@ -813,8 +866,12 @@
 
   nil)
 
+(declaim (ftype (function (t)
+                          (values t))
+                acl2::large-consp))
+
 (defmacro acl2::defconst (name term &rest rst)
-  (declare (ignore rst)) ; e.g., documentation
+  (declare (ignore rst))
   (let ((disc (gensym)))
     `(defparameter ,name
        (let ((acl2::*safe-mode-verified-p* t))
@@ -854,7 +911,24 @@
                  (assert (consp (cdr ,disc)))
                  (cond
                   ((and (eq (cdr (cdr ,disc)) (symbol-value ',name))
-                        (or (equal (car (cdr ,disc)) ',term)
+
+; Here, as in defconst-fn, we skip the check just below (which is merely an
+; optimization, as explained in defconst-fn) if it seems expensive but the
+; second check (below) -- against the term -- could be cheap.  Without this
+; check, if two books each contain a form (defconst *a* (hons-copy
+; '<large_cons_tree>)) then when the compiled file for the second book is
+; loaded, the check against the term (i.e. the first check below, as opposed to
+; the second check, which uses that term's value) could be intractable.  For a
+; concrete example, see :doc note-7-2.
+
+                        (or (let ((disc ,disc)
+                                  (qterm ',term))
+
+; We check that acl2::large-consp to avoid a boot-strapping problem in GCL.
+
+                              (and (not (and (fboundp 'acl2::large-consp)
+                                             (acl2::large-consp qterm)))
+                                   (equal (car (cdr disc)) qterm)))
                             (equal (cdr (cdr ,disc)) ,term)))
                    (symbol-value ',name))
                   (t (acl2::defconst-redeclare-error ',name))))
@@ -905,18 +979,18 @@
 
   '(
     #+acl2-par "multi-threading-raw"
-    #+hons "serialize-raw"
+    "serialize-raw"
     "axioms"
+    "hons"
+    "hons-raw" ; avoid possible inlining of hons fns in later sources
     "basis-a"   ; to be included in any "toothbrush"
-    "memoize"   ; but only get special under-the-hood treatment with #+hons
-    "hons"      ; but only get special under-the-hood treatment with #+hons
-    "serialize" ; but only get special under-the-hood treatment with #+hons
+    "memoize"
+    "serialize"
     "basis-b"   ; not to be included in any "toothbrush"
     "parallel" ; but only get special under-the-hood treatment with #+acl2-par
     #+acl2-par "futures-raw"
     #+acl2-par "parallel-raw"
-    #+hons "hons-raw"
-    #+hons "memoize-raw"
+    "memoize-raw"
     "translate"
     "type-set-a"
     "linear-a"
@@ -929,19 +1003,24 @@
     "bdd"
     "other-processes"
     "induct"
-    "proof-checker-pkg"
+    "proof-builder-pkg"
     "doc"
     "history-management"
     "prove"
     "defuns"
-    "proof-checker-a"
+    "proof-builder-a"
     "defthm"
     "other-events"
     "ld"
-    "proof-checker-b"
+    "proof-builder-b"
+    "apply-raw"
     "interface-raw"
     "defpkgs"
-    "boot-strap-pass-2" ; at the end so that it is compiled last
+    "boot-strap-pass-2-a"
+    "apply-prim"
+    "apply-constraints"
+    "apply"
+    "boot-strap-pass-2-b"
     )
   "*acl2-files* is the list of all the files necessary to build
 ACL2 from scratch.")
@@ -997,7 +1076,7 @@ ACL2 from scratch.")
    (setq acl2::*copy-of-acl2-version*
 ;  Keep this in sync with the value of acl2-version in *initial-global-table*.
          (concatenate 'string
-                      "ACL2 Version 7.1"
+                      "ACL2 Version 8.4"
                       #+non-standard-analysis
                       "(r)"
                       #+(and mcl (not ccl))
@@ -1037,64 +1116,64 @@ ACL2 from scratch.")
   (let ((acl2-compiler-enabled-var
          #+cltl2 'common-lisp-user::*acl2-compiler-enabled*
          #-cltl2 'user::*acl2-compiler-enabled*))
-    `(progn (dolist (pair *initial-global-table*)
-              (f-put-global (car pair) (cdr pair) *the-live-state*))
-            (f-put-global 'acl2-sources-dir (our-pwd) *the-live-state*)
-            (f-put-global 'iprint-ar
-                          (compress1 'iprint-ar
-                                     (f-get-global 'iprint-ar *the-live-state*))
-                          *the-live-state*)
-            (f-put-global 'compiler-enabled
+    `(let ((state *the-live-state*))
+       (dolist (pair *initial-global-table*)
+         (f-put-global (car pair) (cdr pair) state))
+       (f-put-global 'acl2-sources-dir (our-pwd) state)
+       (f-put-global 'iprint-ar
+                     (compress1 'iprint-ar
+                                (f-get-global 'iprint-ar state))
+                     state)
+       (f-put-global 'ld-history (list (make ld-history-entry)) state)
+       (f-put-global 'compiler-enabled
 
 ; Either t, nil, or :books is fine here.  For example, it might be reasonable
 ; to initialize to (not *suppress-compile-build-time*).  But for now we enable
 ; compilation of books for all Lisps.
 
-                          (cond ((boundp ',acl2-compiler-enabled-var)
-                                 (or (member ,acl2-compiler-enabled-var
-                                             '(t nil :books))
-                                     (error "Illegal value for ~
-                                             user::*acl2-compiler-enabled*, ~s"
-                                            ,acl2-compiler-enabled-var))
-                                 ,acl2-compiler-enabled-var)
-                                (t
+                     (cond ((boundp ',acl2-compiler-enabled-var)
+                            (or (member ,acl2-compiler-enabled-var
+                                        '(t nil :books))
+                                (error "Illegal value for ~
+                                        user::*acl2-compiler-enabled*, ~s"
+                                       ,acl2-compiler-enabled-var))
+                            ,acl2-compiler-enabled-var)
+                           (t
 
 ; Warning: Keep the following "compile on the fly" readtime conditional in sync
 ; with the one in acl2-compile-file.
 
-                                 #+(or ccl sbcl)
-                                 :books
-                                 #-(or ccl sbcl)
-                                 t))
-                          *the-live-state*)
-            (f-put-global
-             'host-lisp
-             ,(let () ; such empty binding has avoided errors in  GCL 2.6.7
-                #+gcl :gcl
-                #+ccl :ccl
-                #+sbcl :sbcl
-                #+allegro :allegro
-                #+clisp :clisp
-                #+cmu :cmu
-                #+lispworks :lispworks
-                #-(or gcl ccl sbcl allegro clisp cmu lispworks)
-                (error
-                 "Error detected in initialize-state-globals: ~%~
-                  The underlying host Lisp appears not to support ACL2. ~%~
-                  Contact the ACL2 implementors to request such support."))
-             *the-live-state*)
-            (f-put-global
-             'compiled-file-extension
-             ,*compiled-file-extension*
-             *the-live-state*)
-            #+unix
-            (f-put-global 'tmp-dir "/tmp" *the-live-state*)
-            #+gcl ; for every OS, including Windows (thanks to Camm Maguire)
-            (when (boundp 'si::*tmp-dir*)
-              (f-put-global 'tmp-dir si::*tmp-dir* *the-live-state*))
-            #-acl2-mv-as-values
-            (f-put-global 'raw-arity-alist *initial-raw-arity-alist*
-                          *the-live-state*))))
+                            #+(or ccl sbcl)
+                            :books
+                            #-(or ccl sbcl)
+                            t))
+                     state)
+       (f-put-global
+        'host-lisp
+        ,(let () ; such empty binding has avoided errors in  GCL 2.6.7
+           #+gcl :gcl
+           #+ccl :ccl
+           #+sbcl :sbcl
+           #+allegro :allegro
+           #+clisp :clisp
+           #+cmu :cmu
+           #+lispworks :lispworks
+           #-(or gcl ccl sbcl allegro clisp cmu lispworks)
+           (error
+            "Error detected in initialize-state-globals: ~%The underlying ~
+             host Lisp appears not to support ACL2. ~%Contact the ACL2 ~
+             implementors to request such support."))
+        state)
+       (f-put-global
+        'compiled-file-extension
+        ,*compiled-file-extension*
+        state)
+       #+unix
+       (f-put-global 'tmp-dir "/tmp" state)
+       #+gcl ; for every OS, including Windows (thanks to Camm Maguire)
+       (when (boundp 'si::*tmp-dir*)
+         (f-put-global 'tmp-dir si::*tmp-dir* state))
+       nil)))
 
 (defconstant *suppress-compile-build-time*
 
@@ -1196,10 +1275,136 @@ ACL2 from scratch.")
   (error "Use a version of ACKL after 206"))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;                            EXITING LISP
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defparameter *acl2-panic-exit-status* nil)
+
+#+ccl
+(defun common-lisp-user::acl2-exit-lisp-ccl-report (status)
+
+; Gary Byers says (email, 1/12/2016) that he believes that the first of 5
+; values returned by (GCTIME) is the sum of the other four, which are full and
+; then 3 levels of ephemeral/generational.  He also says that these are
+; reported in internal-time-units, which are microseconds on x8664.
+
+  (declare (ignore status))
+  (format t
+          "~%(ccl::total-bytes-allocated) = ~s~%(ccl::gctime) ~
+           = ~s~%(ccl::gccounts) = ~s~%~%"
+          (ccl::total-bytes-allocated)
+          (multiple-value-list (ccl::gctime))
+          (multiple-value-list (ccl::gccounts))))
+
+#+cltl2
+(defvar common-lisp-user::*acl2-exit-lisp-hook*
+  nil)
+
+(defun exit-lisp (&optional (status '0 status-p))
+
+; Parallelism blemish: In ACL2(p), LispWorks 6.0.1 hasn't always successfully
+; exited when exit-lisp was called.  The call below of stop-multiprocessing is
+; an attempt to improve the chance of a successful exit.  In practice, the call
+; does not fix the problem.  However, we leave it for now since we don't think
+; it can hurt.  If exit-lisp starts working reliably without the following
+; calls to send-die-to-worker-threads and stop-multiprocessing, they should be
+; removed.
+
+  #+cltl2
+  (when (fboundp common-lisp-user::*acl2-exit-lisp-hook*)
+    (funcall common-lisp-user::*acl2-exit-lisp-hook* status)
+    (setq common-lisp-user::*acl2-exit-lisp-hook* nil))
+  #+(and acl2-par lispworks)
+  (when mp::*multiprocessing*
+    (send-die-to-worker-threads)
+    (mp::stop-multiprocessing))
+
+; The status (an integer) will be returned as the exit status (shell variable
+; $?).  We avoid passing the status argument when it is 0, in case Windows or
+; other operating systems get confused by it.  However, this function is a
+; no-op if we are already in the process of quitting via this function; see the
+; comment below the occurrence below of *acl2-panic-exit-status*.
+
+; It appeared at one point that (ccl::quit 0) is more reliable than
+; (ccl::quit), but that's no longer clear.  Still, it seems reasonable to pass
+; the status explicitly to the individual Lisp's exit function if that status
+; is passed explicitly here -- hence the use of status-p.
+
+  (cond
+   ((null status) ; shouldn't happen
+    (error "Passed null status to exit-lisp!"))
+   (*acl2-panic-exit-status*
+
+; We have seen various type errors and bus errors when attempting to quit in
+; CCL.  Gary Byers pointed out that this may be caused by attempting to quit
+; while in the process of quitting.  So, we avoid doing a quit if already in
+; the process of quitting.
+
+    (return-from exit-lisp nil)))
+  (setq *acl2-panic-exit-status* status)
+  #+clisp
+  (if status-p (user::exit status) (user::exit))
+  #+lispworks ; Version 4.2.0; older versions have used bye
+  (if status-p (lispworks:quit :status status) (lispworks:quit))
+  #+akcl
+  (if status-p (si::bye status) (si::bye))
+  #+lucid
+  (lisp::exit) ; don't know how to handle status, but don't support lucid
+  #+ccl
+  (if status-p (ccl::quit status) (ccl::quit))
+  #+cmu
+  (cond ((null status-p)
+         (common-lisp-user::quit t))
+        (t ; quit does not take an exit status as of CMUCL version 19e
+         (unix:unix-exit status)))
+  #+allegro
+  (user::exit status :no-unwind t)
+  #+(and mcl (not ccl))
+  (cl-user::quit) ; mcl support is deprecated, so we don't worry about status
+  #+sbcl
+  (let ((sym (or (find-symbol "EXIT" 'sb-ext)
+                 (find-symbol "QUIT" 'sb-ext))))
+
+; Quoting http://www.sbcl.org/manual/#Exit, regarding sb-ext:quit:
+
+;   Deprecated in favor of sb-ext:exit as of 1.0.56.55 in May 2012. Expected to
+;   move into late deprecation in May 2013.
+
+    (cond ((or (null sym)
+               (not (fboundp sym)))
+           (error "No function named \"EXIT\" or \"QUIT\" is defined in the ~%~
+                   \"SB-EXT\" package.  Perhaps you are using a very old or ~%~
+                   very new version of SBCL.  If you are surprised by this ~%~
+                   message, feel free to contact the ACL2 implementors."))
+          ((equal (symbol-name sym) "EXIT")
+           (if status-p
+               (funcall sym :code status)
+             (funcall sym)))
+          (t ; (equal (symbol-name sym) "QUIT")
+           (if status-p
+               (funcall sym :unix-status status)
+             (funcall sym)))))
+
+; Return status (to avoid an ignore declaration) if we cannot exit lisp.  The
+; caller of this function should complain if Lisp survives the call.  The panic
+; flag may help though.
+
+  (progn status-p status))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;                                CHECKS
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ; See acl2-check.lisp for more checks.
+
+; We allow ACL2 code to take advantage of Ansi CL features.  It's conceivable
+; that we don't need this restriction (which only applies to GCL), but it
+; doesn't currently seem worth the trouble to figure that out.
+#+(not cltl2)
+(progn
+  (format t "~%ERROR: It is illegal to build ACL2 in this non-ANSI Common ~
+             Lisp.~%~%")
+  (acl2::exit-lisp))
 
 ; The following macro turns off some style warnings.  It is defined here
 ; instead of the "LISP BUGS AND QUIRKS" section because we want to define this
@@ -1290,7 +1495,18 @@ ACL2 from scratch.")
                        (invoke-restart 'muffle-warning))))
            ,@forms))
 
-  #-(or sbcl cmu)
+; We include allegro below to avoid "unreachable" warnings from the compiler,
+; as would otherwise appear when compiling function FROM-TO-BY-AC during the
+; build.
+  #+(or lispworks allegro)
+  `(with-redefinition-suppressed
+    (handler-bind
+     ((style-warning (lambda (c)
+                       (declare (ignore c))
+                       (invoke-restart 'muffle-warning))))
+     ,@forms))
+
+  #-(or sbcl cmu lispworks allegro)
   `(with-redefinition-suppressed ,@forms))
 
 (defmacro with-more-warnings-suppressed (&rest forms)
@@ -1304,18 +1520,10 @@ ACL2 from scratch.")
 ; The handler-bind form given in with-warnings-suppressed for sbcl and cmucl is
 ; sufficient; we do not need anything further here.  But even with the addition
 ; of style-warnings (as commented there), that form doesn't seem to work for
-; CCL, Allegro CL, Lispworks, or CLISP.  So we bind some globals instead.
+; CCL, Allegro CL, or CLISP.  So we bind some globals instead.
 
-  #+lispworks
-  `(let ((compiler::*compiler-warnings* nil))
-     ,@forms)
-
-  #+allegro
-  `(handler-bind
-    ((style-warning (lambda (c)
-                      (declare (ignore c))
-                      (invoke-restart 'muffle-warning))))
-    ,@forms)
+; Through Version_8.3 we dealt with style-warning here when #+allegro, but that
+; is now done in with-warnings-suppressed.
 
   #+clisp
   `(let ((*compile-verbose* nil))
@@ -1325,7 +1533,7 @@ ACL2 from scratch.")
   `(let ((ccl::*suppress-compiler-warnings* t))
      ,@forms)
 
-  #-(or lispworks allegro clisp ccl)
+  #-(or clisp ccl)
   (if (cdr forms) `(progn ,@forms) (car forms)))
 
 (defmacro with-suppression (&rest forms)
@@ -1343,6 +1551,17 @@ ACL2 from scratch.")
             ("COMMON-LISP")
             (with-warnings-suppressed ,@forms)))
 
+; The following may prevent an error when SBCL compiles ec-calls in the
+; definition of apply$-lambda.  We may do something more principled in the
+; future.  The names could be obtained with (add-suffix name *inline-suffix*),
+; except that add-suffix and inline-suffix* are not yet defined here.  We could
+; wait until they are, but then we'd need to teach note-fns-in-form about
+; with-suppression.
+#-acl2-loop-only
+(with-suppression
+ (intern "CAR$INLINE" "COMMON-LISP")
+ (intern "CDR$INLINE" "COMMON-LISP"))
+
 (defconstant acl2::*acl2-status-file*
   (make-pathname :name "acl2-status"
                  :type "txt"))
@@ -1356,11 +1575,14 @@ ACL2 from scratch.")
    (or (not (probe-file *acl2-status-file*))
        (delete-file *acl2-status-file*))
    (load "acl2-check.lisp")
-   (with-open-file (str *acl2-status-file*
-                        :direction :output)
-                   (format str
-                           "~s"
-                           :checked))
+
+; At one time we wrote ":CHECKED" to the file *acl2-status-file*, in order to
+; avoid both running this check here and then later, running this check again
+; in compile-acl2.  But as of 2/2017 we timed the load above at about 1/5
+; second; that seemed sufficiently negligible that it seemed fine to
+; run the check twice in return for being able to avoid having "make full"
+; needlessly recompile when *acl2-status-file* is up-to-date.
+
    t))
 
 (defun note-compile-ok ()
@@ -1370,7 +1592,9 @@ ACL2 from scratch.")
                               :direction :output)
                          (format str
                                  "~s"
-                                 :compiled))))
+                                 (if *suppress-compile-build-time*
+                                     :compile-skipped
+                                   :compiled)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;                       COMPILING and LOADING, PART 1
@@ -1385,14 +1609,12 @@ ACL2 from scratch.")
 ; functions for ACL2 are in package "ACL2", so invoke (in-package
 ; "ACL2") to obviate typing package names.
 
-; NOTE:  In order to compile ACL2, checks must first be run on the suitability
+; NOTE: In order to compile ACL2, checks must first be run on the suitability
 ; of the underlying Common Lisp implementation, by executing
-; (check-suitability-for-acl2).  If the Common Lisp is suitable, this form will
-; write the file acl2-status.txt with the symbol :CHECKED.  Successful
-; compilation should write out that same file with the symbol :COMPILED.
-
-; Compiling is a no-op if *suppress-compile-build-time* is non-nil, but we
-; still write :COMPILED as indicated above.
+; (check-suitability-for-acl2).  Successful compilation should write out file
+; *acl2-status* with the symbol :COMPILED unless *suppress-compile-build-time*
+; is non-nil, in which case we skip compilation and write :COMPILE-SKIPPED
+; instead.
 
 (defvar *lisp-extension* "lisp")
 
@@ -1414,7 +1636,7 @@ ACL2 from scratch.")
 
 ; The following appears to allow tail recursion elimination for functions
 ; locally defined using LABELS.  This is important for efficiency since we
-; use LABELS in defining executable counterparts (see e.g. oneify-cltl-code).
+; use LABELS in defining executable-counterparts (see e.g. oneify-cltl-code).
 #+allegro
 (setq compiler:tail-call-non-self-merge-switch t)
 
@@ -1496,7 +1718,7 @@ ACL2 from scratch.")
 
 (defparameter *acl2-readtable*
   (copy-readtable nil)
-  "*acl2-readtable* is the readtable we use (a) to restrict the use
+  "*acl2-readtable* is the readtable we use (a) to restrict the use of
 #. to cause evaluation during READing (b) and to define our own version
 of backquote.")
 
@@ -1507,10 +1729,10 @@ which is saved just in case it's needed later.")
 
 (defun set-new-dispatch-macro-character (char subchar fn)
 
-; This function currently causes an error when attempting to build ACL2(h) on
-; top of CLISP, where (get-dispatch-macro-character #\# #\Y) evaluates to
-; #<SYSTEM-FUNCTION SYSTEM::CLOSURE-READER>.  Here is a discussion of that
-; issue.
+; This function has caused an error when attempting to build ACL2 (actually
+; ACL2(h), some time ago) on top of CLISP, where (get-dispatch-macro-character
+; #\# #\Y) evaluates to #<SYSTEM-FUNCTION SYSTEM::CLOSURE-READER>.  Here is a
+; discussion of that issue.
 
 ; With some thought we might be able to avoid the special cases below for which
 ; char is #\# and subchar is, for example, #\Y -- i.e., smashing (in that
@@ -1518,16 +1740,15 @@ which is saved just in case it's needed later.")
 ; semantics for ACL2 source files, to be read using *acl2-readtable*, while the
 ; host Lisp's semantics are expected for compiled files.  But consider files
 ; like .cert and @expansion.lsp files, i.e., files that may be written by the
-; host Lisp (see the call of prin1 in print-object$-ser) but are read by ACL2.
+; host Lisp (see the call of prin1 in print-object$-fn) but are read by ACL2.
 ; Perhaps the issue goes away if we are using the serialize reader and writer,
 ; as must be the case when we install a reader for #\Y.  We may think all this
 ; through when there is sufficient reason to do so.  For now, the only problem
 ; pertaining to our handling of dispatch macro characters is in the case of
-; CLISP and ACL2(h), since #\Y is already defined in CLISP -- this function
-; causes an error when attempting to build ACL2(h) on CLISP.  Since CLISP is
-; much slower than the other six host Lisps that we support, and since ACL2(h)
-; is optimized for CCL such that it is really only intended for CCL at this
-; point (June 2013), we can live without CLISP support for ACL2(h).
+; CLISP and ACL2, since #\Y is already defined in CLISP -- this function causes
+; an error when attempting to build ACL2 on CLISP.  Since CLISP is much slower
+; than the other host Lisps that we support, we can live without CLISP support
+; for ACL2.
 
   (let ((old (get-dispatch-macro-character char subchar)))
     (cond ((or (null old)
@@ -1572,11 +1793,7 @@ which is saved just in case it's needed later.")
    #\.
    #'sharp-dot-read))
 
-(defun define-sharp-atsign ()
-  (set-new-dispatch-macro-character
-   #\#
-   #\@
-   #'sharp-atsign-read))
+; Define-sharp-atsign is defined in interface-raw.lisp.
 
 (defun define-sharp-bang ()
   (set-new-dispatch-macro-character
@@ -1589,6 +1806,12 @@ which is saved just in case it's needed later.")
    #\#
    #\u
    #'sharp-u-read))
+
+(defun define-sharp-f ()
+  (set-new-dispatch-macro-character
+   #\#
+   #\f
+   #'sharp-f-read))
 
 (defvar *old-character-reader*
   (get-dispatch-macro-character #\# #\\))
@@ -1604,18 +1827,17 @@ which is saved just in case it's needed later.")
      'fancy-string-reader-macro)
 
 ; Thanks to Jared Davis for contributing the code for #\Y and #\Z (see
-; serialize-raw.lisp).  Note that p. 531 of CLtL2 specifies that #\Y and #\Z
-; may be available to us (though we check this by using
+; serialize-raw.lisp).  Note that Section 2.4.8 Sharpsign of the Common Lisp
+; Hyperspec (also Table 22-4, p. 531 of CLtL2) specifies that #\Y and #\Z may
+; be available to us (though we check this by using
 ; set-new-dispatch-macro-character).  Keep these two settings in sync with
 ; *reckless-acl2-readtable*.
 
-    #+hons ; SBCL requires #+hons (same restriction as ser-hons-reader-macro)
     (set-new-dispatch-macro-character
      #\#
      #\Z
      'ser-hons-reader-macro)
 
-    #+hons ; SBCL requires #+hons (same restriction as ser-cons-reader-macro)
     (set-new-dispatch-macro-character
      #\#
      #\Y
@@ -1643,9 +1865,10 @@ which is saved just in case it's needed later.")
 
     (when do-all-changes
       (define-sharp-dot)
-      (define-sharp-atsign)
+;     (define-sharp-atsign) ; see interface-raw.lisp
       (define-sharp-bang)
-      (define-sharp-u))
+      (define-sharp-u)
+      (define-sharp-f))
 
 ;  Keep control of character reader.  However, we do not need to keep such
 ;  control when reading in a .fas file for CLISP, and in fact, the set-theory
@@ -1672,9 +1895,10 @@ which is saved just in case it's needed later.")
           (copy-readtable *acl2-readtable*))
         (let ((*readtable* *acl2-readtable*))
           (define-sharp-dot)
-          (define-sharp-atsign)
+;         (define-sharp-atsign) ; see interface-raw.lisp
           (define-sharp-bang)
           (define-sharp-u)
+          (define-sharp-f)
           (set-dispatch-macro-character
            #\#
            #\\
@@ -1700,7 +1924,7 @@ which is saved just in case it's needed later.")
 ;                       Remarks on *acl2-readtable*
 ;
 ;
-; Because read-object$ calls the Common Lisp function read, read-object$
+; Because read-object calls the Common Lisp function read, read-object
 ; is a function of the values of the Common Lisp symbols (a)
 ; *readtable*, (b) *package*, and (c) *features*.  In ACL2, the user can
 ; specify the package to use, via in-package, which sets the global
@@ -1715,7 +1939,7 @@ which is saved just in case it's needed later.")
 ; the user must then leave *features* alone (even though the
 ; implementors of ACL2 put :acl2-loop-only onto *features* during
 ; boot-strapping).  One bad consequence of our *features* policy is that
-; verified files will not in general be verifiable or useable in other
+; verified files will not in general be verifiable or usable in other
 ; Lisp implementations or installations unless the settings of
 ; *features* relevant to one's usages of the #+ and #- are the same in
 ; the two Lisp implementations.  One simple way to obtain peace of mind
@@ -1799,7 +2023,7 @@ which is saved just in case it's needed later.")
 ;
 ; Eventually, it will be best to define a read function for ACL2 solely in terms
 ; of ACL2 character reading primitives.  Common Lisp read is ambiguous.  There is
-; the ambiguity of backquote described above.  There is the abiguity of which
+; the ambiguity of backquote described above.  There is the ambiguity of which
 ; tokens get read as numbers.  To make matters a little more scary, there is
 ; nothing that prevents a Common Lisp implementation from adding, for example, a
 ; new # readmacro option that would provide something as potentially catastrophic
@@ -1833,7 +2057,7 @@ which is saved just in case it's needed later.")
 ;
 ; So, we manage this simply by modifying the character reader so that
 ; the #\ notation only works for single characters and for Space, Tab,
-; Newline, Page, and Rubout; an error is caused otherwise.
+; Newline, Page, Rubout, and Return; an error is caused otherwise.
 
 ; Our algorithm for reading character objects starting with #\ is
 ; quite simple.  We accumulate characters until encountering a
@@ -1841,8 +2065,8 @@ which is saved just in case it's needed later.")
 ; *acl2-read-character-terminators*.  The result must be either a
 ; single standard character or else one of the names (up to case,
 ; which we ignore in the multiple-character case) SPACE, TAB, NEWLINE,
-; PAGE, and RUBOUT.  Otherwise we cause an error.  Note that if we do
-; NOT cause an error, then any dpANS-compliant Common Lisp
+; PAGE, RUBOUT, and RETURN.  Otherwise we cause an error.  Note that
+; if we do NOT cause an error, then any dpANS-compliant Common Lisp
 ; implementation's character reader would behave the same way, because
 ; dpANS says (in the section ``Sharpsign Backslash'') the following.
 
@@ -1954,7 +2178,7 @@ which is saved just in case it's needed later.")
 ; When use-acl2-proclaims is true, we are recompiling to take advantage of
 ; acl2-proclaims.lisp.  But if *do-proclaims* is false, then there shouldn't be
 ; such a file (or, it consists only of a comment), so there is no point in
-; recompiling, and we return immediatel.
+; recompiling, and we return immediately.
 
   #+gcl
   (unless (gcl-version->= 2 6 12)
@@ -1968,22 +2192,15 @@ You are using version ~s.~s.~s."
              (not *do-proclaims*)) ; see comment above
     (return-from compile-acl2 nil))
 
+; Juho Snellman points out that SBCL resets the compiler policy on entry to
+; LOAD / COMPILE-FILE, and restores the old value once the file has been loaded
+; / compiled; thus the global proclaim is no longer in effect once COMPILE-ACL2
+; gets called.  So we proclaim here even though for other Lisps besides SBCL it
+; might be redundant with the global proclaim above.
+
   (proclaim-optimize)
 
   (with-warnings-suppressed
-
-   #+sbcl
-   (declaim (optimize (safety 0) (space 0) (speed 3) (debug 0)))
-
-; Here is a natural place to put compiler options.  In fact, we put them above,
-; globally.
-
-; (declaim (optimize (safety 0) (space 0) (speed 3)))
-
-; However, Juho Snellman points out that SBCL resets the compiler policy on
-; entry to LOAD / COMPILE-FILE, and restores the old value once the file has
-; been loaded / compiled; thus the global declaim is no longer in effect once
-; COMPILE-ACL2 gets called.
 
 ; Note on Illegal Instructions:  If ACL2 causes an illegal instruction
 ; trap it is difficult to figure out what is happening.  Here is a
@@ -2045,10 +2262,13 @@ You are using version ~s.~s.~s."
    (unless (and (probe-file *acl2-status-file*)
                 (with-open-file (str *acl2-status-file*
                                      :direction :input)
-                                (eq (read str nil)
-                                    (if use-acl2-proclaims
-                                        :compiled
-                                      :checked))))
+                                (member (read str nil)
+
+; This check is insufficient to avoid running the check twice, but that's OK.
+; See the comment about ":CHECKED" in check-suitability-for-acl2.
+
+                                        '(:compiled
+                                          :compile-skipped))))
      (check-suitability-for-acl2))
    (when (not *suppress-compile-build-time*)
      (our-with-compilation-unit
@@ -2065,7 +2285,7 @@ You are using version ~s.~s.~s."
               (let ((source (make-pathname :name name
                                            :type *lisp-extension*)))
                 (load source)
-                (or (equal name "proof-checker-pkg")
+                (or (equal name "proof-builder-pkg")
                     (progn
                       (compile-file source)
                       (load-compiled
@@ -2102,7 +2322,7 @@ You are using version ~s.~s.~s."
 ; slow build for GCL (where we compile all *1* functions as we go through
 ; initialization).
 
-    #+(and gcl acl2-mv-as-values)
+    #+gcl
     (when fast
       (setq user::*fast-acl2-gcl-build* t))
 
@@ -2126,23 +2346,23 @@ You are using version ~s.~s.~s."
               )
        do
        (si::allocate-growth type 1 10 50 2)))
-    (cond
-     ((or (not (probe-file *acl2-status-file*))
-          (with-open-file (str *acl2-status-file*
-                               :direction :input)
-                          (not (member (read str nil)
-                                       '(:compiled :initialized)))))
-      (error "Please compile ACL2 using ~s, which will write~%~
-              the token :COMPILED to the file acl2-status.txt."
-             '(compile-acl2))))
+    (when (or (not (probe-file *acl2-status-file*))
+              (with-open-file (str *acl2-status-file*
+                                   :direction :input)
+                (not (member (read str nil)
+                             '(:compiled :compile-skipped :initialized)))))
+      (error "Please run ~s, which will write the token ~s to the file ~
+              acl2-status.txt."
+             '(compile-acl2)
+             (if *suppress-compile-build-time* :COMPILED :COMPILE-SKIPPED)))
     (let ((*readtable* *acl2-readtable*)
           (extension (if *suppress-compile-build-time*
                          *lisp-extension*
                        *compiled-file-extension*)))
       (dolist (name *acl2-files*)
         (or (equal name "defpkgs")
-            (if (equal name "proof-checker-pkg")
-                (load "proof-checker-pkg.lisp")
+            (if (equal name "proof-builder-pkg")
+                (load "proof-builder-pkg.lisp")
               (load-compiled (make-pathname :name name
                                             :type extension)))))
       (load "defpkgs.lisp")
@@ -2160,103 +2380,11 @@ You are using version ~s.~s.~s."
 ;                            DECLARATIONS
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-; We use XARGS in DECLARE forms.  By making this proclamation, we
-; suppress compiler warnings.
+; We use XARGS and IRRELEVANT in DECLARE forms.  By making this proclamation,
+; we suppress compiler warnings.
 
 (declaim (declaration xargs))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;                            EXITING LISP
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(defparameter *acl2-panic-exit-status* nil)
-
-(defun exit-lisp (&optional (status '0 status-p))
-
-; Parallelism blemish: In ACL2(p), LispWorks 6.0.1 hasn't always successfully
-; exited when exit-lisp was called.  The call below of stop-multiprocessing is
-; an attempt to improve the chance of a succesful exit.  In practice, the call
-; does not fix the problem.  However, we leave it for now since we don't think
-; it can hurt.  If exit-lisp starts working reliably without the following
-; calls to send-die-to-worker-threads and stop-multiprocessing, they should be
-; removed.
-
-  #+(and acl2-par lispworks)
-  (when mp::*multiprocessing*
-    (send-die-to-worker-threads)
-    (mp::stop-multiprocessing))
-
-; The status (an integer) will be returned as the exit status (shell variable
-; $?).  We avoid passing the status argument when it is 0, in case Windows or
-; other operating systems get confused by it.  However, this function is a
-; no-op if we are already in the process of quitting via this function; see the
-; comment below the occurrence below of *acl2-panic-exit-status*.
-
-; It appeared at one point that (ccl::quit 0) is more reliable than
-; (ccl::quit), but that's no longer clear.  Still, it seems reasonable to pass
-; the status explicitly to the individual Lisp's exit function if that status
-; is passed explicitly here -- hence the use of status-p.
-
-  (cond
-   ((null status) ; shouldn't happen
-    (error "Passed null status to exit-lisp!"))
-   (*acl2-panic-exit-status*
-
-; We have seen various type errors and bus errors when attempting to quit in
-; CCL.  Gary Byers pointed out that this may be caused by attempting to quit
-; while in the process of quitting.  So, we avoid doing a quit if already in
-; the process of quitting.
-
-    (return-from exit-lisp nil)))
-  (setq *acl2-panic-exit-status* status)
-  #+clisp
-  (if status-p (user::exit status) (user::exit))
-  #+lispworks ; Version 4.2.0; older versions have used bye
-  (if status-p (lispworks:quit :status status) (lispworks:quit))
-  #+akcl
-  (if status-p (si::bye status) (si::bye))
-  #+lucid
-  (lisp::exit) ; don't know how to handle status, but don't support lucid
-  #+ccl
-  (if status-p (ccl::quit status) (ccl::quit))
-  #+cmu
-  (cond ((null status-p)
-         (common-lisp-user::quit t))
-        (t ; quit does not take an exit status as of CMUCL version 19e
-         (unix:unix-exit status)))
-  #+allegro
-  (user::exit status :no-unwind t)
-  #+(and mcl (not ccl))
-  (cl-user::quit) ; mcl support is deprecated, so we don't worry about status
-  #+sbcl
-  (let ((sym (or (find-symbol "EXIT" 'sb-ext)
-                 (find-symbol "QUIT" 'sb-ext))))
-
-; Quoting http://www.sbcl.org/manual/#Exit, regarding sb-ext:quit:
-
-;   Deprecated in favor of sb-ext:exit as of 1.0.56.55 in May 2012. Expected to
-;   move into late deprecation in May 2013.
-
-    (cond ((or (null sym)
-               (not (fboundp sym)))
-           (error "No function named \"EXIT\" or \"QUIT\" is defined in the ~%~
-                   \"SB-EXT\" package.  Perhaps you are using a very old or ~%~
-                   very new version of SBCL.  If you are surprised by this ~%~
-                   message, feel free to contact the ACL2 implementors."))
-          ((equal (symbol-name sym) "EXIT")
-           (if status-p
-               (funcall sym :code status)
-             (funcall sym)))
-          (t ; (equal (symbol-name sym) "QUIT")
-           (if status-p
-               (funcall sym :unix-status status)
-             (funcall sym)))))
-
-; Return status (to avoid an ignore declaration) if we cannot exit lisp.  The
-; caller of this function should complain if Lisp survives the call.  The panic
-; flag may help though.
-
-  (progn status-p status))
+(declaim (declaration irrelevant))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;                            CONSTANTS
@@ -2269,24 +2397,52 @@ You are using version ~s.~s.~s."
 ; So starting with Version_2.6 we put the constants here, since this file
 ; (acl2.lisp) is not compiled and hence is only loaded once.
 
-; A slight complication is that *slashable-array* uses *slashable-chars*, which
-; in turn is used in the definition of function some-slashable.  (There are
-; other such examples, but we'll focus on that one.)  So, defconst
-; *slashable-chars* needs to be defined in the ACL2 loop even though, as of
-; Version_2.5, it was used in the definition of *slashable-array*, which we
-; want to include in the present file.  So we inline the defconsts below.
-
 (defconstant *slashable-array*
+
+; The list below comes from evaluating the following form in the supported
+; Lisps (Allegro CL, CCL, CMUCL, GCL, LispWorks, SBCL) and taking the union.
+; A similar form is found in check-slashable.
+
+;   (loop for i from 0 to 255
+;         when (let ((str (coerce (list (code-char i)
+;                                       #\A #\B
+;                                       (code-char i)
+;                                       #\U #\V
+;                                       (code-char i))
+;                                 'string)))
+;                (not (eq (ignore-errors (read-from-string str))
+;                         (intern str "CL-USER"))))
+;         collect i)
+
+; Our use of the form above is justified by the following paragraph from the
+; ANSI standard (also quoted in may-need-slashes-fn).
+
+;    When printing a symbol, the printer inserts enough single escape and/or
+;    multiple escape characters (backslashes and/or vertical-bars) so that if
+;    read were called with the same *readtable* and with *read-base* bound to
+;    the current output base, it would return the same symbol (if it is not
+;    apparently uninterned) or an uninterned symbol with the same print name
+;    (otherwise).
+
   (let ((ar (make-array 256 :initial-element nil)))
-    (dolist (ch
-
-; Inline *slashable-chars*; see the comment above.
-
-             '(#\Newline #\Page #\Space #\" #\# #\' #\( #\) #\, #\: #\; #\\ #\`
-               #\a #\b #\c #\d #\e #\f #\g #\h #\i #\j #\k #\l #\m #\n #\o #\p
-               #\q #\r #\s #\t #\u #\v #\w #\x #\y #\z #\|))
-            (setf (aref ar (char-code ch))
-                  t))
+    (loop for i in
+          '(0 1 2 3 4 5 6 7
+              8 9 10 11 12 13 14 15 16 17 18 19 20 21
+              22 23 24 25 26 27 28 29 30 31 32 34 35
+              39 40 41 44 58 59 92 96 97 98 99 100 101
+              102 103 104 105 106 107 108 109 110 111
+              112 113 114 115 116 117 118 119 120 121
+              122 124 127 128 129 130 131 132 133 134
+              135 136 137 138 139 140 141 142 143 144
+              145 146 147 148 149 150 151 152 153 154
+              155 156 157 158 159 160 168 170 175 178
+              179 180 181 184 185 186 188 189 190 224
+              225 226 227 228 229 230 231 232 233 234
+              235 236 237 238 239 240 241 242 243 244
+              245 246 248 249 250 251 252 253 254 255)
+          do
+          (setf (aref ar i)
+                t))
     ar))
 
 (defconstant *suspiciously-first-numeric-array*
@@ -2414,7 +2570,6 @@ You are using version ~s.~s.~s."
 ; The following constants were originally in memoize-raw.lisp, but CMUCL caused
 ; a redefinition error.  This may be the same problem as mentioned above for
 ; Allegro.
-#+hons
 (progn
 
 ; locals used in functions generated by memoize-fn
@@ -2578,6 +2733,5 @@ You are using version ~s.~s.~s."
                  (> ccl::*openmcl-minor-version* 10)))
   (setq ccl:*trust-paths-from-environment* nil))
 
-#+ccl ; originally for ACL2(h), but let's make behavior the same for ACL2
+#+ccl ; originally for ACL2(h), but here we make behavior the same for ACL2
 (setq ccl::*quit-on-eof* t)
-

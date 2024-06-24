@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -150,7 +138,7 @@
 		  (integerp n) (> n 0)
 		  (integerp k))
 	     (= (sticky (* (expt 2 k) x) n)
-		(* (expt 2 k) (sticky x n))))		
+		(* (expt 2 k) (sticky x n))))
   :rule-classes ()
   :hints (("goal" :in-theory (enable sticky a15)
 		  :use (;(:instance expt-pos (x k))
@@ -170,8 +158,8 @@
 ;; Fri Oct 13 13:35:15 2006
 ;; (i-am-here)
 
-(encapsulate () 
-  (local 
+(encapsulate ()
+  (local
    (defthm sticky-exactp-support
      (implies (and (rationalp x) (>= x 0)
                    (integerp n) (> n 0)
@@ -200,12 +188,12 @@
              ("Subgoal 1" :in-theory (enable sticky exactp-minus)
               :use ((:instance sticky-exactp-support
                                (x (* -1 x))))))))
-              
 
 
-(encapsulate () 
 
-  (local 
+(encapsulate ()
+
+  (local
    (defthm sticky-exactp-n-1-support
     (implies (and (rationalp x) (> x 0)
 		  (integerp n) (> n 1))
@@ -217,7 +205,7 @@
                               '( trunc-exactp-a))
 		  :use ((:instance trunc-exactp-a (n  (1- n)))
 			(:instance expo-trunc (n (1- n)))
-			(:instance expt-strong-monotone 
+			(:instance expt-strong-monotone
 				   (n (1+ (- (expo x) n)))
 				   (m (+ 2 (- (expo x) n))))
 ;			(:instance trunc-pos (n (1- n)))
@@ -240,7 +228,7 @@
            :use ((:instance sticky-exactp-n-1-support
                             (x (* -1 x))))))))
 
-  
+
 
 (local (defthm expo-sticky-1
     (implies (and (rationalp x) (> x 0)
@@ -248,7 +236,7 @@
 	     (<= (expt 2 (expo x))
 		 (sticky x n)))
   :rule-classes ()
-  :hints (("goal" 
+  :hints (("goal"
            :in-theory (enable sticky)
            :use ((:instance expo-trunc (n (1- n)))
 			(:instance expo-lower-bound (x (trunc x (1- n))))
@@ -288,7 +276,7 @@
                               '(trunc-exactp-a))
 		  :use ((:instance expo-sticky-2)
 			(:instance expo-upper-bound)
-			(:instance expt-strong-monotone 
+			(:instance expt-strong-monotone
 				   (n (1+ (- (expo x) n)))
 				   (m (+ 2 (- (expo x) n)))))))))
 
@@ -304,8 +292,8 @@
 			(:instance expo-unique (x (sticky x n)) (n (expo x))))))))
 
 
-(encapsulate () 
-  (local 
+(encapsulate ()
+  (local
    (defthm expo-sticky-support
     (implies (and (rationalp x) (> x 0)
 		  (integerp n) (> n 0))
@@ -325,7 +313,7 @@
 		  (integerp n) (> n 0))
 	     (= (expo (sticky x n))
 		(expo x)))
-  :rule-classes ()  
+  :rule-classes ()
   :hints (("Goal" :cases ((not (> x 0))))
           ("Subgoal 2" :by expo-sticky-support)
           ("Subgoal 1" :in-theory (enable sticky expo-minus)
@@ -348,8 +336,8 @@
 ;			(:instance trunc-trunc (n (1- n)) (m (1- n)))
 			(:instance trunc-away-a (x (sticky x n)) (n (1- n))))))))
 
-(encapsulate () 
-   (local   
+(encapsulate ()
+   (local
     (defthm trunc-sticky-support
       (implies (and (rationalp x) (> x 0)
                     (integerp m) (> m 0)
@@ -423,8 +411,8 @@
 			(:instance trunc-exactp-a (n (1- n)))
 ;			(:instance trunc-pos (n (1- n)))
 			(:instance trunc-diff-pos (n (1- n)))
-			(:instance away-exactp-c 
-				   (n (1- n)) 
+			(:instance away-exactp-c
+				   (n (1- n))
 				   (a (+ (trunc x (1- n))
 					 (expt 2 (+ (expo x) 2 (- n)))))))))))
 
@@ -440,7 +428,7 @@
 			away-sticky-3)))))
 
 (encapsulate ()
-   (local              
+   (local
     (defthm away-sticky-support
     (implies (and (rationalp x) (> x 0)
 		  (integerp m) (> m 0)
@@ -453,7 +441,7 @@
 			sticky-pos
 			(:instance away-away (n (1- n)))
 			(:instance away-away (n (1- n)) (x (sticky x n))))))))
-   
+
   (defthm away-sticky
     (implies (and (rationalp x) ;; (> x 0)
 		  (integerp m) (> m 0)
@@ -516,8 +504,8 @@
 			(:instance near-sticky-2))))))
 
 
-(encapsulate () 
-  (local 
+(encapsulate ()
+  (local
    (defthm near-sticky-support
     (implies (and (rationalp x) (> x 0)
 		  (integerp m) (> m 0)
@@ -531,7 +519,7 @@
 			(:instance away-sticky (m (1+ m)))
 			sticky-pos)))))
 
-  
+
    (defthm near-sticky
     (implies (and (rationalp x) ;; (> x 0)
 		  (integerp m) (> m 0)
@@ -595,8 +583,8 @@
 			(:instance near+-sticky-2))))))
 
 
-(encapsulate () 
-  (local 
+(encapsulate ()
+  (local
    (defthm near+-sticky-support
     (implies (and (rationalp x) (> x 0)
 		  (integerp m) (> m 0)
@@ -611,7 +599,7 @@
 			sticky-pos)))))
 
 
-  
+
    (defthm near+-sticky
     (implies (and (rationalp x) ;; (> x 0)
 		  (integerp m) (> m 0)
@@ -660,7 +648,7 @@
   :hints (("goal" :in-theory (disable fl+int-rewrite expo trunc-rewrite)
 		  :use ((:instance minus-trunc-1)
 			exactp2
-			(:instance fl+int-rewrite 
+			(:instance fl+int-rewrite
 				   (x (* y (expt 2 (- (1- k) (expo y)))))
 				   (n (- (* x (expt 2 (- (1- k) (expo y))))))))))))
 
@@ -908,7 +896,7 @@
 		  (not (exactp x n)))
 	     (= (away x n)
 		(+ (trunc x n)
-		   (expt 2 (+ (expo x) 1 (- n))))))		
+		   (expt 2 (+ (expo x) 1 (- n))))))
   :rule-classes ()
   :hints (("goal" :use ((:instance away-sticky-2 (n (1+ n)))
 			(:instance away-sticky-3 (n (1+ n)))))))
@@ -1051,14 +1039,14 @@
 	     (= (+ x (sticky y k))
 		(sticky (+ x y) k2)))
   :rule-classes ()
-  :hints (("Goal" :use (sticky-plus-original sticky-lemma-1 sticky-lemma-2 
+  :hints (("Goal" :use (sticky-plus-original sticky-lemma-1 sticky-lemma-2
                                     (:instance
                                      trunc-0
                                      (n (+ -1 K (* -1 (EXPO Y)))))))))
 
 
 ;from add3
-(local 
+(local
  (defthm sticky-sticky-1
    (implies (and (rationalp x)
 ;                 (> x 0)
@@ -1072,7 +1060,7 @@
    :rule-classes ()
    :hints (("goal" :use ((:instance sticky))))))
 
-(local 
+(local
  (defthm sticky-sticky-2
    (implies (and (rationalp x)
 ;                 (> x 0)
@@ -1184,7 +1172,7 @@
     (implies (and (rationalp x)
 		  (> x 0)
 		  (integerp m)
-		  (integerp n) 
+		  (integerp n)
 		  (> n m)
 		  (> m 0))
 	     (iff (exactp (sticky x n) m)
@@ -1201,7 +1189,7 @@
 (defthm sticky-exactp-m
     (implies (and (rationalp x)
 		  (integerp m)
-		  (integerp n) 
+		  (integerp n)
 		  (> n m)
 		  (> m 0))
 	     (iff (exactp (sticky x n) m)
@@ -1216,6 +1204,6 @@
    ;                     (:instance exactp- (x (- (sticky x n))) (n m))
                         ))))
 
-          
+
 
 

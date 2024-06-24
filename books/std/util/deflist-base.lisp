@@ -27,6 +27,7 @@
 ;   DEALINGS IN THE SOFTWARE.
 ;
 ; Original author: Jared Davis <jared@centtech.com>
+; Contributing author: Alessandro Coglio <coglio@kestrel.edu>
 ;
 ; Additional Copyright Notice.
 ;
@@ -65,12 +66,14 @@ generates basic, automatic @(see xdoc) documentation.</p>
    :verify-guards           t
    :guard-hints             nil
    :guard-debug             nil
+   :non-emptyp              nil
    :mode                    current defun-mode
    :cheap                   nil
    :verbosep                nil
    :parents                 nil
    :short                   nil
    :long                    nil
+   :prepwork                nil
 })
 
 <h4>Basic Examples</h4>
@@ -153,6 +156,10 @@ implicitly with @(see xdoc::set-default-parents), and suitable documentation
 will be automatically generated for @(':short') and @(':long').  If you don't
 like this documentation, you can supply your own @(':short') and/or @(':long')
 to override it.</p>
+
+<p>The optional @(':prepwork') may provide a list of event forms that are
+submitted just before the generated events.  These are preparatory events,
+e.g. local lemmas to help prove @(':elementp-of-nil').</p>
 
 <h3>Pluggable Architecture</h3>
 
@@ -323,6 +330,7 @@ of which recognizers require true-listp and which don't.</p>")
     :guard-hints
     :already-definedp
     :elementp-of-nil
+    :non-emptyp
     :mode
     :parents
     :short
@@ -330,6 +338,7 @@ of which recognizers require true-listp and which don't.</p>")
     :true-listp
     :rest
     :verbosep
+    :prepwork
     ;; Undocumented option for customizing the theory, mainly meant for
     ;; problematic cases, e.g., built-in functions where ACL2 "knows too much"
     :theory-hack))
@@ -338,14 +347,18 @@ of which recognizers require true-listp and which don't.</p>")
 
 (defun deflist-substitution (name formals element kwd-alist x)
   (b* ((negatedp (getarg :negatedp nil kwd-alist))
-       (true-listp (getarg :true-listp nil kwd-alist)))
+       (true-listp (getarg :true-listp nil kwd-alist))
+       (non-emptyp (getarg :non-emptyp nil kwd-alist)))
     `((acl2::element-p ,(if negatedp
                             `(lambda (,x) (not ,element))
                           `(lambda (,x) ,element)))
       (acl2::non-element-p ,(if negatedp
                                 `(lambda (,x) ,element)
                               `(lambda (,x) (not ,element))))
-      (acl2::element-list-p (lambda (,x) (,name . ,formals)))
+      (,(if non-emptyp
+            'acl2::element-list-nonempty-p
+          'acl2::element-list-p)
+       (lambda (,x) (,name . ,formals)))
       (acl2::element-list-final-cdr-p ,(if true-listp
                                            'not
                                          '(lambda (x) t))))))
@@ -400,6 +413,8 @@ of which recognizers require true-listp and which don't.</p>")
             (list 'not call))))
        (acl2::element-list-p
         (cons name (subst (cadr body) x formals)))
+       (acl2::element-list-nonempty-p
+        (cons name (subst (cadr body) x formals)))
        (t (if (symbolp (car body))
               (cons (car body)
                     (deflist-thmbody-list-subst (cdr body) element name formals x negatedp))
@@ -413,7 +428,9 @@ of which recognizers require true-listp and which don't.</p>")
 
 (defun deflist-thmname-subst (thmname listp-name elementp)
   (b* ((thmname (symbol-name thmname))
-       (subst-list `(("ELEMENT-LIST-P" . ,(symbol-name listp-name))
+       (subst-list `(("ELEMENT-LIST-NONEMPTY-P" . ,(symbol-name listp-name))
+                     ("ELEMENT-LIST-NONEMPTY" . ,(symbol-name listp-name))
+                     ("ELEMENT-LIST-P" . ,(symbol-name listp-name))
                      ("ELEMENT-LIST" . ,(symbol-name listp-name))
                      ("ELEMENT-P" . ,(symbol-name elementp))
                      ("ELEMENT" . ,(symbol-name elementp)))))
@@ -485,13 +502,15 @@ of which recognizers require true-listp and which don't.</p>")
               formals kwd-alist x req-alist fn-subst world))))
 
 (defun deflist-instantiate-table-thms (name formals element kwd-alist x world)
-  (b* ((table
+  (b* ((non-emptyp (getarg :non-emptyp nil kwd-alist))
+       (table
         ;; [Jared] added this reverse because it's nice for documentation for
         ;; the simpler rules (atom, consp, etc.) to show up first.  Since new
         ;; rules just get consed onto the table, if we don't do this reverse
         ;; then the first things you see are rules about revappend, remove,
         ;; last, etc., which are kind of obscure.
-        (reverse (table-alist 'acl2::listp-rules world)))
+
+        (reverse (table-alist (if non-emptyp 'acl2::nonempty-listp-rules 'acl2::listp-rules) world)))
        (fn-subst (deflist-substitution name formals element kwd-alist x))
        (req-alist (deflist-requirement-alist kwd-alist formals element)))
     (deflist-instantiate-table-thms-aux table element name formals kwd-alist x req-alist fn-subst world)))
@@ -558,8 +577,9 @@ of which recognizers require true-listp and which don't.</p>")
        (short            (getarg :short            nil      kwd-alist))
        (long             (getarg :long             nil      kwd-alist))
        (theory-hack      (getarg :theory-hack      nil      kwd-alist))
+       (non-emptyp       (getarg :non-emptyp       nil      kwd-alist))
 
-
+       (prepwork         (getarg :prepwork         nil      kwd-alist))
 
        (rest             (append
                           (getarg :rest nil kwd-alist)
@@ -613,17 +633,39 @@ of which recognizers require true-listp and which don't.</p>")
                          \"loose\" in that it does not care whether @('x') is
                          nil-terminated.</p>"))))
 
+       (car-test (if negatedp
+                     `(not (,elementp ,@(subst `(car ,x) x elem-formals)))
+                   `(,elementp ,@(subst `(car ,x) x elem-formals))))
+       (end-test (if true-listp
+                     `(null ,x)
+                   t))
+
        (def (if already-definedp
-                (and (or (and parents-p parents) short long)
-                     ;; Stupid hack to allow adding boilerplate documentation
-                     ;; to already-defined functions.  This isn't quite as good
-                     ;; as having the documentation as part of the DEFINE
-                     ;; because we won't get an automatic signature.  But it's
-                     ;; better than nothing.
-                     `((defxdoc ,name
-                         ,@(and (or parents-p parents) `(:parents ,parents))
-                         ,@(and short   `(:short ,short))
-                         ,@(and long    `(:long ,long)))))
+                ;; Stupid hack to allow adding boilerplate documentation to
+                ;; already-defined functions.  This isn't quite as good as
+                ;; having the documentation as part of the DEFINE because we
+                ;; won't get an automatic signature.  But it's better than
+                ;; nothing.
+                (and
+                 ;; If the user has already documented this function, there is
+                 ;; no reason to override their docs with something new.  But
+                 ;; using find-topic here doesn't fully work.  It works if the
+                 ;; previously defined topic is in the certification world when
+                 ;; the deflist is generated during certification, but not if
+                 ;; it is in the world before the book is included!  So we use
+                 ;; the :no-override flag to defxdoc instead.
+                 ;; (not (xdoc::find-topic name (xdoc::get-xdoc-table (w state))))
+
+                 ;; If we don't have any actual documentation to add, then
+                 ;; leave it alone and don't do anything.
+                 (or (and parents-p parents) short long)
+                 ;; Otherwise it seems pretty OK to add some docs.
+                 `((defxdoc ,name
+                     ,@(and (or parents-p parents) `(:parents ,parents))
+                     ,@(and short   `(:short ,short))
+                     ,@(and long    `(:long ,long))
+                     :no-override t)))
+
               `((define ,name (,@formals)
                   ,@(and (or parents-p parents) `(:parents ,parents))
                   ,@(and short   `(:short ,short))
@@ -639,29 +681,38 @@ of which recognizers require true-listp and which don't.</p>")
                          `(:verify-guards ,verify-guards
                            :guard-debug   ,guard-debug
                            :guard-hints   ,guard-hints))
-                  (if (consp ,x)
-                      (and ,(if negatedp
-                                `(not (,elementp ,@(subst `(car ,x) x elem-formals)))
-                              `(,elementp ,@(subst `(car ,x) x elem-formals)))
-                           (,name ,@(subst `(cdr ,x) x formals)))
-                    ,(if true-listp
-                         `(null ,x)
-                       t))))))
+                  ,(if non-emptyp
+                       `(and (consp ,x)
+                             ,car-test
+                             (let ((,x (cdr ,x)))
+                               (if (consp ,x)
+                                   (,name ,@formals)
+                                 ,end-test)))
+                     `(if (consp ,x)
+                          (and ,car-test
+                               (,name ,@(subst `(cdr ,x) x formals)))
+                        ,end-test))))))
 
        ((when (eq mode :program))
         `(encapsulate nil
            (program)
+           ,@prepwork
            ,@def
            ,@rest))
 
        (want-doc-p (or short long parents))
        (thms (deflist-instantiate-table-thms name formals element kwd-alist x (w state)))
+       (name-basics (intern-in-package-of-symbol
+                     (concatenate 'string (symbol-name name) "-BASICS")
+                     name))
        (thms-section
-        (if (not want-doc-p)
+        ;; Try to avoid introducing a foolist-p-basics section if we aren't generating
+        ;; docs or if there's already such a topic defined.
+        (if (or (not want-doc-p)
+                (and already-definedp
+                     (xdoc::find-topic name-basics (xdoc::get-xdoc-table (w state)))))
             `(progn . ,thms)
-          `(defsection-progn ,(intern-in-package-of-symbol
-                               (concatenate 'string (symbol-name name) "-BASICS")
-                               name)
+          `(defsection-progn ,name-basics
              :parents (,name)
              :short ,(concatenate 'string
                                   "Basic theorems about @(see "
@@ -671,6 +722,7 @@ of which recognizers require true-listp and which don't.</p>")
 
        (events
         `((logic)
+          ,@prepwork
           (set-inhibit-warnings ;; implicitly local
            "theory" "free" "non-rec" "double-rewrite" "subsume" "disable")
 

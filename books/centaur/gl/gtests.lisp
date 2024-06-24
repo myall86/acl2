@@ -33,6 +33,7 @@
 (include-book "gtypes")
 (include-book "tools/mv-nth" :dir :system)
 (local (include-book "gtype-thms"))
+(local (include-book "bfr-reasoning"))
 (set-inhibit-warnings "theory")
 
 (define mk-g-bdd-ite (bdd then else hyp)
@@ -85,7 +86,7 @@
            (mv (hf (if obj t nil))
                (hf nil) nil hyp))
           ((g-boolean bool) (mv (hf bool) (hf nil) nil hyp))
-          ((g-number &) (mv (hf t) (hf nil) nil hyp))
+          ((g-integer &) (mv (hf t) (hf nil) nil hyp))
           ((g-apply & &) (mv (hf nil) (hf t) x hyp))
           ((g-var &)   (mv (hf nil) (hf t) x hyp))
           ((g-ite test then else)
@@ -228,7 +229,6 @@
    (local
     (in-theory (disable (:definition generic-geval)
                         bfr-eval bfr-eval-list
-                        components-to-number-alt-def
                         bfr-eval-booleanp)))))
 
 (local
@@ -267,7 +267,6 @@
                                default-car default-cdr
                                bfr-eval-nonnil-forward
                                hons-assoc-equal
-                               break-g-number
                                not)))
    (local (in-theory (enable true-under-hyp-point
                              false-under-hyp-point)))

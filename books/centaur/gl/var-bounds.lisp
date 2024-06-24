@@ -35,12 +35,17 @@
 (include-book "gtypes")
 (include-book "bvar-db")
 (include-book "param")
-(local (include-book "centaur/misc/arith-equivs" :dir :system))
+(local (include-book "std/basic/arith-equivs" :dir :system))
+
+(defrefinement bfr-varname-equiv acl2::nat-equiv
+  :hints(("Goal" :in-theory (enable bfr-varname-fix aig-var-fix))))
 
 (defsection bfr-vars-bounded
   (defun-sk bfr-vars-bounded (n x)
     (forall m
-            (implies (<= (nfix n) (nfix m))
+            (implies (and (bfr-varname-p m)
+                          (or (not (natp m))
+                              (<= (nfix n) m)))
                      (not (bfr-depends-on m x))))
     :rewrite :direct)
 
@@ -57,18 +62,20 @@
 
   (local (defthm bfr-eval-of-set-non-dep-cong
            (implies (and (not (bfr-depends-on k x))
-                         (acl2::nat-equiv k k-equiv))
+                         (bfr-varname-equiv k k-equiv))
                     (equal (bfr-eval x (bfr-set-var k-equiv v env))
-                           (bfr-eval x env)))))
+                           (bfr-eval x env)))
+           :hints(("Goal" :in-theory (disable bfr-varname-equiv)))))
 
   (encapsulate nil
     (local (defthm bfr-semantic-depends-on-of-set-var-equiv
              (implies (and (not (bfr-semantic-depends-on k1 x))
-                           (acl2::nat-equiv k1 k2))
+                           (bfr-varname-equiv k1 k2))
                       (equal (bfr-eval x (bfr-set-var k2 v env))
-                             (bfr-eval x env)))))
+                             (bfr-eval x env)))
+             :hints(("Goal" :in-theory (disable bfr-varname-equiv)))))
 
-    (defcong acl2::nat-equiv equal (bfr-semantic-depends-on k x) 1
+    (defcong bfr-varname-equiv equal (bfr-semantic-depends-on k x) 1
       :hints(("Goal" :cases ((bfr-semantic-depends-on k x))
               :in-theory (e/d (bfr-depends-on)
                               (acl2::nat-equiv)))
@@ -77,16 +84,17 @@
                       `(:expand (,(cadar clause)))
                     `(:expand (,(cadar (last clause)))))))))
 
-  (defcong acl2::nat-equiv equal (bfr-depends-on k x) 1
+  (defcong bfr-varname-equiv equal (bfr-depends-on k x) 1
     :hints(("Goal" :cases ((bfr-depends-on k x))
-            :in-theory (enable bfr-depends-on))))
+            :in-theory (e/d (bfr-depends-on)
+                            (bfr-varname-equiv)))))
 
   (defcong acl2::nat-equiv equal (bfr-vars-bounded n x) 1
     :hints(("Goal"
             :use ((:instance bfr-vars-bounded-necc
-                   (m (bfr-vars-bounded-witness acl2::n-equiv x)))
+                   (m (bfr-vars-bounded-witness n-equiv x)))
                   (:instance bfr-vars-bounded-necc
-                   (n acl2::n-equiv)
+                   (n n-equiv)
                    (m (bfr-vars-bounded-witness n x))))
             :in-theory (e/d (bfr-vars-bounded)
                             (bfr-vars-bounded-necc)))))
@@ -129,7 +137,9 @@
 
   (defun-sk pbfr-vars-bounded (n p x)
     (forall m
-            (implies (<= (nfix n) (nfix m))
+            (implies (and (bfr-varname-p m)
+                          (or (not (natp m))
+                              (<= (nfix n) m)))
                      (not (pbfr-depends-on m p x))))
     :rewrite :direct)
 
@@ -146,40 +156,52 @@
 
   (local (defthm pbfr-eval-of-set-non-dep-cong
            (implies (and (not (pbfr-depends-on k p x))
-                         (acl2::nat-equiv k k-equiv)
+                         (bfr-varname-equiv k k-equiv)
                          (bfr-eval p env)
                          (bfr-eval p (bfr-set-var k-equiv v env)))
                     (equal (bfr-eval x (bfr-param-env p (bfr-set-var k-equiv v env)))
-                           (bfr-eval x (bfr-param-env p env))))))
+                           (bfr-eval x (bfr-param-env p env))))
+           :hints(("Goal" :in-theory (disable bfr-varname-equiv)))))
 
   (encapsulate nil
     (local (defthm pbfr-semantic-depends-on-of-set-var-equiv
              (implies (and (not (pbfr-semantic-depends-on k1 p x))
-                           (acl2::nat-equiv k1 k2)
+                           (bfr-varname-equiv k1 k2)
                            (bfr-eval p env)
                            (bfr-eval p (bfr-set-var k2 v env)))
                       (equal (bfr-eval x
                                        (bfr-param-env p (bfr-set-var k2 v env)))
-                             (bfr-eval x (bfr-param-env p env))))))
-    
+                             (bfr-eval x (bfr-param-env p env))))
+             :hints(("Goal" :in-theory (disable bfr-varname-equiv)))))
 
-    (defcong acl2::nat-equiv equal (pbfr-semantic-depends-on k p x) 1
+
+    (defcong bfr-varname-equiv equal (pbfr-semantic-depends-on k p x) 1
       :hints(("Goal" :cases ((pbfr-semantic-depends-on k p x))
-              :in-theory (disable acl2::nat-equiv))
+              :in-theory (disable bfr-varname-equiv))
              (and stable-under-simplificationp
                   (if (eq (caar clause) 'not)
                       `(:expand (,(cadar clause)))
                     `(:expand (,(cadar (last clause)))))))))
 
-  (defcong acl2::nat-equiv equal (pbfr-depends-on k p x) 1
-    :hints(("Goal" :in-theory (enable pbfr-depends-on))))
+  (defcong bfr-varname-equiv equal (pbfr-depends-on k p x) 1
+    :hints(("Goal" :in-theory (e/d (pbfr-depends-on) (bfr-varname-equiv)))))
+
+  (defthm pbfr-vars-bounded-implies-not-depends-on
+    (implies (and (pbfr-vars-bounded n p x)
+                  (b* ((m (bfr-varname-fix m)))
+                    (or (not (natp m))
+                        (<= (nfix n) m))))
+             (not (pbfr-depends-on m p x)))
+    :hints (("goal" :use ((:instance pbfr-vars-bounded-necc
+                           (m (bfr-varname-fix m))))
+             :in-theory (disable pbfr-vars-bounded-necc))))
 
   (defcong acl2::nat-equiv equal (pbfr-vars-bounded n p x) 1
     :hints(("Goal"
             :use ((:instance pbfr-vars-bounded-necc
-                   (m (pbfr-vars-bounded-witness acl2::n-equiv p x)))
+                   (m (pbfr-vars-bounded-witness n-equiv p x)))
                   (:instance pbfr-vars-bounded-necc
-                   (n acl2::n-equiv)
+                   (n n-equiv)
                    (m (pbfr-vars-bounded-witness n p x))))
             :in-theory (e/d (pbfr-vars-bounded)
                             (pbfr-vars-bounded-necc)))))
@@ -260,7 +282,13 @@
     (implies (not (consp x))
              (equal (pbfr-list-depends-on k p x)
                     nil))
-    :rule-classes ((:rewrite :backchain-limit-lst 0))))
+    :rule-classes ((:rewrite :backchain-limit-lst 0)))
+
+  (defcong bfr-varname-equiv equal (pbfr-list-depends-on k p x) 1
+    :hints(("Goal" :in-theory (e/d (pbfr-list-depends-on)
+                                   (bfr-varname-equiv)))))
+
+  )
 
 
 (defsection pbfr-list-vars-bounded
@@ -273,19 +301,23 @@
   (defun pbfr-list-vars-bounded-witness (n p x)
     (if (atom x)
         nil
-      (or (and (not (pbfr-vars-bounded n p (car x)))
-               (nfix (pbfr-vars-bounded-witness n p (car x))))
-          (pbfr-list-vars-bounded-witness n p (cdr x)))))
+      (if (not (pbfr-vars-bounded n p (car x)))
+          (pbfr-vars-bounded-witness n p (car x))
+        (pbfr-list-vars-bounded-witness n p (cdr x)))))
 
   (local (in-theory (enable pbfr-list-vars-bounded)))
 
-
-
   (defthm pbfr-list-vars-bounded-implies-not-depends-on
     (implies (and (pbfr-list-vars-bounded n p x)
-                  (<= (nfix n) (nfix m)))
+                  (b* ((m (bfr-varname-fix m)))
+                    (or (not (natp m))
+                        (<= (nfix n) m))))
              (not (pbfr-list-depends-on m p x)))
-    :hints(("Goal" :in-theory (enable pbfr-list-depends-on))))
+    :hints(("Goal" :in-theory (enable pbfr-list-depends-on)
+            :induct t)
+           (and stable-under-simplificationp
+                '(:use ((:instance pbfr-vars-bounded-necc
+                         (x (car x)) (m (bfr-varname-fix m))))))))
 
   (defthm pbfr-list-vars-bounded-incr
     (implies (and (pbfr-list-vars-bounded m p x)
@@ -300,14 +332,27 @@
     (implies (acl2::rewriting-positive-literal
               `(pbfr-list-vars-bounded ,n ,p ,x))
              (equal (pbfr-list-vars-bounded n p x)
-                    (let ((m (pbfr-list-vars-bounded-witness n p x)))
-                      (or (< (nfix m) (nfix n))
-                          (not (pbfr-list-depends-on m p x))))))
+                    (let ((m (bfr-varname-fix (pbfr-list-vars-bounded-witness n p x))))
+                      (implies (or (not (natp m))
+                                   (<= (nfix n) m))
+                               (not (pbfr-list-depends-on m p x))))))
     :hints(("Goal" :in-theory (enable pbfr-list-depends-on)
             :induct t)
            (and stable-under-simplificationp
                 '(:expand ((pbfr-vars-bounded n p (car x))
                            (:free (n) (pbfr-list-depends-on n p x)))))))
+
+  (local (defthm bfr-varname-p-of-nil
+           (and (not (bfr-varname-p nil))
+                (not (hide (bfr-varname-p nil))))
+           :hints(("Goal" :in-theory (e/d (bfr-varname-p)
+                                          ((bfr-varname-p)))
+                   :expand ((:free (x) (hide x)))))))
+
+  (defthm pbfr-vars-bounded-witness-when-not-bounded
+    (implies (not (pbfr-vars-bounded n p x))
+             (pbfr-vars-bounded-witness n p x))
+    :hints(("Goal" :in-theory (enable pbfr-vars-bounded))))
 
   (defthmd pbfr-list-vars-bounded-witness-under-iff
     (iff (pbfr-list-vars-bounded-witness n p x)
@@ -330,7 +375,11 @@
   (defthm pbfr-list-vars-bounded-of-bfr-to-param-space
     (implies (pbfr-list-vars-bounded k t x)
              (pbfr-list-vars-bounded k p (bfr-list-to-param-space p x)))
-    :hints(("Goal" :in-theory (enable bfr-list-to-param-space)))))
+    :hints(("Goal" :in-theory (enable bfr-list-to-param-space))))
+
+  (defthm pbfr-list-vars-bounded-of-list-fix
+    (equal (pbfr-list-vars-bounded k p (list-fix x))
+           (pbfr-list-vars-bounded k p x))))
 
 
 
@@ -365,12 +414,8 @@
          t
        (pattern-match x
          ((g-boolean b) (pbfr-vars-bounded k p b))
-         ((g-number n)
-          (b* (((mv rn rd in id) (break-g-number n)))
-            (and (pbfr-list-vars-bounded k p rn)
-                 (pbfr-list-vars-bounded k p rd)
-                 (pbfr-list-vars-bounded k p in)
-                 (pbfr-list-vars-bounded k p id))))
+         ((g-integer bits)
+          (pbfr-list-vars-bounded k p bits))
          ((g-ite test then else)
           (and (gobj-vars-bounded k p test)
                (gobj-vars-bounded k p then)
@@ -392,13 +437,9 @@
          nil
        (pattern-match x
          ((g-boolean b) (and (not (pbfr-vars-bounded k p b))
-                             (nfix (pbfr-vars-bounded-witness k p b))))
-         ((g-number n)
-          (b* (((mv rn rd in id) (break-g-number n)))
-            (or (pbfr-list-vars-bounded-witness k p rn)
-                (pbfr-list-vars-bounded-witness k p rd)
-                (pbfr-list-vars-bounded-witness k p in)
-                (pbfr-list-vars-bounded-witness k p id))))
+                             (pbfr-vars-bounded-witness k p b)))
+         ((g-integer bits) (and (not (pbfr-list-vars-bounded k p bits))
+                                (pbfr-list-vars-bounded-witness k p bits)))
          ((g-ite test then else)
           (or (gobj-vars-bounded-witness k p test)
               (gobj-vars-bounded-witness k p then)
@@ -420,12 +461,16 @@
   (defthm-gobj-flag
     (defthm gobj-vars-bounded-implies-not-depends-on
       (implies (and (gobj-vars-bounded k p x)
-                    (<= (nfix k) (nfix n)))
+                    (b* ((n (bfr-varname-fix n)))
+                      (or (not (natp n))
+                          (<= (nfix k) n))))
                (not (gobj-depends-on n p x)))
       :flag gobj)
     (defthm gobj-list-vars-bounded-implies-not-depends-on
       (implies (and (gobj-list-vars-bounded k p x)
-                    (<= (nfix k) (nfix n)))
+                    (b* ((n (bfr-varname-fix n)))
+                      (or (not (natp n))
+                          (<= (nfix k) n))))
                (not (gobj-list-depends-on n p x)))
       :flag list))
 
@@ -458,21 +503,24 @@
       (implies (acl2::rewriting-positive-literal
                 `(gobj-vars-bounded ,k ,p ,x))
                (equal (gobj-vars-bounded k p x)
-                      (let ((n (gobj-vars-bounded-witness k p x)))
-                        (or (< (nfix n) (nfix k))
-                            (not (gobj-depends-on n p x))))))
+                      (let ((n (bfr-varname-fix (gobj-vars-bounded-witness k p x))))
+                        (implies (or (not (natp n))
+                                     (<= (nfix k) n))
+                                 (not (gobj-depends-on n p x))))))
       :hints ('(:expand ((gobj-vars-bounded k p x)
                          (gobj-vars-bounded-witness k p x)))
               (and stable-under-simplificationp
-                   `(:expand ((PBFR-VARS-BOUNDED K P (G-BOOLEAN->BOOL X))))))
+                   `(:expand ((PBFR-VARS-BOUNDED K P (G-BOOLEAN->BOOL X)))
+                     :do-not-induct t)))
       :flag gobj)
     (defthm gobj-list-vars-bounded-in-terms-of-witness
       (implies (acl2::rewriting-positive-literal
                 `(gobj-list-vars-bounded ,k ,p ,x))
                (equal (gobj-list-vars-bounded k p x)
-                      (let ((n (gobj-list-vars-bounded-witness k p x)))
-                        (or (< (nfix n) (nfix k))
-                            (not (gobj-list-depends-on n p x))))))
+                      (let ((n (bfr-varname-fix (gobj-list-vars-bounded-witness k p x))))
+                        (implies (or (not (natp n))
+                                     (<= (nfix k) n))
+                                 (not (gobj-list-depends-on n p x))))))
       :flag list)
     :hints (("goal" :in-theory (e/d (pbfr-list-vars-bounded-in-terms-of-witness
                                      pbfr-list-vars-bounded-witness-under-iff)
@@ -523,7 +571,7 @@
     (implies (and (gobj-vars-bounded k p x)
                   (NOT (EQUAL (TAG X) :G-CONCRETE))
                   (NOT (EQUAL (TAG X) :G-BOOLEAN))
-                  (NOT (EQUAL (TAG X) :G-NUMBER))
+                  (NOT (EQUAL (TAG X) :G-INTEGER))
                   (NOT (EQUAL (TAG X) :G-ITE))
                   (NOT (EQUAL (TAG X) :G-VAR))
                   (NOT (EQUAL (TAG X) :G-APPLY)))
@@ -533,7 +581,7 @@
     (implies (and (gobj-vars-bounded k p x)
                   (NOT (EQUAL (TAG X) :G-CONCRETE))
                   (NOT (EQUAL (TAG X) :G-BOOLEAN))
-                  (NOT (EQUAL (TAG X) :G-NUMBER))
+                  (NOT (EQUAL (TAG X) :G-INTEGER))
                   (NOT (EQUAL (TAG X) :G-ITE))
                   (NOT (EQUAL (TAG X) :G-VAR))
                   (NOT (EQUAL (TAG X) :G-APPLY)))
@@ -544,30 +592,16 @@
                   (eq (tag x) :g-boolean))
              (pbfr-vars-bounded k p (g-boolean->bool x))))
 
-  (defthm gobj-vars-bounded-of-g-number->num-0
+  (defthm gobj-vars-bounded-of-g-integer->bits
     (implies (and (gobj-vars-bounded k p x)
-                  (eq (tag x) :g-number))
-             (pbfr-list-vars-bounded k p (mv-nth 0 (break-g-number (g-number->num x))))))
-
-  (defthm gobj-vars-bounded-of-g-number->num-1
-    (implies (and (gobj-vars-bounded k p x)
-                  (eq (tag x) :g-number))
-             (pbfr-list-vars-bounded k p (mv-nth 1 (break-g-number (g-number->num x))))))
-
-  (defthm gobj-vars-bounded-of-g-number->num-2
-    (implies (and (gobj-vars-bounded k p x)
-                  (eq (tag x) :g-number))
-             (pbfr-list-vars-bounded k p (mv-nth 2 (break-g-number (g-number->num x))))))
-
-  (defthm gobj-vars-bounded-of-g-number->num-3
-    (implies (and (gobj-vars-bounded k p x)
-                  (eq (tag x) :g-number))
-             (pbfr-list-vars-bounded k p (mv-nth 3 (break-g-number (g-number->num x))))))
+                  (eq (tag x) :g-integer))
+             (pbfr-list-vars-bounded k p (g-integer->bits x))))
 
   (defthm-gobj-flag
     (defthm generic-geval-of-set-var-when-gobj-vars-bounded
       (implies (and (gobj-vars-bounded m p x)
-                    (<= (nfix m) (nfix k))
+                    (or (not (natp (bfr-varname-fix k)))
+                        (<= (nfix m) (bfr-varname-fix k)))
                     (bfr-eval p env)
                     (bfr-eval p (bfr-set-var k v env)))
                (equal (generic-geval x (cons (bfr-param-env p (bfr-set-var k v env))
@@ -578,7 +612,8 @@
       :flag gobj)
     (defthm generic-geval-list-of-set-var-when-gobj-vars-bounded
       (implies (and (gobj-list-vars-bounded m p x)
-                    (<= (nfix m) (nfix k))
+                    (or (not (natp (bfr-varname-fix k)))
+                        (<= (nfix m) (bfr-varname-fix k)))
                     (bfr-eval p env)
                     (bfr-eval p (bfr-set-var k v env)))
                (equal (generic-geval-list x (cons (bfr-param-env p (bfr-set-var k v env))
@@ -618,13 +653,9 @@
                 (gobj-vars-bounded k p then)
                 (gobj-vars-bounded k p else))))
 
-  (defthm gobj-vars-bounded-of-g-number
-    (equal (gobj-vars-bounded k p (g-number num))
-           (b* (((mv rn rd in id) (break-g-number num)))
-             (and (pbfr-list-vars-bounded k p rn)
-                  (pbfr-list-vars-bounded k p rd)
-                  (pbfr-list-vars-bounded k p in)
-                  (pbfr-list-vars-bounded k p id)))))
+  (defthm gobj-vars-bounded-of-g-integer
+    (equal (gobj-vars-bounded k p (g-integer bits))
+           (pbfr-list-vars-bounded k p bits)))
 
   (defthm gobj-vars-bounded-of-g-boolean
     (equal (gobj-vars-bounded k p (g-boolean bool))
@@ -666,13 +697,10 @@
            (boolean-listp (n2v n))
            :hints(("Goal" :in-theory (e/d (bfr-ucons) (logcar logcdr))))))
 
-  (defthm gobj-vars-bounded-of-mk-g-number
-    (implies (and (pbfr-list-vars-bounded k p rn)
-                  (pbfr-list-vars-bounded k p rd)
-                  (pbfr-list-vars-bounded k p in)
-                  (pbfr-list-vars-bounded k p id))
-             (gobj-vars-bounded k p (mk-g-number rn rd in id)))
-    :hints(("Goal" :in-theory (e/d (mk-g-number-fn)
+  (defthm gobj-vars-bounded-of-mk-g-integer
+    (implies (pbfr-list-vars-bounded k p bits)
+             (gobj-vars-bounded k p (mk-g-integer bits)))
+    :hints(("Goal" :in-theory (e/d (mk-g-integer)
                                    (i2v n2v
                                         equal-of-booleans-rewrite
                                         set::double-containment)))))
@@ -687,7 +715,7 @@
                 :in-theory (enable mk-g-ite
                                    mk-g-boolean
                                    ; mk-g-number
-                                   gnumber-to-param-space)))
+                                   )))
       :flag gobj)
     (defthm gobj-list-vars-bounded-of-gobj-list-to-param-space
       (implies (gobj-list-vars-bounded k t x)
@@ -717,7 +745,8 @@
 
   (defthm gobj-alist-vars-bounded-implies-not-depends-on
     (implies (and (gobj-alist-vars-bounded k p x)
-                  (<= (nfix k) (nfix n)))
+                  (or (not (natp (bfr-varname-fix n)))
+                      (<= (nfix k) (bfr-varname-fix n))))
              (not (gobj-alist-depends-on n p x)))
     :hints(("Goal" :in-theory (enable gobj-alist-depends-on))))
 
@@ -744,9 +773,10 @@
     (implies (acl2::rewriting-positive-literal
               `(gobj-alist-vars-bounded ,k ,p ,x))
              (equal (gobj-alist-vars-bounded k p x)
-                    (let ((n (gobj-alist-vars-bounded-witness k p x)))
-                      (or (< (nfix n) (nfix k))
-                          (not (gobj-alist-depends-on n p x))))))
+                    (let ((n (bfr-varname-fix (gobj-alist-vars-bounded-witness k p x))))
+                      (implies (or (not (natp n))
+                                   (<= (nfix k) n))
+                               (not (gobj-alist-depends-on n p x))))))
     :hints(("Goal" :in-theory (enable gobj-alist-depends-on
                                       gobj-vars-bounded-in-terms-of-witness))))
 

@@ -47,13 +47,13 @@ solver</a>."
   :long "<h3>Overview</h3>
 
 <p>GL is a convenient and efficient tool for solving many finite ACL2 theorems
-that arise in @(see acl2::hardware-verification) and other contexts.  It plays
-an important role in the verification of arithmetic units and microcode
-routines at <a href='http://www.centtech.com/'>Centaur Technology</a>.</p>
+that arise in @(see acl2::hardware-verification) and other contexts.  It has
+played an important role in the verification of arithmetic units and microcode
+routines at Centaur Technology.</p>
 
-<p>GL <b>requires ACL2(h)</b> because it makes extensive use of @(see
-acl2::hons-and-memoization).  Some optional parts of GL also require <see
-topic='@(url defttag)'>trust tags</see>.</p>
+<p>GL makes extensive use of @(see acl2::hons-and-memoization).  Some
+optional parts of GL also require <see topic='@(url defttag)'>trust
+tags</see>.</p>
 
 <p>GL translates ACL2 problems into Boolean problems that can be solved by
 automatic @(see acl2::boolean-reasoning) tools.  When this approach can be
@@ -155,10 +155,9 @@ anyone who wants to extend GL.</dd>
 
 <dt>The documentation for @(see acl2::hons-and-memoization).</dt>
 
-<dd>GL makes heavy use of the ACL2(h) extension for hash consing and
-memoization.  GL users will likely want to be aware of the basics of ACL2(h),
-and of commands like @(see hons-summary), @(see hons-wash), and @(see
-acl2::set-max-mem).</dd>
+<dd>GL makes heavy use of hash consing and memoization.  GL users will likely
+want to be aware of the basics of @(see hons-and-memoization), and of commands
+like @(see hons-summary), @(see hons-wash), and @(see acl2::set-max-mem).</dd>
 
 </dl>
 
@@ -187,11 +186,10 @@ is used as the engine for @(see gl-aig-bddify-mode).</dd>
 
 <h4>GL Applications</h4>
 
-<p>GL has been used at <a href='http://www.centtech.com/'>Centaur
-Technology</a> to verify RTL implementations of floating-point addition,
-multiplication, and conversion operations, as well as hundreds of bitwise and
-arithmetic operations on scalar and packed integers.  Some papers describing
-some of this work include:</p>
+<p>GL has been used at Centaur Technology to verify RTL implementations of
+floating-point addition, multiplication, and conversion operations, as well as
+hundreds of bitwise and arithmetic operations on scalar and packed integers.
+Some papers describing some of this work include:</p>
 
 <ul>
 
@@ -223,8 +221,7 @@ ACL2</a>.  In ACL2 Workshop 2009, ACM, 2009.  Pages 20-24.</li>
 written as a raw Lisp extension of the ACL2 kernel, so using it meant trusting
 this additional code.  In contrast, GL is implemented as ACL2 books and its
 proof procedure is formally verified by ACL2, so the only code we have to trust
-besides ACL2 is the ACL2(h) extension that provides @(see
-acl2::hons-and-memoization).</p>")
+is in ACL2, including its @(see acl2::hons-and-memoization) features.</p>")
 
 
 (defxdoc debugging
@@ -354,10 +351,10 @@ numbers.  If it runs into a call of @('(* 1/3 x)'), it may represent the result
 abstractly, as a term-like symbolic object:</p>
 
 @({
-    (:g-apply binary-*  1/3  (:g-number ...))
+    (:g-apply binary-*  1/3  (:g-integer ...))
 })
 
-<p>(assuming @('x') is represented as a @(':g-number') object).  This sort of
+<p>(assuming @('x') is represented as a @(':g-integer) object).  This sort of
 abstraction can help to avoid creating potentially very-expensive symbolic
 objects, and is an important part of GL's @(see term-level-reasoning).</p>
 
@@ -555,26 +552,13 @@ construction and its evaluation.</p>
 the evaluation of @('<bdd>') using the list of Booleans in the
 environment.</dd>
 
-<dt>Representation: (:G-NUMBER . list-of-lists-of-bdds)</dt>
-<dt>Constructor: (G-NUMBER list-of-lists-of-bdds)</dt>
+<dt>Representation: (:G-INTEGER . list-of-bfrs)</dt>
+<dt>Constructor: (G-INTEGER list-of-bfrs)</dt>
 
-<dd>Evaluates to a (complex rational) number.  @('<list-of-lists-of-bdds>')
-should be a list containing four or fewer lists of UBDDs, which represent (in
-order):
-
-<ul>
-<li>the numerator of the real part  (two's-complement, default 0)</li>
-<li>the denominator of the real part (unsigned, default 1)</li>
-<li>the numerator of the imaginary part (two's-complement, default 0)</li>
-<li>the denominator of the imaginary part (unsigned, default 1).</li>
-</ul>
-
-It is most common to represent an integer, for which only the first list need
-be included.  In both the two's-complement and unsigned representations, the
-bits are ordered from least to most significant, with the last bit in the two's
-complement representation giving the sign.  Two's complement lists may be
-sign-extended by repeating the final bit, and unsigned lists may be
-zero-extended by appending NILs after the final bit.</dd>
+<dd>Evaluates to an integer.  @('<list-of-bfrs>') gives the bits of the
+integer, least significant first.  The representation is two's-complement,
+i.e. the last bit represents 0 if false or -1 if true.  The enpty list
+represents 0.</dd>
 
 <dt>Representation (:G-CONCRETE . object)</dt>
 <dt>Constructor: (G-CONCRETE object)</dt>
@@ -613,7 +597,7 @@ object.  If the evaluator recognizes @('<fn>') and @('<arglist>') evaluates to
 <dt>Representation: atom</dt>
 
 <dd>Every atom evaluates to itself.  However, the keyword symbols
-:G-BOOLEAN, :G-NUMBER, :G-CONCRETE, :G-VAR, :G-ITE, and :G-APPLY are not
+:G-BOOLEAN, :G-INTEGER, :G-CONCRETE, :G-VAR, :G-ITE, and :G-APPLY are not
 themselves well-formed symbolic objects.</dd>
 
 <dt>Representation: @('(car . cdr)')</dt>
@@ -635,7 +619,7 @@ G-CONCRETE forms.</li>
 
 <li>Most ACL2 objects are themselves well-formed symbolic objects which
 evaluate to themselves.  The exceptions are ones which contain the special
-keyword symbolis :G-BOOLEAN, :G-NUMBER, :G-CONCRETE, :G-VAR,
+keyword symbolis :G-BOOLEAN, :G-INTEGER :G-CONCRETE, :G-VAR,
 :G-ITE, and :G-APPLY.  These atoms (and out of all atoms, only these)
 are not well-formed symbolic objects.  Since a cons of any two
 well-formed symbolic objects is itself a well-formed symbolic objects,
@@ -734,7 +718,7 @@ follows.  The initial goal is as follows:</p>
 <p>The coverage heuristics proceed by repeatedly opening up the
 @('GL::SHAPE-SPEC-OBJ-IN-RANGE') function.  This effectively splits the proof
 into cases for each component of each variable; for example, if one variable's
-shape specifier binding is a cons of two :G-NUMBER forms, then its CAR and CDR
+shape specifier binding is a cons of two :G-INTEGER forms, then its CAR and CDR
 will be considered separately.  Eventually, this results in several subgoals,
 each with conjunction of requirements for some component of some input.</p>
 
@@ -1080,7 +1064,7 @@ performance.</p>
 <p>This is somewhat involved.  Generally, such a function operates by cases on
 what kinds of symbolic objects it has been given.  Most of these cases are
 easy; for instance, the symbolic counterpart for @(see consp) just returns
-@('nil') when given a @(':g-boolean') or @(':g-number').  But in other cases
+@('nil') when given a @(':g-boolean') or @(':g-integer').  But in other cases
 the operation can require combining the Boolean expressions making up the
 arguments in some way, e.g., the symbolic counterpart for @(see binary-*)
 implements a simple binary multiplier.</p>
@@ -1200,44 +1184,44 @@ with the following call of @(see def-gl-param-thm)</p>
 
 @({
 
-(def-gl-param-thm finite-commute-of-*
-  :hyp (and (natp a)
-            (< a (expt 2 16))
-            (natp n)
-            (< n 8))
-  :concl (equal (* n a)
-                (* a n))
-  :param-bindings `((((lsb 0) (mid-sb 0) (high-sb 0))
-                     ,(gl::auto-bindings (:nat a 16)
-                                         (:nat n 3)))
-                    (((lsb 0) (mid-sb 0) (high-sb 1))
-                     ,(gl::auto-bindings (:nat a 16)
-                                         (:nat n 3)))
-                    (((lsb 0) (mid-sb 1) (high-sb 0))
-                     ,(gl::auto-bindings (:nat a 16)
-                                         (:nat n 3)))
-                    (((lsb 0) (mid-sb 1) (high-sb 1))
-                     ,(gl::auto-bindings (:nat a 16)
-                                         (:nat n 3)))
-                    (((lsb 1) (mid-sb 0) (high-sb 0))
-                     ,(gl::auto-bindings (:nat a 16)
-                                         (:nat n 3)))
-                    (((lsb 1) (mid-sb 0) (high-sb 1))
-                     ,(gl::auto-bindings (:nat a 16)
-                                         (:nat n 3)))
-                    (((lsb 1) (mid-sb 1) (high-sb 0))
-                     ,(gl::auto-bindings (:nat a 16)
-                                         (:nat n 3)))
-                    (((lsb 1) (mid-sb 1) (high-sb 1))
-                     ,(gl::auto-bindings (:nat a 16)
-                                         (:nat n 3))))
-  :param-hyp (equal n
-                    (logapp 1 lsb
-                            (logapp 1 mid-sb
-                                    high-sb)))
+    (def-gl-param-thm finite-commute-of-*
+      :hyp (and (natp a)
+                (< a (expt 2 16))
+                (natp n)
+                (< n 8))
+      :concl (equal (* n a)
+                    (* a n))
+      :param-bindings `((((lsb 0) (mid-sb 0) (high-sb 0))
+                         ,(gl::auto-bindings (:nat a 16)
+                                             (:nat n 3)))
+                        (((lsb 0) (mid-sb 0) (high-sb 1))
+                         ,(gl::auto-bindings (:nat a 16)
+                                             (:nat n 3)))
+                        (((lsb 0) (mid-sb 1) (high-sb 0))
+                         ,(gl::auto-bindings (:nat a 16)
+                                             (:nat n 3)))
+                        (((lsb 0) (mid-sb 1) (high-sb 1))
+                         ,(gl::auto-bindings (:nat a 16)
+                                             (:nat n 3)))
+                        (((lsb 1) (mid-sb 0) (high-sb 0))
+                         ,(gl::auto-bindings (:nat a 16)
+                                             (:nat n 3)))
+                        (((lsb 1) (mid-sb 0) (high-sb 1))
+                         ,(gl::auto-bindings (:nat a 16)
+                                             (:nat n 3)))
+                        (((lsb 1) (mid-sb 1) (high-sb 0))
+                         ,(gl::auto-bindings (:nat a 16)
+                                             (:nat n 3)))
+                        (((lsb 1) (mid-sb 1) (high-sb 1))
+                         ,(gl::auto-bindings (:nat a 16)
+                                             (:nat n 3))))
+      :param-hyp (equal n
+                        (logapp 1 lsb
+                                (logapp 1 mid-sb
+                                        high-sb)))
 
-  :cov-bindings (gl::auto-bindings (:nat a 16)
-                                   (:nat n 3)))
+      :cov-bindings (gl::auto-bindings (:nat a 16)
+                                       (:nat n 3)))
 
 })
 
@@ -1250,7 +1234,7 @@ between the variables in the theorem that we want to case-split and the values
 given in @(':param-bindings').  In this example, we essentially encode a truth
 table into @(':param-bindings') using the least significant bit (@('lsb')),
 middle significant bit
-(@'(mid-sb')), and most significant bit (@('high-sb')).  We then indicate that
+(@('mid-sb')), and most significant bit (@('high-sb')).  We then indicate that
 these three significant-bit variables appended together represent the variable
 @('n') in our theorem.</p>
 
@@ -1441,7 +1425,7 @@ the form:</p>
 <p>These are called coverage obligations.  Shape-spec-obj-in-range says that the
 value var is expressible by the given shape-spec; that is, the shape-spec
 covers all possible values of var satisfying the hyps.  For example, if the
-shape-spec is the :g-number construct for a 10-bit integer, then the
+shape-spec is the :g-integer construct for a 10-bit integer, then the
 shape-spec-obj-in-range term reduces to:</p>
 
 @({
@@ -1465,10 +1449,10 @@ whatsoever, so its coverage obligations are trivial.</p>
 <li>INV, a 1-argument function symbol or lambda, the inverse function.</li>
 </ul>
 
-<p>The symbolic term resulting from this shape spec is simply the application
-(G-APPLY) of FN to the symbolic objects derived from ARGS.  INV is an extra
-piece of information that tells us how to prove coverage.  Its usage is
-discussed in @(see g-call).</p>
+<p>The symbolic term resulting from this shape spec is simply the
+application (G-APPLY) of FN to the symbolic objects derived from ARGS.  INV is
+an extra piece of information that tells us how to prove coverage.  Its usage
+is discussed in @(see g-call).</p>
 
 <h3>Automatic Boolean Variable Generation</h3>
 
@@ -1587,7 +1571,3 @@ false counterexamples, however.</p>
    (mem (update-mem addr val mem))
    :test (quotep addr))
 })")
-
-
-
-

@@ -1,3 +1,32 @@
+; GL - A Symbolic Simulation Framework for ACL2
+; Copyright (C) 2008-2013 Centaur Technology
+;
+; Contact:
+;   Centaur Technology Formal Verification Group
+;   7600-C N. Capital of Texas Highway, Suite 300, Austin, TX 78731, USA.
+;   http://www.centtech.com/
+;
+; License: (An MIT/X11-style license)
+;
+;   Permission is hereby granted, free of charge, to any person obtaining a
+;   copy of this software and associated documentation files (the "Software"),
+;   to deal in the Software without restriction, including without limitation
+;   the rights to use, copy, modify, merge, publish, distribute, sublicense,
+;   and/or sell copies of the Software, and to permit persons to whom the
+;   Software is furnished to do so, subject to the following conditions:
+;
+;   The above copyright notice and this permission notice shall be included in
+;   all copies or substantial portions of the Software.
+;
+;   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+;   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+;   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+;   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+;   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+;   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+;   DEALINGS IN THE SOFTWARE.
+;
+; Original author: Sol Swords <sswords@centtech.com>
 
 (in-package "GL")
 
@@ -208,7 +237,7 @@
       (hons-acons (gobj-list-to-param-space (caar sig-table) p)
                   (parametrize-gobj-alists p (cdar sig-table))
                   (parametrize-sig-table p (cdr sig-table))))))
-                   
+
 
 (defund parametrize-constraint-db-tuples (p tuples)
   (declare (xargs :guard t))
@@ -255,7 +284,9 @@
 
   (defthm gobj-alist-list-vars-bounded-implies-not-depends-on
     (implies (and (gobj-alist-list-vars-bounded k p x)
-                  (<= (nfix k) (nfix n)))
+                  (let ((n (bfr-varname-fix n)))
+                    (or (not (natp n))
+                        (<= (nfix k) n))))
              (not (gobj-alist-list-depends-on n p x)))
     :hints(("Goal" :in-theory (e/d (gobj-alist-list-depends-on)))))
 
@@ -272,9 +303,10 @@
     (implies (acl2::rewriting-positive-literal
               `(gobj-alist-list-vars-bounded ,k ,p ,x))
              (equal (gobj-alist-list-vars-bounded k p x)
-                    (let ((n (gobj-alist-list-vars-bounded-witness k p x)))
-                      (or (< (nfix n) (nfix k))
-                          (not (gobj-alist-list-depends-on n p x))))))
+                    (let ((n (bfr-varname-fix (gobj-alist-list-vars-bounded-witness k p x))))
+                      (implies (or (not (natp n))
+                                   (<= (nfix k) n))
+                               (not (gobj-alist-list-depends-on n p x))))))
     :hints(("Goal" :in-theory (enable gobj-alist-list-depends-on
                                       gobj-alist-vars-bounded-in-terms-of-witness))))
 
@@ -318,7 +350,9 @@
 
   (defthm gbc-sigtable-vars-bounded-implies-not-depends-on
     (implies (and (gbc-sigtable-vars-bounded k p x)
-                  (<= (nfix k) (nfix n)))
+                  (let ((n (bfr-varname-fix n)))
+                    (or (not (natp n))
+                        (<= (nfix k) n))))
              (not (gbc-sigtable-depends-on n p x)))
     :hints(("Goal" :in-theory (e/d (gbc-sigtable-depends-on)))))
 
@@ -335,9 +369,10 @@
     (implies (acl2::rewriting-positive-literal
               `(gbc-sigtable-vars-bounded ,k ,p ,x))
              (equal (gbc-sigtable-vars-bounded k p x)
-                    (let ((n (gbc-sigtable-vars-bounded-witness k p x)))
-                      (or (< (nfix n) (nfix k))
-                          (not (gbc-sigtable-depends-on n p x))))))
+                    (let ((n (bfr-varname-fix (gbc-sigtable-vars-bounded-witness k p x))))
+                      (implies (or (not (natp n))
+                                   (<= (nfix k) n))
+                               (not (gbc-sigtable-depends-on n p x))))))
     :hints(("Goal" :in-theory (enable gbc-sigtable-depends-on
                                       gobj-alist-list-vars-bounded-in-terms-of-witness))))
 
@@ -381,7 +416,9 @@
 
   (defthm gbc-tuples-vars-bounded-implies-not-depends-on
     (implies (and (gbc-tuples-vars-bounded k p x)
-                  (<= (nfix k) (nfix n)))
+                  (let ((n (bfr-varname-fix n)))
+                    (or (not (natp n))
+                        (<= (nfix k) n))))
              (not (gbc-tuples-depends-on n p x)))
     :hints(("Goal" :in-theory (e/d (gbc-tuples-depends-on)))))
 
@@ -398,9 +435,10 @@
     (implies (acl2::rewriting-positive-literal
               `(gbc-tuples-vars-bounded ,k ,p ,x))
              (equal (gbc-tuples-vars-bounded k p x)
-                    (let ((n (gbc-tuples-vars-bounded-witness k p x)))
-                      (or (< (nfix n) (nfix k))
-                          (not (gbc-tuples-depends-on n p x))))))
+                    (let ((n (bfr-varname-fix (gbc-tuples-vars-bounded-witness k p x))))
+                      (implies (or (not (natp n))
+                                   (<= (nfix k) n))
+                               (not (gbc-tuples-depends-on n p x))))))
     :hints(("Goal" :in-theory (enable gbc-tuples-depends-on
                                       gbc-sigtable-vars-bounded-in-terms-of-witness))))
 
@@ -445,7 +483,9 @@
 
   (defthm gbc-db-vars-bounded-implies-not-depends-on
     (implies (and (gbc-db-vars-bounded k p x)
-                  (<= (nfix k) (nfix n)))
+                  (let ((n (bfr-varname-fix n)))
+                    (or (not (natp n))
+                        (<= (nfix k) n))))
              (not (gbc-db-depends-on n p x)))
     :hints(("Goal" :in-theory (e/d (gbc-db-depends-on)))))
 
@@ -462,9 +502,10 @@
     (implies (acl2::rewriting-positive-literal
               `(gbc-db-vars-bounded ,k ,p ,x))
              (equal (gbc-db-vars-bounded k p x)
-                    (let ((n (gbc-db-vars-bounded-witness k p x)))
-                      (or (< (nfix n) (nfix k))
-                          (not (gbc-db-depends-on n p x))))))
+                    (let ((n (bfr-varname-fix (gbc-db-vars-bounded-witness k p x))))
+                      (implies (or (not (natp n))
+                                   (<= (nfix k) n))
+                               (not (gbc-db-depends-on n p x))))))
     :hints(("Goal" :in-theory (enable gbc-db-depends-on
                                       gbc-tuples-vars-bounded-in-terms-of-witness))))
 
@@ -488,6 +529,41 @@
                                       parametrize-constraint-db)))))
 
 
+(defthm-gobj-flag gobj-depends-on-congruence
+  (defthm bfr-varname-equiv-implies-equal-gobj-depends-on
+    (implies (bfr-varname-equiv k1 k2)
+             (equal (gobj-depends-on k1 p x)
+                    (gobj-depends-on k2 p x)))
+    :hints ('(:expand ((:free (k) (gobj-depends-on k p x)))
+              :in-theory (disable bfr-varname-equiv)))
+    :rule-classes :congruence
+    :flag gobj)
+
+  (defthm bfr-varname-equiv-implies-equal-gobj-list-depends-on
+    (implies (bfr-varname-equiv k1 k2)
+             (equal (gobj-list-depends-on k1 p x)
+                    (gobj-list-depends-on k2 p x)))
+    :hints ('(:expand ((:free (k) (gobj-list-depends-on k p x)))
+              :in-theory (disable bfr-varname-equiv)))
+    :rule-classes :congruence
+    :flag list))
+
+(defcong bfr-varname-equiv equal (gobj-alist-depends-on k p x) 1
+  :hints(("Goal" :in-theory (e/d (gobj-alist-depends-on) (bfr-varname-equiv)))))
+
+(defcong bfr-varname-equiv equal (gobj-alist-list-depends-on k p x) 1
+  :hints(("Goal" :in-theory (e/d (gobj-alist-list-depends-on) (bfr-varname-equiv)))))
+
+(defcong bfr-varname-equiv equal (gbc-sigtable-depends-on k p x) 1
+  :hints(("Goal" :in-theory (e/d (gbc-sigtable-depends-on) (bfr-varname-equiv)))))
+
+(defcong bfr-varname-equiv equal (gbc-tuples-depends-on k p x) 1
+  :hints(("Goal" :in-theory (e/d (gbc-tuples-depends-on) (bfr-varname-equiv)))))
+
+(defcong bfr-varname-equiv equal (gbc-db-depends-on k p x) 1
+  :hints(("Goal" :in-theory (e/d (gbc-db-depends-on) (bfr-varname-equiv)))))
+
+
 
 
 
@@ -498,12 +574,13 @@
              (gbc-process-new-lit lit ccat state)
              (and (gobj-alist-list-vars-bounded k p (alist-vals substs))
                   (gbc-db-vars-bounded k p ccat))))
-  :hints (("goal" :in-theory (enable
-                              gobj-alist-list-vars-bounded-in-terms-of-witness
-                              gbc-db-vars-bounded-in-terms-of-witness))))
+  :hints (("goal" :in-theory (e/d
+                              (gobj-alist-list-vars-bounded-in-terms-of-witness
+                              gbc-db-vars-bounded-in-terms-of-witness)
+                              (nfix)))))
 
 
-           
+
 
 (defthm gbc-db-vars-bounded-of-incr
   (implies (and (gbc-db-vars-bounded n p x)

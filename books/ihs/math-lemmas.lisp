@@ -13,7 +13,7 @@
 ;;;    (512) 322-9951
 ;;;    flatau@cli.com
 ;;;
-;;;    Modified for ACL2 Version_2.6 by: 
+;;;    Modified for ACL2 Version_2.6 by:
 ;;;    Jun Sawada, IBM Austin Research Lab. sawada@us.ibm.com
 ;;;    Matt Kaufmann, kaufmann@cs.utexas.edu
 ;;;
@@ -260,7 +260,7 @@ simple theorems for inequalities.</p>"
   :parents (math-lemmas ihs-math)
   :short "A theory of EXPT which is compatible with the ALGEBRA theories."
   :long "<p>This theory contains :TYPE-PRESCRIPTIONS, simpification,
-  normalization and selected :LINEAR rules for @(see EXPT.)  This theory will
+  normalization and selected :LINEAR rules for @(tsee EXPT).  This theory will
   not be useful unless the @(see integerp-algebra) theory, or something similar
   is ENABLEd.</p>"
 

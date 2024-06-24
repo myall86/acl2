@@ -1,3 +1,4 @@
+.sysr/
 workxxx*
 *@expansion.lsp
 *.out
@@ -12,6 +13,8 @@ workxxx*
 *.acl2x
 Makefile-deps
 Makefile-tmp
+Makefile-deps.lsp
+Makefile-tmp.lsp
 *.data
 *.o
 *.sbin
@@ -43,6 +46,7 @@ Makefile-tmp
 .acl2rc
 *.log
 TMP*.*
+*.tem
 temp-emacs-file*
 *~
 Makefile-certs

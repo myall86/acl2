@@ -30,6 +30,7 @@
 
 (in-package "ACL2")
 (include-book "xdoc/base" :dir :system)
+(include-book "xdoc/full-escape-symbol" :dir :system)
 
 (defxdoc b*
   :parents (macro-libraries)
@@ -43,7 +44,7 @@ matching."
 <p>To use @('b*') you will need to load the following book:</p>
 
 @({
-    (include-book \"tools/bstar\" :dir :system)
+    (include-book \"std/util/bstar\" :dir :system)
 })
 
 <p>In its most basic form, the @('b*') macro is nearly a drop-in replacement
@@ -70,7 +71,7 @@ mv-let).  For instance:</p>
          (append new-good new-bad))))
 })
 
-<p>Another interesting example is the <see topic='@(url patbind-when)'>when
+<p>Another example is the <see topic='@(url patbind-when)'>when
 binder</see>, which allows for a sort of \"early exit\" from the @('b*') form
 without needing to alternate between @('let*') and @('if').  For instance:</p>
 
@@ -107,7 +108,7 @@ binder.</see></p>
 <p>Depending on the binder form, it may be that multiple expressions are
 allowed or only a single one.</p>
 
-<p>The @('tools/bstar') book comes with several useful b* binders already
+<p>The @('std/util/bstar') book comes with several useful b* binders already
 defined, which we describe below.  You can also define your own, custom binder
 forms to extend the syntax of @('b*') to provide additional kinds of pattern
 matching or to implement common coding patterns.  For example, the @(see
@@ -196,6 +197,11 @@ that are available \"out of the box.\"</p>
    (run-this-for-side-effects ...)
    (return-this-expression .....))
 })
+
+<p>Note: The built-in binders are all defined in the ACL2 package, and can be
+used (without package prefix) in any other package that imports the binder
+symbol, or with the @('acl2::') packge prefix anywhere. See also the note about
+packages under user-defined binders below.</p>
 
 <p>We now give some additional details about these built-in binders.  Since
 users can also define their own @('b*') binders, you may wish to see @(see
@@ -372,10 +378,21 @@ the binder macro using the form @(see def-b*-binder).</p>
 
 <p>The definition of the @('patbind-foo') macro determines how this gets
 further expanded.  Some informative examples of these binder macros may be
-found in @('tools/bstar.lisp'); simply search for uses of @(see
+found in @('std/util/bstar.lisp'); simply search for uses of @(see
 def-b*-binder).</p>
 
 <p>Here are some further notes on defining binder macros.</p>
+
+<p>Interaction with packages: The macro @('patbind-foo') is derived from a use
+of the @('foo') binder using @('intern-in-package-of-symbol') with @('foo') as
+the package witness.  Practially speaking, this means that you can use a binder
+from a different package (without any package prefix) if either the binder name
+@('foo') or the macro @('patbind-foo') is imported into your package.
+Additionally, if @('foo') was defined as a binder in the @('bar') package and
+not imported into your current package, it can still be invoked as
+@('bar::foo').  Note also that when defining a binder using @('def-b*-binder'),
+the @('args'), @('forms'), and @('rest-expr') formals are always in the ACL2
+package.</p>
 
 <p>Often the simplest way to accomplish the intended effect of a patbind macro
 is to have it construct another @('b*') form to be recursively expanded, or to
@@ -406,18 +423,33 @@ is the best option we have. See any definition produced by
   :parents (b*)
   :short "List of the available directives usable in @('b*')")
 
+(local (defthm character-listp-of-explode-nonnegative-integer
+         (implies (character-listp acc)
+                  (character-listp (explode-nonnegative-integer n 10 acc)))))
+
+(local (defthm character-listp-of-explode-atom
+         (character-listp (explode-atom x 10))))
+
+(local (defthm character-listp-of-append
+         (implies (and (character-listp x)
+                       (character-listp y))
+                  (character-listp (append x y)))))
+
+(local (defthm character-listp-of-make-character-list
+         (character-listp (make-character-list x))))
+
 (mutual-recursion
  (defun pack-list (args)
    (declare (xargs :measure (acl2-count args)
-                   :guard t
-                   :verify-guards nil))
-   (if (atom args)
-       nil
-     (if (atom (cdr args))
-         (pack-tree (car args))
-       (append (pack-tree (car args))
-               (cons #\Space
-                     (pack-list (cdr args)))))))
+                   :guard t))
+   (cond ((atom args)
+          nil)
+         ((atom (cdr args))
+          (pack-tree (car args)))
+         (t
+          (append (pack-tree (car args))
+                  (cons #\Space
+                        (pack-list (cdr args)))))))
  (defun pack-tree (tree)
    (declare (xargs :measure (acl2-count tree)
                    :guard t))
@@ -432,30 +464,62 @@ is the best option we have. See any definition produced by
              (cons #\Space (pack-list (cdr tree)))
              (list #\))))))
 
+(encapsulate
+  ()
+  (local (defun my-induct (flag x)
+           (if (equal flag 'list)
+               (cond ((atom x) nil)
+                     ((atom (cdr x)) (my-induct 'tree (car x)))
+                     (t (list (my-induct 'tree (car x))
+                              (my-induct 'list (cdr x)))))
+             (if (atom x)
+                 nil
+               (list (my-induct 'tree (car x))
+                     (my-induct 'list (cdr x)))))))
+
+  (local (defthm lemma
+           (if (equal flag 'list)
+               (character-listp (pack-list x))
+             (character-listp (pack-tree x)))
+           :rule-classes nil
+           :hints(("Goal" :induct (my-induct flag x)))))
+
+  (defthm character-listp-of-pack-list
+    (character-listp (pack-list x))
+    :hints(("Goal" :use ((:instance lemma (flag 'list))))))
+
+  (defthm character-listp-of-pack-tree
+    (character-listp (pack-tree x))
+    :hints(("Goal" :use ((:instance lemma (flag 'tree)))))))
+
 (defun pack-term (args)
-  (declare (xargs :guard t
-                  :verify-guards nil))
+  (declare (xargs :guard t))
   (intern (coerce (pack-list args) 'string) "ACL2"))
 
 (defmacro pack (&rest args)
   `(pack-term (list ,@args)))
 
 (defun macro-name-for-patbind (binder)
+  (declare (xargs :guard (symbolp binder)))
   (intern-in-package-of-symbol
    (concatenate 'string "PATBIND-" (symbol-name binder))
    (if (equal (symbol-package-name binder) "COMMON-LISP")
        'acl2::foo
      binder)))
 
-(defconst *patbind-special-syms* '(t nil & -))
+(defconst *patbind-special-syms* '(& -))
 
 (defun int-string (n)
+  (declare (xargs :guard (natp n)))
   (coerce (explode-nonnegative-integer n 10 nil) 'string))
 
 (defun str-num-sym (str n)
+  (declare (xargs :guard (and (stringp str)
+                              (natp n))))
   (intern (concatenate 'string str (int-string n)) "ACL2"))
 
 (defun ignore-var-name (n)
+  (declare (xargs :guard (natp n)))
   (str-num-sym "IGNORE-" n))
 
 
@@ -483,6 +547,7 @@ is the best option we have. See any definition produced by
          (cw "; Not a binder list; first bad entry is ~x0.~%" (car x)))))
 
 (defun decode-varname-for-patbind (pattern)
+  (declare (xargs :guard (symbolp pattern)))
   (let* ((name (symbol-name pattern))
          (len (length name))
          (?p (and (<= 1 len)
@@ -502,33 +567,61 @@ is the best option we have. See any definition produced by
     (mv sym ignorep)))
 
 (defun patbindfn (pattern assign-exprs nested-expr)
+  (declare (xargs :guard t
+                  :guard-debug t))
   (cond ((eq pattern '-)
          ;; A dash means "run this for side effects."  In this case we allow
          ;; multiple terms; these form an implicit progn, in the common-lisp sense.
          `(prog2$ (progn$ . ,assign-exprs)
                   ,nested-expr))
-        ((member pattern *patbind-special-syms*)
-         ;; &, T, NIL mean "don't bother evaluating this."
+        ((eq pattern '&)
+         ;; & means "don't bother evaluating this."
          nested-expr)
         ((atom pattern)
-         ;; A binding to a single variable.  Here we don't allow multiple
-         ;; expressions; we believe it's more readable to use - to run things
-         ;; for side effects, and this might catch some paren errors.
-         (if (cdr assign-exprs)
-             (er hard 'b* "~
-The B* binding of ~x0 to ~x1 isn't allowed because the binding of a variable must be a
-single term." pattern assign-exprs)
-           (mv-let (sym ignorep)
-             (decode-varname-for-patbind pattern)
-             ;; Can we just refuse to bind a variable marked ignored?
-             (if (eq ignorep 'ignore)
-                 nested-expr
-               `(let ((,sym ,(car assign-exprs)))
-                  ,@(and ignorep `((declare (,ignorep ,sym))))
-                  ,nested-expr)))))
+         ;; A binding to a single variable.
+         ;;
+         (cond ((or (not (symbolp pattern))
+                    (keywordp pattern)
+                    (eq pattern t)
+                    (eq pattern nil))
+                ;; This prohibits things like (b* ((5 1)) x), which don't
+                ;; really make any sense.  It also prohibits things like (b*
+                ;; ((t 1)) t), which are scary and nonsensical.
+                (er hard? 'b* "Invalid left-hand side: trying to bind ~x0 to ~x1.~%"
+                    pattern assign-exprs))
+               ((not assign-exprs)
+                ;; This prohibits things like (b* ((x)) x), which historically
+                ;; bound X to NIL but are kind of weird and probably indicate
+                ;; that there is a paren error.
+                (er hard? 'b* "Invalid attempt to bind of ~x0 to nothing." pattern))
+               ((atom assign-exprs)
+                ;; This prohibits things like (b* ((x . 5)) x), which don't
+                ;; make sense and probably indicate that there is a paren
+                ;; error.
+                (er hard? 'b* "Invalid attempt to bind ~x0 to atom ~x1." pattern assign-exprs))
+               ((and (consp assign-exprs)
+                     (cdr assign-exprs))
+                ;; This prohibits things like (b* ((x 1 2)) x).  We don't allow
+                ;; multiple expressions on the rhs of a binding because we
+                ;; think it's more readable to use - to run things for side
+                ;; effects, and this might catch some paren errors.
+                (er hard? 'b* "Too many right-hand side terms: trying to bind ~x0 to ~x1.~%"
+                    pattern assign-exprs))
+               (t
+                (mv-let (sym ignorep)
+                  (decode-varname-for-patbind pattern)
+                  ;; Can we just refuse to bind a variable marked ignored?
+                  (if (eq ignorep 'ignore)
+                      nested-expr
+                    `(let ((,sym ,(car assign-exprs)))
+                       ,@(and ignorep `((declare (,ignorep ,sym))))
+                       ,nested-expr))))))
         ((eq (car pattern) 'quote)
          ;; same idea as &, t, nil
          nested-expr)
+        ((not (symbolp (car pattern)))
+         (er hard? 'b* "~
+The B* binding of ~x0 to ~x1 isn't allowed." pattern assign-exprs))
         (t ;; Binding macro call.
          (let* ((binder (car pattern))
                 (patbind-macro (macro-name-for-patbind binder))
@@ -595,24 +688,29 @@ all of the available binder forms.</p>
 for more details.</p>")
 
 (defmacro def-b*-binder (name &key
-                              (parents '(b*-binders))
+                              (parents 'nil parents-p)
                               (short 'nil short-p)
                               (long 'nil long-p)
                               decls
                               body)
   (let* ((macro-name (macro-name-for-patbind name))
-         (short      (if short-p
-                         short
+         (doc-p (or parents-p    ; Don't create doc if no parents, short, or long provided
+                    short-p long-p))
+         (parents (or parents '(b*-binders)))
+         (short (if short-p
+                    short
+                  (and doc-p
                        (concatenate 'string
                                     "@(see acl2::b*) binder form @('" (symbol-name name)
-                                    "') (placeholder).")))
-         (long       (if long-p
-                         long
-                       (concatenate 'string
-                                    "<p>This is a b* binder introduced with @(see acl2::def-b*-binder).</p>
-                                     @(def " (symbol-name macro-name) ")"))))
+                                    "') (placeholder)."))))
+         (long (if long-p
+                   long
+                 (and doc-p
+                      (concatenate 'string
+                                   "<p>This is a b* binder introduced with @(see acl2::def-b*-binder).</p>
+                                     @(def " (xdoc::full-escape-symbol macro-name) ")")))))
     `(progn
-       ,@(if (or parents short long)
+       ,@(if doc-p
              ;; Want to be able to turn off documentation, e.g., for ret binders
              `((defxdoc ,macro-name :parents ,parents :short ,short :long ,long))
            nil)
@@ -633,7 +731,8 @@ Pattern constructor ~x0 needs exactly one binding expression, but was given ~x1~
                 ',binder ,bindings))))
 
 (defun destructor-binding-list (args destructors binding)
-  (if (atom args)
+  (declare (xargs :guard t))
+  (if (or (atom args) (atom destructors)) ;; WAHJr. added (atom destructors)
       nil
     (cons (list (car args) (list (car destructors) binding))
           (destructor-binding-list (cdr args) (cdr destructors) binding))))
@@ -664,6 +763,12 @@ Pattern constructor ~x0 needs exactly one binding expression, but was given ~x1~
 ;; The arg might be a plain variable, an ignored or ignorable variable, or a
 ;; binding expression.
 (defun var-ignore-list-for-patbind-mv (args igcount mv-vars binders ignores ignorables freshvars)
+  (declare (xargs :guard (and (natp igcount)
+                              (true-listp mv-vars)
+                              (true-listp binders)
+                              (true-listp ignores)
+                              (true-listp ignorables)
+                              (true-listp freshvars)))) ;; WAHJr.
   (if (atom args)
       (mv (reverse mv-vars)
           (reverse binders)
@@ -751,6 +856,7 @@ and @(see cdr)."
 @('cons') may be nested inside other bindings.</p>")
 
 (defun nths-binding-list (args n form)
+  (declare (xargs :guard (natp n)))
   (if (atom args)
       nil
     (cons (list (car args) `(nth ,n ,form))
@@ -900,16 +1006,49 @@ and @('list*') may be nested inside other bindings.</p>"
       `(patbind ,(car args) ,forms ,rest-expr)
     `(patbind-cons (,(car args) (list* . ,(cdr args))) ,forms ,rest-expr)))
 
-(defun assigns-for-assocs (args alist)
+(defun assocs-binder-element-p (ele) ;; WAHJr
+  (declare (xargs :guard t))
+  (if (atom ele)
+      (symbolp ele)
+    ;; sswords -- weakened the condition: second element is an evaluated expression
+    (or (and (consp (cdr ele))
+             (equal (cddr ele) nil))
+        (equal (cdr ele) NIL))))
+
+(defun assocs-binder-listp (lst) ;; WAHJr.
+  (declare (xargs :guard t))
+  (if (atom lst)
+      (null lst)
+    (let ((l (car lst)))
+      (and (assocs-binder-element-p l)
+           (assocs-binder-listp (cdr lst))))))
+
+(defun assigns-for-assocs (getter args alist)
+  (declare (xargs :guard (assocs-binder-listp args))) ;; WAHJr.
   (if (atom args)
       nil
     (cons (if (consp (car args))
-              `(,(caar args) (cdr (assoc ,(cadar args) ,alist)))
+              `(,(caar args) (cdr (,getter ,(cadar args) ,alist)))
             (mv-let (sym ign)
               (decode-varname-for-patbind (car args))
               (declare (ignore ign))
-              `(,(car args) (cdr (assoc ',sym ,alist)))))
-          (assigns-for-assocs (cdr args) alist))))
+              `(,(car args) (cdr (,getter ',sym ,alist)))))
+          (assigns-for-assocs getter (cdr args) alist))))
+
+(defun body-for-assocs (getter args forms rest-expr)
+  (declare (xargs :guard (and (consp forms)
+                              (assocs-binder-listp args)))) ;; WAHJr.
+  (mv-let (pre-bindings name rest)
+    (if (and (consp (car forms))
+             (not (eq (caar forms) 'quote)))
+        (mv `((?tmp-for-assocs ,(car forms)))
+            'tmp-for-assocs
+            `(check-vars-not-free (tmp-for-assocs)
+                                  ,rest-expr))
+      (mv nil (car forms) rest-expr))
+    `(b* (,@pre-bindings
+          . ,(assigns-for-assocs getter args name))
+       ,rest)))
 
 (def-b*-binder assocs
   :short "@(see b*) binder for extracting particular values from an alist."
@@ -946,18 +1085,7 @@ to the pair @('(var 'var)').</li>
 <p>Each of the arguments in the @('var') position of the pair form may be a
 recursive binder, and @('assocs') may be nested inside other bindings.</p>"
 
-  :body
-  (mv-let (pre-bindings name rest)
-    (if (and (consp (car forms))
-             (not (eq (caar forms) 'quote)))
-        (mv `((?tmp-for-assocs ,(car forms)))
-            'tmp-for-assocs
-            `(check-vars-not-free (tmp-for-assocs)
-                            ,rest-expr))
-      (mv nil (car forms) rest-expr))
-    `(b* (,@pre-bindings
-          . ,(assigns-for-assocs args name))
-       ,rest)))
+  :body (body-for-assocs 'assoc args forms rest-expr))
 
 (def-b*-binder er
   :short "@(see b*) binder for error triples."
@@ -1150,9 +1278,11 @@ is returned.  I.e.,</p>
 instead of @('if').</p>"
   :decls ((declare (xargs :guard (and (consp args) (eq (cdr args) nil)))))
   :body
-  `(if ,(car args)
-       (progn$ . ,forms)
-     ,rest-expr))
+  (if forms
+      `(if ,(car args)
+           (progn$ . , forms)
+         ,rest-expr)
+    `(or ,(car args) ,rest-expr)))
 
 (def-b*-binder unless
   :short "@(see b*) control flow operator."
@@ -1276,6 +1406,8 @@ The second argument to pattern constructor ~x0 must be a symbol, but is ~x1~%~%"
 
 ;; Find a pair in the alist whose key is a symbol whose name is str.
 (defun b*-assoc-symbol-name (str alist)
+  (declare (xargs :guard (and (stringp str)
+                              (symbol-alistp alist)))) ;; WAHJr.
   (if (atom alist)
       nil
     (if (and (consp (car alist))
@@ -1284,6 +1416,7 @@ The second argument to pattern constructor ~x0 must be a symbol, but is ~x1~%~%"
       (b*-assoc-symbol-name str (cdr alist)))))
 
 (defun b*-decomp-err (arg binder component-alist)
+  (declare (xargs :guard (alistp component-alist))) ;; WAHJr.
   (er hard? 'b*-decomp-bindings
       "Bad ~s0 binding: ~x2.~%For a ~s0 binding you may use the following ~
        kinds of arguments: keyword/value list form :field binder ..., ~
@@ -1295,6 +1428,7 @@ The second argument to pattern constructor ~x0 must be a symbol, but is ~x1~%~%"
 ;; Component-alist binds field names to their accessor functions.
 ;; Accepts a number of forms of bindings:
 (defun b*-decomp-bindings (args binder component-alist var)
+  (declare (xargs :guard (symbol-alistp component-alist))) ;; WAHJr.
   (b* (((when (atom args)) nil)
        ((when (keywordp (car args)))
         (b* ((look (b*-assoc-symbol-name (symbol-name (car args))
@@ -1323,6 +1457,7 @@ The second argument to pattern constructor ~x0 must be a symbol, but is ~x1~%~%"
           (b*-decomp-bindings (cdr args) binder component-alist var))))
 
 (defun b*-decomp-fn (args forms rest-expr binder component-alist)
+  (declare (xargs :guard (symbol-alistp component-alist))) ;; WAHJr.
   (b* (((unless (and (true-listp forms)
                      (= (length forms) 1)))
         (er hard? 'b*-decomp-fn
@@ -1395,38 +1530,109 @@ The second argument to pattern constructor ~x0 must be a symbol, but is ~x1~%~%"
   :body
   (patbind-local-stobjs-fn args forms rest-expr))
 
+
+
+(defun match-b*-fun-args (x)
+  ;; Returns (MV MATCHP NAME ARGS DECLS)
+  (declare (xargs :guard t))
+  ;; args should either be something like:
+  ;;   ((ADD A B))
+  ;;   (INLINE (ADD A B))
+  ;;   (NOTINLINE (ADD A B))
+  (if (atom x)
+      (mv nil nil nil nil)
+    (let ((fn/args-part ;; E.g., (ADD A B)
+           (if (and (or (eq (first x) 'inline)
+                        (eq (first x) 'notinline))
+                    (consp (cdr x))
+                    (not (cddr x)))
+               (second x)
+             (first x))))
+      (if (atom fn/args-part)
+          (mv nil nil nil nil)
+        (let* ((fn    (car fn/args-part))
+               (args  (cdr fn/args-part))
+               (decls (cond ((eq (car x) 'inline)    `((declare (inline ,fn))))
+                            ((eq (car x) 'notinline) `((declare (notinline ,fn))))
+                            (t nil))))
+          (mv t fn args decls))))))
+
 (def-b*-binder fun
   :short "@(see b*) binder to produce @(see flet) forms."
-  :long "<p>Usage:</p>
+  :long "<p>Example:</p>
 
 @({
-    (b* (((fun (foo a b c)) (body-form)))
-      (result-form))
+    (b* (((fun (add a b)) (+ a b)))
+      (add 3 4))
 })
 
-<p>is equivalent to</p>
+<p>More generally,</p>
 
 @({
-    (flet ((foo (a b c) (body-form)))
-      (result-form))
-})"
-  :decls
-  ((declare (xargs :guard
-                   (and
-                    ;; only arg is a symbol-list (foo a b c)
-                    (consp args)
-                    (symbol-listp (car args))
-                    (consp (car args))
-                    (eq (cdr args) nil)
-                    ;; body is implicit progn$?
-                    (true-listp forms)
-                    ))))
+    (b* (((fun (name arg1 ... argn)) body-form))
+      result-form)
+})
+
+<p>expands to</p>
+
+@({
+    (flet ((name (arg1 ... argn) body-form))
+      result-form)
+})
+
+<p>You can also provide an @('inline') or @('notinline') suggestion, e.g.,:</p>
+
+@({
+    (b* (((fun inline (add a b)) (+ a b)))
+      (add 3 4))
+
+    (b* (((fun notinline (add a b)) (+ a b)))
+      (add 3 4))
+})
+
+<p>Either of these results in a suitable @(see declare) form for the function;
+see @(see flet) for more discussion.</p>"
+
   :body
-  `(flet ((,(caar args) ,(cdar args) (progn$ . ,forms)))
-     ,rest-expr))
+  ;; I'm going to do the error checking inline, instead of as part of the
+  ;; guard, so we can provide better error messages.
+  (mv-let (okp fn args decls)
+    (match-b*-fun-args args)
+    (cond ((not okp)
+           (er hard? 'b* "Invalid b* binder FUN binder (see :doc patbind-fun): ~x0~%" args))
+          ((or (not (symbolp fn))
+               (keywordp fn)
+               (eq fn t)
+               (eq fn nil))
+           (er hard? 'b* "Invalid function name ~x0 in b* FUN binder: ~x1~%" fn args))
+          ((not (symbol-listp args))
+           (er hard? 'b* "Invalid formals for b* FUN binder of ~x0: ~x1~%" fn args))
+          (t
+           `(flet ((,fn ,args (progn$ . ,forms)))
+              ,@decls
+              ,rest-expr)))))
+
+(defun access-binder-element-p (x)
+  (declare (xargs :guard t))
+  (or (symbolp x)
+      (and (consp x)
+           (consp (cdr x))
+           (symbolp (car x))
+           (symbolp (cadr x))
+           (not (cddr x)))))
+
+(defun access-binder-listp (x)
+  (declare (xargs :guard t))
+  (if (atom x)
+      (eq x nil)
+    (and (access-binder-element-p (car x))
+         (access-binder-listp (cdr x)))))
 
 
 (defun access-b*-bindings (recname var pairs)
+  (declare (xargs :guard (and (symbolp recname)
+                              ;; (symbolp var) -- sswords: not always a symboll
+                              (access-binder-listp pairs))))
   (if (atom pairs)
       nil
     (cons
@@ -1448,3 +1654,35 @@ The second argument to pattern constructor ~x0 must be a symbol, but is ~x1~%~%"
   `(b* ,(access-b*-bindings (car args) (car forms) (cdr args))
      ,rest-expr))
 
+(def-b*-binder unless-casematch
+  :short "@(see b*) binder for using @(see case-match) against a single pattern."
+  :long "<p>The following example shows the usage of @('unless-casematch')
+inside a @(see b*) form.  @('pattern') is a pattern for @(see case-match).</p>
+@({
+ (b* (((unless-casematch obj (a . b))
+       (er hard? 'my-form \"Expected obj to match (a . b) but it didn't\")))
+    (cw \"The car is ~x0 and the cdr is ~x1~%\" a b))
+ })
+<p>This expands to:</p>
+@({
+ (case-match obj
+   ((a . b) (cw \"The car is ~x0 and the cdr is ~x1~%\" a b))
+   (& (er hard? 'my-form \"Expected obj to match (a . b) but it didn't\")))
+ })
+"
+  :body
+  (case-match args
+    ((form pattern)
+     (b* (((mv pre-bindings var rest)
+           (if (symbolp form)
+               (mv nil form acl2::rest-expr)
+             (mv `((?__tmp-for-unless-casematch ,form))
+                 '__tmp-for-unless-casematch
+                 `(check-vars-not-free (__tmp-for-unless-casematch)
+                                       ,acl2::rest-expr)))))
+       `(b* ,pre-bindings
+          (case-match ,var
+            (,pattern ,rest)
+            (& (progn$ . ,acl2::forms))))))
+    (& (er hard? 'unless-casematch "Unless-casematch takes two args: ~x0"
+           '(unless-casematch form pattern)))))

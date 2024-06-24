@@ -29,6 +29,7 @@
 ;   DEALINGS IN THE SOFTWARE.
 
 (in-package "QUANT")
+(include-book "xdoc/top" :dir :system)
 
 ;; TODO:
 ;; - match on predicate *as well* as body.
@@ -516,7 +517,7 @@
       `((,(car vars) (gensym::generalize (acl2::hide ,witness))))
     (generalize-witness-rec 0 vars witness)))
 
-(defun defun-sk-fn (name args body disable doc quant-ok skolem-name skolemize thm-name rewrite witness-dcls)
+(defun defun-sk-fn (name args body disable doc quant-ok skolem-name skolemize thm-name rewrite witness-dcls strengthen)
   (let* ((formula `(,name ,@args))
 	 (formula-by-multiplicity (intern-in-package-of-symbol
 				   (concatenate 'string
@@ -572,13 +573,15 @@
 
       (local (in-theory (cons 'acl2::MV-NTH-TO-VAL (theory 'acl2::minimal-theory))))
 
-      (defun-sk ,name ,args ,body
+      (defun-sk ,name ,args
+	,@witness-dcls
+        ,body
 	,@(rekey :doc doc)
 	,@(rekey :quant-ok quant-ok)
 	,@(rekey :skolem-name skolem-name)
 	,@(rekey :thm-name thm-name)
 	,@(rekey :rewrite rewrite)
-	,@(rekey :witness-dcls witness-dcls))
+        ,@(rekey :strengthen strengthen))
 
       (in-theory (disable ,thm-name))
 
@@ -605,11 +608,11 @@
 
       )))
 
-(defmacro def::un-sk (name args body &key doc quant-ok skolem-name skolemize thm-name rewrite witness-dcls)
-  (defun-sk-fn name args body nil doc quant-ok skolem-name skolemize thm-name rewrite witness-dcls))
+(defmacro def::un-sk (name args body &key doc quant-ok skolem-name skolemize thm-name rewrite witness-dcls strengthen)
+  (defun-sk-fn name args body nil doc quant-ok skolem-name skolemize thm-name rewrite witness-dcls strengthen))
 
-(defmacro def::un-skd (name args body &key doc quant-ok skolem-name skolemize thm-name rewrite witness-dcls)
-  (defun-sk-fn name args body t doc quant-ok skolem-name skolemize thm-name rewrite witness-dcls))
+(defmacro def::un-skd (name args body &key doc quant-ok skolem-name skolemize thm-name rewrite witness-dcls strengthen)
+  (defun-sk-fn name args body t doc quant-ok skolem-name skolemize thm-name rewrite witness-dcls strengthen))
 
 ;; ===========================================================================
 
@@ -1134,6 +1137,10 @@
 	 (mv nil nil state))
     `(instantiate-quantified-formulae :rec ,rec :hints ,hints :formulae ,formulae)))
 
+; Matt K. addition: Avoid ACL2(p) failure due to INST calls below.
+(local (include-book "std/system/non-parallel-book" :dir :system))
+(local (acl2::non-parallel-book))
+
 ;; skolemization
 
 (defun restrict-all-instances (quant list-alist)
@@ -1189,60 +1196,8 @@
  (def::un-sk forall-zen (a)
    (forall (x y) (implies (boo a x) (hoo a y))))
 
- #+joe
- (defthmd forall-zen-skolemization
-   (equal (val n (forall-zen-witness a))
-	  (gensym::generalize (hide (val n (forall-zen-witness a)))))
-   :hints (("Goal" :expand (:free (x) (hide x))
-	    :in-theory (enable gensym::generalize))))
-
- #+joe
- (add-generalization-pattern (hide (val n (forall-zen-witness a))))
-
  (def::un-sk exists-zen (a)
    (exists (x y) (not (implies (boo a x) (hoo a y)))))
-
- #+joe
- (defthmd exists-zen-skolemization
-   (equal (val n (exists-zen-witness a))
-	  (gensym::generalize (hide (val n (exists-zen-witness a)))))
-   :hints (("Goal" :expand (:free (x) (hide x))
-	    :in-theory (enable gensym::generalize))))
-
- #+joe
- (add-generalization-pattern (hide (val n (exists-zen-witness a))))
-
- #+joe
- (defconst *qlist*
-   (list (new-quant :name 'exists-zen
-		    :type :exists
-		    :vars `(x y)
-		    :bound `(a)
-		    :instantiate 'exists-zen-suff
-		    :skolemize 'exists-zen-skolemization
-		    :body  `(not (implies (boo a x) (hoo a y)))
-		    :witness `(exists-zen-witness a)
-		    )
-	 (new-quant :name 'forall-zen
-		    :type :forall
-		    :vars `(x y)
-		    :bound `(a)
-		    :instantiate 'forall-zen-necc
-		    :skolemize 'forall-zen-skolemization
-		    :body  `(implies (boo a x) (hoo a y))
-		    :witness `(forall-zen-witness a)
-		    )))
-
- ;; This is ultimately how we will store information on quantified
- ;; formulae: in tables.
-
- #+joe
- (table::set 'quant-list *qlist*)
-
- #+joe
- (in-theory (disable forall-zen-necc))
- #+joe
- (in-theory (disable exists-zen-suff))
 
  (defthmd forall-zen-instantiation-test
    (implies
@@ -1259,8 +1214,6 @@
  (local (in-theory (enable skolemization-axiom)))
 
  ;; Note that the instantiation and skolemization hints do not interfere.
-
- ;; I'm not sure, however, that the skolemization hints are working correctly.
 
  (defthmd forall-zen-skolemization-test
    (forall-zen q)
@@ -1586,3 +1539,75 @@ ACL2 !>
 	     (quant::inst?)))
 
    ))
+
+(acl2::defxdoc def::un-sk
+  :short "An extension of defun-sk that supports automated skolemization and instantiation of quantified formulae"
+  :parents (defun-sk)
+  :long "<p>
+The @('def::un-sk') macro is an extension of @(tsee defun-sk) that supports
+automated skolemization and instantiation of quantified formulae via the
+computed hints @('quant::inst?') and @('quant::skosimp').
+</p>
+<p>Usage:</p> @({
+  (include-book \"coi/quantification/quantification\" :dir :system)
+
+  (def::un-sk forall-zen (a)
+    (forall (x y) (implies (boo a x) (hoo a y))))
+
+  (def::un-sk exists-zen (a)
+    (exists (x y) (not (implies (boo a x) (hoo a y)))))
+
+  (defthmd forall-zen-instantiation-test
+    (implies
+     (forall-zen q)
+     (implies (boo q x1) (hoo q y1)))
+    :hints ((quant::inst?)))
+
+  (defthmd exists-zen-instantiation-test
+    (implies
+     (not (exists-zen q))
+     (implies (boo q x1) (hoo q y1)))
+    :hints ((quant::inst?)))
+
+  ;; This is kind of a cool theorem
+
+  (defthmd forall-is-not-exists
+    (iff (forall-zen q)
+         (not (exists-zen q)))
+    :hints ((quant::skosimp)
+ 	    (quant::inst?)))
+
+  ;; Here we use it to do \"pick-a-point\" proofs
+
+  (def::un-sk assox-equiv (x y)
+    (forall (a) (equal (assoc a x) (assoc a y))))
+
+  (defequiv assox-equiv
+    :hints ((quant::skosimp)
+            (quant::inst?)))
+
+  (defcong assox-equiv equal (assoc a x) 2
+    :hints ((quant::skosimp)
+            (quant::inst?)))
+
+  (defcong assox-equiv assox-equiv (cons pair y) 2
+    :hints ((quant::skosimp)
+            (quant::inst?)))
+
+  (defcong assox-equiv assox-equiv (acons key value y) 3
+    :hints ((quant::skosimp)
+  	    (quant::inst?)))
+ })
+
+")
+
+(acl2::defxdoc quant::inst?
+  :short "A hint that attempts automated instantiation of quantified formulae"
+  :parents (def::un-sk)
+  :long "<p> See @(tsee def::un-sk) </p>")
+
+(acl2::defxdoc quant::skosimp
+  :short "A hint for performing automated skolemization of quantified formulae"
+  :parents (def::un-sk)
+  :long "<p> See @(tsee def::un-sk) </p>")
+

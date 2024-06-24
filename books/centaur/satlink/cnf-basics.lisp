@@ -38,7 +38,7 @@
 (include-book "centaur/misc/equal-sets" :dir :system)
 (local (include-book "arithmetic/top" :dir :system))
 (local (in-theory (enable* acl2::arith-equiv-forwarding)))
-(local (in-theory (enable eval-clause eval-formula)))
+(local (in-theory (enable eval-clause eval-formula eval-cube)))
 
 (local (defthm equal-1-when-bitp
          (implies (bitp x)
@@ -48,16 +48,10 @@
 (defsection cnf-basics
   :extension eval-formula
 
-  (defcong var-equiv equal (eval-var x env) 1
-    :hints(("Goal" :in-theory (enable eval-var))))
-
   (defcong bits-equiv equal (eval-var x env) 2
     :hints(("Goal" :in-theory (enable eval-var))))
 
 
-
-  (defcong lit-equiv equal (eval-lit x env) 1
-    :hints(("Goal" :in-theory (enable eval-lit))))
 
   (defcong bits-equiv equal (eval-lit x env) 2
     :hints(("Goal" :in-theory (enable eval-lit))))
@@ -74,6 +68,11 @@
            (b-not (eval-lit lit env)))
     :hints(("Goal" :in-theory (enable eval-lit))))
 
+  (defthm eval-lit-of-lit-negate-cond
+    (equal (eval-lit (lit-negate-cond lit neg) env)
+           (b-xor neg (eval-lit lit env)))
+    :hints(("Goal" :in-theory (enable eval-lit))))
+
 
   (defthm eval-clause-when-atom
     (implies (atom clause)
@@ -84,6 +83,11 @@
     (equal (eval-clause (cons lit clause) env)
            (b-ior (eval-lit lit env)
                   (eval-clause clause env))))
+
+  (defthm eval-clause-of-append
+    (equal (eval-clause (append a b) env)
+           (b-ior (eval-clause a env)
+                  (eval-clause b env))))
 
   (defthm eval-clause-when-some-true-literal
     (implies (and (member lit clause)
@@ -104,6 +108,40 @@
 
 
 
+  (defthm eval-cube-when-atom
+    (implies (atom cube)
+             (equal (eval-cube cube env)
+                    1)))
+
+  (defthm eval-cube-of-cons
+    (equal (eval-cube (cons lit cube) env)
+           (b-and (eval-lit lit env)
+                  (eval-cube cube env))))
+
+  (defthm eval-cube-of-append
+    (equal (eval-cube (append a b) env)
+           (b-and (eval-cube a env)
+                  (eval-cube b env))))
+
+  (defthm eval-cube-when-some-false-literal
+    (implies (and (member lit cube)
+                  (equal (eval-lit lit env) 0))
+             (equal (eval-cube cube env)
+                    0)))
+
+  (defthmd eval-cube-when-subset
+    (implies (and (subsetp c1 c2)
+                  (equal (eval-cube c2 env) 1))
+             (equal (eval-cube c1 env) 1))
+    :hints(("Goal" :induct (len c1))))
+
+  (defcong set-equiv equal (eval-cube cube env) 1
+    :hints(("Goal" :in-theory (enable set-equiv eval-cube-when-subset))))
+
+  (defcong bits-equiv equal (eval-cube cube env) 2)
+
+
+
   (defthm eval-formula-when-atom
     (implies (atom formula)
              (equal (eval-formula formula env)
@@ -113,6 +151,11 @@
     (equal (eval-formula (cons clause formula) env)
            (b-and (eval-clause clause env)
                   (eval-formula formula env))))
+
+  (defthm eval-formula-of-append
+    (equal (eval-formula (append a b) env)
+           (b-and (eval-formula a env)
+                  (eval-formula b env))))
 
   (defthm eval-formula-when-some-false-clause
     (implies (and (member clause formula)
@@ -145,12 +188,12 @@
 
   (defthm max-index-clause-of-cons
     (equal (max-index-clause (cons lit clause))
-           (max (var->index (lit->var lit))
+           (max (lit->var lit)
                 (max-index-clause clause))))
 
   (defthm index-of-literals-is-bounded-by-max-index-clause
     (implies (member lit clause)
-             (<= (var->index (lit->var lit)) (max-index-clause clause)))
+             (<= (lit->var lit) (max-index-clause clause)))
     :rule-classes ((:rewrite) (:linear)))
 
   (local (defthm l0
@@ -204,7 +247,7 @@
 
   (local (defthm l0
            (implies (member-equal a f1)
-                    (member-equal (var->index (lit->var a)) (clause-indices f1)))))
+                    (member-equal (lit->var a) (clause-indices f1)))))
 
   (local (defthm l1
            (implies (subsetp-equal f1 f2)
@@ -225,7 +268,7 @@
     (nat-listp (clause-indices x)))
 
   (defcong list-equiv equal (clause-indices x) 1
-    :hints(("Goal" :induct (my-ind x acl2::x-equiv))))
+    :hints(("Goal" :induct (my-ind x x-equiv))))
 
   (defcong set-equiv set-equiv (clause-indices x) 1
     :hints(("Goal" :in-theory (enable set-equiv)))))
@@ -247,7 +290,7 @@
     (nat-listp (formula-indices x)))
 
   (defcong list-equiv equal (formula-indices x) 1
-    :hints(("Goal" :induct (my-ind x acl2::x-equiv))))
+    :hints(("Goal" :induct (my-ind x x-equiv))))
 
   (local (defthm l0
            (implies (member-equal clause formula)

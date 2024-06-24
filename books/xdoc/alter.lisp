@@ -1,5 +1,5 @@
 ; XDOC Documentation System for ACL2
-; Copyright (C) 2009-2011 Centaur Technology
+; Copyright (C) 2009-2015 Centaur Technology
 ;
 ; Contact:
 ;   Centaur Technology Formal Verification Group
@@ -55,7 +55,7 @@
         (cons (car all-topics)
               (change-parents-fn name new-parents (cdr all-topics))))
        (topic (cons (cons :parents new-parents)
-                    (delete-assoc-equal :parents topic))))
+                    (remove1-assoc-equal :parents topic))))
     (cons topic (cdr all-topics))))
 
 (defmacro change-parents (name new-parents)
@@ -72,7 +72,7 @@
         (cons (car all-topics)
               (change-short-fn name new-short (cdr all-topics))))
        (topic (cons (cons :short new-short)
-                    (delete-assoc-equal :short topic))))
+                    (remove1-assoc-equal :short topic))))
     (cons topic (cdr all-topics))))
 
 (defmacro change-short (name new-short)
@@ -90,13 +90,33 @@
         (cons (car all-topics)
               (change-long-fn name new-long (cdr all-topics))))
        (topic (cons (cons :long new-long)
-                    (delete-assoc-equal :long topic))))
+                    (remove1-assoc-equal :long topic))))
     (cons topic (cdr all-topics))))
 
 (defmacro change-long (name new-long)
   `(table xdoc 'doc
           (change-long-fn ',name ',new-long
                              (get-xdoc-table world))))
+
+
+(defun change-base-pkg-fn (name pkg all-topics)
+  (declare (xargs :mode :program))
+  (b* (((when (atom all-topics))
+        (er hard? 'change-base-pkg-fn "Topic ~x0 was not found." name))
+       (topic (car all-topics))
+       ((unless (equal (cdr (assoc :name topic)) name))
+        (cons (car all-topics)
+              (change-base-pkg-fn name pkg (cdr all-topics))))
+       (topic (cons (cons :base-pkg (acl2::pkg-witness pkg))
+                    (remove1-assoc-equal :base-pkg topic))))
+    (cons topic (cdr all-topics))))
+
+(defmacro change-base-pkg (name pkg)
+  `(table xdoc 'doc
+          (change-base-pkg-fn ',name ',pkg
+                              (get-xdoc-table world))))
+
+
 
 
 ;; Idea:
@@ -138,7 +158,7 @@
 
 (local (progn
 
-(include-book "misc/assert" :dir :system)
+(include-book "std/testing/assert-bang" :dir :system)
 
 (table xdoc 'doc nil)
 (defxdoc foo :short "test topic")

@@ -283,7 +283,7 @@
   :hints (("Goal" :use (rem+1-2))))
 
 (defthm x-or-x/2
-    (implies (integerp x) 
+    (implies (integerp x)
 	     (or (integerp (/ x 2)) (integerp (/ (1+ x) 2))))
   :rule-classes ())
 
@@ -320,9 +320,13 @@
 ;;;                             BITN
 ;;;**********************************************************************
 
-(defthm natp-bitn
-    (natp (bitn x n))
-    :rule-classes (:type-prescription :rewrite))
+; Matt K. comment: deleted -- see the comment about April 2016 in
+; books/rtl/rel1/support/logdefs.lisp, where natp-bitn is introduced as a
+; :type-prescription rule.  It doesn't seem important for this to be a rewrite
+; rule.
+;(defthm natp-bitn
+;    (natp (bitn x n))
+;    :rule-classes (:type-prescription :rewrite))
 
 ; The following function should often be kept disabled, but we
 ; leave it enabled while proving the basic lemmas below.
@@ -1084,7 +1088,7 @@
 		  (natp k))
 	     (= (logior x (expt 2 k))
 		(+ x
-		   (* (expt 2 k) 
+		   (* (expt 2 k)
 		      (- 1 (bitn x k))))))
   :rule-classes ()
   :hints (("Goal" :use (and-bits-b))))
@@ -1503,12 +1507,12 @@
 		(logior (logior (logand (* (expt 2 j) (bits x i j))
 					(* (expt 2 j) (bits y i j)))
 				(logand (* (expt 2 j) (bits y i j))
-					(bits x (1- j) 0)))					
+					(bits x (1- j) 0)))
 			(logior (logand (bits x (1- j) 0)
 					(bits y (1- j) 0))
 				(logand (* (expt 2 j) (bits x i j))
 					(bits y (1- j) 0))))))
-				
+
   :rule-classes ()
   :hints (("Goal"
            ;; The following theory hint was necessary here, though not
@@ -1534,7 +1538,7 @@
 		  (integerp j) (> j 0))
 	     (= (logand (* (expt 2 j) (bits x i j))
 			(* (expt 2 j) (bits y i j)))
-		(* (expt 2 j) (logand (bits x i j) (bits y i j)))))				
+		(* (expt 2 j) (logand (bits x i j) (bits y i j)))))
   :rule-classes ()
   :hints (("Goal"
            ;; The following theory hint was necessary here, though not
@@ -1600,7 +1604,7 @@
 				0)
 			(logior (logand (bits x (1- j) 0)
 					(bits y (1- j) 0))
-				0))))				
+				0))))
   :rule-classes ()
   :hints (("Goal" :use (logand-bits-4
 			logand-bits-5
@@ -1738,7 +1742,7 @@
 		  (integerp j) (>= j 0)
 		  (integerp x) (>= x 0) (< x (expt 2 m)))
 	     (= (bits (comp1 x m) i j)
-		(fl (+ (expt 2 (1+ (- i j))) 
+		(fl (+ (expt 2 (1+ (- i j)))
 		       (/ (- (1+ (rem x (expt 2 (1+ i)))))
 			  (expt 2 j))))))
   :rule-classes ()
@@ -1751,14 +1755,14 @@
 		  (integerp j) (>= j 0)
 		  (integerp x) (>= x 0) (< x (expt 2 m)))
 	     (= (bits (comp1 x m) i j)
-		(+ (expt 2 (1+ (- i j))) 
+		(+ (expt 2 (1+ (- i j)))
 		   (fl (/ (- (1+ (rem x (expt 2 (1+ i)))))
 			  (expt 2 j))))))
   :rule-classes ()
   :hints (("Goal" :in-theory (disable a10)
 		  :use (bits-comp1-2
 			(:instance integerp-expt (n (- (1+ i) j)))
-			(:instance fl+int 
+			(:instance fl+int
 				   (x (/ (- (1+ (rem x (expt 2 (1+ i))))) (expt 2 j)))
 				   (n (expt 2 (1+ (- i j)))))))))
 
@@ -1788,8 +1792,8 @@
 		  :use (bits-comp1-4))))
 
 (defthm bits-comp1
-    (implies (and (natp m) 
-		  (natp i) 
+    (implies (and (natp m)
+		  (natp i)
 		  (natp j)
 		  (> m i)
 		  (>= i j)
@@ -1986,7 +1990,7 @@
   :hints (("Goal" :use ((:instance bit+*k-2 (x y) (k x) (m n) (n i))))))
 
 (defthm cat-0-rewrite
-    (implies (natp x)		  
+    (implies (natp x)
 	     (equal (cat 0 x n) x))
     :hints (("Goal" :in-theory (enable natp cat))))
 

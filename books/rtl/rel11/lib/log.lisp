@@ -1,103 +1,24 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
 ;
 ; Contact:
-;   David Russinoff
+;   David M. Russinoff
 ;   1106 W 9th St., Austin, TX 78703
-;   http://www.russsinoff.com/
+;   david@russinoff.com
+;   http://www.russinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
+; See license file books/rtl/rel11/license.txt.
 ;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
-;
-; Author: David M. Russinoff (david@russinoff.com)
 
 (in-package "RTL")
 
-(set-enforce-redundancy t) ; for some reason, acl2 4.3 complains about  logand-natp 
+(set-enforce-redundancy t) ; for some reason, acl2 4.3 complains about logand-natp
 
 (local (include-book "../support/top"))
 
 (set-inhibit-warnings "theory") ; avoid warning in the next event
 (local (in-theory nil))
 
-;; From basic.lisp:
-
-(defund fl (x)
-  (declare (xargs :guard (real/rationalp x)))
-  (floor x 1))
-
-;; From bits.lisp:
-
-(defund bvecp (x k)
-  (declare (xargs :guard (integerp k)))
-  (and (integerp x)
-       (<= 0 x)
-       (< x (expt 2 k))))
-
-(defund bits (x i j)
-  (declare (xargs :guard (and (integerp x)
-                              (integerp i)
-                              (integerp j))))
-  (mbe :logic (if (or (not (integerp i))
-                      (not (integerp j)))
-                  0
-                (fl (/ (mod x (expt 2 (1+ i))) (expt 2 j))))
-       :exec  (if (< i j)
-                  0
-                (logand (ash x (- j)) (1- (ash 1 (1+ (- i j))))))))
-
-(defund bitn (x n)
-  (declare (xargs :guard (and (integerp x)
-                              (integerp n))))
-  (mbe :logic (bits x n n)
-       :exec  (if (evenp (ash x (- n))) 0 1)))
-
-(defund binary-cat (x m y n)
-  (declare (xargs :guard (and (integerp x)
-                              (integerp y)
-                              (natp m)
-                              (natp n))))
-  (if (and (natp m) (natp n))
-      (+ (* (expt 2 n) (bits x (1- m) 0))
-         (bits y (1- n) 0))
-    0))
-
-(defun formal-+ (x y)
-  (declare (xargs :guard t))
-  (if (and (acl2-numberp x) (acl2-numberp y))
-      (+ x y)
-    (list '+ x y)))
-
-(defun cat-size (x)
-  (declare (xargs :guard (and (true-listp x) (evenp (length x)))))
-  (if (endp (cddr x))
-      (cadr x)
-    (formal-+ (cadr x)
-	      (cat-size (cddr x)))))
-
-(defmacro cat (&rest x)
-  (declare (xargs :guard (and x (true-listp x) (evenp (length x)))))
-  (cond ((endp (cddr x))
-         `(bits ,(car x) ,(formal-+ -1 (cadr x)) 0))
-        ((endp (cddddr x))
-         `(binary-cat ,@x))
-        (t
-         `(binary-cat ,(car x) 
-                      ,(cadr x) 
-                      (cat ,@(cddr x)) 
-                      ,(cat-size (cddr x))))))
-
+(include-book "defs")
 
 ;;;**********************************************************************
 ;;;                       LOGAND, LOGIOR, and LOGXOR
@@ -141,12 +62,12 @@
                            (logxor (mod x 2) (mod y 2))))))))
   :rule-classes ((:definition :controller-alist ((binary-logxor t t)))))
 
-(defthm logand-bnd
-    (implies (<= 0 x)
-	     (and (<= 0 (logand x y))
-                  (<= (logand x y) x)))
-  :rule-classes :linear)
-
+(defun log-induct (x y)
+  (declare (xargs :measure (abs (* (ifix x) (ifix y)))))
+  (if (or (not (integerp x)) (not (integerp y)) (= x 0) (= y 0) (= x y))
+      (+ x y)
+    (log-induct (fl (/ x 2)) (fl (/ y 2)))))
+    
 (defthm logand-bvecp
     (implies (and (natp n)
 		  (bvecp x n)
@@ -163,6 +84,12 @@
 		  (bvecp y n)
                   (natp n))
 	     (bvecp (logxor x y) n)))
+
+(defthmd logand-plus-logxor
+  (implies (and (integerp x)
+                (integerp y))
+	   (equal (+ (logand x y) (logxor x y))
+	          (logior x y))))
 
 (defthmd logand-mod
   (implies (and (integerp x)
@@ -294,6 +221,14 @@
 	     (equal (logior (* (expt 2 n) x) y)
 		    (+ (* (expt 2 n) x) y))))
 
+(defthmd logior-2**n
+  (implies (and (natp n)
+                (integerp x))
+           (equal (logior (expt 2 n) x)
+                  (if (= (bitn x n) 1)
+                      x
+                    (+ x (expt 2 n))))))
+
 (defthmd logand-bits
     (implies (and (integerp x)
 		  (natp n)
@@ -330,8 +265,7 @@
                 (integerp i)
                 (integerp j))
            (equal (bits (logxor x y) i j)
-                  (logxor (bits x i j) (bits y i j))))
-  :hints (("Goal" :use bits-logxor$)))
+                  (logxor (bits x i j) (bits y i j)))))
 
 (defthmd bitn-logand
     (implies (and (integerp x)
@@ -469,10 +403,8 @@
 	     (equal (logior x x) x)))
 
 (defthm logxor-self
-  (equal (logxor x x) 0)
-  :hints (("Goal" :use logxor-self$)))
+  (equal (logxor x x) 0))
 
-; Matt K. edit: changed variable x to i to match ihs/logops-lemmas.lisp.
 (defthm lognot-lognot
     (implies (case-split (integerp i))
 	     (equal (lognot (lognot i))
@@ -571,6 +503,12 @@
                 (integerp z))
            (equal (logior x (logand y z))
                   (logand (logior x y) (logior x z)))))
+
+(defthmd logior-logand-1
+  (implies (and (integerp x)
+                (integerp y))
+           (equal (logior x (logand x y))
+                  x)))
 
 (defthmd logand-logior
   (implies (and (integerp x)

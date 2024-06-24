@@ -34,12 +34,12 @@
 ;; rules (and, not yet implemented, clause processors).
 
 ;(include-book "meta-extract-ttag")
-(include-book "tools/defevaluator-fast" :dir :system)
 (include-book "ev-theoremp")
-(include-book "tools/def-functional-instance" :dir :system)           
+(include-book "tools/def-functional-instance" :dir :system)
 (include-book "tools/match-tree" :dir :system)
 (include-book "tools/flag" :dir :system)
 (include-book "magic-ev")
+(include-book "xdoc/top" :dir :system)
 
 ; The following are necessary for developer builds, in which sublis-var and
 ; other supporting functions for meta-extract are not in :logic mode.
@@ -52,7 +52,7 @@
 ;; meta-extract facilities, i.e. to prove the theorems that follow.  We provide a
 ;; macro def-meta-extract below which proves these theorems for an extension of
 ;; this evaluator.
-(defevaluator-fast mextract-ev mextract-ev-lst
+(defevaluator mextract-ev mextract-ev-lst
   ((typespec-check ts x)
    (if a b c)
    (equal a b)
@@ -215,7 +215,7 @@
                                  :forcep nil)))
   :hints(("Goal" :use ((:instance mextract-contextual-badguy
                         (obj (list :relieve-hyp hyp alist rune target bkptr)))))))
-                
+
 ;; Assuming (mextract-ev-global-facts), meta-extract-formula produces a theorem
 (defthm mextract-formula
   (implies (and (mextract-ev-global-facts)
@@ -290,12 +290,42 @@
                               (- (len lemmas)
                                  (len (member rule lemmas)))))))))))
 
+
+(defthm plist-worldp-w-state
+  (implies (state-p1 state)
+           (plist-worldp (w state)))
+  :hints(("Goal" :in-theory (enable w))))
+
+(defun magic-ev-fncall-logic (fn arglist state)
+  (declare (xargs :guard (symbolp fn)
+                  :stobjs state))
+  (if (logicp fn (w state))
+      (magic-ev-fncall fn arglist state t nil)
+    (mv (msg "Not logic mode: ~x0" fn) nil)))
+
+(defthm mextract-fncall-logic
+  (mv-let (erp val)
+    (magic-ev-fncall-logic fn arglist st)
+    (implies (and (mextract-ev-global-facts)
+                  (equal (w st) (w state))
+                  (not erp))
+             (equal val
+                    (mextract-ev (cons fn (kwote-lst arglist)) nil))))
+  :hints(("Goal"
+          :use ((:instance mextract-global-badguy-sufficient
+                 (obj (list :fncall fn arglist))
+                 (a nil))))))
+
+(local (in-theory (disable magic-ev-fncall-logic)))
+
+
 (defthm mextract-fncall
   (mv-let (erp val)
     (magic-ev-fncall fn arglist st t nil)
     (implies (and (mextract-ev-global-facts)
                   (equal (w st) (w state))
-                  (not erp))
+                  (not erp)
+                  (logicp fn (w st)))
              (equal val
                     (mextract-ev (cons fn (kwote-lst arglist)) nil))))
   :hints(("Goal"
@@ -309,33 +339,36 @@
 (defthm-magic-ev-flg
   (defthm mextract-ev-magic-ev
     (mv-let (erp val)
-      (magic-ev x alist state hard-errp aokp)
-      (implies (and (mextract-ev-global-facts :state state1)
-                    (equal (w state1) (w state))
+      (magic-ev x alist st hard-errp aokp)
+      (implies (and (mextract-ev-global-facts)
+                    (equal (w st) (w state))
                     (not erp)
                     (equal hard-errp t)
                     (equal aokp nil)
                     ;; need pseudo-termp so that we know we don't look up
                     ;; non-symbol atoms
-                    (pseudo-termp x))
+                    (pseudo-termp x)
+                    (logic-fnsp x (w st)))
                (equal val
                       (mextract-ev x alist))))
     :flag magic-ev)
   (defthm mextract-ev-magic-ev-lst
     (mv-let (erp val)
-      (magic-ev-lst x alist state hard-errp aokp)
-      (implies (and (mextract-ev-global-facts :state state1)
-                    (equal (w state1) (w state))
+      (magic-ev-lst x alist st hard-errp aokp)
+      (implies (and (mextract-ev-global-facts)
+                    (equal (w st) (w state))
                     (not erp)
                     (equal hard-errp t)
                     (equal aokp nil)
-                    (pseudo-term-listp x))
+                    (pseudo-term-listp x)
+                    (logic-fns-listp x (w st)))
                (equal val
                       (mextract-ev-lst x alist))))
     :flag magic-ev-lst)
-  
+
     :hints(("goal" :in-theory (e/d (mextract-ev-of-fncall-args)
-                                   (meta-extract-global-fact+)))))
+                                   (meta-extract-global-fact+))
+            :induct (magic-ev-flg flag x alist st hard-errp aokp))))
 
 
 
@@ -400,7 +433,7 @@
            (implies (and (alistp a)
                          (alistp b))
                     (alistp (append a b)))))
-  (local (include-book "std/lists/take" :dir :system))
+  ;; (local (include-book "std/lists/take" :dir :system))
   (local (defthm commutativity-2-of-+
            (equal (+ x (+ y z))
                   (+ y (+ x z)))))
@@ -454,7 +487,7 @@
     :hints (("goal" :use ((:instance ev-lst-of-pairlis-append-head-rest
                            (head nil))))))
 
-  
+
   (defthm ev-lst-of-pairlis
     (implies (and (no-duplicatesp keys)
 ; (true-listp vals)
@@ -642,70 +675,99 @@
                     ,(ev-lst-find-atom-rule 'evlst-fn (w state))
                     ,(ev-find-quote-rule 'evfn (w state))
                     ,(ev-find-variable-rule 'evfn (w state))
-                    ,(ev-find-lambda-rule 'evfn (w state))))))
+                    ,(ev-find-lambda-rule 'evfn (w state))
+                    ,(ev-find-nonsymbol-atom-rule 'evfn (w state))
+                    ,(ev-find-bad-fncall-rule 'evfn (w state))))))
 
      (def-functional-instance
        evfn-meta-extract-typeset
        mextract-typeset
        ((mextract-ev evfn)
         (mextract-ev-lst evlst-fn)
-        (mextract-contextual-badguy evfn-meta-extract-contextual-badguy)))
+        (mextract-contextual-badguy evfn-meta-extract-contextual-badguy))
+       :translate nil
+       :macro-subst ((mextract-ev-global-facts evfn-meta-extract-global-facts)
+                     (mextract-ev-contextual-facts evfn-meta-extract-contextual-facts)))
 
      (def-functional-instance
        evfn-meta-extract-rw+-equal
        mextract-rw+-equal
        ((mextract-ev evfn)
         (mextract-ev-lst evlst-fn)
-        (mextract-contextual-badguy evfn-meta-extract-contextual-badguy)))
+        (mextract-contextual-badguy evfn-meta-extract-contextual-badguy))
+       :translate nil
+       :macro-subst ((mextract-ev-global-facts evfn-meta-extract-global-facts)
+                     (mextract-ev-contextual-facts evfn-meta-extract-contextual-facts)))
 
      (def-functional-instance
        evfn-meta-extract-rw+-iff
        mextract-rw+-iff
        ((mextract-ev evfn)
         (mextract-ev-lst evlst-fn)
-        (mextract-contextual-badguy evfn-meta-extract-contextual-badguy)))
+        (mextract-contextual-badguy evfn-meta-extract-contextual-badguy))
+       :translate nil
+       :macro-subst ((mextract-ev-global-facts evfn-meta-extract-global-facts)
+                     (mextract-ev-contextual-facts evfn-meta-extract-contextual-facts)))
 
      (def-functional-instance
        evfn-meta-extract-rw+-equiv
        mextract-rw+-equiv
        ((mextract-ev evfn)
         (mextract-ev-lst evlst-fn)
-        (mextract-contextual-badguy evfn-meta-extract-contextual-badguy)))
+        (mextract-contextual-badguy evfn-meta-extract-contextual-badguy))
+       :translate nil
+       :macro-subst ((mextract-ev-global-facts evfn-meta-extract-global-facts)
+                     (mextract-ev-contextual-facts evfn-meta-extract-contextual-facts)))
 
      (def-functional-instance
        evfn-meta-extract-rw-equal
        mextract-rw-equal
        ((mextract-ev evfn)
         (mextract-ev-lst evlst-fn)
-        (mextract-contextual-badguy evfn-meta-extract-contextual-badguy)))
+        (mextract-contextual-badguy evfn-meta-extract-contextual-badguy))
+       :translate nil
+       :macro-subst ((mextract-ev-global-facts evfn-meta-extract-global-facts)
+                     (mextract-ev-contextual-facts evfn-meta-extract-contextual-facts)))
 
      (def-functional-instance
        evfn-meta-extract-rw-iff
        mextract-rw-iff
        ((mextract-ev evfn)
         (mextract-ev-lst evlst-fn)
-        (mextract-contextual-badguy evfn-meta-extract-contextual-badguy)))
+        (mextract-contextual-badguy evfn-meta-extract-contextual-badguy))
+       :translate nil
+       :macro-subst ((mextract-ev-global-facts evfn-meta-extract-global-facts)
+                     (mextract-ev-contextual-facts evfn-meta-extract-contextual-facts)))
 
      (def-functional-instance
        evfn-meta-extract-rw-equiv
        mextract-rw-equiv
        ((mextract-ev evfn)
         (mextract-ev-lst evlst-fn)
-        (mextract-contextual-badguy evfn-meta-extract-contextual-badguy)))
+        (mextract-contextual-badguy evfn-meta-extract-contextual-badguy))
+       :translate nil
+       :macro-subst ((mextract-ev-global-facts evfn-meta-extract-global-facts)
+                     (mextract-ev-contextual-facts evfn-meta-extract-contextual-facts)))
 
      (def-functional-instance
        evfn-meta-extract-mfc-ap
        mextract-mfc-ap
        ((mextract-ev evfn)
         (mextract-ev-lst evlst-fn)
-        (mextract-contextual-badguy evfn-meta-extract-contextual-badguy)))
+        (mextract-contextual-badguy evfn-meta-extract-contextual-badguy))
+       :translate nil
+       :macro-subst ((mextract-ev-global-facts evfn-meta-extract-global-facts)
+                     (mextract-ev-contextual-facts evfn-meta-extract-contextual-facts)))
 
      (def-functional-instance
        evfn-meta-extract-relieve-hyp
        mextract-relieve-hyp
        ((mextract-ev evfn)
         (mextract-ev-lst evlst-fn)
-        (mextract-contextual-badguy evfn-meta-extract-contextual-badguy)))
+        (mextract-contextual-badguy evfn-meta-extract-contextual-badguy))
+       :translate nil
+       :macro-subst ((mextract-ev-global-facts evfn-meta-extract-global-facts)
+                     (mextract-ev-contextual-facts evfn-meta-extract-contextual-facts)))
 
      (def-functional-instance
        evfn-meta-extract-formula
@@ -713,7 +775,10 @@
        ((mextract-ev evfn)
         (mextract-ev-lst evlst-fn)
         (mextract-ev-falsify evfn-falsify)
-        (mextract-global-badguy evfn-meta-extract-global-badguy)))
+        (mextract-global-badguy evfn-meta-extract-global-badguy))
+       :translate nil
+       :macro-subst ((mextract-ev-global-facts evfn-meta-extract-global-facts)
+                     (mextract-ev-contextual-facts evfn-meta-extract-contextual-facts)))
 
      (def-functional-instance
        evfn-meta-extract-lemma-term
@@ -721,7 +786,10 @@
        ((mextract-ev evfn)
         (mextract-ev-lst evlst-fn)
         (mextract-ev-falsify evfn-falsify)
-        (mextract-global-badguy evfn-meta-extract-global-badguy)))
+        (mextract-global-badguy evfn-meta-extract-global-badguy))
+       :translate nil
+       :macro-subst ((mextract-ev-global-facts evfn-meta-extract-global-facts)
+                     (mextract-ev-contextual-facts evfn-meta-extract-contextual-facts)))
 
      (def-functional-instance
        evfn-meta-extract-lemma
@@ -729,7 +797,21 @@
        ((mextract-ev evfn)
         (mextract-ev-lst evlst-fn)
         (mextract-ev-falsify evfn-falsify)
-        (mextract-global-badguy evfn-meta-extract-global-badguy)))
+        (mextract-global-badguy evfn-meta-extract-global-badguy))
+       :translate nil
+       :macro-subst ((mextract-ev-global-facts evfn-meta-extract-global-facts)
+                     (mextract-ev-contextual-facts evfn-meta-extract-contextual-facts)))
+
+     (def-functional-instance
+       evfn-meta-extract-fncall-logic
+       mextract-fncall-logic
+       ((mextract-ev evfn)
+        (mextract-ev-lst evlst-fn)
+        (mextract-ev-falsify evfn-falsify)
+        (mextract-global-badguy evfn-meta-extract-global-badguy))
+       :translate nil
+       :macro-subst ((mextract-ev-global-facts evfn-meta-extract-global-facts)
+                     (mextract-ev-contextual-facts evfn-meta-extract-contextual-facts)))
 
      (def-functional-instance
        evfn-meta-extract-fncall
@@ -737,7 +819,10 @@
        ((mextract-ev evfn)
         (mextract-ev-lst evlst-fn)
         (mextract-ev-falsify evfn-falsify)
-        (mextract-global-badguy evfn-meta-extract-global-badguy)))
+        (mextract-global-badguy evfn-meta-extract-global-badguy))
+       :translate nil
+       :macro-subst ((mextract-ev-global-facts evfn-meta-extract-global-facts)
+                     (mextract-ev-contextual-facts evfn-meta-extract-contextual-facts)))
 
      (def-functional-instance
        evfn-meta-extract-magic-ev
@@ -745,7 +830,10 @@
        ((mextract-ev evfn)
         (mextract-ev-lst evlst-fn)
         (mextract-ev-falsify evfn-falsify)
-        (mextract-global-badguy evfn-meta-extract-global-badguy)))
+        (mextract-global-badguy evfn-meta-extract-global-badguy))
+       :translate nil
+       :macro-subst ((mextract-ev-global-facts evfn-meta-extract-global-facts)
+                     (mextract-ev-contextual-facts evfn-meta-extract-contextual-facts)))
 
      (def-functional-instance
        evfn-meta-extract-magic-ev-lst
@@ -753,7 +841,10 @@
        ((mextract-ev evfn)
         (mextract-ev-lst evlst-fn)
         (mextract-ev-falsify evfn-falsify)
-        (mextract-global-badguy evfn-meta-extract-global-badguy)))
+        (mextract-global-badguy evfn-meta-extract-global-badguy))
+       :translate nil
+       :macro-subst ((mextract-ev-global-facts evfn-meta-extract-global-facts)
+                     (mextract-ev-contextual-facts evfn-meta-extract-contextual-facts)))
 
      ;; rewrite to fn-check-def now
      ;; (def-functional-instance
@@ -765,12 +856,15 @@
      ;;    (mextract-global-badguy evfn-meta-extract-global-badguy)))
 
      (def-functional-instance
-       evfn-fn-check-def
+       evfn-meta-extract-fn-check-def
        mextract-ev-fn-check-def
        ((mextract-ev evfn)
         (mextract-ev-lst evlst-fn)
         (mextract-ev-falsify evfn-falsify)
-        (mextract-global-badguy evfn-meta-extract-global-badguy)))
+        (mextract-global-badguy evfn-meta-extract-global-badguy))
+       :translate nil
+       :macro-subst ((mextract-ev-global-facts evfn-meta-extract-global-facts)
+                     (mextract-ev-contextual-facts evfn-meta-extract-contextual-facts)))
 
      ;; why not...
      (def-functional-instance
@@ -779,7 +873,10 @@
        ((mextract-ev evfn)
         (mextract-ev-lst evlst-fn)
         (mextract-ev-falsify evfn-falsify)
-        (mextract-global-badguy evfn-meta-extract-global-badguy)))
+        (mextract-global-badguy evfn-meta-extract-global-badguy))
+       :translate nil
+       :macro-subst ((mextract-ev-global-facts evfn-meta-extract-global-facts)
+                     (mextract-ev-contextual-facts evfn-meta-extract-contextual-facts)))
 
      (def-functional-instance
        evfn-lst-of-pairlis-append-rest
@@ -787,7 +884,10 @@
        ((mextract-ev evfn)
         (mextract-ev-lst evlst-fn)
         (mextract-ev-falsify evfn-falsify)
-        (mextract-global-badguy evfn-meta-extract-global-badguy)))
+        (mextract-global-badguy evfn-meta-extract-global-badguy))
+       :translate nil
+       :macro-subst ((mextract-ev-global-facts evfn-meta-extract-global-facts)
+                     (mextract-ev-contextual-facts evfn-meta-extract-contextual-facts)))
 
      (def-functional-instance
        evfn-lst-of-pairlis-append-head-rest
@@ -795,7 +895,10 @@
        ((mextract-ev evfn)
         (mextract-ev-lst evlst-fn)
         (mextract-ev-falsify evfn-falsify)
-        (mextract-global-badguy evfn-meta-extract-global-badguy)))))
+        (mextract-global-badguy evfn-meta-extract-global-badguy))
+       :translate nil
+       :macro-subst ((mextract-ev-global-facts evfn-meta-extract-global-facts)
+                     (mextract-ev-contextual-facts evfn-meta-extract-contextual-facts)))))
 
 (defun meta-extract-replace-sym (from to x)
   (let* ((name (symbol-name x))
@@ -853,14 +956,14 @@
 (local
  (localize-example
   using-typeset-and-type-alist
-  
+
   (defthm nth-when-symbolp
     (implies (symbolp n)
              (equal (nth n x)
                     (car x)))
     :rule-classes nil)
 
-  (defevaluator-fast nthmeta-ev nthmeta-ev-lst
+  (defevaluator nthmeta-ev nthmeta-ev-lst
     ((typespec-check ts x)
      (if a b c)
      (equal a b)
@@ -1038,7 +1141,7 @@
          (value '(value-triple :failed))
        (er soft 'bar-of-baz-fails "Proof unexpectedly succeeded"))))
 
-  (defevaluator-fast foobar-ev foobar-ev-lst
+  (defevaluator foobar-ev foobar-ev-lst
     ((typespec-check ts x)
      (if a b c)
      (equal a b)
@@ -1117,10 +1220,6 @@
 
 
 
-(defthm plist-worldp-w-state
-  (implies (state-p1 state)
-           (plist-worldp (w state)))
-  :hints(("Goal" :in-theory (enable w))))
 
 ;; Allows use of meta-extract-formula with just the world.  You still need
 ;; state in the theorems (and to know that wrld = (w state)).
@@ -1128,12 +1227,14 @@
   (declare (xargs :guard (and (symbolp name)
                               (plist-worldp wrld))))
   (or (getprop name 'theorem nil 'current-acl2-world wrld)
-      (mv-let (flg prop)
-        (constraint-info name wrld)
-        (cond ((eq prop *unknown-constraints*)
-               *t*)
-              (flg (ec-call (conjoin prop)))
-              (t prop)))))
+      (cond ((logicp name wrld)
+             (mv-let (flg prop)
+               (constraint-info name wrld)
+               (cond ((unknown-constraints-p prop)
+                      *t*)
+                     (flg (ec-call (conjoin prop)))
+                     (t prop))))
+            (t *t*))))
 
 (defthm meta-extract-formula-w-rewrite
   (equal (meta-extract-formula-w name (w state))
@@ -1217,8 +1318,7 @@
              (quote-listp (cdr x))
              (mbt (pseudo-term-listp (cdr x))))
         (mv-let (erp val)
-          (magic-ev-fncall (car x) (unquote-lst (cdr x))
-                           state t nil)
+          (magic-ev-fncall-logic (car x) (unquote-lst (cdr x)) state)
           (if erp
               x
             (kwote val)))
@@ -1231,10 +1331,10 @@
              (equal (fnc-ev (ev-call-metafn x mfc state) a)
                     (fnc-ev x a)))
     :hints(("Goal"
-            :use ((:instance fnc-ev-meta-extract-fncall
-                   (fn (car x))
-                   (arglist (unquote-lst (cdr x)))
-                   (st state)))
+            ;; :use ((:instance fnc-ev-meta-extract-fncall-logic
+            ;;        (fn (car x))
+            ;;        (arglist (unquote-lst (cdr x)))
+            ;;        (st state)))
             :in-theory (enable fnc-ev-constraint-0))))
 
 
@@ -1272,3 +1372,250 @@
   (defthm fib-9
     (equal (fib 9) 55))))
 
+;; The following is for reference by the xdoc:
+(defevaluator mx-ev mx-ev-lst
+  ((typespec-check ts x)
+   (if a b c)
+   (equal a b)
+   (not a)
+   (iff a b)
+   (implies a b)))
+
+(defxdoc magic-ev
+  :parents (meta)
+  :short "Evaluate a term under a ground substitution using @(see magic-ev-fncall)."
+  :long "<p>Invocation:</p>
+@({
+ (magic-ev term alist state hard-error-returns-nilp aokp)
+ })
+
+<p>evaluates the given term under the alist mapping variables to values.
+Functions within the term are evaluated using @(see magic-ev-fncall) and the
+values returned are the same as for @(see magic-ev-fncall), that is,</p>
+@({
+ (mv NIL value)
+ })
+<p>on success or</p>
+@({
+ (mv T error-msg)
+ })
+<p>on failure.</p>")
+
+(defxdoc magic-ev-lst
+  :parents (magic-ev)
+  :short "Evaluate a list of terms using @(see magic-ev).")
+
+(defxdoc fn-get-def
+  :parents (meta-extract)
+  :short "Look up a function's definition from the world."
+  :long "<p>Invocation:</p>
+@({
+ (fn-get-def fnname state)
+ })
+<p>or equivalently,if @('world') is @('(w state)'),</p>
+@({
+ (fn-get-def-w fnname world)
+ })
+
+<p>produces @('(mv successp formals body)'), where if @('successp') is true,
+then @('(fnname . formals)') is equal to @('body') under evaluation.</p>
+
+<p>@('fn-get-def') can be assumed to work correctly in the context of
+metafunctions and clause processors via @(see meta-extract).</p>
+
+<p>The @(see def-meta-extract) macro supports @('fn-get-def') indirectly: we
+rewrite the @('successp') return value to a call of @('fn-check-def'), and
+@('def-meta-extract') provides a theorem that rewrites an evaluation of
+@('(fnname . args)') to the evaluation of @('body') under the pairing of
+@('formals') to @('args') when it can relieve the hypothesis</p>
+@({
+ (fn-check-def fnname state formals body).
+ })")
+
+(defpointer fn-check-def fn-get-def)
+
+
+
+
+(local
+ ;; Set up a custom untranslate so that the xdoc will show the
+ ;; mx-ev-meta-extract macros rather than their expanded forms.
+ (progn
+   (make-event
+    (let ((curr-preprocess (cdr (assoc 'untranslate-preprocess
+                                       (table-alist 'user-defined-functions-table (w state))))))
+      `(defun my-preprocess (term wrld)
+         (declare (ignorable wrld)
+                  (xargs :mode :program))
+         (cond ((equal term '(MX-EV
+                              (META-EXTRACT-GLOBAL-FACT+ (MV-NTH '0
+                                                                 (MX-EV-META-EXTRACT-GLOBAL-BADGUY STATE))
+                                                         (MV-NTH '1
+                                                                 (MX-EV-META-EXTRACT-GLOBAL-BADGUY STATE))
+                                                         STATE)
+                              (MX-EV-FALSIFY (META-EXTRACT-GLOBAL-FACT+
+                                              (MV-NTH '0
+                                                      (MX-EV-META-EXTRACT-GLOBAL-BADGUY STATE))
+                                              (MV-NTH '1
+                                                      (MX-EV-META-EXTRACT-GLOBAL-BADGUY STATE))
+                                              STATE))))
+                '(mx-ev-meta-extract-global-facts))
+               ((equal term '(MX-EV (META-EXTRACT-CONTEXTUAL-FACT
+                                     (MX-EV-META-EXTRACT-CONTEXTUAL-BADGUY A MFC STATE)
+                                     MFC STATE)
+                                    A))
+                '(mx-ev-meta-extract-contextual-facts a))
+               ((and (consp term)
+                     (equal (car term) '(LAMBDA (X L)
+                                                (RETURN-LAST 'MBE1-RAW
+                                                             (MEMBER-EQL-EXEC X L)
+                                                             (RETURN-LAST 'PROGN
+                                                                          (MEMBER-EQL-EXEC$GUARD-CHECK X L)
+                                                                          (MEMBER-EQUAL X L))))))
+                (cons 'member (cdr term)))
+               ((and (consp term)
+                     (equal (car term) '(LAMBDA (X)
+                                                (RETURN-LAST 'MBE1-RAW
+                                                             (NO-DUPLICATESP-EQL-EXEC X)
+                                                             (RETURN-LAST 'PROGN
+                                                                          (NO-DUPLICATESP-EQL-EXEC$GUARD-CHECK X)
+                                                                          (NO-DUPLICATESP-EQUAL X))))))
+                (cons 'no-duplicatesp (cdr term)))
+               (t ,(if curr-preprocess
+                       `(,curr-preprocess term wrld)
+                     'term))))))
+   (table user-defined-functions-table 'untranslate-preprocess 'my-preprocess)))
+
+(def-meta-extract mx-ev mx-ev-lst)
+
+(defxdoc def-meta-extract
+  :parents (meta-extract)
+  :short "Generate macros and theorems convenient for using @(see meta-extract) with a given evaluator."
+  :long "<p>Using the @(see meta-extract) feature in proofs of meta rules and
+clause processors is fairly inconvenient when starting from scratch.
+Def-meta-extract generates a set of theorems for a given evaluator that are
+a more convenient starting point for reasoning about meta-extract.</p>
+
+<p>Usage:</p>
+
+@({
+ (defevaluator mx-ev mx-ev-lst
+   ((typespec-check ts x)
+    (if a b c)
+    (equal a b)
+    (not a)
+    (iff a b)
+    (implies a b)
+    ...))   ;; other functions as needed for the application
+
+ (def-meta-extract mx-ev mx-ev-lst)
+ })
+
+<p>We will use the above invocation on @('mx-ev') as an example;
+@('def-meta-extract') should be applicable to any evaluator that supports the
+six functions listed in the defevaluator form above.</p>
+
+<p>The above invocation of @('def-meta-extract') produces two macros that
+expand to well-formed meta-extract hypotheses:</p>
+@({
+ (mx-ev-meta-extract-contextual-facts a :mfc mfc :state state)
+ (mx-ev-meta-extract-global-facts :state state)
+ })
+<p>(Note: The keyword arguments listed default to the variable names @('mfc')
+and @('state'), which are usually the right arguments.)</p>
+
+<p>The exact meta-extract hypotheses produced use a bad-guy function as the
+@('obj') argument to the meta-extract function, and for the global macro, for
+the @('st') argument to @('meta-extract-global-fact+'), so that they
+effectively universally quantify them, as shown by the following two theorems:</p>
+@(def mx-ev-meta-extract-contextual-badguy-sufficient)
+@(def mx-ev-meta-extract-global-badguy-sufficient)
+
+<p>However, @('def-meta-extract') proves several theorems for the given
+evaluator so that the user doesn't need to reason directly about invocations of
+@(see meta-extract-contextual-fact) and @(see meta-extract-global-fact+).  For
+example, to show that an invocation of @('meta-extract-formula') is true under
+@('mx-ev'), you could prove:</p>
+@({
+  (implies (and (mx-ev (meta-extract-global-fact+ (list :formula name) st state) a)
+                (equal (w st) (w state)))
+           (mx-ev (meta-extract-formula name st) a))
+})
+<p>But the following theorem proved by @('def-meta-extract') obviates the need
+to reason directly about @(see meta-extract-global-fact+) and provide the correct
+@('obj = (list :formula name)') in this manner:</p>
+@({
+  (implies (and (mx-ev-meta-extract-global-facts)
+                (equal (w st) (w state)))
+           (mx-ev (meta-extract-formula name st) a))
+ })
+
+<p>(Note: @('st'), the state from which the formula is extracted, and
+@('state'), the original state on which the metafunction or clause processor
+was invoked, may differ in the case of a clause processor because the clause
+processor can update state.  As long as the @('w') field (holding the ACL2
+logical world) of the state is not updated, global facts can still be extracted
+from the state and assumed correct.)</p>
+
+<h3>List of theorems proved by @('def-meta-extract')</h3>
+
+<h4>Typset reasoning with @(see mfc-ts)</h4>
+<p>The following theorem allows the user to conclude that a typeset returned by
+@(see mfc-ts) correctly describes the type of a term:</p>
+@(def mx-ev-meta-extract-typeset)
+
+<h4>Rewriting with @(see mfc-rw) and under substitution with @(see mfc-rw+)</h4>
+<p>The following six theorems allow the user to conclude that a call of @(see
+mfc-rw) returns an equivalent term, or that a call of @(see mfc-rw+) returns a
+term equivalent to the substitution of @('alist') into @('term'), with the
+equivalence given by the @('equiv-info') argument provided (@('nil') for
+equality, @('t') for @('iff'), or the name of an equivalence relation):</p>
+@(def mx-ev-meta-extract-rw-equal)
+@(def mx-ev-meta-extract-rw-iff)
+@(def mx-ev-meta-extract-rw-equiv)
+@(def mx-ev-meta-extract-rw+-equal)
+@(def mx-ev-meta-extract-rw+-iff)
+@(def mx-ev-meta-extract-rw+-equiv)
+
+<h4>Detecting linear arithmetic contradictions with @(see mfc-ap)</h4>
+<p>The following theorem allows the user to conclude that a term is false under
+the given environment @('a') when @(see mfc-ap) returns @('t') indicating a
+linear arithmetic contradiction:</p>
+@(def mx-ev-meta-extract-mfc-ap)
+
+<h4>Proving terms true with @(see mfc-relieve-hyp)</h4>
+@(def mx-ev-meta-extract-relieve-hyp)
+
+<h4>Looking up formulas by name using @(see meta-extract-formula)</h4>
+<p>(Note: @('meta-extract-formula') can be used to look up a theorem,
+definition of a defined function, or constraint of a constrained function.)</p>
+@(def mx-ev-meta-extract-formula)
+
+<h4>Looking up rewrite rules from a @('lemmas') property</h4>
+<p>The following two theorems conclude that a rewrite rule extracted from a
+function's @('lemmas') property is valid (the second somewhat more explicitly
+than the first):</p>
+@(def mx-ev-meta-extract-lemma-term)
+@(def mx-ev-meta-extract-lemma)
+
+<h4>Calling a function with @(see magic-ev-fncall)</h4>
+@(def mx-ev-meta-extract-fncall)
+
+<h4>Evaluating a term with @(see magic-ev) or termlist with @(see magic-ev-lst)</h4>
+@(def mx-ev-meta-extract-magic-ev)
+@(def mx-ev-meta-extract-magic-ev-lst)
+
+<h4>Looking up a function definition with @(see fn-get-def)</h4>
+<p>The following theorem allows a function call to be expaneded to its body
+when the function definition is successfully looked up in the world with @(see
+fn-get-def).  Note: The term @('(mv-nth 0 (fn-get-def ...))') indicating
+success of the @(see fn-get-def) call is rewritten to the call of @(see
+fn-check-def):</p>
+@(def mx-ev-meta-extract-fn-check-def)
+
+<h4>Technical lemmas about pairing formals with actuals</h4>
+<p>The following three theorems may help in reasoning about expansions of
+function calls and lambdas:</p>
+@(def mx-ev-lst-of-pairlis)
+@(def mx-ev-lst-of-pairlis-append-rest)
+@(def mx-ev-lst-of-pairlis-append-head-rest)")

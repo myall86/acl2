@@ -25,12 +25,12 @@
 ; these parameters, simply do :doc <param> at the ACL2 prompt.
 
 ;; (acl2s-defaults :set testing-enabled :naive) ;other values are T,NIL
-;; (acl2s-defaults :set verbosity-level 1) 
+;; (acl2s-defaults :set verbosity-level 1)
 ;; (acl2s-defaults :set num-trials 1000)
 ;; (acl2s-defaults :set num-counterexamples 3)
 ;; (acl2s-defaults :set num-witnesses 3)
 ;; (acl2s-defaults :set search-strategy :simple) ;other value is :incremental
-;; (acl2s-defaults :set sampling-method :random) 
+;; (acl2s-defaults :set sampling-method :random)
 ;; (acl2s-defaults :set subgoal-timeout 10) ;0 turns off timeout
 
 
@@ -44,30 +44,33 @@
 
 (include-book "acl2s-parameter")
 (include-book "prove-cgen" :ttags :all)
-(include-book "../defdata/top" :ttags :all)
+(include-book "acl2s/defdata/top" :dir :system :ttags :all)
 
 
 (defun defdata-testing-enabled-ev (D kwd-alist wrld)
   (declare (ignore D wrld))
-  `((local (acl2s-defaults :set testing-enabled 
+  `((local (acl2s-defaults :set testing-enabled
                            ,(defdata::get1 :testing-enabled kwd-alist)))))
 
-; Add the above form at the beginning of defdata events 
-(table defdata-defaults-table 
-       :pre-hook-fns 
-       (cons 'defdata-testing-enabled-ev 
-             (defdata::get1 :pre-hook-fns (table-alist 'defdata-defaults-table world))))
+; Add the above form at the beginning of defdata events
+(table defdata-defaults-table
+       :pre-pred-hook-fns
+       (cons 'defdata-testing-enabled-ev
+             (defdata::get1 :pre-pred-hook-fns (table-alist 'defdata-defaults-table world))))
 
-(make-event 
+
+;reset cgen globals and other state defaults
+(make-event
  (er-progn
-  (assign cgen::event-stack nil)
+  (assign cgen::event-ctx nil)
   (assign cgen::cgen-state nil)
+  (assign acl2::evalable-printing-abstractions nil)
   (value '(value-triple :invisible)))
  :check-expansion t)
 
 (defttag t)
-(defattach (acl2::initialize-event-user cgen::initialize-event-user-cgen-gv) :skip-checks t)
-(defattach (acl2::finalize-event-user cgen::finalize-event-user-cgen-gv) :skip-checks t)
+(defattach (acl2::initialize-event-user cgen::initialize-event-user-cgen-gv) :skip-checks t :system-ok t)
+(defattach (acl2::finalize-event-user cgen::finalize-event-user-cgen-gv) :skip-checks t :system-ok t)
 (defattach (cgen::print-testing-summary cgen::print-testing-summary-fn) :skip-checks t)
 (defttag nil)
 
@@ -91,18 +94,24 @@
 ;        :sig ((any hints keyword-value-listp state) -> (mv erp any state))
   (b* ((ctx 'test?)
 
-       (cgen::cgen-state (cgen::make-cgen-state-fn form override-defaults (w state)))       
+       (cgen::cgen-state (cgen::make-cgen-state-fn form (cons :USER-DEFINED ctx)
+                                                   override-defaults (w state)))
 ;       (?defaults (cget params))
        ;(testing-enabled (cget testing-enabled))
        (vl              (cgen::cget verbosity-level))
        (pts?            (cgen::cget print-cgen-summary))
+
+       (timeout (cgen::cget cgen-timeout))
+
        (hints (append '() ;acl2::*bash-skip-forcing-round-hints*
                       (acl2::add-string-val-pair-to-string-val-alist
                        "Goal" :do-not (list 'quote '(acl2::generalize acl2::fertilize))
                        (acl2::add-string-val-pair-to-string-val-alist
                         "Goal" :do-not-induct T hints))))
 
-       ((mv res cgen::cgen-state state) (prove/cgen form hints cgen::cgen-state state))
+       ((mv res cgen::cgen-state state)
+        (with-time-limit timeout
+                         (prove/cgen form hints cgen::cgen-state state)))
 
        ((er &) (cond ((not (cgen::cgen-state-p cgen::cgen-state)) (value nil))
                      ((and (<= (acl2::access cgen::gcs% (cgen::cget gcs) :cts) 0)
@@ -111,8 +120,8 @@
                       (value nil))
                      (t (cgen::print-testing-summary cgen::cgen-state ctx state))))
 
-       
-       ((mv cts-found? state)   
+
+       ((mv cts-found? state)
         (cond ((eq res :falsifiable) (prog2$
                                       (cgen::cw? (cgen::normal-output-flag vl)
                                            "~%Test? found a counterexample.~%")
@@ -135,7 +144,7 @@
                   (mv NIL state)))))
 
        )
-      
+
     (mv cts-found? '(value-triple :invisible) state )))
 
 (defmacro test? (form &rest kwd-val-lst)
@@ -146,18 +155,16 @@
          (hints (and hints-entry (cadr hints-entry))))
     `(with-output
       :stack :push
-      ,(if debug :on :off) :all
+      ,@(if debug '(:on :all :summary-on :all) '(:off :all :summary-off :all))
+      ,@(if debug nil (list :on 'comment))
       :gag-mode ,(not debug)
      (make-event
       (test?-fn ',form ',hints ',kwd-val-lst state)))))
 
-
-(include-book "xdoc/top" :dir :system)
-
 (defxdoc acl2::cgen
-  :parents (acl2::debugging acl2::acl2-sedan)
+  :parents (acl2::debugging acl2::acl2-sedan acl2::testing-utilities)
   :short "Counterexample Generation a.k.a Disproving for ACL2"
-  :long 
+  :long
 "
 <h3>Using Cgen</h3>
 <p>
@@ -170,7 +177,7 @@ commands:
 })
 </p>
 
-<h3>Introduction</h3> 
+<h3>Introduction</h3>
 
 <p> Cgen is a powerful debugging facility that can be used to test/check
 formulas for counterexamples automatically. It is implemented as a set of
@@ -184,14 +191,14 @@ counterexamples. So although you can integrate Cgen seamlessly in your
 interactive proof workflow, we recommend the use of the specially designed
 macro, <i>test?</i>.  </p>
 
-<h3>To prove use <tt>thm</tt>, to disprove use <tt>test?</tt></h3> 
+<h3>To prove use <tt>thm</tt>, to disprove use <tt>test?</tt></h3>
 
 <p> One can use @('test?') as a drop-in replacement for @('thm')
 to disprove conjectures.  @('test?') guarantees that
 counterexamples are printed in terms of the top goal's
 variables. See @(see test?) for more details and examples.</p>
 
-<h3>More Powerful Theorem Proving</h3> 
+<h3>More Powerful Theorem Proving</h3>
 
 <p>
 Cgen also defeats false generalizations. We have seen many
@@ -220,29 +227,26 @@ Cgen falsified a bad generalization, thereby causing ACL2 to
 
 <h3> Advanced Notes </h3>
 
-<p> If you interrupt a @('test?'),@('thm'), or @('defthm'), in a session with
-@('testing-enabled'), using say Ctrl-C or ACL2s's interrupt command, then there
-is a good chance of polluting the transient Cgen global state. This situation
-might also occur if you are using @(see brr). In such cases you can remedy the
-problem, using @(see cgen::flush). Simply submit the command @('(cgen::flush)')
-in the session editor or the ACL2 prompt. </p>
 
 <p>The API functions/macros for Cgen library reside in the ACL2S package. Use
 list (<tt>*acl2s-exports*</tt>) to import these symbols into your own
 package.</p>
 
-<h3>More details</h3> 
+<h3>More details</h3>
 
 <p> To understand more about how testing works, please refer to the following
 <a href=\"http://arxiv.org/abs/1105.4394v2\">paper</a> </p>
 "
  )
 
+#!ACL2
+(defpointer counter-example-generation cgen)
+
 (defxdoc cgen::flush
   :parents (acl2::cgen)
   :short "Flush/Reset the Cgen state globals to sane values."
-  :long "
-  Flush the transient Cgen state globals (<tt>cgen::event-stack</tt>, <tt>cgen::cgen-state</tt>) to <tt>nil</tt>.
+  :long " [DEPRECATED, IRRELEVANT]
+  Flush the transient Cgen state globals (<tt>cgen::event-ctx</tt>, <tt>cgen::cgen-state</tt>) to <tt>nil</tt>.
   <code>
    Usage (at the top-level):
      (cgen::flush)
@@ -263,14 +267,14 @@ package.</p>
   (test? (implies (and (posp (car x))
                        (posp (cdr x)))
                   (= (cdr x) (len x))))
-    
-  
+
+
   (defun perm (x y)
     (if (endp x)
       (endp y)
       (and (member (car x) y)
            (perm (cdr x) (remove1 (car x) y)))))
-  
+
   (test?
     (implies (and (consp X)
                   (member a Y))
@@ -280,16 +284,16 @@ package.</p>
 })
 
 Note: test? is in ACL2S package.
-  
+
 <h4>Usage:</h4>
 @({
-   (test? form 
+   (test? form
           [:hints hints]
           [acl2s-defaults keyword options]
    )
 })
 
-<h3>Introduction</h3> 
+<h3>Introduction</h3>
 
 <p> @('test?') is a powerful counterexample generation facility,
 based on random testing, that is intended to be used to increase
@@ -317,7 +321,7 @@ have succeeded, so @('test?') will report success. </p>
 is recommended to use them only in the design and in the debug phase, since its
 use requires trust-tags.</p>
 
-<h3> Control Parameters </h3> 
+<h3> Control Parameters </h3>
 
 <p> We can furthur control the behavior of test? using keyword options or
 @('acl2s-defaults'). All the parameters in @('acl2s-defaults') are available as
@@ -328,7 +332,7 @@ The most important parameters to tweak are
 <h3>More Examples</h3>
 @({
   (defdata small-pos (enum '(1 2 3 4 5 6 7 8 9)))
-  (test? 
+  (test?
     (implies (and (integerp c1)
                   (integerp c2)
                   (integerp c3)
@@ -347,31 +351,31 @@ The most important parameters to tweak are
     (if (>= (floor i ri) ri)
         ri
         (square-root1 i (floor (+ ri (floor i ri)) 2))))
-  
+
   (defun square-root (i)
     (declare (xargs :mode :program))
     (square-root1 i (floor i 2)))
-  
+
   (defun square (x)
      (* x x))
-   
-   
+
+
   (test?
     (implies (natp i)
              (and (<= (square (square-root i)) i)
                   (< i (square (1+ (square-root i)))))))
-  
+
 
 
 
   (defdata triple (list pos pos pos))
-  
+
   (defun trianglep (v)
     (and (triplep v)
          (< (third v) (+ (first v) (second v)))
          (< (first v) (+ (second v) (third v)))
          (< (second v) (+ (first v) (third v)))))
-  
+
   (defun shape (v)
     (if (trianglep v)
         (cond ((equal (first v) (second v))
@@ -382,25 +386,10 @@ The most important parameters to tweak are
               ((equal (first v) (third v)) \"isosceles\")
               (t \"scalene\"))
       \"error\"))
-  
+
   (acl2s-defaults :set num-trials 1000000)
   (acl2s-defaults :set testing-enabled :naive)
-  
-  (test? 
-   (implies (and (triplep x)
-                 (trianglep x)
-                 (> (third x) 256)
-                 (= (third x)
-                    (* (second x) (first x))))
-            (not (equal \"isosceles\" (shape x)))))
-  
-  (acl2s-defaults :set num-trials 1000)
-  
-  (acl2s-defaults :set testing-enabled t)
-  
-  
-  (include-book \"arithmetic/top-with-meta\" :dir :system)
-  
+
   (test?
    (implies (and (triplep x)
                  (trianglep x)
@@ -408,16 +397,26 @@ The most important parameters to tweak are
                  (= (third x)
                     (* (second x) (first x))))
             (not (equal \"isosceles\" (shape x)))))
-  
+
+  (acl2s-defaults :set num-trials 1000)
+
+  (acl2s-defaults :set testing-enabled t)
+
+
+  (include-book \"arithmetic/top-with-meta\" :dir :system)
+
+  (test?
+   (implies (and (triplep x)
+                 (trianglep x)
+                 (> (third x) 256)
+                 (= (third x)
+                    (* (second x) (first x))))
+            (not (equal \"isosceles\" (shape x)))))
+
 })
 
 
 <h3> Advanced Notes </h3>
-
-<p> If you interrupt a @('test?') using say Ctrl-C, then there is a good chance
-of polluting the transient Cgen global state. In such cases you can remedy the
-problem, using @(see cgen::flush). Simply submit the command @('(cgen::flush)')
-in the session editor or the ACL2 prompt. </p>
 
 <p> We note that in order to be able to generate counterexamples, we do not
 allow ACL2 to use any of the following processes: induction, generalization,
@@ -427,7 +426,7 @@ are recognized.  If you want to enable the above processes, use @('thm')
 instead, but note that counterexamples shown might not be of the top-level
 conjecture.  </p>
 
-    
+
 "
 )
 
@@ -436,7 +435,7 @@ conjecture.  </p>
   :parents (acl2::cgen)
   :short "top-level API function for Cgen/testing."
   :long
-"<h3>Introduction</h3> 
+"<h3>Introduction</h3>
 
 <p> This is the main API function to test/check a form for counterexamples with
 the full power of prove (and hints), i.e. @('prove/cgen') actually calls
@@ -458,7 +457,7 @@ in trans-eval call of prove (usually a hard/raw lisp error), it is @(':?')
 otherwise, which points out that we could neither prove nor disprove the
 conjecture under consideration </p>
 
-<h3>Example</h3> 
+<h3>Example</h3>
 
 <p> For an example of the use of @('prove/cgen'), you can study the
 implementation of the @('test?') macro itself found in cgen/top.lisp. To see
@@ -467,3 +466,23 @@ the structure of @('cgen-state'), you can study the
 information in a human-readable form. </p>
 "
 )
+
+;; Put the test-checkpoint no-op backtrack hint in the override-hints
+;; (acl2s-defaults :set testing-enabled t)
+
+
+; [2016-04-03 Sun] Add fixers support to Cgen
+;; (make-event
+;;  (if *fixers-enabled*
+;;      '(progn
+;;         (include-book "fixers2" :ttags :all)
+;;         (include-book "fixers-gl-backend" :ttags :all)
+;;         (include-book "cgen-rules")
+;;         (gl::gl-satlink-mode)
+;;         )
+;;    '(value-triple :invisible)))
+
+; [2017-10-06 Fri] Replaced GL backend with a greedy algorithm for
+; arranging fixers
+(include-book "fixers-greedy" :ttags :all)
+(include-book "cgen-rules")

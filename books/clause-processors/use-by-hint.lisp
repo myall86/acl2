@@ -1,3 +1,31 @@
+; Copyright (C) 2009 Centaur Technology
+;
+; Contact:
+;   Centaur Technology Formal Verification Group
+;   7600-C N. Capital of Texas Highway, Suite 300, Austin, TX 78731, USA.
+;   http://www.centtech.com/
+;
+; License: (An MIT/X11-style license)
+;
+;   Permission is hereby granted, free of charge, to any person obtaining a
+;   copy of this software and associated documentation files (the "Software"),
+;   to deal in the Software without restriction, including without limitation
+;   the rights to use, copy, modify, merge, publish, distribute, sublicense,
+;   and/or sell copies of the Software, and to permit persons to whom the
+;   Software is furnished to do so, subject to the following conditions:
+;
+;   The above copyright notice and this permission notice shall be included in
+;   all copies or substantial portions of the Software.
+;
+;   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+;   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+;   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+;   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+;   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+;   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+;   DEALINGS IN THE SOFTWARE.
+;
+; Original author: Sol Swords <sswords@centtech.com>
 
 
 ;; This is a computed hint that causes a :by hint to be applied to a subgoal
@@ -22,7 +50,9 @@
 
 (in-package "ACL2")
 
-(include-book "join-thms")
+;; (include-book "join-thms")
+(include-book "remove-hyp")
+(include-book "std/util/bstar" :dir :system)
 
 ;; USE-BY-HINT is t.  Therefore it can be added as a hyp to any subgoal without
 ;; affecting its truth value.  It serves to signal use-by-computed-hint to give
@@ -35,26 +65,6 @@
                     (use-by-hint)
                     (:type-prescription use-by-hint)))
 
-
-;; This is a very simple clause processor which simply removes the first
-;; literal from the clause.
-(defun remove-first-hyp-cp (clause)
-  (if (consp clause)
-      (list (cdr clause))
-    (list clause)))
-
-(defevaluator use-by-hint-ev use-by-hint-ev-lst
-  ((if a b c)))
-
-(def-join-thms use-by-hint-ev)
-
-(defthm remove-first-hyp-cp-correct
-  (implies (and (pseudo-term-listp x)
-                (alistp a)
-                (use-by-hint-ev (conjoin-clauses (remove-first-hyp-cp x))
-                         a))
-           (use-by-hint-ev (disjoin x) a))
-  :rule-classes :clause-processor)
 
 ;; The computed hint.  Checks to see if the first literal in the clause is a
 ;; hyp of the form (use-by-hint 'rulename).  If so, first remove that literal
@@ -84,3 +94,5 @@
        ,the-hints
        :clause-processor remove-first-hyp-cp))
     (& nil)))
+
+;; Note: the use-termhint utility used to be here but has been moved to std/util/termhints.lisp.

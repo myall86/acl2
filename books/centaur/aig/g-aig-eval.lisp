@@ -61,7 +61,7 @@
           (implies (not (g-keyword-symbolp (car x)))
                    (and (not (g-concrete-p x))
                         (not (g-boolean-p x))
-                        (not (g-number-p x))
+                        (not (g-integer-p x))
                         (not (g-ite-p x))
                         (not (g-apply-p x))
                         (not (g-var-p x))))
@@ -90,7 +90,7 @@
                                       member-eq
                                       ;; gl::gobjectp-car-cdr-when-cons
 ; gl::generic-geval-when-g-var-tag
-                                      gl::general-number-components-ev))
+                                      ))
               :induct (hons-assoc-equal key x))))))
 
 (define gobj-alist-to-bfr-alist ((x atom-key-gobj-val-alistp)
@@ -145,7 +145,7 @@
    ;; (defthm bfr-alistp-gobj-alist-to-bfr-alist
    ;;   (implies (atom-key-gobj-val-alistp x)
    ;;            (gl::bfr-alistp (mv-nth 0 (gobj-alist-to-bfr-alist x hyp)))))
-   
+
    ;; (defthm bfr-p-gobj-alist-to-bfr-alist
    ;;   (implies (and (gl::bfr-p hyp)
    ;;                 (atom-key-gobj-val-alistp x))
@@ -187,7 +187,6 @@
                (hons-assoc-equal
                 gl::not-keyword-symbolp-car-impl)
                (member-eq hons-assoc-equal
-                          gl::general-number-components-ev
                           (:definition atom-key-gobj-val-alistp)
                           gl::general-concrete-obj-correct)))
            (and stable-under-simplificationp
@@ -219,7 +218,6 @@
                 gobj-alist-to-bfr-alist
                 gl::not-keyword-symbolp-car-impl)
                (member-eq hons-assoc-equal
-                          gl::general-number-components-ev
                           atom-key-gobj-val-alistp
                           gl::general-concrete-obj-correct))
               :do-not-induct t
@@ -244,7 +242,7 @@
    (defthm aig-eval-eval-gobj-alist
      (implies (and (atom-key-gobj-val-alistp x)
                    (gl::bfr-hyp-eval hyp (car env))
-                   (not (gl::bfr-eval 
+                   (not (gl::bfr-eval
                          (mv-nth 1 (gobj-alist-to-bfr-alist x hyp))
                          (car env))))
               (equal (aig-eval aig (gl::bfr-eval-alist
@@ -258,7 +256,7 @@
    (defthm aig-eval-list-eval-gobj-alist
      (implies (and (atom-key-gobj-val-alistp x)
                    (gl::bfr-hyp-eval hyp (car env))
-                   (not (gl::bfr-eval 
+                   (not (gl::bfr-eval
                          (mv-nth 1 (gobj-alist-to-bfr-alist x hyp))
                          (car env))))
               (equal (aig-eval-list aig (gl::bfr-eval-alist
@@ -279,9 +277,9 @@
    ;;                                    gl::g-apply->args)
    ;;                                   ((force)))
    ;;            :expand ((gl::gobjectp (list* :g-apply fn args))))))
-             
 
- 
+
+
    (local (in-theory (disable atom-key-gobj-val-alistp
                               suffixp ; car-member-when-suffix
                               )))))
@@ -304,7 +302,7 @@
 
 (local
  (progn
-   
+
 
 (defthm eval-of-g-boolean-list
   (equal (gl::generic-geval (g-boolean-list x) env)
@@ -360,7 +358,7 @@
                           X
                           :TRUE T
                           :FALSE NIL
-                          :VAR (AIG-ENV-LOOKUP X FAL)
+                          :VAR (AIG-ALIST-LOOKUP X FAL)
                           :INV (gl::bfr-not (AIG-Q-COMPOSE (CAR X) FAL))
                           :AND (LET ((A (AIG-Q-COMPOSE (CAR X) FAL)))
                                     (AND A
@@ -376,10 +374,10 @@
   :hints(("Goal" :in-theory (enable hons-assoc-equal
                                     gl::pbfr-list-depends-on))))
 
-(defthm deps-of-aig-env-lookup
+(defthm deps-of-aig-alist-lookup
   (implies (not (gl::pbfr-list-depends-on k p (alist-vals al)))
-           (not (gl::pbfr-depends-on k p (aig-env-lookup x al))))
-  :hints(("Goal" :in-theory (enable aig-env-lookup))))
+           (not (gl::pbfr-depends-on k p (aig-alist-lookup x al))))
+  :hints(("Goal" :in-theory (enable aig-alist-lookup))))
 
 (defthm deps-of-aig-q-compose
   (implies (and (not (gl::pbfr-list-depends-on k p (alist-vals al)))
@@ -394,7 +392,7 @@
                           X
                           :TRUE T
                           :FALSE NIL
-                          :VAR (AIG-ENV-LOOKUP X FAL)
+                          :VAR (AIG-ALIST-LOOKUP X FAL)
                           :INV (gl::bfr-not (AIG-COMPOSE (CAR X) FAL))
                           :AND (LET ((A (AIG-COMPOSE (CAR X) FAL)))
                                     (AND A
@@ -534,7 +532,7 @@
                                      gl::bfr-depends-on
                                      gl::bfr-from-param-space)))))
   :otf-flg t)
- 
+
 
 
 ;; (defthm aig-bfrify-list-bfr-listp
@@ -630,7 +628,7 @@
 (gl::verify-g-guards aig-eval-list-with-bddify)
 
 (encapsulate nil
-  (make-event 
+  (make-event
    `(acl2::without-waterfall-parallelism
      (gl::def-eval-g aig-eval-ev
                      ,(list* 'aig-eval-list 'if 'cons
@@ -639,15 +637,15 @@
 (local
  (progn
 
-   (acl2::without-waterfall-parallelism 
+   (acl2::without-waterfall-parallelism
     (gl::correctness-lemmas aig-eval-ev))
 
    (gl::eval-g-prove-f-i aig-eval-ev-f-i-generic-geval aig-eval-ev
                          gl::generic-geval)
 
-   (gl::eval-g-functional-instance
-    gl::generic-geval-g-boolean
-    aig-eval-ev gl::generic-geval)
+   ;; (gl::eval-g-functional-instance
+   ;;  gl::generic-geval-g-boolean
+   ;;  aig-eval-ev gl::generic-geval)
 
    (gl::eval-g-functional-instance
     gl::general-concrete-obj-correct
@@ -703,13 +701,13 @@
                                     aig-eval-list-symbolic)
                                    (member-eq atom-key-gobj-val-alistp
                                               member-equal eval-bdd-list
-                                              gl-thm::generic-geval-g-boolean-for-aig-eval-ev
+                                              ;; gl-thm::generic-geval-g-boolean-for-aig-eval-ev
                                               aig-bddify-list))
             :do-not-induct t))))
 
 (local (in-theory (disable aig-eval-list-symbolic)))
 
-(gl::def-gobj-dependency-thm 
+(gl::def-gobj-dependency-thm
  aig-eval-list-with-bddify
  :hints`(("Goal" :in-theory (e/d (,gl::gfn)
                                  (gl::gobj-depends-on)))))

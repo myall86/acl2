@@ -146,10 +146,7 @@
 
                            ACL2::CANCEL_TIMES-EQUAL-CORRECT
                            ACL2::CANCEL_PLUS-EQUAL-CORRECT
-                           ACL2::TRUE-LISTP-MEMBER-EQUAL
-
-                           VL-NONATOM->OP$INLINE-OF-VL-EXPR-FIX-X-NORMALIZE-CONST
-                           )))
+                           ACL2::TRUE-LISTP-MEMBER-EQUAL)))
 
 ;; Stupid little functions to avoid lots of case splitting.
 
@@ -425,6 +422,7 @@ For instance:</p>
 (defines vl-consteval-main
   (define vl-consteval-main ((x vl-expr-p)
                              (ss vl-scopestack-p))
+    :short "Recursive helper for @(see vl-consteval)"
     :inline nil
     :returns (mv (successp booleanp :rule-classes :type-prescription)
                  (ans      vl-expr-p))

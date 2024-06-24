@@ -104,18 +104,20 @@ At each atom in the tree:
 
 <li> We check whether the car of the tree is a repetition operator, of the form
   @({
-    (:@proj <subtemplates-name> subforms)
+    (:@proj <subtemplates-name> subform)
    })
-  or 
+  or
   @({
-    (:@append <subtemplates-name> subforms)
+    (:@append <subtemplates-name> . subforms)
    })
 
   If so, we first look up the subtemplates-name in the @('subsubsts') field of
   our substitution.  The value should be a list of other substitution objects.
   These substitutions are each applied to subforms.  For the @(':@proj') case,
-  the results are consed into a list; for the @(':@append') case, appended
-  together.  These are then appended to the cdr and recursively substituted.</li>
+  the subform is expanded with to each subtemplate and the results are consed
+  into a list; for the @(':@append') case, all subforms are expanded with each
+  subtemplate and the results are appended together.  In either case, the
+  resulting list is appended to the cdr and recursively substituted.</li>
 
 <li> We check whether the car of the tree is bound in splice-alist, and if so
     we append its corresponding value to the recursive substitution of the
@@ -231,7 +233,7 @@ defthm would disappear.</p>
       (intern-in-package-of-symbol
        str (if (keywordp sym)
                sym
-             (or pkg? pkg-sym))))))
+             (or pkg? pkg-sym sym))))))
 
 (defun tmpl-sym-tree-sublis (alist tree pkg-sym)
   (declare (xargs :mode :program))
@@ -278,6 +280,7 @@ defthm would disappear.</p>
   (atoms          ;; replacements for atoms (alist of old . new)
    strs           ;; replacements for substrings of symbol names
                   ;; either ("old" . "new") or ("old" "new" . pkg-sym)
+   string-strs    ;; replacements for substrings of strings
    pkg-sym        ;; default package symbol for symbol substring replacements
 
    splices        ;; atoms -> lists, e.g., to replace (foo x) with (bar 'blah x),
@@ -286,6 +289,25 @@ defthm would disappear.</p>
    subsubsts      ;; atoms -> lists of other tmplsubst objects
    ))
 
+
+(defun combine-tmplsubsts (a b)
+  ;; Combine the fields of the given template substs.  Keys of b that are in a as well will be shadowed.
+  (b* (((tmplsubst a))
+       ((tmplsubst b)))
+    (make-tmplsubst
+     :atoms (append a.atoms b.atoms)
+     :strs (append a.strs b.strs)
+     :string-strs (append a.string-strs b.string-strs)
+     :pkg-sym (or a.pkg-sym b.pkg-sym)
+     :splices (append a.splices b.splices)
+     :features (append a.features b.features)
+     :subsubsts (append a.subsubsts b.subsubsts))))
+
+(defun combine-each-tmplsubst-with-default (as b)
+  (if (atom as)
+      nil
+    (cons (combine-tmplsubsts (car as) b)
+          (combine-each-tmplsubst-with-default (cdr as) b))))
 
 ;; returns (mv changedp tree), avoids unnecessary consing.
 ;; The precedence among the substitutions is as the argument ordering suggests:
@@ -299,6 +321,9 @@ defthm would disappear.</p>
         ((when (atom tree))
          (b* ((look (assoc-equal tree subst.atoms))
               ((when look) (mv t (cdr look)))
+              ((when (stringp tree))
+               (b* (((mv res ?pkg) (tmpl-str-sublis subst.string-strs tree)))
+                 (mv (not (equal res tree)) res)))
               ((unless (symbolp tree))
                (mv nil tree))
               (name (symbol-name tree))
@@ -322,7 +347,7 @@ defthm would disappear.</p>
          (b* (((cons subtemp-name subforms) (cdar tree))
               (subtemplates (cdr (assoc subtemp-name subst.subsubsts)))
               (sub-res (if (eq (caar tree) :@proj)
-                           (template-proj subforms subtemplates)
+                           (template-proj (car subforms) subtemplates)
                          (template-append subforms subtemplates)))
               ((mv & ans) (template-subst-rec (append sub-res (cdr tree)) subst)))
            (mv t ans)))
@@ -368,12 +393,14 @@ defthm would disappear.</p>
                                 splice-alist
                                 atom-alist
                                 str-alist
+                                string-str-alist
                                 (pkg-sym ''acl2::foo))
   (template-subst-top tree
                       (make-tmplsubst :features features
                                       :splices splice-alist
                                       :atoms atom-alist
                                       :strs str-alist
+                                      :string-strs string-str-alist
                                       :subsubsts subsubsts
                                       :pkg-sym pkg-sym)))
 

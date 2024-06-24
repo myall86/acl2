@@ -144,7 +144,7 @@ version.
     (invokevirtual "Job" "start" 0)
     (load job2)
     (invokevirtual "Job" "start" 0)
- to 
+ to
     (load job2)
     (load job1)
     (invokevirtual "Job" "start" 0)
@@ -241,7 +241,7 @@ proved it after about an hour's work.
 ;  meta 10000000 ctrl-d
 ; so as not to put it in the kill ring.
 
-; I sometimes divert output to foo.log and use 
+; I sometimes divert output to foo.log and use
 ;   /u/moore/bin/watchlog foo.log
 ; to observe it in another buffer.  To get the diversion stuff, do
 
@@ -446,7 +446,7 @@ Sun Jul 15 14:17:26 2001
                                       (PROGRAM frame))
                   (index-into-program pc
                                       (program1 class method)))))
-                  
+
 ; Details: In the defthm above, class and method and pc will always be
 ; constant.  Generally (program frame) will be undetermined, but
 ; (programp frame "..." "...") will be settled by some case of the
@@ -659,7 +659,7 @@ Sun Jul 15 14:17:26 2001
                 (equal job `(REF ,i))
                 (equal stack nil)))
        (t  nil)))))
-           
+
 (defun thread-no         (thread) (nth 0 thread))
 (defun thread-call-stack (thread) (nth 1 thread))
 (defun thread-status     (thread) (nth 2 thread))
@@ -1205,18 +1205,73 @@ Sun Jul 15 14:17:26 2001
       (BIPUSH (EXECUTE-BIPUSH INST TH S))
       (CALOAD (EXECUTE-CALOAD INST TH S))
       (CASTORE (EXECUTE-CASTORE INST TH S))
+      (D2F (EXECUTE-D2F INST TH S))
+      (D2I (EXECUTE-D2I INST TH S))
+      (D2L (EXECUTE-D2L INST TH S))
+      (DADD (EXECUTE-DADD INST TH S))
+      (DALOAD (EXECUTE-DALOAD INST TH S))
+      (DASTORE (EXECUTE-DASTORE INST TH S))
+      (DCMPG (EXECUTE-DCMPG INST TH S))
+      (DCMPL (EXECUTE-DCMPL INST TH S))
+      (DCONST_0 (EXECUTE-DCONST_0 INST TH S))
+      (DCONST_1 (EXECUTE-DCONST_1 INST TH S))
+      (DDIV (EXECUTE-DDIV INST TH S))
+      (DLOAD (EXECUTE-DLOAD INST TH S))
+      (DLOAD_0 (EXECUTE-DLOAD_X INST TH S 0))
+      (DLOAD_1 (EXECUTE-DLOAD_X INST TH S 1))
+      (DLOAD_2 (EXECUTE-DLOAD_X INST TH S 2))
+      (DLOAD_3 (EXECUTE-DLOAD_X INST TH S 3))
+      (DMUL (EXECUTE-DMUL INST TH S))
+      (DNEG (EXECUTE-DNEG INST TH S))
+      (DREM (EXECUTE-DREM INST TH S))
+      (DRETURN (EXECUTE-DRETURN INST TH S))
+      (DSTORE (EXECUTE-DSTORE INST TH S))
+      (DSTORE_0 (EXECUTE-DSTORE_X INST TH S 0))
+      (DSTORE_1 (EXECUTE-DSTORE_X INST TH S 1))
+      (DSTORE_2 (EXECUTE-DSTORE_X INST TH S 2))
+      (DSTORE_3 (EXECUTE-DSTORE_X INST TH S 3))
+      (DSUB (EXECUTE-DSUB INST TH S))
       (DUP (EXECUTE-DUP INST TH S))
       (DUP_X1 (EXECUTE-DUP_X1 INST TH S))
       (DUP_X2 (EXECUTE-DUP_X2 INST TH S))
       (DUP2 (EXECUTE-DUP2 INST TH S))
       (DUP2_X1 (EXECUTE-DUP2_X1 INST TH S))
       (DUP2_X2 (EXECUTE-DUP2_X2 INST TH S))
+      (F2D (EXECUTE-F2D INST TH S))
+      (F2I (EXECUTE-F2I INST TH S))
+      (F2L (EXECUTE-F2L INST TH S))
+      (FADD (EXECUTE-FADD INST TH S))
+      (FALOAD (EXECUTE-FALOAD INST TH S))
+      (FASTORE (EXECUTE-FASTORE INST TH S))
+      (FCMPG (EXECUTE-FCMPG INST TH S))
+      (FCMPL (EXECUTE-FCMPL INST TH S))
+      (FCONST_0 (EXECUTE-FCONST_0 INST TH S))
+      (FCONST_1 (EXECUTE-FCONST_1 INST TH S))
+      (FCONST_2 (EXECUTE-FCONST_2 INST TH S))
+      (FDIV (EXECUTE-FDIV INST TH S))
+      (FLOAD (EXECUTE-FLOAD INST TH S))
+      (FLOAD_0 (EXECUTE-FLOAD_X INST TH S 0))
+      (FLOAD_1 (EXECUTE-FLOAD_X INST TH S 1))
+      (FLOAD_2 (EXECUTE-FLOAD_X INST TH S 2))
+      (FLOAD_3 (EXECUTE-FLOAD_X INST TH S 3))
+      (FMUL (EXECUTE-FMUL INST TH S))
+      (FNEG (EXECUTE-FNEG INST TH S))
+      (FREM (EXECUTE-FREM INST TH S))
+      (FRETURN (EXECUTE-FRETURN INST TH S))
+      (FSTORE (EXECUTE-FSTORE INST TH S))
+      (FSTORE_0 (EXECUTE-FSTORE_X INST TH S 0))
+      (FSTORE_1 (EXECUTE-FSTORE_X INST TH S 1))
+      (FSTORE_2 (EXECUTE-FSTORE_X INST TH S 2))
+      (FSTORE_3 (EXECUTE-FSTORE_X INST TH S 3))
+      (FSUB (EXECUTE-FSUB INST TH S))
       (GETFIELD (EXECUTE-GETFIELD INST TH S))
       (GETSTATIC (EXECUTE-GETSTATIC INST TH S))
       (GOTO (EXECUTE-GOTO INST TH S))
       (GOTO_W (EXECUTE-GOTO_W INST TH S))
       (I2B (EXECUTE-I2B INST TH S))
       (I2C (EXECUTE-I2C INST TH S))
+      (I2D (EXECUTE-I2D INST TH S))
+      (I2F (EXECUTE-I2F INST TH S))
       (I2L (EXECUTE-I2L INST TH S))
       (I2S (EXECUTE-I2S INST TH S))
       (IADD (EXECUTE-IADD INST TH S))
@@ -1274,6 +1329,8 @@ Sun Jul 15 14:17:26 2001
       (IXOR (EXECUTE-IXOR INST TH S))
       (JSR (EXECUTE-JSR INST TH S))
       (JSR_W (EXECUTE-JSR_W INST TH S))
+      (L2D (EXECUTE-L2D INST TH S))
+      (L2F (EXECUTE-L2F INST TH S))
       (L2I (EXECUTE-L2I INST TH S))
       (LADD (EXECUTE-LADD INST TH S))
       (LALOAD (EXECUTE-LALOAD INST TH S))
@@ -1815,7 +1872,7 @@ Sun Jul 15 14:17:26 2001
 ; that 1<= th < (len (heap s)).
 
 ; Suppose we know (good-state s).  Now how do we open up (step th s)?
-; We need to get 
+; We need to get
 ; (good-thread i
 ;              (if (and (endp (cdr tt))
 ;                       except-last-flg)
@@ -2002,7 +2059,7 @@ Sun Jul 15 14:17:26 2001
 
 (defthm bind-bind
   (equal (bind i v1 (bind i v2 lst))
-         (bind i v1 lst))) 
+         (bind i v1 lst)))
 
 (defthm lookup-method-in-good-class-table
   (implies (and (syntaxp (and (quotep class)
@@ -2214,7 +2271,7 @@ Sun Jul 15 14:17:26 2001
 ; if the counter in such a state is non-nil, then it is rel to the
 ; counter in the next state.  Monotonicity-2, further below, says once
 ; the counter is non-nil, it stays non-nil.
- 
+
 (defthm Monotonicity
   (let* ((s1 (run sched *a0*))
          (s2 (step th s1)))
@@ -2259,7 +2316,7 @@ Sun Jul 15 14:17:26 2001
               (cons (+ 1 (len cdr-counts))
                     (natural-sum cdr-counts)))
             :well-founded-relation e0-ord-<))
-            
+
     (if (equal fn 'makemultiarray2)
         (if
          (zp car-counts)
@@ -2346,7 +2403,7 @@ Sun Jul 15 14:17:26 2001
                                    (disable good-thread-table)))))
 
 ; ---------------------------------------------------------------------------
-; Appendix 2.  Some Handy Utilities 
+; Appendix 2.  Some Handy Utilities
 
 #|
 
@@ -2354,7 +2411,7 @@ Sun Jul 15 14:17:26 2001
 ; M5.  If you evaluate (s (caar (cadaar s))) it will return
 ; thread0-frame0-pc, telling you what state component that refers to.
 
-(assign s 
+(assign s
 '(((0 ((thread0-frame0-pc (thread0-frame0-local0
                            thread0-frame0-local1
                            thread0-frame0-local2)
@@ -2645,7 +2702,7 @@ Sun Jul 15 14:17:26 2001
 
 ; This test runs 530 steps, leaves the counter at 15, and confirms
 ; that we are always in good-states during the run.
- 
+
 (defun repeat (th n)
   (if (zp n)
       nil

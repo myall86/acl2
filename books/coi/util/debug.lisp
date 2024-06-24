@@ -91,13 +91,13 @@
 ;              (acl2::set-raw-mode t)
 ;              (defun coi-debug::fail-fn (value message parameters)
 ;                (acl2::prog2$
-;                  (acl2::fmt-to-comment-window message parameters 0 nil)
+;                  (acl2::fmt-to-comment-window message parameters 0 nil nil)
 ;                  (acl2::break)))))
 ;
 ; "))
 
 (defxdoc coi-debug::fail
-  :parents (coi-debug::fail)
+  :parents (acl2::miscellaneous)
   :short "A macro to assist in signalling runtime errors"
   :long "<p>The coi-debug::fail macro allows the user to signal runtime errors
  in ACL2 code.  The return value of coi-debug::fail can be set by specifying
@@ -116,7 +116,7 @@
  <p>FOO !&gt; (acl2::progn (acl2::defttag t) (acl2::progn!  (acl2::set-raw-mode
             t) (defun coi-debug::fail-fn (value message parameters)
             (acl2::prog2$ (acl2::fmt-to-comment-window message parameters 0
-            nil) (acl2::break)))))</p>")
+            nil nil) (acl2::break)))))</p>")
 ;; -------------------------------------------------------------------
 
 
@@ -165,7 +165,7 @@
 ; "))
 
 (defxdoc coi-debug::assert
-  :parents (coi-debug::assert)
+  :parents (acl2::miscellaneous)
   :short "A macro to assist in detecting runtime errors"
   :long "<p>The coi-debug::assert macro allows the user to identify runtime
  errors in ACL2 code.  The return value of coi-debug::assert can be set by

@@ -30,6 +30,7 @@
 
 (in-package "VL")
 (include-book "elements")
+;; (include-book "classes")
 (local (include-book "../../util/arithmetic"))
 
 (defxdoc parse-packages
@@ -111,7 +112,7 @@
                                :msg "[[ Remaining ]]: ~s0 ~s1.~%"
                                :args (list (vl-tokenlist->string-with-spaces
                                             (take (min 4 (len tokens))
-                                                  (redundant-list-fix tokens)))
+                                                  (list-fix tokens)))
                                            (if (> (len tokens) 4) "..." ""))
                                :fatalp t
                                :fn __function__)))
@@ -119,6 +120,56 @@
                      :minloc minloc
                      :maxloc maxloc
                      :warnings (list err warn2))))
+
+(defparser vl-parse-genelement-or-class ()
+  :result (vl-genelementlist-p val)
+  :resultp-of-nil t
+  :true-listp t
+  :fails gracefully
+  :count strong
+  (seq tokstream
+       (gen :w= (vl-parse-generate))
+       (when gen
+         (return (list gen)))
+       (atts := (vl-parse-0+-attribute-instances))
+       (when (or (vl-is-token? :vl-kwd-class)
+                 (vl-is-token? :vl-kwd-virtual))
+         (:= (vl-parse-class-declaration atts))
+         (return nil))
+       (items := (vl-parse-modelement-aux atts))
+       (return (vl-modelementlist->genelements items))))
+
+
+(local (defthm vl-tokentype-p-implies-symbolp
+         (implies (vl-tokentype-p x)
+                  (symbolp x))
+         :hints(("Goal" :in-theory (enable vl-tokentype-p)))
+         :rule-classes :compound-recognizer))
+
+(defparser vl-parse-genelements-or-classes-until (endkwd)
+  :guard (vl-tokentype-p endkwd)
+  :result (vl-genelementlist-p val)
+  :resultp-of-nil t
+  :true-listp t
+  :fails gracefully
+  :count weak
+  :measure (vl-tokstream-measure)
+  (declare (xargs :ruler-extenders :all))
+  (seq tokstream
+       (when (vl-is-token? endkwd)
+         (return nil))
+
+       (when (vl-is-token? :vl-kwd-generate)
+         (:= (vl-match))
+         (elems :w= (vl-parse-genelements-until :vl-kwd-endgenerate))
+         (:= (vl-match-token :vl-kwd-endgenerate))
+         (rest := (vl-parse-genelements-or-classes-until endkwd))
+         (return (append elems rest)))
+
+       (first :s= (vl-parse-genelement-or-class))
+       (rest := (vl-parse-genelements-until endkwd))
+       (return (append first rest))))
+
 
 (defparser vl-parse-package-declaration (atts)
   ;; package_declaration ::= { attribute_instance } package [ lifetime ] package_identifier ;
@@ -149,7 +200,7 @@
                (seq tokstream
                     (:= (vl-match-token :vl-semi))
                     ;; BOZO parse timeunits declaration stuff.
-                    (items  := (vl-parse-genelements-until :vl-kwd-endpackage))
+                    (items  := (vl-parse-genelements-or-classes-until :vl-kwd-endpackage))
                     (endkwd := (vl-match-token :vl-kwd-endpackage))
                     (:= (vl-parse-endblock-name (vl-idtoken->name name) "package/endpackage"))
                     (return
@@ -172,13 +223,22 @@
                                                                  :vl-import
                                                                  ;; :vl-fwdtypedef -- not allowed
                                                                  ;; :vl-modport    -- not allowed
+                                                                 :vl-letdecl
+                                                                 ;; Don't get confused by assertion_item_declaration;
+                                                                 ;; :vl-assertion is not allowed and
+                                                                 ;; :vl-cassertion is not allowed either.
+                                                                 ;; They are assertion_items, not assertion_item_declarations.
+                                                                 :vl-dpiimport
+                                                                 :vl-dpiexport
+                                                                 :vl-class
+                                                                 :vl-property
                                                                  )))
                           (warnings
                            (if (not bad-item)
                                warnings
                              (fatal :type :vl-bad-package-item
-                                    :msg "~a0: a package may not contain ~x1s."
-                                    :args (list bad-item (tag bad-item)))))
+                                    :msg "~a0: a package may not contain a ~s1."
+                                    :args (list bad-item (vl-genelement->short-kind-string bad-item)))))
 
                           ((vl-genblob c) (vl-sort-genelements items)))
                        (make-vl-package :name (vl-idtoken->name name)
@@ -191,6 +251,9 @@
                                         :taskdecls c.taskdecls
                                         :typedefs c.typedefs
                                         :imports c.imports
+                                        :classes c.classes
+                                        :dpiimports c.dpiimports
+                                        :dpiexports c.dpiexports
                                         :warnings warnings
                                         :atts atts
                                         ;; bozo timeunits stuff

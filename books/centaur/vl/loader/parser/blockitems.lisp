@@ -1,10 +1,6 @@
 ; VL Verilog Toolkit
 ; Copyright (C) 2008-2014 Centaur Technology
-;
-; Contact:
-;   Centaur Technology Formal Verification Group
-;   7600-C N. Capital of Texas Highway, Suite 300, Austin, TX 78731, USA.
-;   http://www.centtech.com/
+; Copyright (C) 2022 Intel Corporation
 ;
 ; License: (An MIT/X11-style license)
 ;
@@ -29,10 +25,15 @@
 ; Original author: Jared Davis <jared@centtech.com>
 
 (in-package "VL")
-(include-book "datatypes")
+(include-book "expressions")
 (include-book "paramdecls")
 (include-book "imports")
+;; (include-book "classes") ;; just for vl-maybe-parse-lifetime
+(include-book "../descriptions")
 (local (include-book "../../util/arithmetic"))
+(local (include-book "tools/do-not" :dir :system))
+(local (acl2::do-not generalize fertilize))
+
 
 (defxdoc parse-blockitems
   :parents (parser)
@@ -61,7 +62,7 @@ out some duplication and indirection:</p>
 <li>variables can be of many new built-in or user-defined types</li>
 <li>initializers can have \"new\", etc., instead of just being expressions</li>
 <li>ranges for each variable_type can now be lists of variable_dimensions</li>
-<li>package import statements are also considered data declarations, for whatever reason.</li>
+<li>package import statements and typedefs are also considered data declarations, for whatever reason.</li>
 </ul>
 
 <p>The new grammar looks like this:</p>
@@ -83,10 +84,11 @@ out some duplication and indirection:</p>
        | identifier unsized_dimension { variable_dimension } [ '=' dynamic_array_new ]
        | identifier [ '=' class_new ]
 
-    dynamic_array_new ::= new [ expression ] [ ( expression ) ]
+    dynamic_array_new ::= 'new' '[' expression ']' [ '(' expression ')' ]
 
-    class_new ::= [ class_scope ] new [ ( list_of_arguments ) ]
-                | new expression
+    class_new ::= [ class_scope ] 'new' [ '(' list_of_arguments ')' ]
+                | 'new' expression
+
 
     variable_dimension ::= unsized_dimension
                          | unpacked_dimension
@@ -123,7 +125,7 @@ out some duplication and indirection:</p>
         nil)
        ((vl-vardeclassign temp1) (car temps))
        (decl1 (make-vl-vardecl :name     temp1.id
-                               :initval  temp1.expr
+                               :initval  temp1.rhs
                                :constp   constp
                                :varp     varp
                                :lifetime lifetime
@@ -139,16 +141,18 @@ out some duplication and indirection:</p>
                              :atts     atts
                              :loc      loc))))
 
-(local (defthm vl-packeddimensionlist-p-when-vl-rangelist-p
-         (implies (vl-rangelist-p x)
-                  (vl-packeddimensionlist-p x))
-         :hints(("Goal" :induct (len x)))))
+(defprojection vl-ranges->dimensions ((x vl-rangelist-p))
+  :returns (dims vl-dimensionlist-p)
+  (vl-range->dimension x))
+
 
 (defparser vl-parse-variable-type ()
-  ;; Verilog-2005 Only.
-  ;;
-  ;; variable_type ::= identifier { range }
-  ;;                 | identifier '=' expression
+  :short "Match @('variable_type') for Verilog-2005."
+  :long "<p>Grammar:</p>
+         @({
+              variable_type ::= identifier { range }
+                              | identifier '=' expression
+         })"
   :result (vl-vardeclassign-p val)
   :resultp-of-nil nil
   :fails gracefully
@@ -160,16 +164,18 @@ out some duplication and indirection:</p>
           (expr := (vl-parse-expression))
           (return (make-vl-vardeclassign :id (vl-idtoken->name id)
                                          :dims nil
-                                         :expr expr)))
+                                         :rhs (make-vl-rhsexpr :guts expr))))
         (arrdims := (vl-parse-0+-ranges))
         (return (make-vl-vardeclassign :id (vl-idtoken->name id)
-                                       :dims arrdims
-                                       :expr nil))))
+                                       :dims (vl-ranges->dimensions arrdims)
+                                       :rhs nil))))
 
 (defparser vl-parse-list-of-variable-identifiers ()
-  ;; Verilog-2005 Only.
-  ;;
-  ;; list_of_variable_identifiers ::= variable_type { ',' variable_type }
+  :short "Match @('list_of_variable_identifiers') for Verilog-2005."
+  :long "<p>Grammar:</p>
+         @({
+              list_of_variable_identifiers ::= variable_type { ',' variable_type }
+         })"
   :result (vl-vardeclassignlist-p val)
   :resultp-of-nil t
   :true-listp t
@@ -182,11 +188,12 @@ out some duplication and indirection:</p>
           (rest := (vl-parse-list-of-variable-identifiers)))
         (return (cons first rest))))
 
-
 (defparser vl-parse-integer-declaration (atts)
-  ;; Verilog-2005 Only.
-  ;;
-  ;;    integer_declaration  ::= 'integer'  list_of_variable_identifiers ';'
+  :short "Match @('integer_declaration') for Verilog-2005."
+  :long "<p>Grammar:</p>
+         @({
+              integer_declaration ::= 'integer' list_of_variable_identifiers ';'
+         })"
   :guard (vl-atts-p atts)
   :result (vl-vardecllist-p val)
   :resultp-of-nil t
@@ -206,9 +213,11 @@ out some duplication and indirection:</p>
                                    :loc      (vl-token->loc kwd)))))
 
 (defparser vl-parse-real-declaration (atts)
-  ;; Verilog-2005 Only.
-  ;;
-  ;;    real_declaration     ::= 'real'     list_of_variable_identifiers ';'
+  :short "Match @('real_declaration') for Verilog-2005."
+  :long "<p>Grammar:</p>
+         @({
+              real_declaration ::= 'real' list_of_variable_identifiers ';'
+         })"
   :guard (vl-atts-p atts)
   :result (vl-vardecllist-p val)
   :resultp-of-nil t
@@ -227,11 +236,12 @@ out some duplication and indirection:</p>
                                    :atts     atts
                                    :loc      (vl-token->loc kwd)))))
 
-
 (defparser vl-parse-time-declaration (atts)
-  ;; Verilog-2005 Only.
-  ;;
-  ;;   time_declaration     ::= 'time'     list_of_variable_identifiers ';'
+  :short "Match @('time_declaration') for Verilog-2005."
+  :long "<p>Grammar:</p>
+         @({
+              time_declaration ::= 'time' list_of_variable_identifiers ';'
+         })"
   :guard (vl-atts-p atts)
   :result (vl-vardecllist-p val)
   :resultp-of-nil t
@@ -251,9 +261,11 @@ out some duplication and indirection:</p>
                                    :loc      (vl-token->loc kwd)))))
 
 (defparser vl-parse-realtime-declaration (atts)
-  ;; Verilog-2005 Only.
-  ;;
-  ;;    realtime_declaration ::= 'realtime' list_of_variable_identifiers ';'
+  :short "Match @('realtime_declaration') for Verilog-2005."
+  :long "<p>Grammar:</p>
+         @({
+             realtime_declaration ::= 'realtime' list_of_variable_identifiers ';'
+         })"
   :guard (vl-atts-p atts)
   :result (vl-vardecllist-p val)
   :resultp-of-nil t
@@ -273,9 +285,11 @@ out some duplication and indirection:</p>
                                    :loc      (vl-token->loc kwd)))))
 
 (defparser vl-parse-reg-declaration (atts)
-  ;; Verilog-2005 Only.
-  ;;
-  ;;    reg_declaration      ::= 'reg' [ 'signed' ] [ range ] list_of_variable_identifiers ';'
+  :short "Match @('reg_declaration') for Verilog-2005."
+  :long "<p>Grammar:</p>
+         @({
+              reg_declaration ::= 'reg' [ 'signed' ] [ range ] list_of_variable_identifiers ';'
+         })"
   :guard (vl-atts-p atts)
   :result (vl-vardecllist-p val)
   :resultp-of-nil t
@@ -299,16 +313,17 @@ out some duplication and indirection:</p>
                                           (make-vl-coretype :name :vl-reg
                                                             :signedp signedp
                                                             :pdims (if range
-                                                                       (list range)
+                                                                       (list (vl-range->dimension range))
                                                                      nil)))
                                    :atts atts
                                    :loc (vl-token->loc kwd)))))
 
 (defparser vl-parse-list-of-event-identifiers (atts)
-  ;; Verilog-2005 Only.
-  ;;
-  ;; list_of_event_identifiers ::=
-  ;;    identifier {range} { ',' identifier {range} }
+  :short "Match @('list_of_event_identifiers') for Verilog-2005."
+  :long "<p>Grammar:</p>
+         @({
+             list_of_event_identifiers ::= identifier {range} { ',' identifier {range} }
+         })"
   :guard (vl-atts-p atts)
   :result (vl-vardecllist-p val)
   :resultp-of-nil t
@@ -321,18 +336,21 @@ out some duplication and indirection:</p>
         (when (vl-is-token? :vl-comma)
           (:= (vl-match))
           (rest := (vl-parse-list-of-event-identifiers atts)))
-        (return (cons (make-vl-vardecl :type (make-vl-coretype :name :vl-event
-                                                               :udims arrdims)
-                                       :name (vl-idtoken->name id)
-                                       :loc (vl-token->loc id)
-                                       :atts atts)
-                      rest))))
+        (return
+         (b* ((udims-from-arrdims (vl-ranges->dimensions arrdims)))
+           (cons (make-vl-vardecl :type (make-vl-coretype :name :vl-event
+                                                          :udims udims-from-arrdims)
+                                  :name (vl-idtoken->name id)
+                                  :loc (vl-token->loc id)
+                                  :atts atts)
+                 rest)))))
 
 (defparser vl-parse-event-declaration (atts)
-  ;; Verilog-2005 Only.
-  ;;
-  ;; event_declaration ::=
-  ;;    'event' list_of_event_identifiers ';'
+  :short "Match @('event_declaration') for Verilog-2005."
+  :long "<p>Grammar:</p>
+         @({
+              event_declaration ::= 'event' list_of_event_identifiers ';'
+         })"
   :guard (vl-atts-p atts)
   :result (vl-vardecllist-p val)
   :resultp-of-nil t
@@ -347,9 +365,30 @@ out some duplication and indirection:</p>
 
 
 
+
+(defparser vl-maybe-parse-lifetime ()
+  :parents (parser)
+  :short "Match an optional @('lifetime') for SystemVerilog-2012."
+  :long "<p>Grammar:</p>
+         @({
+              lifetime ::= 'static' | 'automatic'
+         })"
+  :result (vl-lifetime-p val)
+  :resultp-of-nil t
+  :fails gracefully
+  :count strong-on-value
+  (seq tokstream
+        (when (vl-is-token? :vl-kwd-static)
+          (:= (vl-match))
+          (return :vl-static))
+        (when (vl-is-token? :vl-kwd-automatic)
+          (:= (vl-match))
+          (return :vl-automatic))
+        (return nil)))
+
 ; -------------------------------------------------------------------------
 ;
-;       Verilog-2012 Style Variables
+;       SystemVerilog-2012 Style Variables
 ;
 ; -------------------------------------------------------------------------
 ;
@@ -365,20 +404,6 @@ out some duplication and indirection:</p>
 ; There are a lot of ways for a data_declaration to start, so we'll use
 ; backtracking and just try to parse one.
 
-(defparser vl-maybe-parse-lifetime ()
-  :result (vl-lifetime-p val)
-  :resultp-of-nil t
-  :fails gracefully
-  :count strong-on-value
-  (seq tokstream
-        (when (vl-is-token? :vl-kwd-static)
-          (:= (vl-match))
-          (return :vl-static))
-        (when (vl-is-token? :vl-kwd-automatic)
-          (:= (vl-match))
-          (return :vl-automatic))
-        (return nil)))
-
 
 (encapsulate nil ;; vl-parse-main-data-declaration
   (local (in-theory (disable not iff
@@ -387,12 +412,13 @@ out some duplication and indirection:</p>
                              acl2::len-when-atom)))
 
   (defparser vl-parse-main-data-declaration (atts)
-    ;; SystemVerilog-2012 Only.
-    ;;
-    ;;    data_declaration ::=
-    ;;       ['const'] ['var'] [lifetime] data_type_or_implicit list_of_variable_decl_assignments ';'
-    ;;     | ...
-    ;;
+    :short "Parse the main variable declaration part of a @('data_declaration') for SystemVerilog-2012."
+    :long "<p>Grammar:</p>
+           @({
+               data_declaration ::=
+                   ['const'] ['var'] [lifetime] data_type_or_implicit list_of_variable_decl_assignments ';'
+                 | ...
+           })"
     :guard (vl-atts-p atts)
     :result (vl-vardecllist-p val)
     :guard-debug t
@@ -483,10 +509,132 @@ out some duplication and indirection:</p>
             ;; not so bad to just go with the explicit error.
             (mv explicit-err explicit-val tokstream))))))
 
-;; BOZO eventually support other allowed data declarations: type declarations,
-;; package import declarations, and net type declarations.  But to do this
-;; we'll probably first want to extend our notion of vl-blockitem-p to allow
-;; imports and type declarations.
+
+
+; -------------------------------------------------------------------------
+;
+;       SystemVerilog-2012 Typedefs
+;
+; -------------------------------------------------------------------------
+
+;; type_declaration ::=
+;;    'typedef' data_type type_identifier { variable_dimension } ';'
+;;  | 'typedef' interface_instance_identifier constant_bit_select '.' type_identifier type_identifier ';'
+;;  | 'typedef' [ 'enum' | 'struct' | 'union' | 'class' | 'interface class' ] type_identifier ';'
+
+(defparser vl-parse-fwd-typedef (atts)
+  :short "Match a forward @('type_declaration') for SystemVeriog-2012."
+  :long "<p>The SystemVerilog-2012 grammar groups ``forward'' type declarations
+         in with other type declarations.  Here we're just parsing:</p>
+
+         @({
+             type_declaration ::=
+               'typedef' [ 'enum' | 'struct' | 'union' | 'class' | 'interface class' ] type_identifier ';'
+         })
+
+         <p>We don't match the other forms of @('type_declaration') here.</p>"
+  :guard (and (vl-atts-p atts)
+              (vl-is-token? :vl-kwd-typedef))
+  :result (vl-fwdtypedef-p val)
+  :resultp-of-nil nil
+  :fails gracefully
+  :count strong
+  (seq tokstream
+       (typedef := (vl-match))  ;; guard ensures it starts with 'typedef'
+
+       (when (vl-is-token? :vl-kwd-interface)
+         (:= (vl-match))
+         (:= (vl-match-token :vl-kwd-class))
+         (name := (vl-match-token :vl-idtoken))
+         (:= (vl-match-token :vl-semi))
+         (return-raw
+          (b* ((val (make-vl-fwdtypedef :kind :vl-interfaceclass
+                                        :name (vl-idtoken->name name)
+                                        :loc (vl-token->loc typedef)
+                                        :atts atts)))
+            (mv nil val tokstream))))
+
+       (when (vl-is-some-token? '(:vl-kwd-enum :vl-kwd-struct :vl-kwd-union :vl-kwd-class))
+         (type := (vl-match))
+         (name := (vl-match-token :vl-idtoken))
+         (:= (vl-match-token :vl-semi))
+         (return-raw
+          (b* ((val   (make-vl-fwdtypedef :kind (case (vl-token->type type)
+                                                  (:vl-kwd-enum   :vl-enum)
+                                                  (:vl-kwd-struct :vl-struct)
+                                                  (:vl-kwd-union  :vl-union)
+                                                  (:vl-kwd-class  :vl-class))
+                                          :name (vl-idtoken->name name)
+                                          :loc (vl-token->loc typedef)
+                                          :atts atts)))
+            (mv nil val tokstream))))
+
+       (return-raw
+        (vl-parse-error "Not a valid forward typedef."))))
+
+(defparser vl-parse-type-declaration (atts)
+  :short "Match any kind of @('type_declaration') for SystemVerilog-2012."
+  :long "<p>The grammar mixes both forward and regular type declarations:</p>
+         @({
+
+              type_declaration ::=
+                 'typedef' data_type type_identifier { variable_dimension } ';'
+               | 'typedef' interface_instance_identifier constant_bit_select '.' type_identifier type_identifier ';'
+               | 'typedef' [ 'enum' | 'struct' | 'union' | 'class' | 'interface class' ] type_identifier ';'
+         })
+
+         <p>We match either kind of type declaration and return it as a @(see
+         vl-description-p).</p>"
+  :guard (and (vl-atts-p atts)
+              (vl-is-token? :vl-kwd-typedef))
+  :result (vl-description-p val)
+  :resultp-of-nil nil
+  :fails gracefully
+  :count strong
+  ;; We use backtracking to figure out if it's a forward or regular type
+  ;; declaration.  We try forward declarations first because they're less
+  ;; likely to have problems, and we'd probably rather see errors about
+  ;; full type declarations.
+  (b* ((backup (vl-tokstream-save))
+       ((mv erp fwd tokstream)
+        (vl-parse-fwd-typedef atts))
+       ((unless erp)
+        ;; Got a valid fwd typedef, so return it.
+        (mv erp fwd tokstream))
+
+       (tokstream (vl-tokstream-restore backup)))
+
+    ;; Else, not a fwd typedef, so try to match a full one.
+    (seq tokstream
+          (typedef := (vl-match))  ;; guard ensures it starts with 'typedef'
+
+          ;; BOZO the following probably isn't right for the 2nd production.
+          (datatype := (vl-parse-datatype))
+          (id := (vl-match-token :vl-idtoken))
+          (udims := (vl-parse-0+-variable-dimensions))
+          (semi := (vl-match-token :vl-semi))
+          (return-raw
+           (b* ((val (make-vl-typedef :name (vl-idtoken->name id)
+                                      :type (vl-datatype-update-udims udims datatype)
+                                      :minloc (vl-token->loc typedef)
+                                      :maxloc (vl-token->loc semi)
+                                      :atts atts)))
+             (mv nil val tokstream)))))
+  ///
+  (local (defthm tag-of-vl-parse-fwd-typedef
+           (b* (((mv err val ?tokstream) (vl-parse-fwd-typedef atts)))
+             (implies (not err)
+                      (equal (tag val) :vl-fwdtypedef)))
+           :hints(("Goal" :in-theory (enable vl-parse-fwd-typedef)))))
+
+  (defthm vl-typedef-p-of-vl-parse-type-declaration
+    (b* (((mv err val ?tokstream) (vl-parse-type-declaration atts)))
+      (implies (not err)
+               (equal (vl-typedef-p val)
+                      (eq (tag val) :vl-typedef))))
+    :hints(("Goal" :in-theory (enable tag-reasoning)))))
+
+
 
 
 ; -------------------------------------------------------------------------
@@ -495,35 +643,7 @@ out some duplication and indirection:</p>
 ;
 ; -------------------------------------------------------------------------
 
-; Verilog-2005:
-;
-; block_item_declaration ::=
-;    {attribute_instance} 'reg' ['signed'] [range] list_of_block_variable_identifiers ';'
-;  | {attribute_instance} 'integer' list_of_block_variable_identifiers ';'
-;  | {attribute_instance} 'time' list_of_block_variable_identifiers ';'
-;  | {attribute_instance} 'real' list_of_block_variable_identifiers ';'
-;  | {attribute_instance} 'realtime' list_of_block_variable_identifiers ';'
-;  | {attribute_instance} event_declaration
-;  | {attribute_instance} local_parameter_declaration ';'
-;  | {attribute_instance} parameter_declaration ';'
-;
-; list_of_block_variable_identifiers ::=
-;    block_variable_type { ',' block_variable_type }
-;
-; block_variable_type ::= identifier { dimension }
-;
-; Of particular note is that the rules for reg, integer, time, real, and
-; realtime above are different than reg_declaration, integer_declaration, etc.,
-; using list_of_block_variable_identifiers versus list_of_variable_identifiers.
-; Comparing these, we see that the only difference is that these declarations
-; are not allowed to have initial values assigned to them.  That is, "reg foo =
-; 1" is okay as a module item, but not as a block item.
-;
-; With this in mind, our approach is to reuse our parsers above and simply walk
-; through to ensure that none of the variables have been given initial values.
-
 (defund vl-find-vardecl-with-initval (x)
-  ; Verilog-2005 Only.
   (declare (xargs :guard (vl-vardecllist-p x)))
   (if (consp x)
       (if (vl-vardecl->initval (car x))
@@ -532,7 +652,37 @@ out some duplication and indirection:</p>
     nil))
 
 (defparser vl-2005-parse-block-item-declaration-noatts (atts)
-  ; Verilog-2005 Only.
+  :short "Match a whole @('block_item_declaration'), except for any attributes, for Verilog-2005."
+  :long "<p>Verilog-2005 Grammar:</p>
+         @({
+              block_item_declaration ::=
+                 {attribute_instance} 'reg' ['signed'] [range] list_of_block_variable_identifiers ';'
+               | {attribute_instance} 'integer' list_of_block_variable_identifiers ';'
+               | {attribute_instance} 'time' list_of_block_variable_identifiers ';'
+               | {attribute_instance} 'real' list_of_block_variable_identifiers ';'
+               | {attribute_instance} 'realtime' list_of_block_variable_identifiers ';'
+               | {attribute_instance} event_declaration
+               | {attribute_instance} local_parameter_declaration ';'
+               | {attribute_instance} parameter_declaration ';'
+
+              list_of_block_variable_identifiers ::=
+                 block_variable_type { ',' block_variable_type }
+
+              block_variable_type ::= identifier { dimension }
+         })
+
+         <p>Of particular note is that the rules for @('reg') through
+         @('realtime') above differ from the module-level @('reg_declaration'),
+         @('integer_declaration'), etc., in that they use
+         @('list_of_block_variable_identifiers') instead of
+         @('list_of_variable_identifiers').  Comparing these, we see that the
+         only difference is that block item declarations are not allowed to
+         have initial values assigned to them.  That is, @('reg foo = 1') is
+         okay as a module item, but not as a block item.</p>
+
+         <p>With this in mind, our approach is to reuse our module-level
+         parsers, but then walk through to ensure that none of the variables
+         have been given initial values.</p>"
   :guard (vl-atts-p atts)
   :result (vl-blockitemlist-p val)
   :resultp-of-nil t
@@ -579,29 +729,96 @@ out some duplication and indirection:</p>
                (vl-parse-error "Block item declarations are not allowed to have initial values.")
              (mv nil elements tokstream))))))
 
-; SystemVerilog-2012 version:
-;
-;   block_item_declaration ::=
-;      {attribute_instance} data_declaration                          // no semicolon
-;    | {attribute_instance} local_parameter_declaration ';'
-;    | {attribute_instance} parameter_declaration       ';'
-;    | {attribute_instance} overload_declaration                      // no semicolon
-;    | {attribute_instance} let_declaration                           // no semicolon
-;
-; The data_declaration subsumes the reg, integer, time, real, realtime, and
-; event cases in Verilog-2005.
-;
-; We don't yet support overload or let declarations, but we have:
-;
-;   overload_declaration ::= 'bind' ...
-;   let_declaration ::= 'let' ...
-;
-; So we can easily identify when these things occur. Moreover we know that a
-; parameter or local_parameter declaration always starts with 'parameter' or
-; 'localparam', so we can at least gracefully fail if we encounter anything we
-; don't support.
 
+(defparser vl-parse-1+-let-ports ()
+  :result (vl-portdecllist-p val)
+  :true-listp t
+  :elementp-of-nil t
+  :fails gracefully
+  :count weak
+  (seq tokstream
+       (atts := (vl-parse-0+-attribute-instances))
+       (type := (if (and (vl-is-token? :vl-idtoken)
+                         (vl-lookahead-is-some-token? '(:vl-comma :vl-rparen :vl-equalsign)
+                                                      (cdr (vl-tokstream->tokens))))
+                    (mv nil *vl-plain-old-logic-type* ;; might be wrong
+                        tokstream)
+                  (vl-parse-datatype-or-implicit)))
+       (id := (vl-match-token :vl-idtoken))
+       (when (vl-is-token? :vl-equalsign)
+         (expr := (vl-parse-expression)))
+       (when (vl-is-token? :vl-comma)
+         (:= (vl-match))
+         (rest := (vl-parse-1+-let-ports)))
+       (return (cons (make-vl-portdecl :name (vl-idtoken->name id)
+                                       :loc (vl-token->loc id)
+                                       :dir :vl-input
+                                       :type type
+                                       :default expr
+                                       :atts atts)
+                     rest))))
+
+(defparser vl-parse-0+-let-ports ()
+  :result (vl-portdecllist-p val)
+  :true-listp t
+  :elementp-of-nil t
+  :fails gracefully
+  :count weak
+  (seq tokstream
+       (when (vl-is-token? :vl-rparen)
+         (return nil))
+       (return-raw (vl-parse-1+-let-ports))))
+
+
+(defparser vl-parse-let-declaration (atts)
+  :guard (vl-atts-p atts)
+  :result (vl-letdecl-p val)
+  :fails gracefully
+  :count strong
+  (seq tokstream
+       (:= (vl-match-token :vl-kwd-let))
+       (name := (vl-match-token :vl-idtoken))
+       (when (vl-is-token? :vl-lparen)
+         (:= (vl-match))
+         (ports := (vl-parse-0+-let-ports))
+         (:= (vl-match-token :vl-rparen)))
+       (:= (vl-match-token :vl-equalsign))
+       (expr := (vl-parse-expression))
+       (return (make-vl-letdecl :name (vl-idtoken->name name)
+                                :portdecls ports
+                                :expr expr
+                                :atts atts
+                                :loc (vl-token->loc name)))))
+
+                           
 (defparser vl-2012-parse-block-item-declaration-noatts (atts)
+  :short "Match a whole @('block_item_declaration'), except for any attributes,
+          for SystemVerilog-2012."
+  :long "<p>SystemVerilog-2012 Grammar:</p>
+
+         @({
+              block_item_declaration ::=
+                  {attribute_instance} data_declaration                          // no semicolon
+                | {attribute_instance} local_parameter_declaration ';'
+                | {attribute_instance} parameter_declaration       ';'
+                | {attribute_instance} overload_declaration                      // no semicolon
+                | {attribute_instance} let_declaration                           // no semicolon
+         })
+
+         <p>The data_declaration subsumes the reg, integer, time, real,
+         realtime, and event cases in Verilog-2005.</p>
+
+         <p>We don't yet support overload or let declarations, but we have:</p>
+
+         @({
+              overload_declaration ::= 'bind' ...
+              let_declaration ::= 'let' ...
+         })
+
+         <p>So we can easily identify when these things occur. Moreover we know
+         that a parameter or local parameter declaration always starts with
+         'parameter' or 'localparam', so we can at least gracefully fail if we
+         encounter anything we don't support.</p>"
   :guard (vl-atts-p atts)
   :result (vl-blockitemlist-p val)
   :resultp-of-nil t
@@ -611,8 +828,6 @@ out some duplication and indirection:</p>
   (seq tokstream
         (when (vl-is-token? :vl-kwd-bind)
           (return-raw (vl-parse-error "overload declarations (\"bind ...\") are not yet supported")))
-        (when (vl-is-token? :vl-kwd-let)
-          (return-raw (vl-parse-error "let declarations are not yet supported")))
         (when (vl-is-some-token? '(:vl-kwd-localparam :vl-kwd-parameter))
           ;; Do not eat the token.
           (elems := (vl-parse-param-or-localparam-declaration atts '(:vl-kwd-localparam :vl-kwd-parameter)))
@@ -620,14 +835,38 @@ out some duplication and indirection:</p>
           (:= (vl-match-token :vl-semi))
           (return elems))
         (when (vl-is-token? :vl-kwd-import)
-          (return-raw (vl-parse-package-import-declaration atts)))
-        ;; Otherwise, we are presumably in the data_declaration case.  Eventually we will
+          ;; Kind of hacky -- to make sure the guard is satisfied we need to
+          ;; look ahead.  This excessive guard is meant to avoid any possible
+          ;; confusion with DPI imports, but we don't have to worry about DPI
+          ;; imports here.
+          (return-raw (if (vl-plausible-start-of-package-import-p)
+                          (vl-parse-package-import-declaration atts)
+                        (vl-parse-error "Expected package name after import."))))
+
+        ;; Otherwise we are in the data_declaration case.
+
+        ;; BOZO it's a little ugly to explicitly look for typedefs here,
+        ;; instead of writing a proper parse-data-declaration function.  But in
+        ;; the special case of block items, I don't think we really want to
+        ;; support forward typedefs?
+        (when (vl-is-token? :vl-kwd-typedef)
+          (ans := (vl-parse-type-declaration atts))
+          (return-raw (if (eq (tag ans) :vl-typedef)
+                          (mv nil (list ans) tokstream)
+                        (vl-parse-error "Not implemented: forward typedefs as block items."))))
+
+        (when (vl-is-token? :vl-kwd-let)
+          (ans := (vl-parse-let-declaration atts))
+          (return (list ans)))
+
+          ;; Otherwise, we are presumably in the data_declaration case.  Eventually we will
         ;; need to extend this to handle typedefs, etc., but for now we'll at least
         ;; get the main data declarations.
         (elems := (vl-parse-main-data-declaration atts))
         (return elems)))
 
 (defparser vl-parse-block-item-declaration-noatts (atts)
+  :short "Match a whole @('block_item_declaration'), except for any attributes."
   :guard (vl-atts-p atts)
   :result (vl-blockitemlist-p val)
   :resultp-of-nil t
@@ -639,6 +878,7 @@ out some duplication and indirection:</p>
     (vl-2012-parse-block-item-declaration-noatts atts)))
 
 (defparser vl-parse-block-item-declaration ()
+  :short "Match a whole @('block_item_declaration'), including initial attributes."
   :result (vl-blockitemlist-p val)
   :resultp-of-nil t
   :true-listp t
@@ -650,10 +890,11 @@ out some duplication and indirection:</p>
         (return decls)))
 
 (defparser vl-parse-0+-block-item-declarations ()
-  ;; Tries to eat as many block items as it can find.
-  ;; We use backtracking to know when to stop, because these declarations can be
-  ;; followed by arbitrary statements, hence it's not clear whether (* ... *) is
-  ;; the start of a new block item declaration or a statement.
+  :short "Match as many @('block_item_declaration')s as we can find."
+  :long "<p>We use backtracking to know when to stop, because these
+         declarations can be followed by arbitrary statements, hence it's not
+         clear whether something like <tt>(* ... *)</tt> attributes are for the
+         start of a new block item declaration or for a statement.</p>"
   :result (vl-blockitemlist-p val)
   :resultp-of-nil t
   :true-listp t

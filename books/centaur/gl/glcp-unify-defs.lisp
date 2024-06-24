@@ -1,3 +1,32 @@
+; GL - A Symbolic Simulation Framework for ACL2
+; Copyright (C) 2008-2013 Centaur Technology
+;
+; Contact:
+;   Centaur Technology Formal Verification Group
+;   7600-C N. Capital of Texas Highway, Suite 300, Austin, TX 78731, USA.
+;   http://www.centtech.com/
+;
+; License: (An MIT/X11-style license)
+;
+;   Permission is hereby granted, free of charge, to any person obtaining a
+;   copy of this software and associated documentation files (the "Software"),
+;   to deal in the Software without restriction, including without limitation
+;   the rights to use, copy, modify, merge, publish, distribute, sublicense,
+;   and/or sell copies of the Software, and to permit persons to whom the
+;   Software is furnished to do so, subject to the following conditions:
+;
+;   The above copyright notice and this permission notice shall be included in
+;   all copies or substantial portions of the Software.
+;
+;   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+;   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+;   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+;   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+;   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+;   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+;   DEALINGS IN THE SOFTWARE.
+;
+; Original author: Sol Swords <sswords@centtech.com>
 
 (in-package "GL")
 
@@ -9,18 +38,18 @@
 ;; x is a concrete object
 (defund glcp-unify-concrete (pat x alist)
   (declare (xargs :guard (pseudo-termp pat)))
-  (b* (((when (eq pat nil))
-        (if (eq x nil)
-            (mv t alist)
-          (mv nil nil)))
-       ((when (atom pat))
-        (let ((pair (hons-assoc-equal pat alist)))
-          (if pair
-              (if (and (general-concretep (cdr pair))
-                       (equal (general-concrete-obj (cdr pair)) x))
-                  (mv t alist)
-                (mv nil nil))
-            (mv t (cons (cons pat (g-concrete-quote x)) alist)))))
+  (b* (((when (atom pat))
+        (if (and pat (mbt (symbolp pat)))
+            (let ((pair (hons-assoc-equal pat alist)))
+              (if pair
+                  (if (and (general-concretep (cdr pair))
+                           (equal (general-concrete-obj (cdr pair)) x))
+                      (mv t alist)
+                    (mv nil nil))
+                (mv t (cons (cons pat (g-concrete-quote x)) alist))))
+          (if (eq x nil)
+              (mv t alist)
+            (mv nil nil))))
        ((when (eq (car pat) 'quote))
         (if (equal (cadr pat) x)
             (mv t alist)
@@ -68,15 +97,16 @@
  (defun glcp-unify-term/gobj (pat x alist)
    (declare (xargs :guard (pseudo-termp pat)
                    :guard-debug t))
-   (b* (((when (eq pat nil))
-         (if (eq x nil) (mv t alist) (mv nil nil)))
-        ((when (atom pat))
-         (let ((pair (hons-assoc-equal pat alist)))
-           (if pair
-               (if (equal x (cdr pair))
-                   (mv t alist)
-                 (mv nil nil))
-             (mv t (cons (cons pat x) alist)))))
+   (b* (((when (atom pat))
+         (if (and pat (mbt (symbolp pat)))
+             (let ((pair (hons-assoc-equal pat alist)))
+               (if pair
+                   (if (equal x (cdr pair))
+                       (mv t alist)
+                     (mv nil nil))
+                 (mv t (cons (cons pat x) alist))))
+           (if (eq x nil) (mv t alist) (mv nil nil))))
+        
         ((when (eq (car pat) 'quote))
          (if (and (general-concretep x)
                   (equal (general-concrete-obj x) (cadr pat)))
@@ -101,29 +131,19 @@
            (glcp-unify-term/gobj (fourth pat) else alist)))
         ((when (and (eq (car pat) 'acl2::logcons$inline)
                     (int= (len pat) 3)
-                    (eq (tag x) :g-number)))
-         (b* ((num (g-number->num x))
-              ((mv rnum rden inum iden)
-               (break-g-number num))
-              ((unless (and (equal rden '(t))
-                            (eq inum nil)
-                            (equal iden '(t))))
-               (mv nil nil))
-              ((mv first rest ?end) (first/rest/end
-                                     (mbe :logic (acl2::list-fix rnum)
-                                          :exec (if (true-listp rnum)
-                                                    rnum
-                                                  (acl2::list-fix rnum)))))
+                    (eq (tag x) :g-integer)))
+         (b* ((bits (g-integer->bits x))
+              ((mv first rest ?end) (first/rest/end (acl2::list-fix bits)))
               ((mv car-ok alist)
                (glcp-unify-term/gobj (second pat)
-                                     (mk-g-number (bfr-scons first (bfr-sterm nil)))
+                                     (mk-g-integer (bfr-scons first (bfr-sterm nil)))
                                      alist))
               ((unless car-ok) (mv nil nil)))
            (glcp-unify-term/gobj (third pat)
-                                 (mk-g-number rest)
+                                 (mk-g-integer rest)
                                  alist)))
         ((when (or (eq (tag x) :g-boolean)
-                   (eq (tag x) :g-number)
+                   (eq (tag x) :g-integer)
                    (eq (tag x) :g-ite)
                    (eq (tag x) :g-var)))
          (mv nil nil))

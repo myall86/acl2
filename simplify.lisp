@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 8.4 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2022, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -132,9 +132,7 @@
                                        cl))
          *true-clause*)
         ((and (eq (ffn-symb lit) 'not)
-              (nvariablep (fargn lit 1))
-              (not (fquotep (fargn lit 1)))
-              (eq (ffn-symb (fargn lit 1)) 'integerp)
+              (ffn-symb-p (fargn lit 1) 'integerp)
               (member-equal (fcons-term 'rationalp (fargs (fargn lit 1))) cl))
          *true-clause*)
         ((member-term lit cl) cl)
@@ -181,7 +179,7 @@
 ; that the proved theorem establishes cl2?  Yes.  Think of cl1 as a rewrite
 ; rule: (implies (not (equal x 'const1)) (iff (p x) t)).  Now consider
 ; rewriting (p A) in cl2.  You may assume the falsity of the other literals of
-; cl2.  So we have (equal A 'const2).  Backchain with cl1.  We msut prove (not
+; cl2.  So we have (equal A 'const2).  Backchain with cl1.  We must prove (not
 ; (equal A 'const1)), which is true because A is 'const2.
 
 ; So how extend subsumption to handle instantiation of an
@@ -231,9 +229,7 @@
              ((null cl1) count)
              ((extra-info-lit-p (car cl1))
               (subsumes-rec count (cdr cl1) cl2 alist))
-             ((and (nvariablep (car cl1))
-                   (not (fquotep (car cl1)))
-                   (eq (ffn-symb (car cl1)) 'EQUAL))
+             ((ffn-symb-p (car cl1) 'EQUAL)
               (cond ((quotep (fargn (car cl1) 1))
                      (subsumes1-equality-with-const count
                                                     (car cl1)
@@ -250,53 +246,51 @@
              (t (subsumes1 count (car cl1) (cdr cl1) cl2 cl2 alist)))))
 
 (defun subsumes1-equality-with-const (count lit x const1 tl1 tl2 cl2 alist)
-  (cond ((eql count 0) 0)
-        ((null tl2) (-f count))
-        ((extra-info-lit-p (car tl2))
-         (subsumes1-equality-with-const count lit x const1 tl1 (cdr tl2) cl2 alist))
-        ((and (nvariablep (car tl2))
-              (not (fquotep (car tl2)))
-              (eq (ffn-symb (car tl2)) 'NOT)
-              (nvariablep (fargn (car tl2) 1))
-              (not (fquotep (fargn (car tl2) 1)))
-              (eq (ffn-symb (fargn (car tl2) 1)) 'EQUAL))
-         (let ((arg1 (fargn (fargn (car tl2) 1) 1))
-               (arg2 (fargn (fargn (car tl2) 1) 2)))
-           (cond ((and (quotep arg1)
-                       (not (equal arg1 const1)))
-                  (mv-let
-                   (wonp alist1)
-                   (one-way-unify1 x arg2 alist)
-                   (cond ((not wonp)
-                          (subsumes1-equality-with-const (1-f count) lit x const1 tl1 (cdr tl2) cl2 alist))
-                         (t (let ((new-count (subsumes-rec (1-f count) tl1 cl2 alist1)))
-                              (cond ((<= 0 new-count) new-count)
-                                    (t (subsumes1-equality-with-const (-f new-count)
-                                                                      lit x const1 tl1 (cdr tl2)
-                                                                      cl2 alist))))))))
-                 ((and (quotep arg2)
-                       (not (equal arg2 const1)))
-                  (mv-let
-                   (wonp alist1)
-                   (one-way-unify1 x arg1 alist)
-                   (cond ((not wonp)
-                          (subsumes1-equality-with-const (1-f count)
-                                                         lit x const1 tl1 (cdr tl2) cl2 alist))
-                         (t (let ((new-count (subsumes-rec (1-f count) tl1 cl2 alist1)))
-                              (cond ((<= 0 new-count) new-count)
-                                    (t (subsumes1-equality-with-const (-f new-count)
-                                                                      lit x const1 tl1 (cdr tl2)
-                                                                      cl2 alist))))))))
-                 (t (subsumes1-equality-with-const count lit x const1 tl1 (cdr tl2) cl2 alist)))))
-        (t (mv-let
-            (wonp alist1)
-            (one-way-unify1 lit (car tl2) alist)
-            (cond ((not wonp)
-                   (subsumes1-equality-with-const (1-f count) lit x const1 tl1 (cdr tl2) cl2 alist))
-                  (t (let ((new-count (subsumes-rec  (1-f count) tl1 cl2 alist1)))
-                       (cond
-                        ((<= 0 new-count) new-count)
-                        (t (subsumes1-equality-with-const (-f new-count) lit x const1 tl1 (cdr tl2) cl2 alist))))))))))
+  (the
+   (signed-byte 30)
+   (cond ((eql count 0) 0)
+         ((null tl2) (-f count))
+         ((extra-info-lit-p (car tl2))
+          (subsumes1-equality-with-const count lit x const1 tl1 (cdr tl2) cl2 alist))
+         ((and (ffn-symb-p (car tl2) 'NOT)
+               (ffn-symb-p (fargn (car tl2) 1) 'EQUAL))
+          (let ((arg1 (fargn (fargn (car tl2) 1) 1))
+                (arg2 (fargn (fargn (car tl2) 1) 2)))
+            (cond ((and (quotep arg1)
+                        (not (equal arg1 const1)))
+                   (mv-let
+                     (wonp alist1)
+                     (one-way-unify1 x arg2 alist)
+                     (cond ((not wonp)
+                            (subsumes1-equality-with-const (1-f count) lit x const1 tl1 (cdr tl2) cl2 alist))
+                           (t (let ((new-count (subsumes-rec (1-f count) tl1 cl2 alist1)))
+                                (cond ((<= 0 new-count) new-count)
+                                      (t (subsumes1-equality-with-const (-f new-count)
+                                                                        lit x const1 tl1 (cdr tl2)
+                                                                        cl2 alist))))))))
+                  ((and (quotep arg2)
+                        (not (equal arg2 const1)))
+                   (mv-let
+                     (wonp alist1)
+                     (one-way-unify1 x arg1 alist)
+                     (cond ((not wonp)
+                            (subsumes1-equality-with-const (1-f count)
+                                                           lit x const1 tl1 (cdr tl2) cl2 alist))
+                           (t (let ((new-count (subsumes-rec (1-f count) tl1 cl2 alist1)))
+                                (cond ((<= 0 new-count) new-count)
+                                      (t (subsumes1-equality-with-const (-f new-count)
+                                                                        lit x const1 tl1 (cdr tl2)
+                                                                        cl2 alist))))))))
+                  (t (subsumes1-equality-with-const count lit x const1 tl1 (cdr tl2) cl2 alist)))))
+         (t (mv-let
+              (wonp alist1)
+              (one-way-unify1 lit (car tl2) alist)
+              (cond ((not wonp)
+                     (subsumes1-equality-with-const (1-f count) lit x const1 tl1 (cdr tl2) cl2 alist))
+                    (t (let ((new-count (subsumes-rec  (1-f count) tl1 cl2 alist1)))
+                         (cond
+                          ((<= 0 new-count) new-count)
+                          (t (subsumes1-equality-with-const (-f new-count) lit x const1 tl1 (cdr tl2) cl2 alist)))))))))))
 
 (defun subsumes1 (count lit tl1 tl2 cl2 alist)
 
@@ -344,9 +338,7 @@
   (cond ((null cl1) t)
         ((extra-info-lit-p (car cl1))
          (subsumes!-rec (cdr cl1) cl2 alist))
-        ((and (nvariablep (car cl1))
-              (not (fquotep (car cl1)))
-              (eq (ffn-symb (car cl1)) 'EQUAL))
+        ((ffn-symb-p (car cl1) 'EQUAL)
          (cond ((quotep (fargn (car cl1) 1))
                 (subsumes!1-equality-with-const (car cl1)
                                                 (fargn (car cl1) 2)
@@ -364,12 +356,8 @@
   (cond ((null tl2) nil)
         ((extra-info-lit-p (car tl2))
          (subsumes!1-equality-with-const lit x const1 tl1 (cdr tl2) cl2 alist))
-        ((and (nvariablep (car tl2))
-              (not (fquotep (car tl2)))
-              (eq (ffn-symb (car tl2)) 'NOT)
-              (nvariablep (fargn (car tl2) 1))
-              (not (fquotep (fargn (car tl2) 1)))
-              (eq (ffn-symb (fargn (car tl2) 1)) 'EQUAL))
+        ((and (ffn-symb-p (car tl2) 'NOT)
+              (ffn-symb-p (fargn (car tl2) 1) 'EQUAL))
          (let ((arg1 (fargn (fargn (car tl2) 1) 1))
                (arg2 (fargn (fargn (car tl2) 1) 2)))
            (cond ((and (quotep arg1)
@@ -422,7 +410,7 @@
 ; The following value is rather arbitrary, determined by experimentation so
 ; that subsumes doesn't run for more than a small fraction of a second on a
 ; 2.6GH P4 (depending on the underlying Lisp).  The following takes about 0.04
-; seconds to return '? (signalling that we have done 1,000,000 calls of
+; seconds to return '? (signaling that we have done 1,000,000 calls of
 ; one-way-unify1) on that machine using GCL 2.6.7 and about 0.17 seconds using
 ; Allegro CL 7.0.
 
@@ -504,7 +492,7 @@
 ; would feel obligated to track equivalence relations by passing back a tag
 ; ttree.)  The present function is essentially (member-equal cl cl-set), except
 ; that equality is tested using equal-mod-commuting-lst: thus, some member of
-; cl-set is identicial to cl except that literals can be commuted as explained
+; cl-set is identical to cl except that literals can be commuted as explained
 ; above.
 
   (cond ((endp cl-set) nil)
@@ -591,7 +579,7 @@
 ; with a reverse call in order to provide unchanged functionality.  Would we
 ; gain efficiency by eliminating tail recursion at the cost of that reverse
 ; call?  Maybe.  A clearer win would be to avoid the reverse call, which should
-; be logically OK but could change the prover's behavior, thus invaliding huge
+; be logically OK but could change the prover's behavior, thus invalidating huge
 ; portions of the regression suite.
 
 ; The alternate code is simply the following line, in place of all that
@@ -689,22 +677,27 @@
 ; unify substitution, etc.  To advance an activation we check each
 ; (instantiated) hyp successively against the type-alist with type-set.  If we
 ; reach the end of the hyps, we know the conclusions of the rule are all true.
-; We record these facts in ``fc-derivations''.  If we reach a hyp whose truth
-; is not known under the current type-alist, we ``suspend'' the activation.  Of
-; course, if a hyp is found to be false, we simply drop the activation.  We
-; must also handle the branching caused by free vars in a hyp -- which causes
-; an activation to split into several different activations under each of the
-; possible matches for the free vars plus to remain suspended in case
-; additional matches arise later.
+; We record each such deduced conclusion as an ``fc-derivation,'' aka an
+; ``fcd,'' a kind of record.  (Note that just because we create an fcd does not
+; mean we will incorporate it into our assumptions.  More on this below.)  If
+; we reach a hyp whose truth is not known under the current type-alist, we
+; ``suspend'' the activation.  Of course, if a hyp is found to be false, we
+; simply drop the activation.  We must also handle the branching caused by free
+; vars in a hyp -- which causes an activation to split into several different
+; activations under each of the possible matches for the free vars plus to
+; remain suspended in case additional matches arise later.
 
-;  When we have advanced all the activations we have a list of still-suspended
+; When we have advanced all the activations we have a list of still-suspended
 ; activations and a list of forward-chaining derivations deduced so far.  We
 ; then heuristically decide which of the derivations to keep.  This is called
 ; ``approving'' the derivations and is imposed to prevent pumps like (implies
-; (p x) (p (f x))) from causing infinite forward chaining.  A key heuristic is
-; that the derived conclusion should not be worse than any conclusion used in
-; its derivation.  This means we must be able to determine which conclusions
-; were used in the derivation of another one.  We do that rather cheaply by
+; (p x) (p (f x))) from causing infinite forward chaining.  Thus, one must be
+; careful to distinguish ``fcds'' from ``approved fcds,'' a subset of the
+; former though there is no indicator in the fc-derivation record to indicate
+; that an fcd has been approved.  A key heuristic in approving an fcd is that
+; the derived conclusion should not be worse than any conclusion used in its
+; derivation.  This means we must be able to determine which conclusions were
+; used in the derivation of another one.  We do that rather cheaply by
 ; embedding ttrees in fc-derivations.  These ttrees are tainted from the
 ; perspective of the rest of the code, because they have dependencies buried
 ; inside them.  We discuss this when we introduce them but it gives rise to
@@ -716,10 +709,15 @@
 ; prover.
 
 ; Once we have collected the approved derivations, we assume them all obtaining
-; a new type-alist.  Since the newly added conclusions may contain new terms,
-; we add more activations to our list of suspended activations.  Then we start
-; another ``round'' in which we try again to advance the suspended activations
-; in the context of the new type-alist.
+; a new type-alist.  It is at that point that we process the disjunction
+; triples, possibly shrinking some clauses or even deducing some new
+; conclusions and getting a new type-alist.  During the processing we assume
+; that if an fcd was approved then any disjunct in it is approved.  Thus, the
+; fcds produced by eliminating all but one literal in a clause is added to the
+; list of approved fcds.  Since the newly added conclusions may contain new
+; terms, we add more activations to our list of suspended activations.  Then we
+; start another ``round'' in which we try again to advance the suspended
+; activations in the context of the new type-alist.
 
 ; The notion of a round is implemented by forward-chain1.  The top-level
 ; forward chain just sets up the initial type-alist and the initial activations
@@ -751,10 +749,10 @@
 ; you understand fc-derivations and what has actually happened in a proof
 ; attempt.
 
-; A forward chaining rule is
+; A forward chaining rule is (not defined in rewrite.lisp):
 
-(defrec forward-chaining-rule
-  ((rune . nume) trigger hyps concls . match-free) nil)
+; (defrec forward-chaining-rule
+;   ((rune . nume) trigger hyps concls . match-free) nil)
 
 ; One of the main inefficiencies in our earlier forward chaining schemes
 ; was that if a rule began to fire but misfired because some hyp could
@@ -865,7 +863,7 @@
 ; though the choice is suggested on the eventual type-alist.  This
 ; actually happened in an example distilled by Dave Greve.  The obvious
 ; problem with leaving the relevant activation around, still blocked on
-; (FOOP x), is that we'll repeatedly re-discover the possiblity that x
+; (FOOP x), is that we'll repeatedly re-discover the possibility that x
 ; is (A).  In discussing how to avoid such redundancy, Dave suggested
 ; searching only the ``new'' part of each type-alist (new since the last
 ; attempt to guess free vars).  However, that idea doesn't work because
@@ -1009,7 +1007,7 @@
                                 (car hyps))
                         ,(cddr inst-hyp))
               `(:REASON ,inst-hyp))
-; with the current unify-sustitution:
+; with the current unify-substitution:
          (:UNIFY-SUBST ,pretty-subst))))))
 
 (defun prettyify-fc-activations (acts level)
@@ -1102,11 +1100,10 @@
 
          (collect-terms-and-activations-lst (fargs term) ttree wrld ens
                                             trigger-terms activations))
-        (t (let ((rules (getprop (ffn-symb term)
-                                 'forward-chaining-rules
-                                 nil
-                                 'current-acl2-world
-                                 wrld)))
+        (t (let ((rules (getpropc (ffn-symb term)
+                                  'forward-chaining-rules
+                                  nil
+                                  wrld)))
 
 ; If the term has rules, we collect it and add any activations it
 ; triggers (though there may be none).  But first we see whether we've
@@ -1192,7 +1189,8 @@
 )
 
 (defun mult-search-type-alist (rest-hyps concls term typ type-alist
-                                         unify-subst ttree oncep keys-seen)
+                                         unify-subst ttree oncep keys-seen
+                                         compound-rec-rune?)
 
 ; This function is a variant of search-type-alist that searches for
 ; all instances of term (other than those listed in keys-seen) bound to a
@@ -1201,6 +1199,10 @@
 ; tag-trees each extending ttree, and a list of the instances themselves
 ; (actually EQ to the terms from the type-alist upon which
 ; one-way-unify1 was called).
+
+; The argument compound-rec-rune? is either nil or else a rune of a
+; compound-recognizer rule.  If the latter, then we include it in every
+; tag-tree returned.
 
   (cond ((null type-alist)
          (mv nil nil nil))
@@ -1224,7 +1226,9 @@
 
                            (mv (list new-unify-subst)
                                (list (cons-tag-trees (cddr (car type-alist))
-                                                     ttree))
+                                                     (push-lemma?
+                                                      compound-rec-rune?
+                                                      ttree)))
                                (list (car (car type-alist)))))
 
 ; We found a new unify-subst but there may be additional interesting ones out
@@ -1238,12 +1242,17 @@
                                                              unify-subst
                                                              ttree
                                                              oncep
-                                                             keys-seen)
+                                                             keys-seen
+                                                             compound-rec-rune?)
                                      (mv (cons new-unify-subst other-unifies)
                                          (cons (cons-tag-trees
-                                                (cddr (car type-alist)) ttree)
+                                                (cddr (car type-alist))
+                                                (push-lemma?
+                                                 compound-rec-rune?
+                                                 ttree))
                                                other-ttrees)
-                                         (cons (car (car type-alist)) other-instances)))))))
+                                         (cons (car (car type-alist))
+                                               other-instances)))))))
 
 ; We didn't find any new substitutions; try again.
 
@@ -1253,17 +1262,19 @@
                                              new-unify-subst
                                              ttree
                                              oncep
-                                             keys-seen)))))
+                                             keys-seen
+                                             compound-rec-rune?)))))
         (t (mult-search-type-alist rest-hyps concls term
                                    typ
                                    (cdr type-alist)
                                    unify-subst
                                    ttree
                                    oncep
-                                   keys-seen))))
+                                   keys-seen
+                                   compound-rec-rune?))))
 
 (defun mult-lookup-hyp (hyp rest-hyps concls type-alist wrld unify-subst ttree
-                            oncep last-keys-seen)
+                            oncep last-keys-seen ens)
 
 ; This function basically takes a hyp and a type-alist.  It returns (mv
 ; new-unify-substs new-ttrees new-last-keys-seen), in which extensions of
@@ -1274,81 +1285,89 @@
 
 ; This function is basically a variant of lookup-hyp.
 
-  (mv-let (term typ)
-          (term-and-typ-to-lookup hyp wrld)
+  (mv-let (term typ rune)
+          (term-and-typ-to-lookup hyp wrld ens)
           (mult-search-type-alist rest-hyps concls term typ type-alist
-                                  unify-subst ttree oncep last-keys-seen)))
+                                  unify-subst ttree oncep last-keys-seen
+                                  rune)))
 
 (mutual-recursion
 
-(defun ev-respecting-ens (form alist state latches ttree ens wrld)
+(defun ev-respecting-ens (form alist state ttree ens wrld)
 
-; This is a variant of ev (see also ev-rec) that avoids calling functions whose
-; executable counterparts are disabled.  Thus, here we return (mv erp val
-; latches ttree), where ev would return (mv erp val latches) and ttree extends
-; the given ttree by adding executable-counterpart runes justifying the
-; evaluation.  If erp is non-nil then val and ttree are to be taken as
-; meaningless.
+; This is a variant of ev (see also ev-rec), for use when latches is nil, that
+; avoids calling functions whose executable-counterparts are disabled.  Thus,
+; here we return (mv erp val ttree), where ev would return (mv erp val latches)
+; and ttree extends the given ttree by adding executable-counterpart runes
+; justifying the evaluation.  If erp is non-nil then val and ttree are to be
+; taken as meaningless.
 
   (cond ((or (variablep form)
              (fquotep form))
          (mv-let (erp val latches)
-           (ev form alist state latches t nil)
-           (mv erp val latches ttree)))
+           (ev form alist state nil t nil)
+           (assert$ (null latches)
+                    (mv erp val ttree))))
         (t (let ((fn (ffn-symb form)))
              (cond
               ((or (flambdap fn)
                    (enabled-xfnp fn ens wrld))
                (cond ((eq fn 'if)
                       (mv-let
-                        (test-er test latches ttree)
+                        (test-er test ttree)
                         (ev-respecting-ens (fargn form 1) alist state
-                                           latches ttree ens wrld)
-                        (cond (test-er (mv t test latches ttree))
+                                           ttree ens wrld)
+                        (cond (test-er (mv t test ttree))
                               (test (ev-respecting-ens
                                      (fargn form 2)
-                                     alist state latches
+                                     alist state
                                      (push-lemma '(:EXECUTABLE-COUNTERPART if)
                                                  ttree)
                                      ens wrld))
                               (t (ev-respecting-ens
                                   (fargn form 3)
-                                  alist state latches
+                                  alist state
                                   (push-lemma '(:EXECUTABLE-COUNTERPART if)
-                                                 ttree)
+                                              ttree)
                                   ens wrld)))))
                      (t (mv-let
-                          (args-er args latches ttree)
+                          (args-er args ttree)
                           (ev-lst-respecting-ens (fargs form) alist state
-                                                 latches ttree ens wrld)
+                                                 ttree ens wrld)
                           (cond
-                           (args-er (mv t args latches ttree))
+                           (args-er (mv t args ttree))
                            (t (cond
                                ((flambdap fn)
                                 (ev-respecting-ens
                                  (lambda-body (ffn-symb form))
                                  (pairlis$ (lambda-formals (ffn-symb form))
                                            args)
-                                 state latches ttree ens wrld))
+                                 state ttree ens wrld))
                                (t (mv-let (erp val latches)
-                                    (ev-fncall fn args state latches t nil)
-                                    (mv erp val latches
-                                        (push-lemma
-                                         `(:EXECUTABLE-COUNTERPART ,fn)
-                                         ttree)))))))))))
-              (t (mv t nil latches ttree)))))))
+                                    (ev-fncall fn args
+                                               nil ; irrelevant (latches = nil)
+                                               state
+                                               nil ; latches
+                                               t nil)
+                                    (assert$
+                                     (null latches)
+                                     (mv erp val
+                                         (push-lemma
+                                          `(:EXECUTABLE-COUNTERPART ,fn)
+                                          ttree))))))))))))
+              (t (mv t nil ttree)))))))
 
-(defun ev-lst-respecting-ens (lst alist state latches ttree ens wrld)
+(defun ev-lst-respecting-ens (lst alist state ttree ens wrld)
   (cond ((endp lst)
-         (mv nil nil latches ttree))
-        (t (mv-let (erp val latches ttree)
-             (ev-respecting-ens (car lst) alist state latches ttree ens wrld)
-             (cond (erp (mv erp val latches ttree))
-                   (t (mv-let (erp rst latches ttree)
-                        (ev-lst-respecting-ens (cdr lst) alist state latches
+         (mv nil nil ttree))
+        (t (mv-let (erp val ttree)
+             (ev-respecting-ens (car lst) alist state ttree ens wrld)
+             (cond (erp (mv erp val ttree))
+                   (t (mv-let (erp rst ttree)
+                        (ev-lst-respecting-ens (cdr lst) alist state
                                                ttree ens wrld)
-                        (cond (erp (mv erp rst latches ttree))
-                              (t (mv nil (cons val rst) latches ttree))))))))))
+                        (cond (erp (mv erp rst ttree))
+                              (t (mv nil (cons val rst) ttree))))))))))
 )
 
 ; Forward Chaining Derivations - fc-derivations - fcds
@@ -1543,34 +1562,21 @@
 
 (mutual-recursion
 
-(defun expunge-fc-derivations-lst (fc-derivation-lst ttree)
-  (cond ((endp fc-derivation-lst) ttree)
-        (t (push-lemma
-            (access fc-derivation (car fc-derivation-lst) :rune)
-            (cons-tag-trees (expunge-fc-derivations
-                             (access fc-derivation (car fc-derivation-lst)
-                                     :ttree))
-                            (expunge-fc-derivations-lst (cdr fc-derivation-lst)
-                                                        ttree))))))
-
 (defun expunge-fc-derivations (ttree)
 
-; Ttree is a not fcd-free and we make it fcd-free.  In particular, we
-; copy ttree, replacing each 'fc-derivation in it by a new node which
-; tags the rule name with 'lemma and lifts out the interior ttrees and
-; expunges them.  Thus, when we are done we have a ttree with no
-; 'fc-derivation tags, but which has 'lemma tags on the set of names in
-; the 'fc-derivations and which has all of the 'pt objects and
-; 'assumptions (for example) that were recursively embedded in
-; 'fc-derivations.
+; Ttree is a not fcd-free and we make it fcd-free.  In particular, we copy
+; ttree, replacing each 'fc-derivation in it by a new node which tags the rule
+; name with 'lemma and lifts out the interior ttrees and expunges them.  Thus,
+; when we are done we have a ttree with no 'fc-derivation tags, but which has
+; 'lemma tags on the set of names in the 'fc-derivations and which has all of
+; the other tags, e.g., 'pt 'assumptions, etc, that were recursively embedded
+; in 'fc-derivations.
 
 ; Note: This function must be able to find 'fc-derivations anywhere within the
-; ttree.  In particular, before we removed ttrees from the type-alists in
-; 'assumptions, we had to expunge the fc-derivations within the type-alists.
-; See the comment in force-assumptions.  Remember that 'fc-derivations are for
-; heuristic use only, except that they may contain 'pt and 'assumption objects
-; that we must lift out.  So we should be ruthless about finding and expunging
-; all 'fc-derivations.
+; ttree.  Fc-derivations are for heuristic use only during forward chaining (to
+; cheaply record the derivation of a fact, so that we can prevent
+; forward-chaining ``pumps'').  We should be ruthless in finding and removing
+; them.
 
 ; Once upon a time we detected an 'fc-derivation at the end of prove.  It
 ; slipped into the final proof tree as follows: Forward chaining made two
@@ -1613,10 +1619,68 @@
 ;   (thm (concl (trig a))))
 
   (let ((objects (tagged-objects 'fc-derivation ttree)))
-    (cond (objects (expunge-fc-derivations-lst
-                    objects
-                    (remove-tag-from-tag-tree! 'fc-derivation ttree)))
-          (t ttree))))
+    (cond (objects
+           (expunge-fc-derivations-assumptions
+            (expunge-fc-derivations-lst
+             objects
+             (remove-tag-from-tag-tree! 'fc-derivation ttree))))
+          (t (expunge-fc-derivations-assumptions ttree)))))
+
+(defun expunge-fc-derivations-lst (fc-derivation-lst ttree)
+
+; Each element of fc-derivations-lst is an fc-derivation.  Each such record has
+; a :ttree and a :rune.  We accumulate into ttree the :rune of each
+; fc-derivation as well as the :ttree of each fc-derivation after recursively
+; expunging the fc-derivation tags from it.  Thus, for example, if the :ttree
+; of an element of fc-derivations contains a PT or ASSUMPTIONS tag, it survives
+; and is part of the final ttree returned.
+
+  (cond ((endp fc-derivation-lst) ttree)
+        (t (push-lemma
+            (access fc-derivation (car fc-derivation-lst) :rune)
+            (cons-tag-trees (expunge-fc-derivations
+                             (access fc-derivation (car fc-derivation-lst)
+                                     :ttree))
+                            (expunge-fc-derivations-lst (cdr fc-derivation-lst)
+                                                        ttree))))))
+
+(defun expunge-fc-derivations-type-alist (type-alist)
+
+; We expunge the fc-derivation tags from every ttree in type-alist.
+
+  (cond
+   ((endp type-alist)
+    nil)
+   (t (cons (cons (caar type-alist)
+                  (cons (cadar type-alist)
+                        (expunge-fc-derivations (cddar type-alist))))
+            (expunge-fc-derivations-type-alist (cdr type-alist))))))
+
+(defun expunge-fc-derivations-assumptions-lst (assumptions)
+
+; For every assumption record in assumptions we replace the :type-alist
+; field with the result of expunging fc-derivations from the type-alist.
+
+  (cond
+   ((endp assumptions) nil)
+   (t (cons (change assumption (car assumptions)
+                    :type-alist
+                    (expunge-fc-derivations-type-alist
+                     (access assumption (car assumptions) :type-alist)))
+            (expunge-fc-derivations-assumptions-lst (cdr assumptions))))))
+
+(defun expunge-fc-derivations-assumptions (ttree)
+
+; If ttree contains an 'assumption tag, expunge fc-derivations from the ttrees
+; in the type-alists of all the assumptions.
+
+  (let ((objects (tagged-objects 'assumption ttree)))
+    (cond
+     (objects
+      (extend-tag-tree 'assumption
+                       (expunge-fc-derivations-assumptions-lst objects)
+                       (remove-tag-from-tag-tree! 'assumption ttree)))
+     (t ttree))))
 )
 
 ; A Reporting Facility for Forward Chaining
@@ -1858,7 +1922,7 @@
 
 (defun set-fc-criteria-fn (x state)
 
-; Warning: Keep this in syc with set-waterfall-parallelism-fn.
+; Warning: Keep this in sync with set-waterfall-parallelism-fn.
 
   (er-let* ((criteria
              (cond
@@ -2726,7 +2790,8 @@
                                  type-alist
                                  wrld unify-subst ttree
                                  oncep1
-                                 last-keys-seen)
+                                 last-keys-seen
+                                 ens)
                 (cond
                  (new-unify-subst-list
 
@@ -2871,7 +2936,7 @@
                             fcd-lst)))
    (t
     (let* ((forcep1 (and (nvariablep (car hyps))
-                         (not (fquotep (car hyps)))
+;                        (not (fquotep (car hyps)))
                          (or (eq (ffn-symb (car hyps)) 'force)
                              (eq (ffn-symb (car hyps)) 'case-split))))
            (forcer-fn (and forcep1 (ffn-symb (car hyps))))
@@ -2934,10 +2999,9 @@
 ; only using evaluation on ground terms where it makes the most sense.
 
                        (mv-let
-                        (erp val latches ttree2)
+                        (erp val ttree2)
                         (ev-respecting-ens
-                         inst-hyp nil state nil nil ens wrld)
-                        (declare (ignore latches))
+                         inst-hyp nil state nil ens wrld)
 
 ; Note that ttree2 is the ttree for the evaluation and it does not
 ; include ttree or ttree1.  We are not using the type-set stuff because
@@ -3123,26 +3187,29 @@
 ; activations in every pot.  We start by advancing all the activations
 ; listed in a single pot.
 
-(defun advance-fc-activations (lst fc-round type-alist ens force-flg wrld state oncep-override
-                                   suspensions fcd-lst)
+(defun advance-fc-activations (lst fc-round type-alist ens force-flg wrld state
+                                   oncep-override suspensions fcd-lst)
 
-; Lst is of the form (act1 ... actn), where each acti is an fc
-; activation.  Fcd-lst is a list of fc-derivations onto which we
-; accumulate any derived conclusions (as fc-derivations).  We return two
-; results which we build by accumulation onto the last two arguments: a
-; new list of possibly advanced suspended activations and the
-; accumulated successful derivations.
+; Lst is of the form (act1 ... actn), where each acti is an fc activation.
+; Fcd-lst is a list of fc-derivations onto which we accumulate any derived
+; conclusions (as fc-derivations).  Note that the fcds in this list are not
+; necessarily ``approved.''  Their conclusions are known to be non-nil but we
+; may not actually add them to the type-alist.  We return two results which we
+; build by accumulation onto the last two arguments: a new list of possibly
+; advanced suspended activations and the fc-derivations produced by successful
+; forward chaining.
 
   (cond ((null lst)
          (mv suspensions fcd-lst))
         (t (mv-let
             (suspensions1 fcd-lst1)
             (advance-fc-activation (car lst)
-                                   fc-round type-alist ens force-flg wrld state oncep-override
-                                   suspensions fcd-lst)
+                                   fc-round type-alist ens force-flg wrld state
+                                   oncep-override suspensions fcd-lst)
             (advance-fc-activations (cdr lst)
-                                    fc-round type-alist ens force-flg wrld state oncep-override
-                                    suspensions1 fcd-lst1)))))
+                                    fc-round type-alist ens force-flg wrld
+                                    state oncep-override suspensions1
+                                    fcd-lst1)))))
 
 (defun fc-pair-lst (fcd-lst)
 
@@ -3530,40 +3597,38 @@
 ; its level number.
 
   (cond ((flambdap fn) (max-level-no (lambda-body fn) wrld))
-        ((getprop fn 'level-no nil
-                  'current-acl2-world wrld))
+        ((getpropc fn 'level-no nil wrld))
         (t 0)))
 
 )
 
 (mutual-recursion
 
-(defun sort-approved1-rating1 (term wrld fc vc)
+(defun sort-fcds1-rating1 (term wrld fc vc)
   (cond ((variablep term) (mv fc (1+ vc)))
         ((fquotep term) (mv fc vc))
         ((flambda-applicationp term)
          (mv-let (fc vc)
-                 (sort-approved1-rating1 (lambda-body term) wrld fc vc)
-                 (sort-approved1-rating1-lst (fargs term) wrld (1+ fc) vc)))
+                 (sort-fcds1-rating1 (lambda-body term) wrld fc vc)
+                 (sort-fcds1-rating1-lst (fargs term) wrld (1+ fc) vc)))
         ((or (eq (ffn-symb term) 'not)
-             (= (getprop (ffn-symb term) 'absolute-event-number 0
-                         'current-acl2-world wrld)
+             (= (getpropc (ffn-symb term) 'absolute-event-number 0 wrld)
                 0))
-         (sort-approved1-rating1-lst (fargs term) wrld fc vc))
-        (t (sort-approved1-rating1-lst (fargs term) wrld
+         (sort-fcds1-rating1-lst (fargs term) wrld fc vc))
+        (t (sort-fcds1-rating1-lst (fargs term) wrld
                                        (+ 1
                                           (get-level-no (ffn-symb term) wrld)
                                           fc)
                                        vc))))
 
-(defun sort-approved1-rating1-lst (lst wrld fc vc)
+(defun sort-fcds1-rating1-lst (lst wrld fc vc)
   (cond ((null lst) (mv fc vc))
         (t (mv-let (fc vc)
-                   (sort-approved1-rating1 (car lst) wrld fc vc)
-                   (sort-approved1-rating1-lst (cdr lst) wrld fc vc)))))
+                   (sort-fcds1-rating1 (car lst) wrld fc vc)
+                   (sort-fcds1-rating1-lst (cdr lst) wrld fc vc)))))
 )
 
-(defun sort-approved1-rating (term wrld)
+(defun sort-fcds1-rating (term wrld)
 
 ; In forward-chaining we assume all the derived concls.  We sort them by the
 ; ratings computed here, assuming first those terms with the highest rating.
@@ -3578,24 +3643,25 @@
 ; the terms above before others!
 
   (mv-let (fc vc)
-          (sort-approved1-rating1 term wrld 0 0)
+          (sort-fcds1-rating1 term wrld 0 0)
           (- (+ (* 10 fc) vc))))
 
-(defun sort-approved1 (approved wrld)
+(defun sort-fcds1 (approved wrld)
   (cond ((null approved) nil)
         (t (cons
-            (cons (sort-approved1-rating
+            (cons (sort-fcds1-rating
                    (access fc-derivation (car approved) :concl)
                    wrld)
                   (car approved))
-            (sort-approved1 (cdr approved) wrld)))))
+            (sort-fcds1 (cdr approved) wrld)))))
 
-(defun sort-approved (approved wrld)
+(defun sort-fcds (fcd-lst wrld)
 
-; Approved is a list of fc-derivations which have derived certain :concls.
-; We sort that list so that those with the higher rated :concls come first.
+; Fcd-lst is a list of fc-derivations (which happen to have been approved, but
+; that doesn't matter to the sorting algorithm).  Each has a derived :concl.
+; We sort fcd-lst so that those with the higher rated :concls come first.
 
-  (strip-cdrs (merge-sort-car-> (sort-approved1 approved wrld))))
+  (strip-cdrs (merge-sort-car-> (sort-fcds1 fcd-lst wrld))))
 
 (defun strip-fcd-concls (fcd-lst)
   (cond ((null fcd-lst) nil)
@@ -3666,86 +3732,741 @@
          (every-concl-member-equalp (cdr fcd-lst) trigger-terms))
         (t nil)))
 
-; Now we are ready to define the function that carries out successive
-; rounds of a forward chaining.
+; We now begin the development of code to process disjunctions produced by
+; forward chaining.
 
-(defun forward-chain1 (cl fc-round trigger-terms activations type-alist force-flg wrld
+; Essay on Disjunctions Produced by Forward Chaining
+
+; Disjunction-triples is maintained as a list of triples, (clause ttree . fcd).
+; Whenever forward-chain1 derives a new literal, it produces an fc-derivation,
+; fcd, to record that fact.  Should the :concl of that fc-derivation be a
+; disjunction, like (OR p q r) then it creates a disjunction-triple, ((p q r)
+; ttree . fcd) and adds it to the list of disjunction-triples.  Note that the
+; first component of a disjunction-triple is in fact a clause.  After extending
+; the type-alist with all the newly derived concls and extending
+; disjuction-triples as necessary, we map over disjunction-triples and call
+; type-set on each literal of each clause.  We throw away any triple whose
+; clause contains a true literal; we delete any false literal, accumulate the
+; proof of falsity ttree into the ttree of the triple, and, in the event that
+; the deletion produces a unit clause, we delete the triple, and extend the
+; type-alist by assuming the remaining single literal true with the ttree (and
+; we accumulate a new fc-derivation onto fcd-list).  We iterate as long as
+; we've produced new triples or type-alist.  One can think of this process as
+; ``unit propagation'' except instead of knocking off literals with unit
+; clauses we knock them off with type-set.  The function that does all this is
+; called process-disjunction-triples and it returns a contradictionp flag, a
+; modified list of disjuction-triples, either the ttree associated with the
+; contradiction or a new (not fcd-free) type-alist, and the new
+; disjunction-triples.  The modified disjunction-triples and type-alist are
+; passed on to the next round of forward chaining.
+
+(defun collect-disjuncts (term top-level)
+  (case-match term
+    (('IF p p q) (cons p (collect-disjuncts q nil)))
+    (('IF p *t* q) (cons p (collect-disjuncts q nil)))
+    (('IF p q *t*) (cons (dumb-negate-lit p) (collect-disjuncts q nil)))
+    (& (and (not top-level) (list term)))))
+
+(defun collect-disjunction-triples (fcd-lst triples)
+
+; Fcd-lst is a list of fc-derivation records.  Each record has a :concl and a
+; :ttree and then other things.  We convert each fcd whose :concl is a
+; disjunction into a triple, (clause ttree . fcd) where clause is the
+; list of disjuncts, e.g., (p q r) from (OR p (OR q r)), ttree is just the
+; :ttree field of the fcd, and the cddr of the triple, fcd, is the original fcd
+; itself.
+
+; Foreshadowing: The reason we preserve the original fcd is to use it later to
+; return a new fc-derivation.  By making the disjunctive processing ultimately
+; traffic in fc-derivations we simplify the rest of the forward chaining
+; module.  The ``disjunction triples'' we create here will be exploited (by
+; exploit-disjunction-triple) as we learn about the individual disjuncts.
+; E.g., if disjunct q becomes nil we'll shrink (p q r) to (p r) and change the
+; ttree of the triple appropriately.  Eventually we may shrink the disjuncts
+; component of the triple to a singleton, e.g., (p), at which point we'll know
+; p is non-nil.  If and when that happens we will create a new fc-derivation
+; record, fcd', by taking the original fcd of the triple and setting its :concl
+; and :ttree to the corresponding components from the triple.
+
+  (cond
+   ((endp fcd-lst) triples)
+   (t (let* ((fcd (car fcd-lst))
+             (concl (access fc-derivation (car fcd-lst) :concl))
+             (disjuncts (collect-disjuncts concl t)))
+        (cond
+         (disjuncts
+          (collect-disjunction-triples
+           (cdr fcd-lst)
+           (cons (list* disjuncts
+                        (access fc-derivation fcd :ttree)
+                        fcd)
+                 triples)))
+         (t (collect-disjunction-triples (cdr fcd-lst) triples)))))))
+
+(defun exploit-disjunction-triple (clause ttree fcd type-alist ens wrld
+                                          last-lit-kept kept-cnt lit-deletedp)
+
+; The ``disjunction triple'' we're exploiting is (clause ttree . fcd), but
+; we've torn it apart here so we can cdr our way down clause modifying ttree
+; and, if we manage to deduce a new literal we'll use fcd to create a new
+; fc-derivation.
+
+; We apply type-set to each literal of clause, deleting any now-false lits.  If
+; we eliminate all but one of the lits, that lit must be true so we assume it.
+; But more typically either nothing changes or else we knock a disjunct off.
+
+; Result:
+; (mv signal     ; :CONTRADICTION | :DELETE | :UNCHANGED | :NEW
+;     ttree      ; only meaningful for :CONTRADICTION or :NEW, else nil
+;     clause     ; only meaningful when :NEW signalled, else nil
+;     type-alist ; always an extension (possibly weak) of type-alist
+;     fcd        ; nil or fc-derivation; non-nil iff new lit derived
+;     )
+
+; We might signal :DELETE for one of two reasons: (i) we learned that one of
+; the literals of the clause is true under the type-alist, so the disjunction
+; tells us nothing, or (ii) we derived a literal from the disjunction and have
+; assumed it true in the returned type-alist.
+
+; Some questions we had to ask...  Can we signal a contradiction and have an
+; fcd returned?  Quite possibly, but we're not entirely sure! So we program for
+; it.  Imagine that we derive lit (thus producing a new fcd), add lit to the
+; type alist and get a contradiction with something else already there.  In
+; that case we signal a contradiction and return a new fcd.  But see ``Can this
+; happen?'' below!  Next question: Wouldn't we also have a new type-alist?  No,
+; never with a contradiction.  If we signal contradiction then either all the
+; literals were false under the incoming type-alist or else we derived a new
+; literal, assumed it, detected a contradiction (via mbf without a new alist).
+; Can we get a new type-alist without an fcd?  No.  The only time we change the
+; type-alist is when we derive a new lit and assume it, which only happens at
+; the end when we realize only lit survived.  Why do we pass the original fcd
+; down?  An fc-derivation contains many fields, e.g., the rune and unify-subst
+; giving rise to the disjunction originally produced and we use them in our
+; eventual fcd answer.  But an fc-derivation is possibly produced only at the
+; bottom of our recursion, so fcd is not modified or accumulated or anything
+; ``on the way down.''  The ttree is obviously important when we signal
+; :contradiction, but why is the ttree meaningful with signal :NEW?  The
+; resulting ttree is the one to be associated with the new disjunction created
+; from the new (shrunken) clause.
+
+; Efficiency Note: If we take the view that the only way we can help ourselves
+; is by knocking off all but one of the literals, then it suffices to apply
+; type-set to just the first two literals of the clause.  If neither is NIL,
+; then we're not going to knock off all but one!  However, (a) it seems
+; unlikely users will forward chain to long lists of disjuncts -- in fact, 2 is
+; the most we've seen, (b) if type-set finds a true literal we can stop
+; checking that clause, which is an efficiency win even if we didn't learn
+; anything useful, and (c) limiting it to just two literals imposes some
+; overhead and coding ugliness.  So, we decided to do it this way and just
+; record our thoughts for posterity.
+
+  (cond
+   ((endp clause)
+    (cond
+     ((eql kept-cnt 0)
+; All lits were false, so this is a contradiction!  We know the type-alist is
+; unchanged but we pass it back out of general principle.
+      (mv :CONTRADICTION ttree
+          nil        ; irrelevant clause
+          type-alist ; unchanged
+          nil))      ; irrelevant, no new lit deduced
+     ((eql kept-cnt 1)
+; Exactly one literal survived in this clause and it is last-lit-kept.
+      (mv-let (mbt mbf tta fta ttree1)
+        (assume-true-false last-lit-kept ttree
+                           nil nil ; force-flg and dwp
+                           type-alist ens wrld
+                           nil nil ; pot-lst and pt
+                           :fta)   ; don't bother with false type-alist
+        (declare (ignore fta))
+        (cond
+         (mbf
+
+; Contradiction, with ttree1 including ttree.  Can this happen?  Actually, we
+; don't think it can!  Or, at least, it seems unlikely, which is why we program
+; for it.  If we detect a contradiction by assuming a literal true, then one
+; might hope that we would have detected it is false when we computed its
+; type-set on the way down.  But we found the type-set of this lit to be
+; indeterminant.  Had we found it false we would have deleted it and been left
+; with no kept lits, getting the :CONTRADICTION above.  But type-set and
+; assume-true-false are so complicated that we'd rather not depend on the wish
+; that everything known by one is known by the other!  There is one efficiency
+; implication of this decision.  Search for ``Efficiency Note'' below.
+
+          (mv :CONTRADICTION ttree1
+              nil        ; irrelevant clause
+              type-alist ; unchanged type-alist
+
+; The new fcd below is implicitly approved because the parent disjunction
+; triple was produced from an approved fcd.  Roughly speaking this means that
+; if a disjunction is approved, its disjuncts are approved.
+
+              (change fc-derivation fcd
+                      :concl last-lit-kept
+                      :ttree ttree))) ;  new fc-derivation!
+         (mbt
+; This literal is already known to be t.
+          (mv :DELETE nil
+              nil         ; irrelevant clause
+              type-alist  ; unchanged type-alist
+              nil)) ; no new deduction!  We already knew this lit was true.
+         (t
+          (mv :DELETE nil ; delete this disjunction since we're done with it
+              nil         ; irrelevant clause
+              tta         ; new type-alist with assumed lit and ttree
+
+; The new fcd below is implicitly approved because the parent disjunction
+; triple was produced from an approved fcd.  Roughly speaking this means that
+; if a disjunction is approved, its disjuncts are approved.
+
+              (change fc-derivation fcd
+                      :concl last-lit-kept
+                      :ttree ttree) ; new fc-derivation!
+              )))))
+     (lit-deletedp
+; We've reached the end of the clause but deleted something.   So cons up a
+; new version on the way out.
+      (mv :NEW ttree nil type-alist nil))
+     (t
+; We've reached the end of the clause and deleted nothing; there's nothing to do.
+      (mv :UNCHANGED nil ; ttree is irrelevant because we'll keep the original
+          nil type-alist nil))))
+   (t (let ((lit (car clause)))
+        (mv-let (ts ttree1)
+          (type-set lit
+                    nil nil ; force-flg and dwp
+                    type-alist ens wrld ttree
+                    nil nil) ; pot-lst and pt
+          (cond
+           ((ts= ts *ts-nil*)
+; This lit is false, so we drop it (by not consing it on to the answer clause).
+            (exploit-disjunction-triple (cdr clause) ttree1 fcd
+                                        type-alist ens wrld
+                                        last-lit-kept kept-cnt
+                                        t ; indicate that a lit will be dropped
+                                        ))
+           ((ts-disjointp ts *ts-nil*)
+; This lit is true, so this clause tells us nothing new and we can delete it
+; and quit.
+            (mv :DELETE nil
+                nil type-alist nil))
+           (t
+
+; This lit is indeterminant.  It might be the only surviving member of the
+; clause when we're done.  The ttree1 that tells us the type of lit is
+; irrelevant since we don't need a justification to leave the literal in place.
+; Efficiency Note: we know the type-set of lit here and yet we forget it
+; and, if lit turns out to be the only surviving lit, we'll do a lot of that
+; type-set work again as we assume it true.  We might be able to same some work
+; by passing ts and ttree1 down along with lit!
+
+            (mv-let
+              (signal new-ttree new-clause new-type-alist new-fcd)
+              (exploit-disjunction-triple (cdr clause) ttree fcd
+                                          type-alist ens wrld
+                                          lit ; last known survivor
+                                          (+ 1 kept-cnt)
+                                          lit-deletedp)
+              (cond
+               ((eq signal :NEW)
+                (mv :NEW
+                    new-ttree
+                    (cons lit new-clause)
+                    new-type-alist
+                    nil))
+               (t ; signal = :CONTRADICTION, :DELETE, or :UNCHANGED
+                (mv signal new-ttree new-clause new-type-alist new-fcd)))))))))))
+
+; Unit Tests
+; (assign fcd0
+;         (make fc-derivation
+;               :concl '(silly-concl) ; should be irrelevant
+;               :ttree 'silly-ttree ; should be irrelevant
+;               :fn-cnt 'fn-cnt
+;               :p-fn-cnt 'p-fn-cnt
+;               :inst-trigger 'trigger
+;               :rune 'rune
+;               :fc-round 'fc-round
+;               :unify-subst 'unify-subst))
+
+; :delete
+; (exploit-disjunction-triple '((NOT A) (NOT B) C (NOT D))
+;                        (push-lemma '(:FORWARD-CHAINING FC-OR) nil)
+;                        (@ fcd0)
+;                        `((A ,*ts-t* . ((LEMMA (:FORWARD-CHAINING A))))
+;                          (B ,*ts-t* . ((LEMMA (:FORWARD-CHAINING B))))
+;                          (D ,*ts-non-nil* . ((LEMMA (:FORWARD-CHAINING D)))))
+;                        (ens state) (w state)
+;                        nil 0 nil)
+
+; :Contradiction
+; (exploit-disjunction-triple '((NOT A) (NOT B) C (NOT D))
+;                        (push-lemma '(:FORWARD-CHAINING FC-OR) nil)
+;                        (@ fcd0)
+;                        `((A ,*ts-t* . ((LEMMA (:FORWARD-CHAINING A))))
+;                          (B ,*ts-t* . ((LEMMA (:FORWARD-CHAINING B))))
+;                          (C ,*ts-nil* . ((LEMMA (:FORWARD-CHAINING NOT-C))))
+;                          (D ,*ts-non-nil* . ((LEMMA (:FORWARD-CHAINING D)))))
+;                        (ens state) (w state)
+;                        nil 0 nil)
+
+; :unchanged
+; (exploit-disjunction-triple '((NOT A1) (NOT B1) C1 (NOT D1))
+;                        (push-lemma '(:FORWARD-CHAINING FC-OR) nil)
+;                        (@ fcd0)
+;                        `((A ,*ts-t* . ((LEMMA (:FORWARD-CHAINING A))))
+;                          (B ,*ts-t* . ((LEMMA (:FORWARD-CHAINING B))))
+;                          (D ,*ts-non-nil* . ((LEMMA (:FORWARD-CHAINING D)))))
+;                        (ens state) (w state)
+;                        nil 0 nil)
+
+; new
+; (exploit-disjunction-triple '((NOT A1) (NOT B) C (NOT D1))
+;                        (push-lemma '(:FORWARD-CHAINING FC-OR) nil)
+;                        (@ fcd0)
+;                        `((A ,*ts-t* . ((LEMMA (:FORWARD-CHAINING A))))
+;                          (B ,*ts-t* . ((LEMMA (:FORWARD-CHAINING B))))
+;                          (D ,*ts-non-nil* . ((LEMMA (:FORWARD-CHAINING D)))))
+;                        (ens state) (w state)
+;                        nil 0 nil)
+
+(defun exploit-disjunction-triples1 (disjunction-triples
+                                     type-alist ens wrld
+                                     new-approved-fcds all-approved-fcds)
+
+; Map over disjunction-triples and exploit each one, accumulating any new
+; fc-derivations onto all-approved-fcds.  Since disjunction triples are produced
+; only from approved fcds, the fcds produced from disjunction triples are
+; themselves treated as approved.
+
+; Result:
+; (mv contradictionp ttree ; or
+;      new-disjunction-triples new-type-alist
+;      new-new-approved-fcds new-all-approved-fcds)
+
+  (cond
+   ((endp disjunction-triples)
+    (mv nil nil
+        nil type-alist
+        new-approved-fcds all-approved-fcds))
+   (t (let ((clause (caar disjunction-triples))
+            (ttree (cadar disjunction-triples))
+            (fcd (cddar disjunction-triples)))
+        (mv-let (signal new-ttree new-clause new-type-alist new-fcd)
+          (exploit-disjunction-triple clause ttree fcd
+                                      type-alist ens wrld
+                                      nil 0 nil)
+
+; Signal is one of :CONTRADICTION | :DELETE | :UNCHANGED | :NEW
+
+          (let ((new-approved-fcds
+                 (if new-fcd
+                     (cons new-fcd new-approved-fcds)
+                     new-approved-fcds))
+                (all-approved-fcds
+                 (if new-fcd
+                     (cons new-fcd all-approved-fcds)
+                     all-approved-fcds)))
+            (case signal
+              (:CONTRADICTION
+               (mv t new-ttree nil nil
+                   new-approved-fcds
+                   all-approved-fcds))
+              (:DELETE
+               (exploit-disjunction-triples1
+                (cdr disjunction-triples)
+                new-type-alist ens wrld
+                new-approved-fcds
+                all-approved-fcds))
+              (otherwise
+
+; Signal is :UNCHANGED or :NEW.  At first sight one might think that :NEW just
+; costs two more conses than :UNCHANGED and so it is probably not worth
+; maintaining both signals.  But the truth is that :NEW was implemented so the
+; workhorse, exploit-disjunction-triple, did not cons up unchanged clauses.
+; Rather than discard it at the interface between that function and this, we
+; exploit it to save a couple more.  Note also that new-fcd is guaranteed to be
+; nil here: no new fcd was produced when these signals are raised.
+
+               (mv-let
+                 (contradictionp ttree
+                                 new-disjunction-triples
+                                 new-type-alist
+                                 new-approved-fcds
+                                 all-approved-fcds)
+                 (exploit-disjunction-triples1
+                  (cdr disjunction-triples)
+                  new-type-alist ens wrld new-approved-fcds all-approved-fcds)
+                 (cond
+                  (contradictionp
+                   (mv contradictionp ttree
+                       new-disjunction-triples new-type-alist
+                       new-approved-fcds all-approved-fcds))
+                  (t (mv nil nil
+                         (cons (if (eq signal :UNCHANGED)
+                                   (car disjunction-triples)
+                                   (list* new-clause
+                                          new-ttree
+                                          fcd))
+                               new-disjunction-triples)
+                         new-type-alist
+                         new-approved-fcds
+                         all-approved-fcds))))))))))))
+
+; Unit Tests
+; Pump out a Q and delete first disjunction
+; (exploit-disjunction-triples1
+;  `(((P Q) ((LEMMA (:FORWARD-CHAINING P-OR-Q))) . ,(@ fcd0))
+;    ((R S) ((LEMMA (:FORWARD-CHAINING R-OR-S))) . ,(@ fcd0)))
+;  `((P ,*ts-nil* . ((LEMMA (:FORWARD-CHAINING NOT-P)))))
+;  (ens state) (w state)
+;  nil
+;  '(fcd1 fcd2 fcd3))
+
+; Pump out a Q and delete second disjunction
+; (exploit-disjunction-triples1
+;  `(((R S) ((LEMMA (:FORWARD-CHAINING R-OR-S))) . ,(@ fcd0))
+;    ((P Q) ((LEMMA (:FORWARD-CHAINING P-OR-Q))) . ,(@ fcd0)))
+;  `((P ,*ts-nil* . ((LEMMA (:FORWARD-CHAINING NOT-P)))))
+;  (ens state) (w state)
+;  nil
+;  '(fcd1 fcd2 fcd3))
+
+; Pump out a Q delete first disjunction and shrink second
+; (exploit-disjunction-triples1
+;  `(((P Q) ((LEMMA (:FORWARD-CHAINING P-OR-Q))) . ,(@ fcd0))
+;    ((R P S) ((LEMMA (:FORWARD-CHAINING R-OR-S))) . ,(@ fcd0)))
+;  `((P ,*ts-nil* . ((LEMMA (:FORWARD-CHAINING NOT-P)))))
+;  (ens state) (w state)
+;  nil
+;  '(fcd1 fcd2 fcd3))
+
+; contradiction
+; (exploit-disjunction-triples1
+;  `(((P Q1) ((LEMMA (:FORWARD-CHAINING P-OR-Q1))) . ,(@ fcd0))
+;    ((R P S) ((LEMMA (:FORWARD-CHAINING R-OR-S))) . ,(@ fcd0))
+;    ((U V W) ((LEMMA (:FORWARD-CHAINING UVW))) . ,(@ fcd0))
+;    ((P Q2) ((LEMMA (:FORWARD-CHAINING P-OR-Q2))) . ,(@ fcd0)))
+;  `((P ,*ts-nil* . ((LEMMA (:FORWARD-CHAINING NOT-P))))
+;    (U ,*ts-nil* . ((LEMMA (:FORWARD-CHAINING NOT-U))))
+;    (V ,*ts-nil* . ((LEMMA (:FORWARD-CHAINING NOT-V))))
+;    (W ,*ts-nil* . ((LEMMA (:FORWARD-CHAINING NOT-W)))))
+;  (ens state) (w state)
+;  nil
+;  '(fcd1 fcd2 fcd3))
+
+(defun exploit-disjunction-triples (disjunction-triples
+                                    type-alist ens wrld
+                                    new-approved-fcds all-approved-fcds)
+
+; Repeatedly exploit all the disjunction-triples until nothing changes.  Result:
+; (mv contradictionp ttree ; or
+;     new-disjunction-triples new-type-alist new-all-approved-fcds)
+; Since disjunction triples are produced only from approved fcds, the fcds
+; produced from disjunction triples are themselves treated as approved.
+
+  (mv-let
+    (contradictionp ttree new-disjunction-triples new-type-alist
+                    new-approved-fcds
+                    all-approved-fcds)
+    (exploit-disjunction-triples1 disjunction-triples
+                                  type-alist ens wrld
+                                  new-approved-fcds
+                                  all-approved-fcds)
+    (cond
+     (contradictionp
+      (mv contradictionp ttree
+          new-disjunction-triples new-type-alist
+          new-approved-fcds all-approved-fcds))
+     ((and (equal new-disjunction-triples disjunction-triples)
+           (equal new-type-alist type-alist))
+      (mv nil nil new-disjunction-triples new-type-alist
+          new-approved-fcds
+          all-approved-fcds))
+     (t (exploit-disjunction-triples new-disjunction-triples
+                                     new-type-alist ens wrld
+                                     new-approved-fcds
+                                     all-approved-fcds)))))
+
+; Unit Test
+
+; This takes two rounds to derive Q1 and Q2 (round 1) and then to discard (U Q2
+; V W) (round 2).  If you replace exploit-disjunction-triples by
+; exploit-disjunction-triples1 you'll see no contradiction signalled and (U Q2
+; V W) surviving as a disjunction.
+
+; (exploit-disjunction-triples
+;  `(((P Q1) ((LEMMA (:FORWARD-CHAINING P-OR-Q1))) . ,(@ fcd0))
+;    ((R P S) ((LEMMA (:FORWARD-CHAINING R-OR-S))) . ,(@ fcd0))
+;    ((U Q2 V W) ((LEMMA (:FORWARD-CHAINING UVW))) . ,(@ fcd0))
+;    ((P Q2) ((LEMMA (:FORWARD-CHAINING P-OR-Q2))) . ,(@ fcd0)))
+;  `((P ,*ts-nil* . ((LEMMA (:FORWARD-CHAINING NOT-P)))))
+;  (ens state) (w state)
+;  nil
+;  '(fcd1 fcd2 fcd3))
+
+(defun process-disjunction-triples (approved-this-round disjunction-triples
+                                                        type-alist ens wrld
+                                                        new-approved-fcds
+                                                        all-approved-fcds)
+
+; We collect disjunction-triples among the just-approved concls, add them to
+; the existing disjunction-triples, and then exploit all known
+; disjunction-triples via type-set, iterating until no new disjunction-triples
+; or type-alist is produced.  We return
+
+; (mv contradictionp ttree ; or
+;     new-disjunction-triples new-type-alist
+;     new-approved-fcds' all-approved-fcds')
+
+; where new-approved-fcds' and all-approved-fcds' extend the corresponding
+; incoming one with all the fc-derivations produced by exploiting disjunctions.
+; Note that we assume that any disjunct derived from an approved fcd is itself
+; approved.
+
+  (exploit-disjunction-triples
+   (collect-disjunction-triples approved-this-round disjunction-triples)
+   type-alist ens wrld new-approved-fcds all-approved-fcds))
+
+; The following code is used in a hack that prints round-by-round progress
+; through forward-chain1.  You have to redefine a system function to get such
+; reports.  See the essay in forward-chain1 below.
+
+; Strip-ttrees-from-type-alist strips out the ttrees from a type-alist.  We
+; found this important because ttrees containing 'fc-derivation tags are so
+; large they impede comprehension.  But for human readability it is convenient
+; to see the symbolic counterparts of the numeric type-sets, as produced by
+; decode-type-set.  So we introduce a macro that converts the symbolic
+; type-sets to numeric ones and then we print type-alists in terms of this
+; macro.  Thus, evaluating what we print produces a usable type-alist.
+
+(defun concls-from-fcds (fcd-lst)
+  (cond
+   ((endp fcd-lst) nil)
+   (t (cons (access fc-derivation (car fcd-lst) :concl)
+            (concls-from-fcds (cdr fcd-lst))))))
+
+(defmacro make-type-alist (&rest args)
+  (cond ((endp args) nil)
+        (t `(cons (cons ',(car (car args))
+                        ,(cadr (car args)))
+                  (make-type-alist ,@(cdr args))))))
+
+(defun strip-ttrees-from-type-alist (ta)
+  (cond ((endp ta) nil)
+        (t (cons (list (caar ta) (decode-type-set (cadar ta)))
+                 (strip-ttrees-from-type-alist (cdr ta))))))
+
+(defun cw-round-by-round-fn (fc-round fcds1 type-alist1 contrap1
+                                      fcds2 type-alist2 contrap2)
+
+; This function prints the ``round-by-round'' progress report on forward
+; chaining, except it only uses cw printing, is not part of the
+; user-controllable fc-report mechanism, and thus is generally irrelevant and
+; commented-out of the sources!
+
+; fc-round is the round number in question.  The arguments subscripted with 1
+; are the results of advancing all the activations in this round.  Thos
+; subscripted with 2 are the results of processing disjunctions in this round.
+
+; Note: Running the fill-format-string Emacs macro from emacs-acl2.el messes up
+; this fmt string.  Don't change it!
+
+  (cw "(Round ~x0:~%~
+       ~ (new conclusions:~%  ~Y12)~%~
+       ~ (new type-alist:~%  ~Y32)~%~
+       ~ (disjuncts dislodged:~%  ~Y42)~%~
+       ~ (final type-alist:~%  ~Y52)~%~
+       ~ )~%"
+      fc-round
+      (concls-from-fcds fcds1)
+      nil
+      (if contrap1
+          'CONTRADICTION!
+; To see the full alist instead of an abbreviated, symbolic version,
+; replace this cons expression by type-alist1.
+          (cons 'make-type-alist
+                (strip-ttrees-from-type-alist type-alist1)))
+      (concls-from-fcds fcds2)
+      (if contrap2
+          'CONTRADICTION!
+; To see the full alist instead of an abbreviated, symbolic version,
+; replace this cons expression by type-alist2.
+          (cons 'make-type-alist
+                (strip-ttrees-from-type-alist type-alist2)))))
+
+(defmacro cw-round-by-round (round-by-roundp fc-round
+                                             fcds1 type-alist1 contrap1
+                                             fcds2 type-alist2 contrap2
+                                             form)
+
+; This macro expands to form, ignoring everything else, if round-by-roundp is
+; nil.  In any case, it is logically equivalent to form.
+
+  (cond (round-by-roundp
+         `(prog2$
+           (cw-round-by-round-fn ,fc-round
+                                 ,fcds1 ,type-alist1 ,contrap1
+                                 ,fcds2 ,type-alist2 ,contrap2)
+           ,form))
+        (t form)))
+
+(defun forward-chain1 (cl fc-round trigger-terms activations
+                          disjunction-triples type-alist force-flg wrld
                           do-not-reconsiderp ens oncep-override state
                           all-approved-fcds)
 
-; Cl is a clause and fc-round is the current forward chaining round
-; number.  Trigger-terms is the list of every subterm in the problem
-; whose top function symbol has forward chaining rules.  Activations is
-; the list of all (suspended) activations.  We first advance every
-; activation, obtaining a new list of activations and some derived
-; conclusions represented as fcds.  We filter the derived conclusions,
-; throwing out any that, on heuristic grounds, we don't like.  We then
-; assume the approved ones, updating the type-alist.  Some approved
-; conclusions may not give us any new type information, e.g., they are
-; already encoded in the type-alist, but we keep track of those
-; conclusions anyway because they might give us new trigger terms.  We
-; then add activations for all the new trigger terms and appropriately
-; extend trigger-terms.  Then we repeat this process until either we get
-; a contradiction or we stabilize.
+; Essay on How to Get Round-by-Round Forward Chaining Reports:
 
-; We return (mv flg ttree all-approved-fcds fc-round activations).  If flg is
-; t, then we found a contradiction and ttree is a (not fcd-free) ttree.
-; Otherwise, ttree is nil.  In both cases, all-approved-fcds is the accumulated
-; list of all approved fc-derivations produced during forward-chaining,
-; fc-round is the final fc-round number, and activations is the list of
-; still-suspended activations at the end of the process.  These last two are
-; only used in the trace facility for forward-chaining.
+; This definition supports round-by-round printing, but only for people willing
+; to redefine a system function!  Furthermore, round-by-round printing makes
+; the most sense if you also enable full on-the-fly fc-reports.  If you want
+; round-by-round do this:
+
+; (set-fc-criteria t)
+; (set-fc-report-on-the-fly t)
+; (trace$ (forward-chain-top
+;          :entry `(forward-chain-top ,caller ,cl ,pts ,force-flg
+;                                     ,do-not-reconsiderp
+;                                     (w state) (ens state)
+;                                     ,oncep-override
+;                                     state)
+;          :exit `(forward-chain-top ,@values)))
+; (redef+)
+
+; and then grab this definition of forward-chain1, change both calls of
+; cw-round-by-round below so that the first argument is t instead of nil, and
+; redefine forward-chain1.
+
+; The advantage to this full setup is that you'll see the caller (e.g.,
+; preprocess-clause, simplify-clause, etc) of forward-chain-top and the
+; original clause.  Then you'll see round-by-round reporting for that call,
+; then you'll see the summary fc-report for that call, and finally you'll see
+; the three results delivered to the caller by forward-chain-top: (mv
+; contradictionp type-alist ttree-or-fc-pairs).
+
+; Note that the round-by-round reports abbreviate the type-alists shown,
+; dropping the ttrees and printing symbolic type-sets instead of numeric ones.
+; Comments in cw-round-by-round-fn above explain how to redefine that function
+; to see the actual alists.
+
+; End of essay
+
+; Cl is a clause and fc-round is the current forward chaining round number.
+; Trigger-terms is the list of every subterm in the problem whose top function
+; symbol has forward chaining rules.  Activations is the list of all
+; (suspended) activations.  We first advance every activation, obtaining a new
+; list of activations and some derived conclusions represented as fcds.  We
+; filter the derived conclusions, throwing out any that, on heuristic grounds,
+; we don't like.  The ones we like are said to be ``approved'' and in the
+; process of checking their approval we also accumulate the approved ones onto
+; all-approved-fcds.  We then assume the newly approved fcds into the
+; type-alist.  Some approved conclusions may not give us any new type
+; information, e.g., they are already encoded in the type-alist, but we keep
+; track of those conclusions anyway because they might give us new trigger
+; terms.  We then add activations for all the new trigger terms and
+; appropriately extend trigger-terms.  Then we repeat this process until either
+; we get a contradiction or we stabilize.
+
+; We return (mv flg x all-approved-fcds fc-round activations).  If flg is t,
+; then we found a contradiction and x is a (not fcd-free) ttree.  Otherwise, x
+; is the final, extended (not fcd-free) type-alist.  In both cases,
+; all-approved-fcds is the accumulated list of all approved fc-derivations
+; produced during forward-chaining, fc-round is the final fc-round number, and
+; activations is the list of still-suspended activations at the end of the
+; process.  These last two are only used in the trace facility for
+; forward-chaining.
 
 ; Note: The extended type-alist we build here is of no use outside
-; forward chaining because it is full of fc-derivations.  We return two
-; results.  The first is a t or nil indicating whether a contradiction
-; was found.  The second is a ttree if a contradiction was found and is
-; the final fcd-lst otherwise.
+; forward chaining because it is full of fc-derivations.
 
   (mv-let (activations1 fcd-lst1)
-          (advance-fc-activations
-           activations fc-round type-alist ens force-flg
-           wrld state oncep-override
-           nil ; initial new activations
-           nil ; initial new derived concls
-           )
-          (prog2$
-           (filter-all-satisfying-fc-derivations fcd-lst1) ; (FC Reporting)
-           (mv-let (approved-this-round all-approved-fcds)
-                   (approve-fc-derivations fcd-lst1
-                                           cl
-                                           nil ; initial approved this round
-                                           all-approved-fcds)
-                   (mv-let (contradictionp x)
-                           (type-alist-fcd-lst
-                            (sort-approved approved-this-round wrld)
-                            type-alist do-not-reconsiderp force-flg ens wrld)
+    (advance-fc-activations
+     activations fc-round type-alist ens force-flg
+     wrld state oncep-override
+     nil ; initial new activations
+     nil ; initial new derived concls
+     )
+    (prog2$
+     (filter-all-satisfying-fc-derivations fcd-lst1) ; (FC Reporting)
+     (mv-let (new-approved-fcds all-approved-fcds)
+       (approve-fc-derivations fcd-lst1
+                               cl
+                               nil ; initial new approved fcds
+                               all-approved-fcds)
+       (let ((sorted-fcds
+              (sort-fcds new-approved-fcds wrld)))
+         (mv-let (contradictionp x)
+           (type-alist-fcd-lst
+            sorted-fcds
+            type-alist do-not-reconsiderp force-flg ens wrld)
 
 ; If contradictionp is t, x is a ttree; otherwise, x is a type-alist.
 ; In any case, x is not fcd-free.
 
-                           (cond
-                            (contradictionp
+           (cond
+            (contradictionp
+             (cw-round-by-round
+              nil ; change to t to get printing -- and do it below too!
+              fc-round
+              sorted-fcds nil t
+              nil nil nil
+
 ; Note:  x, below, is a ttree and is not fcd-free.
-                              (mv t x all-approved-fcds fc-round activations1))
-; Note:  x, below, is a type-alist and is not fcd-free.
-                            ((and (equal x type-alist)
-                                  (every-concl-member-equalp approved-this-round
-                                                             trigger-terms))
-                             (mv nil nil all-approved-fcds fc-round activations1))
-                            (t
-                             (mv-let (trigger-terms1 activations1)
-                                     (collect-terms-and-activations-from-fcd-lst
-                                      approved-this-round wrld ens
-                                      trigger-terms activations1)
-                                     (forward-chain1
-                                      cl
-                                      (+ 1 fc-round)
-                                      trigger-terms1 activations1
-                                      x ; type-alist
-                                      force-flg wrld do-not-reconsiderp ens
-                                      oncep-override state
-                                      all-approved-fcds)))))))))
+
+              (mv t x all-approved-fcds fc-round activations1)))
+            (t
+
+; We now know x is a type-alist produced by assuming the truth of the :concls
+; of all the new approved fcds produced by advancing-fc-activations.
+; Next we process disjunctions in light of the resulting type-alist.
+
+             (mv-let
+               (contradictionp ttree
+                               new-disjunction-triples new-type-alist
+                               new-approved-fcds1 all-approved-fcds)
+               (process-disjunction-triples new-approved-fcds
+                                            disjunction-triples
+                                            x ; type-alist
+                                            ens wrld
+                                            new-approved-fcds
+                                            all-approved-fcds)
+               (cw-round-by-round
+                nil ; change to t to get printing
+                fc-round
+                sorted-fcds x nil
+; New-approved-fcds1 is an extension of new-approved-fcds and the difference
+; is the set of newly dislodged disjuncts.
+                (set-difference-equal new-approved-fcds1
+                                      new-approved-fcds)
+                new-type-alist contradictionp
+                (cond
+                 (contradictionp
+
+;;;  Fc-round and activations1 are only used in fc reporting.  But it would be
+;;;  good to report the hanging disjunction-triples too!  And it would be a
+;;;  good idea to pass up the final type-alist!  But I'm going to leave these
+;;;  out for now.
+
+                  (mv t ttree
+                      all-approved-fcds fc-round activations1))
+                 ((and (equal new-type-alist type-alist)
+                       (every-concl-member-equalp new-approved-fcds1
+                                                  trigger-terms))
+                  (mv nil nil all-approved-fcds fc-round activations1))
+                 (t
+                  (mv-let (trigger-terms1 activations1)
+                    (collect-terms-and-activations-from-fcd-lst
+                     new-approved-fcds1 wrld ens
+                     trigger-terms activations1)
+                    (forward-chain1
+                     cl
+                     (+ 1 fc-round)
+                     trigger-terms1 activations1 new-disjunction-triples
+                     new-type-alist
+                     force-flg wrld do-not-reconsiderp ens
+                     oncep-override state
+                     all-approved-fcds))))))))))))))
 
 (defun forward-chain-top (caller cl pts force-flg do-not-reconsiderp wrld ens
                                  oncep-override state)
@@ -3770,10 +4491,6 @@
 ; fc-pairs, each of the form (concl . ttree), where concl is a truth derived
 ; from some subset of the negations of literals of cl and ttree is fcd-free and
 ; tags the :FORWARD-CHAINING 'lemmas used and all parents (via 'pt tags).
-
-; Note: The type-alist returned assumes the falsity of every literal in
-; the clause and thus is not suitable for use by rewrite.  We return it
-; strictly for the use of setup-simplify-clause-pot-lst and bdd-clause.
 
 ; In reading the code below, read (fc-exit a b c ...) as though it
 ; were (mv a b c).  The stuff in ... is just used in the reporting.
@@ -3804,7 +4521,7 @@
           (contradictionp ttree2 all-approved-fcds rounds activations1)
           (pstk
            (forward-chain1 cl 1
-                           trigger-terms activations
+                           trigger-terms activations nil
                            type-alist force-flg wrld
                            do-not-reconsiderp ens oncep-override
                            state nil))
@@ -3821,7 +4538,17 @@
 
 ; If no contradiction was found, ttree2 is nil.  We need to convert
 ; all-approved-fcds to a list of pairs of the form (concl . ttree), where each
-; ttree is fcd-free.
+; ttree is fcd-free.  We have questioned why we create a new data structure
+; (``fc-pairs'') instead of just expunging the fc-derivations from the ttrees
+; in all-approved-fcds and putting them back into the fcds.  There really isn't
+; a good reason.  But the fact is that all we need going forward are the
+; conclusions and their corresponding (fcd-free) ttrees.  This list of pairs is
+; used in various places, including setting up the linear pot.  While we could
+; change the code there to deal with fcds and just access the :concl and :ttree
+; fields, it is confusing to (a) pass all the additional information in fcds
+; out to the rest of the prover, and (b) to have a set of fcds that are tainted
+; with fc-derivations (and thus, hidden assumptions) and other fcds whose
+; ttrees are known to be fcd-free.
 
                  (let ((fc-pair-lst (fc-pair-lst all-approved-fcds)))
                    (mv-let
@@ -3906,7 +4633,7 @@
 ; those segments together with the remaining literals and any available
 ; conclusions produced by forward chaining.  Thus, to get the type-alist to be
 ; used while rewriting ``the current literal'' we assume the falsity of three
-; lists of literals: new-clause [the clause segement obtained from one path
+; lists of literals: new-clause [the clause segment obtained from one path
 ; through the previously rewritten literals], (cdr tail) [the rest of the
 ; unrewritten literals], and lits [the literals derived by forward chaining].
 ; We use the ordinary type-alist-clause to create the new type-alist.  The
@@ -3925,7 +4652,7 @@
 ; We have tried three approaches: (append lits new-clause (cdr tail)), (append
 ; new-clause (cdr tail) lits), and a ``smart'' approach in which we sort the
 ; literals to put the smaller ones first, thereby allowing their type-sets to
-; improve, perhaps, the type-sets computed for larger literals (like disjuctive
+; improve, perhaps, the type-sets computed for larger literals (like disjunctive
 ; ones (IF a a b)) involving the some of the smaller ones.  The code deleted
 ; below was part of this ``smart'' approach.  All of these reordering
 ; strategies must maintain the correspondence between the forward-chained
@@ -3943,7 +4670,7 @@
 ;  ; two properties: (a) it is fast to compute, though one might someday try to
 ;  ; speed it up via memoization, and (b) it has the property that if a and b are
 ;  ; two non-constant terms and term a occurs inside of term b, then the size of a
-;  ; is less than the size of b.  This is expoloited to reorder a clause so that
+;  ; is less than the size of b.  This is exploited to reorder a clause so that
 ;  ; the smaller literals come first during the process of sequentially assuming
 ;  ; their falsity to construct a type-alist to use in the rewriting of some other
 ;  ; literal.  See rewrite-clause-type-alist.
@@ -4145,7 +4872,7 @@
 ;       (z-p x)))
 
 (defun rewrite-clause-type-alist (tail new-clause fc-pair-lst rcnst wrld
-                                       pot-lst pt)
+                                       pot-lst)
 
 ; We construct a type alist in which we assume (a) the falsity of every literal
 ; in tail except the first, (b) the falsity of every literal in new-clause, and
@@ -4172,32 +4899,31 @@
 ; we only put accessible assumptions in it -- but we don't.  We must record the
 ; ttrees because of the possible 'assumption tags.
 
-  (mv-let
-   (lits ttree-lst)
-   (select-forward-chained-concls-and-ttrees fc-pair-lst
-                                             (access rewrite-constant rcnst :pt)
-                                             nil nil)
-   (mv-let (current-clause current-ttree-lst)
+  (let ((pt (access rewrite-constant rcnst :pt)))
+    (mv-let
+      (lits ttree-lst)
+      (select-forward-chained-concls-and-ttrees fc-pair-lst pt nil nil)
+      (mv-let (current-clause current-ttree-lst)
 ; The ``smart'' approach was this:
 ;           (reorder-lits-and-ttrees-for-type-alist-clause new-clause nil
 ;                                                          (cdr tail) nil
 ;                                                          lits ttree-lst)
 ; See the essay above for explanations.
 
-           (mv (append new-clause (cdr tail) lits)
-               (make-list-ac (+ (len new-clause) (len (cdr tail)))
-                             nil
-                             ttree-lst))
-           (mv-let (contradictionp type-alist ttree)
-                   (type-alist-clause
-                    current-clause
-                    current-ttree-lst
-                    nil ; force-flg
-                    nil ; initial type-alist
-                    (access rewrite-constant rcnst :current-enabled-structure)
-                    wrld
-                    pot-lst pt)
-                   (mv contradictionp type-alist ttree current-clause)))))
+        (mv (append new-clause (cdr tail) lits)
+            (make-list-ac (+ (len new-clause) (len (cdr tail)))
+                          nil
+                          ttree-lst))
+        (mv-let (contradictionp type-alist ttree)
+          (type-alist-clause
+           current-clause
+           current-ttree-lst
+           nil          ; force-flg
+           nil          ; initial type-alist
+           (access rewrite-constant rcnst :current-enabled-structure)
+           wrld
+           pot-lst pt)
+          (mv contradictionp type-alist ttree current-clause))))))
 
 ; Historical Plaque on Forward Chaining
 
@@ -4222,7 +4948,7 @@
 ; simply because we had no forward chaining rules with more than one hyp
 ; in our tests.
 
-; However, in an effort to help software archeologists (not to mention
+; However, in an effort to help software archaeologists (not to mention
 ; the possibility that we might help ourselves avoid repetition of past
 ; mistakes) we inscribe here an extensive comment written last week:
 
@@ -4300,7 +5026,7 @@
 ; chaining rules:
 ;   name1: (state-p1 x) -> (p (nth 2 state))
 ;   name2: (state-p1 x) -> (p (nth 3 state)),
-; that can get in eachother's way.  If the first is used to add its
+; that can get in each other's way.  If the first is used to add its
 ; conclusion then the second cannot be used because its conclusion is
 ; worse than that just added.
 
@@ -4314,7 +5040,7 @@
 ; form (term namek termk ... name2 term2 name1 term1) and means that term
 ; was produced by a chain of k forward chaining steps: starting with
 ; term1 (which is in the initial set of assumptions) use name1 to derive
-; term2, use name2 to dervie term3, ..., and use namek to derive term.
+; term2, use name2 to derive term3, ..., and use namek to derive term.
 
 ; Our heuristic for deciding whether to keep a conclusion, concl, is if
 ; namek has not been used in this chain, keep concl; otherwise, if namek
@@ -4515,12 +5241,8 @@
 ; We return t if terms (and a b) cannot be true.  We just recognize
 ; the case where each is (EQUAL x 'constant) for different constants.
 
-  (and (not (variablep a))
-       (not (fquotep a))
-       (eq (ffn-symb a) 'equal)
-       (not (variablep b))
-       (not (fquotep b))
-       (eq (ffn-symb b) 'equal)
+  (and (ffn-symb-p a 'equal)
+       (ffn-symb-p b 'equal)
        (or (and (quotep (fargn a 1))
                 (quotep (fargn b 1))
                 (not (equal (cadr (fargn a 1)) (cadr (fargn b 1))))
@@ -4552,9 +5274,7 @@
 
   (cond
    ((equal b c) t)
-   ((and (nvariablep c)
-         (not (fquotep c))
-         (eq (ffn-symb c) 'IF)
+   ((and (ffn-symb-p c 'IF)
          (mutually-exclusive-tests a (fargn c 1)))
     (mutually-exclusive-subsumptionp a b (fargn c 3)))
    (t nil)))
@@ -4658,6 +5378,7 @@
 
 ; We determine whether some lambda-expression is used as a function in term.
 
+  (declare (xargs :guard (pseudo-termp term)))
   (if (or (variablep term)
           (fquotep term))
       nil
@@ -4665,7 +5386,8 @@
         (lambda-subtermp-lst (fargs term)))))
 
 (defun lambda-subtermp-lst (termlist)
-  (if termlist
+  (declare (xargs :guard (pseudo-term-listp termlist)))
+  (if (consp termlist)
       (or (lambda-subtermp (car termlist))
           (lambda-subtermp-lst (cdr termlist)))
     nil))
@@ -4826,7 +5548,7 @@
 ; it will give us a win.
 
 ; One might ask why we only disallow type-set from removing facts here.
-; Why not elswhere, and what about rewrite?  We do it this way because
+; Why not elsewhere, and what about rewrite?  We do it this way because
 ; it is only here that the user cannot prevent this removal from
 ; happening by manipulating the enabled structure.
 
@@ -5005,7 +5727,7 @@
                                         (subcor-var (formals 'implies wrld)
                                                     (list (fargn atm 1)
                                                           (fargn atm 2))
-                                                    (body 'implies t wrld))
+                                                    (bbody 'implies))
                                         ans1 ttree ttree0 current-clause wrld
                                         (access rewrite-constant rcnst
                                                 :current-enabled-structure)
@@ -5093,7 +5815,7 @@
 
 ; This function determines whether every occurrence of old in term is ``equiv
 ; hittable'' while maintaining geneqv.  This means that (subst-equiv-expr equiv
-; new old genequv term ens wrld state ttree) will remove all occurrences of old
+; new old geneqv term ens wrld state ttree) will remove all occurrences of old
 ; from term (assuming there are no occurrences of old in new and old is a
 ; variable).
 
@@ -5242,7 +5964,7 @@
 ; we don't expect to have screwed it up by continuing to substitute; and if the
 ; discovered lit just drops out, then our continued substitution is what we
 ; should have done.  (Aside: If we persist in our decision to reduce literals
-; when they are suffed with constants, then these cases will not arise and all
+; when they are stuffed with constants, then these cases will not arise and all
 ; of the above is irrelevant.)
 
 ; Recall our output spec from find-trivial-equivalence.  The six results we
@@ -5408,7 +6130,7 @@
 ; [2].  So we get:
 ; (implies (equal (foo a) 'evg)        [1]
 ;          (p (foo a) 'evg))
-; and the old admotion against using (equal (foo b) 'evg).  Here we find [1]
+; and the old admonition against using (equal (foo b) 'evg).  Here we find [1]
 ; ``again'' because it is no longer on the list of things to avoid.  Indeed, we
 ; can even use it to good effect.  Of course, once it is used both it and the
 ; old avoided literal are to be avoided.
@@ -5439,7 +6161,7 @@
 
 ; Very roughly speaking, this is just:
 ; (mv (add-literal lit cl nil)      ; add lit to clause cl
-;     (cons pt pt-lst)              ; add lit's parent tnree to pt-lst
+;     (cons pt pt-lst)              ; add lit's parent ttree to pt-lst
 ;     ttree)                        ; and pass up the ttree
 ; But it is complicated by the fact that the add-literal might not actually
 ; cons lit onto cl but reduce the clause to {t} or merge the literal with
@@ -5487,7 +6209,7 @@
 ; iff) except the nth one.  The nth literal is deleted if delete-flg is t and
 ; is skipped but included in the if delete-flg is nil.  Pt-lst is in 1:1
 ; correspondence with cl.  We return the new clause, a new pt-lst and a ttree
-; recording the congruence and executable counterpart rules used.  It is
+; recording the congruence and executable-counterpart rules used.  It is
 ; possible that this fn will return a clause dramatically shorter than cl,
 ; because lits may evaporate upon evaluation or merge with other literals.  We
 ; may also prove the clause.
@@ -5535,7 +6257,10 @@
               (add-literal-and-pt (car cl) (car pt-lst)
                                   cl1 pt-lst1 ttree)))))
 
-(defun remove-trivial-equivalences
+(defstub remove-trivial-equivalences-enabled-p () t)
+(defattach remove-trivial-equivalences-enabled-p constant-t-function-arity-0)
+
+(defun remove-trivial-equivalences-rec
   (cl pt-lst remove-flg ens wrld state ttree hitp avoid-lst)
 
 ; This function looks for two kinds of equivalence hypotheses in cl and uses
@@ -5586,11 +6311,18 @@
                equiv rhs lhs lit-position cl 0 pt-lst
                (and remove-flg (eq condition 'disposable))
                ens wrld state ttree)
-              (remove-trivial-equivalences new-cl new-pt-lst remove-flg
-                                           ens wrld state
-                                           ttree t
-                                           (cons lit avoid-lst))))
+              (remove-trivial-equivalences-rec new-cl new-pt-lst remove-flg
+                                               ens wrld state
+                                               ttree t
+                                               (cons lit avoid-lst))))
      (t (mv hitp cl pt-lst ttree)))))
+
+(defun remove-trivial-equivalences (cl pt-lst remove-flg ens wrld state ttree)
+  (cond
+   ((remove-trivial-equivalences-enabled-p)
+    (remove-trivial-equivalences-rec cl pt-lst remove-flg ens wrld state ttree
+                                     nil nil))
+   (t (mv nil cl pt-lst ttree))))
 
 ; In a break with nqthm, we implement a really trivial theorem prover which
 ; gets the first shot at any conjecture we have to prove.  The idea is to build
@@ -5606,7 +6338,9 @@
 ; find the rest, it is faster to put the most unusual literal first in
 ; each built-in clause.
 
-(defrec built-in-clause ((nume . all-fnnames) clause . rune) t)
+; The following is now defined in rewrite.lisp.
+
+; (defrec built-in-clause ((nume . all-fnnames) clause . rune) t)
 
 ; Note:  The :all-fnnames field must be set as it would be by
 ; all-fnnames-subsumer.  This setting cannot be done automatically because we
@@ -5616,7 +6350,8 @@
 ; initial world.  When adding new records, it is best to use
 ; (all-fnnames-subsumer cl (w state)) to get the :all-fnnames field below.
 
-;; RAG - I changed the clauses about e0-ord-< [v2-8 and beyond: o<] reducing on
+;; Historical Comment from Ruben Gamboa:
+;; I changed the clauses about e0-ord-< [v2-8 and beyond: o<] reducing on
 ;; complex-rationalps to reducing on any complexp.
 
 (defconst *initial-built-in-clauses*
@@ -5848,9 +6583,15 @@
          :all-fnnames '(acl2-count cdr o< true-listp not equal))))
 
 (defun built-in-clausep2 (bic-lst cl fns ens)
+
+; Ens is either nil or an enabled structure.  If ens is nil, then we consider
+; only the rules specified by *initial-built-in-clauses* to be enabled.
+
   (cond ((null bic-lst) nil)
-        ((and (enabled-numep (access built-in-clause (car bic-lst) :nume)
-                             ens)
+        ((and (let ((nume (access built-in-clause (car bic-lst) :nume)))
+                (if (null ens)
+                    (null nume)
+                  (enabled-numep nume ens)))
               (subsetp-eq (access built-in-clause (car bic-lst) :all-fnnames)
                           fns)
               (eq (subsumes *init-subsumes-count*
@@ -5861,6 +6602,9 @@
         (t (built-in-clausep2 (cdr bic-lst) cl fns ens))))
 
 (defun built-in-clausep1 (bic-alist cl fns ens)
+
+; Ens is either nil or an enabled structure.  If ens is nil, then we consider
+; only the rules specified by *initial-built-in-clauses* to be enabled.
 
 ; Bic-alist is the alist of built-in clauses, organized via top fnname.  Cl is
 ; a clause and fns is the all-fnnames-lst of cl.  This function is akin to
@@ -5884,6 +6628,10 @@
         (t (built-in-clausep1 (cdr bic-alist) cl fns ens))))
 
 (defun possible-trivial-clause-p (cl)
+
+; Warning: Keep this list below of function names in sync with those in
+; tautologyp; see comment below.
+
   (if (null cl)
       nil
     (mv-let (not-flg atm)
@@ -5902,8 +6650,9 @@
 
 ; If we ever make 1+ and 1- functions again, they should go back on this list.
 
-                             zerop plusp minusp listp mv-list return-last
-                             wormhole-eval force case-split double-rewrite)
+                             zerop plusp minusp listp mv-list cons-with-hint
+                             return-last wormhole-eval force case-split
+                             double-rewrite)
                            atm)
                 (possible-trivial-clause-p (cdr cl))))))
 
@@ -5913,6 +6662,9 @@
            (tautologyp (disjoin cl) wrld))))
 
 (defun built-in-clausep (caller cl ens match-free-override wrld state)
+
+; Ens is either nil or an enabled structure.  If ens is nil, then we consider
+; only the rules specified by *initial-built-in-clauses* to be enabled.
 
 ; We return two results.  The first indicates whether cl is a ``built
 ; in clause,'' i.e., a known truth.  The second is the supporting
@@ -5933,7 +6685,7 @@
 ; this function force or case-split, you must change its callers!
 
 ; Starting with Version_2.7, this function uses forward-chaining.  This idea
-; arose when changing translate-declaration-to-guard to output calls of
+; arose when changing translate-declaration-to-guard-gen to output calls of
 ; signed-byte-p, unsigned-byte-p, and integer-range-p.  Suddenly some guards
 ; proofs needed to be done that formerly were handled by built-in-clausep.  But
 ; that problem is reduced or eliminated when we forward-chain and have suitable
@@ -5949,6 +6701,9 @@
                                  ens)))
     (cond
      (rune (mv t (push-lemma rune nil)))
+     ((null ens) ; then skip forward-chaining
+      (cond ((trivial-clause-p cl wrld) (mv t nil))
+            (t (mv nil nil))))
      (t (mv-let (contradictionp type-alist ttree)
                 (forward-chain-top caller
                                    cl
@@ -6082,7 +6837,7 @@
             (crunch-clause-segments1 seg1 pts1 (cons marker seg2) nil)
             (mv-let (hitp cl pts ttree)
                     (remove-trivial-equivalences cl pts nil ;;; see Note
-                                                 ens wrld state ttree nil nil)
+                                                 ens wrld state ttree)
 
 ; Note: In the call of remove-trivial-equivalences above we use remove-flg =
 ; nil.  At one time, we used remove-flg = t, thinking that our cl here was the
@@ -6190,7 +6945,7 @@
 ; assumption into the ttree and go on.  Once upon a time we considered
 ; aborting, reporting assn as a bad-ass.  Observe that if the complement of
 ; term is on ancestors, then term is being assumed nil (because (not term) is
-; assumed true).  Doesn't that mean we coul rewrite term to nil?  No.  All we
+; assumed true).  Doesn't that mean we could rewrite term to nil?  No.  All we
 ; really know is that term is impossible to prove by rewriting using whatever
 ; lemmas we did this time.  Term might be provable.  Consider the fact that
 ; the user could have proved (implies term term) for any term, even a provable
@@ -6217,7 +6972,8 @@
                   (push-ancestor (dumb-negate-lit term)
                                  (assumnote-list-to-token-list
                                   (access assumption assn :assumnotes))
-                                 ancestors)))
+                                 ancestors
+                                 nil)))
              (mv-let
               (not-flg atm)
               (strip-not term)
@@ -6514,8 +7270,7 @@
                                    fc-pair-lst
                                    local-rcnst
                                    wrld
-                                   simplify-clause-pot-lst
-                                   new-pts)
+                                   simplify-clause-pot-lst)
 
 ; Ttree0 is relevant only if we got a contradiction.
 
@@ -6851,7 +7606,7 @@
              :rdepth (rewrite-stack-limit wrld)
              :step-limit step-limit
              :type-alist type-alist
-             :obj nil
+             :obj '? ; special mark for setting up the pot-lst
              :geneqv nil
              :pequiv-info nil
              :wrld wrld
@@ -7241,7 +7996,7 @@
                                        t
                                        (access rewrite-constant rcnst
                                                :current-enabled-structure)
-                                       wrld state nil nil nil)
+                                       wrld state nil)
           (declare (ignore pts))
           (let ((local-rcnst (change rewrite-constant rcnst
                                      :top-clause top-clause
@@ -7335,7 +8090,7 @@
                         t
                         (access rewrite-constant local-rcnst
                                 :current-enabled-structure)
-                        wrld state ttree nil nil))
+                        wrld state ttree))
                       (declare (ignore pts hitp))
                       (mv step-limit
                           'hit
@@ -7424,7 +8179,7 @@
 ; books/hints/basic-tests.lisp -- two occurrences
 
 ; Note: displayed-goal might no longer be necessary in our own sources.  But
-; community books have been using them, in particlar, books/acl2s/ccg/ccg.lisp.
+; community books have been using them, in particular, books/acl2s/ccg/ccg.lisp.
 ; So we keep that field.  To search the community books for "displayed-goal"
 ; (or other strings, by analogy):
 
@@ -7454,10 +8209,16 @@
 ; for the active checkpoint, then we add the clause-id and pool-lst for that
 ; goal.
 
-  (clause-id ; could be nil
-   clause    ; nil iff clause-id is nil
-   .         ; list of pairs (clause-id . pool-lst); see above
-   pushed
+; At one time we thought that clause-id can be nil, but as of August 2016 we do
+; not see evidence of that.  We also thought that clause is nil if and only if
+; clause-id is nil, but that is false: clause can be nil for a valid clause-id
+; because we have generated the empty clause, nil, which implies that the proof
+; has failed.
+
+  (clause-id
+   clause
+   .
+   pushed ; list of pairs (clause-id . pool-lst); see above
    )
   t)
 
@@ -7466,7 +8227,7 @@
    (active-cl-id            ; for active key checkpoint if any, else nil
     . active-printed-p)     ; true when active key checkpoint has been printed
    forcep                   ; true after next forcing round has been announced
-   . abort-stack)           ; top-stack when reverting; 'empty-clause on abort
+   . abort-stack)           ; top-stack when reverting; non-nil symbol on abort
   t)
 
 (defconst *initial-gag-state*
@@ -7585,10 +8346,28 @@
 ; expand-hint created by the system, say because some non-controller argument
 ; in the pattern had simplified to 0 or nil.
 
-                           (cons :constants
-                                 (controller-unify-subst name term def-body))
+                           (let ((alist
+                                  (controller-unify-subst name term def-body)))
+
+; Once upon a time we had a bug here.  We simply consed :constants onto alist.
+; That could produce an :alist of the form (:constants . :none).  But this is
+; silly because :none means we do an exact match and produce no substitution
+; whereas the :constants means each var is bound to itself or a quoted evg.
+; If (:constants . :none) means anything it would be the same as :none, so we
+; no longer produce (:constants . :none).  The bug arose because in the code
+; that interprets :alist, namely in the function expand-permission-result1, we
+; expect :alist to be :none, unify-subst, or (:constant . unify-subst) and
+; made no provision for the silly case, which meant we ended up calling
+; one-way-unify1 with a partial alist of :NONE.  This bug was further obscured
+; by an out-of-date comment defrec expand-hint which indicated that :alist
+; was either :none or a substitution.
+
+                             (if (eq alist :none)
+                                 :none
+                                 (cons :constants
+                                       alist)))
                            :rune (access def-body def-body :rune)
-                           :equiv 'equal
+                           :equiv (access def-body def-body :equiv)
                            :hyp (access def-body def-body :hyp)
                            :lhs (cons-term name formals)
                            :rhs (access def-body def-body :concl))
@@ -7765,7 +8544,7 @@
 ; bother to detect that here because we want to report the specious
 ; simplification as though everything were ok and then pretend nothing
 ; happened.  This gives the user some indication of where the loop is.  In the
-; old days, we just signalled a 'miss if (member-equal cl clauses) and that
+; old days, we just signaled a 'miss if (member-equal cl clauses) and that
 ; caused a lot of confusion among experienced users, who saw simplifiable
 ; clauses being passed on to elim, etc.  See :DOC specious-simplification.
 
@@ -7812,7 +8591,7 @@
 
 ; Initially we attempted to fix the slowdown mentioned above (the one reported
 ; by Greve and Wilding) by eliminating completely the special treatment of
-; induction-hyp-terms.  However, lemma psuedo-termp-binary-op_tree in community
+; induction-hyp-terms.  However, lemma pseudo-termp-binary-op_tree in community
 ; book books/meta/pseudo-termp-lemmas.lisp showed the folly of this attempt.
 ; The relevant goal was as follows.
 
@@ -7835,7 +8614,7 @@
 ; induction-hyp-terms, the above binary-op_tree term was rewritten, and hence
 ; so was the pseudo-termp hypothesis.  The result seemed to give permission to
 ; the next hypothesis, (pseudo-term-listp l), to be rewritten much more
-; agressively than it was formerly, which bogged down the rewriter (perhaps
+; aggressively than it was formerly, which bogged down the rewriter (perhaps
 ; even in an infinite loop).
 
 ; A later attempt used the simple algorithm that we stop meddling once we have
@@ -8058,10 +8837,10 @@
 ; We admit the following sorting functions in :logic mode, verify their guards,
 ; and prove properties of them in community book books/misc/sort-symbols.lisp.
 
-(defun strict-merge-symbol-< (l1 l2 acc)
+(defun strict-merge-symbol< (l1 l2 acc)
 
-; If l1 and l2 are strictly ordered by symbol-< and above acc, which is also
-; thus strictly ordered, then the result is strictly ordered by symbol-<.
+; If l1 and l2 are strictly ordered by symbol< and above acc, which is also
+; thus strictly ordered, then the result is strictly ordered by symbol<.
 
   (declare (xargs :guard (and (symbol-listp l1)
                               (symbol-listp l2)
@@ -8074,12 +8853,12 @@
   (cond ((endp l1) (revappend acc l2))
         ((endp l2) (revappend acc l1))
         ((eq (car l1) (car l2))
-         (strict-merge-symbol-< (cdr l1) (cdr l2) (cons (car l1) acc)))
-        ((symbol-< (car l1) (car l2))
-         (strict-merge-symbol-< (cdr l1) l2 (cons (car l1) acc)))
-        (t (strict-merge-symbol-< l1 (cdr l2) (cons (car l2) acc)))))
+         (strict-merge-symbol< (cdr l1) (cdr l2) (cons (car l1) acc)))
+        ((symbol< (car l1) (car l2))
+         (strict-merge-symbol< (cdr l1) l2 (cons (car l1) acc)))
+        (t (strict-merge-symbol< l1 (cdr l2) (cons (car l2) acc)))))
 
-(defun strict-merge-sort-symbol-< (l)
+(defun strict-merge-sort-symbol< (l)
 
 ; Produces a result with the same elements as the list l of symbols, but
 ; strictly ordered by symbol-name.
@@ -8091,35 +8870,56 @@
 
                   :mode :program))
   (cond ((endp (cdr l)) l)
-        (t (strict-merge-symbol-<
-            (strict-merge-sort-symbol-< (evens l))
-            (strict-merge-sort-symbol-< (odds l))
+        (t (strict-merge-symbol<
+            (strict-merge-sort-symbol< (evens l))
+            (strict-merge-sort-symbol< (odds l))
             nil))))
-
-(defun strict-symbol-<-sortedp (x)
-  (declare (xargs :guard (symbol-listp x)))
-  (cond ((or (endp x) (null (cdr x)))
-         t)
-        (t (and (symbol-< (car x) (cadr x))
-                (strict-symbol-<-sortedp (cdr x))))))
 
 (defun sort-symbol-listp (x)
   (declare (xargs :guard (symbol-listp x)))
-  (cond ((strict-symbol-<-sortedp x)
+  (cond ((strict-symbol<-sortedp x)
          x)
-        (t (strict-merge-sort-symbol-< x))))
+        (t (strict-merge-sort-symbol< x))))
 
-(defun strict-merge-sort-symbol-<-cdrs (alist)
+; Now that sort-symbol-listp has been defined, we can define
+; set-ruler-extenders.
+
+#+acl2-loop-only
+(defmacro set-ruler-extenders (x)
+  `(state-global-let*
+    ((inhibit-output-lst (list* 'event 'summary (@ inhibit-output-lst))))
+    (er-progn
+     (chk-ruler-extenders ,x soft 'set-ruler-extenders (w state))
+     (progn
+       (table acl2-defaults-table :ruler-extenders
+              (let ((x0 ,x))
+                (case x0
+
+; If keywords other than :ALL, :BASIC, and :LAMBDAS are supported, then also
+; change get-ruler-extenders1.
+
+                  (:all :all)
+                  (:lambdas *basic-ruler-extenders-plus-lambdas*)
+                  (:basic *basic-ruler-extenders*)
+                  (otherwise (sort-symbol-listp x0)))))
+       (table acl2-defaults-table :ruler-extenders)))))
+
+#-acl2-loop-only
+(defmacro set-ruler-extenders (x)
+  (declare (ignore x))
+  nil)
+
+(defun strict-merge-sort-symbol<-cdrs (alist)
   (cond ((endp alist) nil)
         (t (acons (caar alist)
-                  (strict-merge-sort-symbol-< (cdar alist))
-                  (strict-merge-sort-symbol-<-cdrs (cdr alist))))))
+                  (strict-merge-sort-symbol< (cdar alist))
+                  (strict-merge-sort-symbol<-cdrs (cdr alist))))))
 
 (defun runes-to-class-alist (runes)
-  (strict-merge-sort-symbol-<-cdrs
+  (strict-merge-sort-symbol<-cdrs
    (runes-to-class-alist1
     runes
-    (pairlis$ (strict-merge-sort-symbol-< (strip-cars runes))
+    (pairlis$ (strict-merge-sort-symbol< (strip-cars runes))
               nil))))
 
 (defun extract-and-classify-lemmas (ttree ignore-lst forced-runes)
@@ -8183,44 +8983,6 @@
   (list "" "~@*" "~@* and " "~@*, "
         (tilde-*-conjunction-of-possibly-forced-names-phrase1 lst)))
 
-(defconst *fake-rune-alist*
-
-; We use this constant for dealing with fake runes in tag-trees.  We ignore
-; *fake-rune-for-anonymous-enabled-rule*, because push-lemma is careful not to
-; put it into any tag-trees.
-
-  (list (cons (car *fake-rune-for-linear*)
-              "linear arithmetic")
-        (cons (car *fake-rune-for-type-set*)
-              "primitive type reasoning")))
-
-(defun rune-< (x y)
-  (cond
-   ((eq (car x) (car y))
-    (or (symbol-< (cadr x) (cadr y))
-        (and (eq (cadr x) (cadr y))
-             (cond ((null (cddr x))
-                    (cddr y))
-                   ((null (cddr y))
-                    nil)
-                   (t (< (cddr x) (cddr y)))))))
-   ((symbol-< (car x) (car y))
-    t)
-   (t
-    nil)))
-
-(defun merge-runes (l1 l2)
-  (cond ((null l1) l2)
-        ((null l2) l1)
-        ((rune-< (car l1) (car l2))
-         (cons (car l1) (merge-runes (cdr l1) l2)))
-        (t (cons (car l2) (merge-runes l1 (cdr l2))))))
-
-(defun merge-sort-runes (l)
-  (cond ((null (cdr l)) l)
-        (t (merge-runes (merge-sort-runes (evens l))
-                        (merge-sort-runes (odds l))))))
-
 (defun tilde-*-simp-phrase1 (alist abbreviations-flg)
   (cond
    ((null alist) (mv nil nil))
@@ -8239,7 +9001,7 @@
 
 ; Note: Names is a tilde-* object that will print a conjoined list of names
 ; (possibly followed by parenthetical remarks for splitters).  We must
-; determine whether there is more than one name in the list.  The names printe
+; determine whether there is more than one name in the list.  The names printed
 ; are just those in (cdar alist), which we know is a non-empty true list of
 ; pairs.  Below we set pluralp to t if two or more names will be printed and to
 ; nil if exactly one name will be printed.
@@ -8271,6 +9033,11 @@
                         "the :rewrite rules ~*R"
                       "the :rewrite rule ~*R"))
                   (cons #\R names)))
+             (:REWRITE-QUOTED-CONSTANT
+              (mv (if pluralp
+                      "the :rewrite-quoted-constant rules ~*Q"
+                      "the :rewrite-quoted-constant rule ~*Q")
+                  (cons #\Q names)))
              (:LINEAR
               (mv (if pluralp
                       "the :linear rules ~*L"
@@ -8426,9 +9193,8 @@
 
 (defun tilde-*-raw-simp-phrase (ttree punct phrase)
 
-; See tilde-*-simp-phrase.  But here, we print as specified by value :raw for
-; state global 'raw-proof-format.  We supply the concluding punctuation msg,
-; punct.
+; See tilde-*-simp-phrase.  But here, we print for the case that state global
+; 'raw-proof-format is true.  We supply the concluding punctuation msg, punct.
 
   (let ((forced-runes (recover-forced-runes ttree)))
     (let ((runes (all-runes-in-ttree ttree nil)))
@@ -8442,7 +9208,7 @@
                nil)
               (list* (concatenate 'string "trivial ob~-ser~-va~-tions"
                                   (case punct
-                                    (#\, ",")
+                                    (#\, ", ") ; Space not always needed?
                                     (#\. ".")
                                     (otherwise "")))
                      "~@*"
@@ -8500,7 +9266,7 @@
 ; and so the two uses of this function -- to generate stand-alone pool names
 ; and to generate parts of clause ids -- appear somewhat hidden.  But you will
 ; find calls of this function where the forcing-round supplied is 0 --
-; signallying that we want a pool name to use within a clause id -- even though
+; signaling that we want a pool name to use within a clause id -- even though
 ; the actual forcing-round at the time of call is non-0.
 
   (cond

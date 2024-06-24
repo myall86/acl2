@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -64,7 +52,7 @@
 		  (<= 0 K)
 		  (< A (EXPT 2 K))
 		  (< B (EXPT 2 K)))
-	     (= (LOP A 
+	     (= (LOP A
 		     (MOD B (EXPT 2 (+ -1 K)))
 		     1 (1- K))
 		(EXPO (LOGIOR (* 2 A)
@@ -197,7 +185,7 @@
 		  (< B (EXPT 2 K)))
 	     (= (lnot (* 2 (mod b (expt 2 (1- k))))
 		       k)
-		(lnot (* 2 b) (1+ k))))		
+		(lnot (* 2 b) (1+ k))))
   :rule-classes ()
   :hints (("Goal" :in-theory (set-difference-theories
                               (enable lnot expt bits-reduce)
@@ -555,7 +543,7 @@
                      (lop a b 1 e)))
          :rule-classes ()
          :hints (("Goal" :in-theory (enable lop)
-                  :use (lop2-22 
+                  :use (lop2-22
 			lop2-23
 			(:instance expo-monotone (x 1) (y a)))))))
 

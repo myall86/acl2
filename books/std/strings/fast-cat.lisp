@@ -29,9 +29,44 @@
 ; Original author: Jared Davis <jared@centtech.com>
 
 (in-package "STR")
-(include-book "cat")
+(include-book "printtree")
 (include-book "tools/include-raw" :dir :system)
 ; (depends-on "fast-cat-raw.lsp")
+
+; NOTE: This book used to include several heavyweight books, including
+; std/string/defs (which depends on std/strings/top).  This was because we
+; needed to ensure that every book containing a definition of any of the
+; functions redefined here is included before this book, due to the
+; restrictions on redundancy of functions with raw Lisp code.
+
+; Usually, this only means that the book introducing the raw Lisp definition
+; should include the book introducing the logic definition.  However, because
+; of the particular structure of the std/strings library, these functions had
+; several definitions in different books.  For example, definitions of
+; fast-string-append occurred in cat-base.lisp, defs-program.lisp, and
+; defs.lisp.  Even though these were all generated from the same definition
+; (from cat-base.lisp), they were technically independent events which needed
+; to be redundant in order to include more than one of those books
+; simultaneously.  They would be redundant, except that this book introduced a
+; raw Lisp definition of fast-string-append.  So if we didn't include defs and
+; defs-program in this book, then including this book followed by defs or
+; defs-program would fail with a bad redundancy check.
+
+; To avoid this, we ensure that the functions whose raw Lisp definitions are
+; given in this book are only defined in one place apiece.
+; For FAST-STRING-APPEND,
+;     FAST-STRING-APPEND-LST,
+; and RCHARS-TO-STRING,
+;     the definition is in cat-base.lisp,
+; for PRINTTREE->STR1,
+;     the definition is in printtree.lisp.
+
+; Since the program, logic, and guard verified definitinos are all in one
+; place, this means that defs-program must actually include their logic
+; definitions via these books.  We think this is harmless since the
+; dependencies of both books together cost about 4 seconds to certify.  If it
+; were necessary, however, we could separate the program mode definition,
+; verify-termination, and verify-guards events.
 
 ; In CCL, the performance of str::cat is boosted by a factor of 6.6-9.5x by
 ; including this file, according to the stupid benchmarks at the end of this

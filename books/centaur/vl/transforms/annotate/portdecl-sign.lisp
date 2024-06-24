@@ -29,7 +29,7 @@
 ; Original author: Jared Davis <jared@centtech.com>
 
 (in-package "VL")
-(include-book "../../mlib/range-tools")
+(include-book "../../mlib/expr-tools")
 (include-book "../../mlib/reorder")
 (include-book "../../mlib/filter")
 (local (include-book "../../util/arithmetic"))
@@ -41,7 +41,9 @@
   :short "Fix up type (signedness) information between port and variable
 declarations."
 
-  :long "<p>This is a very early transform that should be run almost
+  :long "<p>See also the long comment in port-resolve.lisp.</p>
+
+<p>This is a very early transform that should be run almost
 immediately.  It needs to be run after @(see make-implicit-wires).  It
 is ordinarily run as part of @(see vl-annotate-design).</p>
 
@@ -126,10 +128,10 @@ nets agree and are correct by the time actual modules are produced.</p>")
         :vl-union    (mv t nil (change-vl-union    type :signedp t))
         :otherwise   (badtype type elem)))))
 
-(local (defthm vl-atts-p-of-delete-assoc-equal
+(local (defthm vl-atts-p-of-remove1-assoc-equal
          (implies (vl-atts-p atts)
-                  (vl-atts-p (delete-assoc-equal name atts)))
-         :hints(("Goal" :in-theory (enable delete-assoc-equal)))))
+                  (vl-atts-p (remove1-assoc-equal name atts)))
+         :hints(("Goal" :in-theory (enable remove1-assoc-equal)))))
 
 (define vl-datatype->signedp ((x vl-datatype-p))
   (vl-datatype-case x
@@ -184,12 +186,12 @@ nets agree and are correct by the time actual modules are produced.</p>")
        ((unless ok) (mv nil warnings port var))
 
        (new-port (change-vl-portdecl port
-                                     :atts (delete-assoc-equal "VL_INCOMPLETE_DECLARATION" port.atts)
+                                     :atts (remove1-assoc-equal "VL_INCOMPLETE_DECLARATION" port.atts)
                                      :type final-type))
        (new-var  (change-vl-vardecl var
                                     ;; Mark the net as port implicit so that it won't get pretty-printed.
                                     :atts (acons "VL_PORT_IMPLICIT" nil
-                                                 (delete-assoc-equal "VL_INCOMPLETE_DECLARATION" var.atts))
+                                                 (remove1-assoc-equal "VL_INCOMPLETE_DECLARATION" var.atts))
                                     :type final-type)))
     (mv t (ok) new-port new-var)))
 
@@ -293,4 +295,3 @@ nets agree and are correct by the time actual modules are produced.</p>")
                       ;; interfaces or other kinds of SystemVerilog constructs
                       ;; that have ports?
                       )))
-

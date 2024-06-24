@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -29,7 +17,7 @@
 ;Eric believes that the function EXPO is intimately connected to EXPT (they are inverses).  Some of his
 ;theorems about EXPT require EXPO for their statements.
 
-;Todo: 
+;Todo:
 ;1. Write a more general version of EXPO that isn't tied to using 2 as the base?
 ;2. Use more consistent names for lemmas, including using expt2 for lemmas which only apply when the r paramater
 ;to expt is 2.
@@ -51,14 +39,29 @@
 	((< x 1) (cons 1 (fl (/ x))))
 	(t (fl x))))
 
-(defund expo (x)
-  (declare (xargs :guard t
-                  :measure (expo-measure x)))
-  (cond ((or (not (rationalp x)) (equal x 0)) 0)
-	((< x 0) (expo (- x)))
-	((< x 1) (1- (expo (* 2 x))))
-	((< x 2) 0)
-	(t (1+ (expo (/ x 2))))))
+(defnd expo (x)
+  (declare (xargs :measure (expo-measure x)
+                  :verify-guards nil))
+  (mbe
+   :logic
+   (cond ((or (not (rationalp x)) (equal x 0)) 0)
+         ((< x 0) (expo (- x)))
+         ((< x 1) (1- (expo (* 2 x))))
+         ((< x 2) 0)
+         (t (1+ (expo (/ x 2)))))
+   :exec
+   (if (rationalp x)
+       (let* ((n (abs (numerator x)))
+              (d (denominator x))
+              (ln (integer-length n))
+              (ld (integer-length d))
+              (l (- ln ld)))
+         (if (>= ln ld)
+             (if (>= (ash n (- l)) d) l (1- l))
+           (if (> ln 1)
+               (if (> n (ash d l)) l (1- l))
+             (- (integer-length (1- d))))))
+     0)))
 
 
 ;probably get this anyway when we define expo
@@ -83,7 +86,7 @@
 ;rename?
 (defthm expo-minus-eric
   (implies (syntaxp (negative-syntaxp x))
-           (equal (expo x) 
+           (equal (expo x)
                   (expo (* -1 x)))))
 
 
@@ -407,7 +410,7 @@
   (implies (and (syntaxp (power2-syntaxp x))
                 (force (power2p x)))
            (equal (integerp x)
-                  (<= 0 (expo x)) 
+                  (<= 0 (expo x))
                   )))
 
 
@@ -513,16 +516,16 @@
 ;BOZO think about this.  expo-shift-general depends on combining (expt 2 i) and (/ (expt 2 i)) but if we
 ;rewrite (/ (expt 2 i)) to (expt 2 (* -1 i)) then this may not happen...  (We don't have a complete set of
 ;rules for gathering expt terms, especially in cases like this: (* (expt 2 i) x y w z (expt 2 (* -1 i)))
-;So currently one cannot have both expt-inverse and expt-shift enabled...  
+;So currently one cannot have both expt-inverse and expt-shift enabled...
 ;We could address this by writing a rule which will always gather expt
 ;terms in a product, even if other terms intervene between them.  If we are guaranteed to always do all
 ;gathering, then expo-shift-general should work okay (i.e., shouldn't loop).
 ;Man, I can't figure out how to write an easy bind-free rule to do all gathering. Even if we walk through the
-;term and decide what to cancel out, e.g., the (expt 2 i) and the (expt 2 (* -1 i)) in  
+;term and decide what to cancel out, e.g., the (expt 2 i) and the (expt 2 (* -1 i)) in
 ;  (* (expt 2 i) x y w z (expt 2 (* -1 i)))
 ;we can't just multiply through by their inverses (which would be the standard way to cancel something in a
 ;product) because the inverting would get sucked in by expt-inverse.  So an attempt to cancel by multiplying
-;through by (/ (expt 2 i)) and (/ (expt 2 (* -1 i))) would be the same as multipying through by (expt 2 (* -1 i)) 
+;through by (/ (expt 2 i)) and (/ (expt 2 (* -1 i))) would be the same as multipying through by (expt 2 (* -1 i))
 ;and (expt 2 (* -1 (* -1 i))) = (expt 2 i), respectively.  Yuck.  Maybe we can use some sort of bubble-down
 ;strategy like Rober Krug does.
 ;It's unfortunate that we don't get any expo-shifting if we are gathering exponents...

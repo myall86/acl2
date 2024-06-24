@@ -1,35 +1,23 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
 (in-package "RTL")
 
-; (set-enforce-redundancy t) ;; Tue Feb 24 10:12:19 2009. 
+; (set-enforce-redundancy t) ;; Tue Feb 24 10:12:19 2009.
 
-; somehow the logand-natp rule complains about not being redundant! 
+; somehow the logand-natp rule complains about not being redundant!
 ;
 
-(include-book "basic") ;; no change from rel8 
+(include-book "basic") ;; no change from rel8
 
 (include-book "bits")
 
@@ -304,7 +292,7 @@
 		  (natp k))
 	     (equal (logior x (expt 2 k))
 		    (+ x
-		       (* (expt 2 k) 
+		       (* (expt 2 k)
 			  (- 1 (bitn x k))))))
     :hints (("Goal" :use ((:instance logior-expt-3-g)))))
 
@@ -316,16 +304,6 @@
 	     (equal (logand x (- (expt 2 n) (expt 2 k)))
 		    (* (expt 2 k) (bits x (1- n) k))))
     :hints (("Goal" :use ((:instance logand-expt-3-g)))))
-
-(defthmd logand-expt-4
-    (implies (and (natp n)
-		  (natp k)
-		  (natp l)
-		  (< l k)
-		  (<= k n))
-	     (equal (logand (- (1- (expt 2 n)) (expt 2 l)) (- (expt 2 n) (expt 2 k)))
-		    (- (expt 2 n) (expt 2 k))))
-    :hints (("Goal" :use ((:instance logand-expt-4-g)))))
 
 (defthmd lognot-shift
   (implies (and (integerp x)
@@ -506,8 +484,8 @@
                 (lognot (logxor i j)))
          (EQUAL (LOGXOR J (LOGNOT I))
                 (LOGNOT (LOGXOR I J)))))
-    
-	   
+
+
 
 (defthmd logior-logand
   (implies (and (integerp x)

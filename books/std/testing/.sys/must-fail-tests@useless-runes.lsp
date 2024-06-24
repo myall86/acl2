@@ -1,0 +1,24 @@
+(F
+ (1 1 (:TYPE-PRESCRIPTION F))
+ )
+(G)
+(F
+ (1 1 (:TYPE-PRESCRIPTION F))
+ )
+(G)
+(F
+ (1 1 (:TYPE-PRESCRIPTION F))
+ )
+(G)
+(F
+ (1 1 (:TYPE-PRESCRIPTION F))
+ )
+(G)
+(F
+ (1 1 (:TYPE-PRESCRIPTION F))
+ )
+(G)
+(F
+ (1 1 (:TYPE-PRESCRIPTION F))
+ )
+(G)

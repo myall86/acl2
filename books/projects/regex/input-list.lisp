@@ -1,3 +1,6 @@
+; Copyright (C) 2004, Regents of the University of Texas
+; Written by Sol Swords
+; License: A 3-clause BSD license.  See the LICENSE file distributed with ACL2.
 
 
 
@@ -132,7 +135,7 @@
     (and (or (not (car l))
              (backrefp (car l) str))
          (backref-listp (cdr l) str))))
-    
+
 
 (defthm backref-listp-nth
   (implies (and (backref-listp l str)
@@ -172,7 +175,7 @@
                 (integerp (car (nth n l)))
                 (integerp (cdr (nth n l))))))
 
-  
+
 (defthm backref-listp-pseudo
   (implies (backref-listp l str)
            (pseudo-backref-listp l)))
@@ -326,7 +329,7 @@
       (if (>= (caar il) (car l-rest))
           (car il)
         l-rest))))
-      
+
 (defthm longest-il-type-weak
   (implies (and (pseudo-input-listp il)
                 (consp il))
@@ -392,14 +395,14 @@
   (implies (and (integerp minidx)
                 (stringp str)
                 (< minidx (length str)))
-           (> (min-idx-il 
+           (> (min-idx-il
                (remove-all-longer-equal-il il minidx) str)
               minidx))
   :rule-classes (:rewrite :linear))
 
 (in-theory (disable length length-equiv))
 
-                
+
 
 ;; Type theorems about input lists
 (defthm remove-all-longer-equal-il-il

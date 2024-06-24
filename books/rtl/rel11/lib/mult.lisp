@@ -1,26 +1,13 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
 ;
 ; Contact:
-;   David Russinoff
+;   David M. Russinoff
 ;   1106 W 9th St., Austin, TX 78703
-;   http://www.russsinoff.com/
+;   david@russinoff.com
+;   http://www.russinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
+; See license file books/rtl/rel11/license.txt.
 ;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
-;
-; Author: David M. Russinoff (david@russinoff.com)
 
 (in-package "RTL")
 
@@ -31,79 +18,9 @@
 (set-inhibit-warnings "theory")
 (local (in-theory nil))
 
-;; From basic.lisp:
+(include-book "defs")
+(include-book "rac")
 
-(defund fl (x)
-  (declare (xargs :guard (real/rationalp x)))
-  (floor x 1))
-
-;; From bits.lisp:
-
-(defund bvecp (x k)
-  (declare (xargs :guard (integerp k)))
-  (and (integerp x)
-       (<= 0 x)
-       (< x (expt 2 k))))
-
-(defund bits (x i j)
-  (declare (xargs :guard (and (integerp x)
-                              (integerp i)
-                              (integerp j))))
-  (mbe :logic (if (or (not (integerp i))
-                      (not (integerp j)))
-                  0
-                (fl (/ (mod x (expt 2 (1+ i))) (expt 2 j))))
-       :exec  (if (< i j)
-                  0
-                (logand (ash x (- j)) (1- (ash 1 (1+ (- i j))))))))
-
-(defund bitn (x n)
-  (declare (xargs :guard (and (integerp x)
-                              (integerp n))))
-  (mbe :logic (bits x n n)
-       :exec  (if (evenp (ash x (- n))) 0 1)))
-
-(defund binary-cat (x m y n)
-  (declare (xargs :guard (and (integerp x)
-                              (integerp y)
-                              (natp m)
-                              (natp n))))
-  (if (and (natp m) (natp n))
-      (+ (* (expt 2 n) (bits x (1- m) 0))
-         (bits y (1- n) 0))
-    0))
-
-;; We define a macro, CAT, that takes a list of a list X of alternating data values 
-;; and sizes.  CAT-SIZE returns the formal sum of the sizes.  X must contain at 
-;; least 1 data/size pair, but we do not need to specify this in the guard, and 
-;; leaving it out of the guard simplifies the guard proof.
-
-(defun formal-+ (x y)
-  (declare (xargs :guard t))
-  (if (and (acl2-numberp x) (acl2-numberp y))
-      (+ x y)
-    (list '+ x y)))
-
-(defun cat-size (x)
-  (declare (xargs :guard (and (true-listp x) (evenp (length x)))))
-  (if (endp (cddr x))
-      (cadr x)
-    (formal-+ (cadr x)
-	      (cat-size (cddr x)))))
-
-(defmacro cat (&rest x)
-  (declare (xargs :guard (and x (true-listp x) (evenp (length x)))))
-  (cond ((endp (cddr x))
-         `(bits ,(car x) ,(formal-+ -1 (cadr x)) 0))
-        ((endp (cddddr x))
-         `(binary-cat ,@x))
-        (t
-         `(binary-cat ,(car x) 
-                      ,(cadr x) 
-                      (cat ,@(cddr x)) 
-                      ,(cat-size (cddr x))))))
-
-	       
 ;;;**********************************************************************
 ;;;			Radix-4 Booth Encoding
 ;;;**********************************************************************
@@ -111,9 +28,14 @@
 (defsection-rtl |Radix-4 Booth Encoding| |Multiplication|
 
 (defun theta (i y)
-  (+ (bitn y (1- (* 2 i))) 
+  (+ (bitn y (1- (* 2 i)))
      (bitn y (* 2 i))
      (* -2 (bitn y (1+ (* 2 i))))))
+
+(defthm theta-bounds
+  (and (<= -2 (theta i y))
+       (<= (theta i y) 2))
+  :rule-classes :linear)
 
 (defun sum-theta (m y)
    (if (zp m)
@@ -121,11 +43,124 @@
      (+ (* (expt 2 (* 2 (1- m))) (theta (1- m) y))
 	(sum-theta (1- m) y))))
 
+;; Signed version
+
+(defthmd sum-theta-lemma-signed
+  (implies (and (posp m)
+                (bvecp y (* 2 m)))
+           (equal (sum-theta m y)
+                  (si y (* 2 m)))))
+
+(defund bmux4signed (zeta x n)
+  (case zeta
+    (1  x)
+    (-1 (bits (lognot x) (1- n) 0))
+    (2  (bits (* 2 x) (1- n) 0))
+    (-2 (bits (lognot (* 2 x)) (1- n) 0))
+    (0  0)))
+
+(defthm bvecp-bmux4signed
+  (implies (and (integerp zeta)
+                (<= -2 zeta)
+                (<= zeta 2)
+                (integerp n)
+                (bvecp x n))
+           (bvecp (bmux4signed zeta x n)
+                  n))
+  :hints (("Goal" :in-theory (enable bmux4signed bvecp)))
+  :rule-classes
+  ((:rewrite
+    :corollary
+    (implies (and (integerp zeta)
+                  (<= -2 zeta)
+                  (<= zeta 2)
+                  (bvecp x n)
+                  (integerp n))
+             (bvecp (bmux4signed zeta x n)
+                    n)))
+   (:type-prescription
+    :corollary
+    (implies (and (integerp zeta)
+                  (<= -2 zeta)
+                  (<= zeta 2)
+                  (bvecp x n)
+                  (integerp n))
+             (natp (bmux4signed zeta x n))))
+   (:linear
+    :corollary
+    (implies (and (integerp zeta)
+                  (<= -2 zeta)
+                  (<= zeta 2)
+                  (bvecp x n)
+                  (integerp n))
+             (< (bmux4signed zeta x n)
+                (expt 2 n))))))
+
+(defund tau (zeta sign)
+  (if (equal zeta 0)
+      0
+    (if (< 0 zeta)
+        sign
+      (lognot1 sign))))
+
+(defun neg (x) (if (< x 0) 1 0))
+
+(defund pp4signed-theta (i x y n)
+   (if (zerop i)
+       (cat 1 1
+	    (lognot1 (tau (theta i y)
+                          (bitn x (1- n))))
+            1
+	    (bmux4signed (theta i y) x n)
+            n)
+     (cat 1 1
+	  (lognot1 (tau (theta i y)
+                        (bitn x (1- n))))
+          1
+	  (bmux4signed (theta i y) x n)
+          n
+	  0 1
+	  (neg (theta (1- i) y))
+          1
+	  0 (* 2 (1- i)))))
+
+(defun sum-pp4signed-theta (x y m n)
+  (if (zp m)
+      0
+    (+ (pp4signed-theta (1- m) x y n)
+       (sum-pp4signed-theta x y (1- m) n))))
+
+(defthmd booth4signed-corollary
+  (implies (and (posp m)
+                (posp n)
+                (bvecp x n)
+                (bvecp y (* 2 m)))
+           (equal (sum-pp4signed-theta x y m n)
+                  (+ (- (expt 2 n))
+                     (- (* (expt 2 (* 2 (1- m)))
+                           (neg (theta (1- m) y))))
+                     (expt 2 (+ n (* 2 m)))
+                     (* (si x n) (si y (* 2 m)))))))
+
+(defthmd booth4signed-corollary-alt
+  (implies (and (posp m)
+                (posp n)
+                (bvecp x n)
+                (bvecp y (* 2 m)))
+           (equal (+ (expt 2 n)
+                     (* (expt 2 (* 2 (1- m)))
+                        (neg (theta (1- m) y)))
+                     (sum-pp4signed-theta x y m n))
+                  (+ (expt 2 (+ n (* 2 m)))
+                     (* (si x n) (si y (* 2 m)))))))
+
+;; Unsigned versions
+
 (defthm sum-theta-lemma
     (implies (and (not (zp m))
 		  (bvecp y (1- (* 2 m))))
 	     (equal y (sum-theta m y)))
-  :rule-classes ())
+    :rule-classes ())
 
 (defun bmux4 (zeta x n)
   (case zeta
@@ -134,50 +169,6 @@
     (2  (* 2 x))
     (-2 (bits (lognot (* 2 x)) (1- n) 0))
     (0  0)))
-
-(defun neg (x) (if (< x 0) 1 0))
-
-(encapsulate ((zeta (i) t))
- (local (defun zeta (i) (declare (ignore i)) 0))
- (defthm zeta-bnd 
-     (and (integerp (zeta i))
-	  (<= (zeta i) 2)
-	  (>= (zeta i) -2))))
-
-(defun pp4 (i x n)
-  (if (zerop i)
-      (cat 1 1
-	   (bitn (lognot (neg (zeta i))) 0) 1
-	   (bmux4 (zeta i) x n) n)
-    (cat 1 1
-	 (bitn (lognot (neg (zeta i))) 0) 1
-	 (bmux4 (zeta i) x n) n
-	 0 1
-	 (neg (zeta (1- i))) 1
-	 0 (* 2 (1- i)))))
-
-(defun sum-zeta (m)
-  (if (zp m)
-      0
-    (+ (* (expt 2 (* 2 (1- m))) (zeta (1- m)))
-       (sum-zeta (1- m)))))   
-
-(defun sum-pp4 (x m n)
-  (if (zp m)
-      0
-    (+ (pp4 (1- m) x n)
-       (sum-pp4 x (1- m) n))))
-
-(defthm booth4-thm
-    (implies (and (not (zp n))
-		  (not (zp m))
-		  (bvecp x (1- n)))
-	     (= (+ (expt 2 n)
-		   (sum-pp4 x m n))
-		(+ (expt 2 (+ n (* 2 m)))
-		   (* x (sum-zeta m))
-		   (- (* (expt 2 (* 2 (1- m))) (neg (zeta (1- m))))))))
-  :rule-classes ())
 
 (defun pp4-theta (i x y n)
    (if (zerop i)
@@ -206,7 +197,9 @@
 		   (sum-pp4-theta x y m n))
 		(+ (expt 2 (+ n (* 2 m)))
 		   (* x y))))
-  :rule-classes ())
+    :rule-classes ())
+
+;;------------------------------------------------------------------------------------------------
 
 (defun pp4p-theta (i x y n)
    (if (zerop i)
@@ -236,6 +229,97 @@
                 (* x y)))
   :rule-classes ())
 
+;;------------------------------------------------------------------------------------------------
+
+(defund mag (i y)
+  (if (member (bits y (1+ (* 2 i)) (1- (* 2 i))) '(3 4))
+      2
+    (if (member (bits y (* 2 i) (1- (* 2 i))) '(1 2))
+        1
+      0)))
+
+(defund nbit (i y)
+  (bitn y (1+ (* 2 i))))
+
+(defthmd theta-rewrite
+  (implies (and (natp y) (natp i))
+           (equal (theta i y)
+                  (if  (= (nbit i y) 1)
+                       (- (mag i y))
+                    (mag i y)))))
+
+(defund bmux4p (i x y n)
+  (if  (= (nbit i y) 1)
+       (bits (lognot (* (mag i y) x)) (1- n) 0)
+       (* (mag i y) x)))
+
+(defthmd bvecp-bmux4p
+  (implies (and (not (zp n))
+                (bvecp x (1- n)))
+	   (bvecp (bmux4p i x y n) n)))
+
+(defthmd bmux4p-rewrite
+  (implies (and (not (zp n))
+                (not (zp m))
+	        (bvecp x (1- n))
+	        (bvecp y (1- (* 2 m)))
+		(natp i)
+		(< i m))
+           (equal (bmux4p i x y n)
+                  (+ (* (theta i y) x)
+                     (* (1- (expt 2 n)) (nbit i y))))))
+
+(defund pp4p (i x y n)
+  (if (zerop i)
+      (cat (if (= (nbit 0 y) 0) 1 0) 1
+           (nbit 0 y) 1
+           (nbit 0 y) 1
+           (bmux4p 0 x y n) n)
+    (cat 1 1
+         (lognot (nbit i y)) 1
+         (bmux4p i x y n) n
+         0 1
+         (nbit (1- i) y) 1
+         0 (* 2 (1- i)))))
+
+(defthmd pp4p0-rewrite
+  (implies (and (not (zp n))
+                (not (zp m))
+	        (bvecp x (1- n))
+	        (bvecp y (1- (* 2 m))))
+           (equal (pp4p 0 x y n)
+                  (+ (expt 2 (+ n 2))
+                     (* (theta 0 y) x)
+                     (- (nbit 0 y))))))
+
+(defthmd pp4p-rewrite
+  (implies (and (not (zp n))
+                (not (zp m))
+	        (bvecp x (1- n))
+	        (bvecp y (1- (* 2 m)))
+                (not (zp i))
+                (< i m))
+           (equal (pp4p i x y n)
+                  (+ (expt 2 (+ n (* 2 i) 1))
+                     (expt 2 (+ n (* 2 i)))
+                     (* (expt 2 (* 2 i)) (theta i y) x)
+                     (* (expt 2 (* 2 (1- i))) (nbit (1- i) y))
+                     (- (* (expt 2 (* 2 i)) (nbit i y)))))))
+
+(defun sum-pp4p (x y m n)
+  (if (zp m)
+      0
+    (+ (pp4p (1- m) x y n)
+       (sum-pp4p x y (1- m) n))))
+
+(defthmd booth4-corollary-3
+  (implies (and (not (zp n))
+                (not (zp m))
+	        (bvecp x (1- n))
+	        (bvecp y (1- (* 2 m))))
+           (equal (sum-pp4p x y m n)
+                  (+ (* x y) (expt 2 (+ n (* 2 m)))))))
+
 )
 ;;;**********************************************************************
 ;;;                Statically Encoded Multiplier Arrays
@@ -244,18 +328,18 @@
 (defsection-rtl |Statically Encoded Multiplier Arrays| |Multiplication|
 
 (defun m-mu-chi (i mode)
-  (cond ((equal mode 'mu)  
-         (if (zp i)  1
+  (cond ((equal mode 'mu)
+         (if (zp i) 1
            (cons (cons 1  i) 1)))
         ((equal mode 'chi)
-         (if (zp i)  0
+         (if (zp i) 0
            (cons (cons 1  i) 0)))))
-             
+
 (mutual-recursion
  (defun mu (i y)
    (declare (xargs :measure (m-mu-chi i 'mu)))
      (+ (bits y (1+ (* 2 i)) (* 2 i)) (chi i y)))
- 
+
  (defun chi (i y)
    (declare (xargs :measure (m-mu-chi i 'chi)))
    (if (zp i)
@@ -351,13 +435,13 @@
 (defun delta (i a b c d)
   (if (zp i)
       (bitn d 0)
-    (logand (logior (logand (bitn a (+ -2 (* 2 i))) 
+    (logand (logior (logand (bitn a (+ -2 (* 2 i)))
 			    (bitn b (+ -2 (* 2 i))))
 		    (logior (logand (bitn a (+ -2 (* 2 i)))
 				    (gamma (1- i) a b c))
 			    (logand (bitn b (+ -2 (* 2 i)))
 				    (gamma (1- i) a b c))))
-	    (lognot (logxor (bitn a (1- (* 2 i))) 
+	    (lognot (logxor (bitn a (1- (* 2 i)))
 			    (bitn b (1- (* 2 i))))))))
 
 (defun psi (i a b c d)
@@ -373,8 +457,8 @@
 (defthm psi-m-1
     (implies (and (natp m)
                   (>= m 1)
-		  (bvecp a (- (* 2 m) 2))   
-		  (bvecp b (- (* 2 m) 2))  
+		  (bvecp a (- (* 2 m) 2))
+		  (bvecp b (- (* 2 m) 2))
 		  (bvecp c 1)
 		  (bvecp d 1))
 	     (and (equal (gamma m a b c) 0)
@@ -445,7 +529,7 @@
 (defsection-rtl |Radix-8 Booth Encoding| |Multiplication|
 
 (defun eta (i y)
-  (+ (bitn y (1- (* 3 i))) 
+  (+ (bitn y (1- (* 3 i)))
      (bitn y (* 3 i))
      (* 2 (bitn y (1+ (* 3 i))))
      (* -4 (bitn y (+ 2 (* 3 i))))))
@@ -476,7 +560,7 @@
 
 (encapsulate ((xi (i) t))
  (local (defun xi (i) (declare (ignore i)) 0))
- (defthm xi-bnd 
+ (defthm xi-bnd
      (and (integerp (xi i))
 	  (<= (xi i) 4)
 	  (>= (xi i) -4))))
@@ -497,7 +581,7 @@
   (if (zp m)
       0
     (+ (* (expt 2 (* 3 (1- m))) (xi (1- m)))
-       (sum-xi (1- m)))))   
+       (sum-xi (1- m)))))
 
 (defun sum-pp8 (x m n)
   (if (zp m)

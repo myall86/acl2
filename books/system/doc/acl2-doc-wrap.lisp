@@ -69,7 +69,7 @@
 ; who are looking at an older version of ACL2 will see the corresponding
 ; ACL2+Books Manual at this link.
 
-  "http://www.cs.utexas.edu/users/moore/acl2/v7-1/")
+  "http://www.cs.utexas.edu/users/moore/acl2/v8-4/")
 
 (defconst *installation-url*
 
@@ -113,7 +113,7 @@
    (declare (xargs :mode :program))
    (if (atom topics)
        nil
-     (cons (acons :from from (delete-assoc :from (car topics)))
+     (cons (acons :from from (remove1-assoc :from (car topics)))
            (change-topic-origins from (cdr topics))))))
 
 (make-event

@@ -42,14 +42,14 @@
 
 (define vl-descalist-okp ((design vl-design-p)
                           descalist)
-  (equal descalist (vl-descalist (vl-design-descriptions design)))
+  (equal descalist (vl-make-descalist (vl-design-descriptions design)))
   ///
   (defthm vl-descalist-p-when-vl-descalist-okp
     (implies (vl-descalist-okp design descalist)
              (vl-descalist-p descalist))))
 
 (defaggregate vls-data
-  :parents (server)
+  :parents (vl-server)
   :short "Data that is available to @(see vls-commands)."
   :tag :vls-data
   ((orig vl-design-p
@@ -81,7 +81,7 @@
   :long "<p>A @('vls-data-p') structure just aggregates a bunch of data that is
 produced when we run the translator.</p>
 
-<p>These structures are typically produced by the @(see server) as part of
+<p>These structures are typically produced by the @(see vl-server) as part of
 its translation-loading scheme.</p>")
 
 ;; (defthm vls-data->orig-depalist-elim
@@ -96,7 +96,7 @@ its translation-loading scheme.</p>")
 (defthm vls-data->orig-descalist-elim
   (implies (force (vls-data-p x))
            (equal (vls-data->orig-descalist x)
-                  (vl-descalist (vl-design-descriptions (vls-data->orig x)))))
+                  (vl-make-descalist (vl-design-descriptions (vls-data->orig x)))))
   :hints(("Goal"
           :use ((:instance return-type-of-vls-data->orig-descalist))
           :in-theory (e/d (vl-descalist-okp)

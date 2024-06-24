@@ -39,7 +39,7 @@
 (include-book "std/strings/top" :dir :system)
 (include-book "std/osets/sort" :dir :system)
 (include-book "xdoc/parse-xml" :dir :system)
-(include-book "misc/assert" :dir :system)
+(include-book "std/testing/assert-bang" :dir :system)
 (set-state-ok t)
 (program)
 
@@ -438,7 +438,7 @@
        (parents (cdr (assoc :parents x)))
        (short   (str::trim (cdr (assoc :short x))))
        (long    (str::trim (cdr (assoc :long x))))
-  
+
        (acc     (str::revappend-chars "(defxdoc " acc))
 
        ;; use fmt-to-string to deal with all lisp-encoding stuff
@@ -519,7 +519,7 @@
         (t (include-xdoc-books
             (cdr dirs)
             (list* #\Newline
-                   #\Newline 
+                   #\Newline
                    (str::revappend-chars
                     (fmt-to-str (list 'include-book
                                       (concatenate 'string (car dirs) "-xdoc"))
@@ -579,16 +579,13 @@
        `(defconst *ignored-xdoc-table* ; includes above books and system
           ',(get-xdoc-table (w state)))))
 
-     #+acl2-legacy-doc
-     (import-acl2doc)
-
      (defun remove-ignored-topics (x bad)
        (declare (xargs :mode :program))
        (if (atom x)
            nil
          (if (find-topic (cdr (assoc :name (car x))) bad)
              (remove-ignored-topics (cdr x) bad)
-           (cons (car x) 
+           (cons (car x)
                  (remove-ignored-topics (cdr x) bad)))))
 
      (make-event
@@ -606,4 +603,3 @@
               (t (er-progn
                   (export-acl2doc *new-xdoc-table* ,out ',subdirs state)
                   (value '(value-triple '(:exported-to ,out))))))))))
-

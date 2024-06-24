@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 8.4 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2022, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -104,11 +104,9 @@
 ; is a pretty innocuous value to print.
 
   (let ((*inside-trace$* t))
-    (declare (special *inside-trace$*))
+    (declare (special *inside-trace$* *trace-level*))
     (cond ((eq direction :in)
-           (f-put-global 'trace-level
-                         (1+f (f-get-global 'trace-level state))
-                         state)))
+           (incf *trace-level*)))
     (let ((trace-evisc-tuple (trace-evisc-tuple))
           (x (trace-hide-world-and-state x)))
       (ppr (eviscerate-top x
@@ -119,14 +117,12 @@
                            (car (cddddr trace-evisc-tuple)) ;;; hiding-cars
                            state)
            (+ 2 ; GCL starts "1>" in column 2
-              (first-trace-printing-column state))
+              (first-trace-printing-column))
            (f-get-global 'trace-co state)
            state
            t))
     (cond ((eq direction :out)
-           (f-put-global 'trace-level
-                         (1-f (f-get-global 'trace-level state))
-                         state)))
+           (decf *trace-level*)))
     '>))
 
 (defun trace-fix-entry-raw (name l)
@@ -159,27 +155,9 @@
                 (cddr l)))
         (t (list* (car l) (cadr l) (trace-fix-entry name (cddr l))))))
 
-#-acl2-mv-as-values
-(defun trace-values (name)
-  (list* 'list
-         '(car values)
-         (let ((mul (trace-multiplicity name *the-live-state*)))
-           (cond ((or (null mul)
-                      (eql mul 1))
-                  nil)
-                 (t (mv-refs-fn (1- mul)))))))
-
-#+acl2-mv-as-values
 (defun trace-values (name)
   (declare (ignore name))
   'values)
-
-#-acl2-mv-as-values
-(defun make-nths (i n var)
-  (if (zerop n)
-      nil
-    (cons `(nth ,i ,var)
-          (make-nths (1+ i) (1- n) var))))
 
 (defun trace-fix-exit-raw (name l)
   (cond ((endp l)

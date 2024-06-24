@@ -18,6 +18,11 @@
 
 (include-book "dynamic-e-d")
 
+; Matt K. mod, Jan. 2019: The following is needed for the #+acl2-devel build,
+; since nonlinearp-default-hint defined below is a :logic mode function that
+; calls observation-cw.
+(include-book "system/observation1-cw" :dir :system)
+
 (table acl2-defaults-table :state-ok t)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -128,8 +133,8 @@
 			      ((:REWRITE normalize-factors-gather-exponents)
 			       (:REWRITE simplify-products-gather-exponents-equal)
 			       (:REWRITE simplify-products-gather-exponents-<)))))
-		   `(:computed-hint-replacement ((arithmetic-default-hint 
-						  stable-under-simplificationp 
+		   `(:computed-hint-replacement ((arithmetic-default-hint
+						  stable-under-simplificationp
 						  hist
 						  'prefer-positive-addends))
 						;; I am surprised that a quote
@@ -142,8 +147,8 @@
                  (observation-cw
                   'arithmetic-default-hint
                   "We now enable non-linear arithmetic.")
-		 `(:computed-hint-replacement ((arithmetic-default-hint 
-						stable-under-simplificationp 
+		 `(:computed-hint-replacement ((arithmetic-default-hint
+						stable-under-simplificationp
 						hist 'non-linear-arithmetic))
 					      :nonlinearp t)))
 	       (t
@@ -171,8 +176,8 @@
 			(:REWRITE normalize-factors-scatter-exponents)
 			(:REWRITE simplify-products-scatter-exponents-equal)
 			(:REWRITE simplify-products-scatter-exponents-<)))))
-	  `(:computed-hint-replacement ((arithmetic-default-hint 
-					 stable-under-simplificationp 
+	  `(:computed-hint-replacement ((arithmetic-default-hint
+					 stable-under-simplificationp
 					 hist nil))
 				       ;; I am surprised that a quote
 				       ;; is not needed here, i.e.,
@@ -249,7 +254,7 @@
 			 ((:REWRITE normalize-factors-gather-exponents)
 			  (:REWRITE simplify-products-gather-exponents-equal)
 			  (:REWRITE simplify-products-gather-exponents-<)))))
-	    `(:computed-hint-replacement ((nonlinearp-default-hint++ id 
+	    `(:computed-hint-replacement ((nonlinearp-default-hint++ id
 								     stable-under-simplificationp
 								     hist 'check-branch-taken))
 					 ;; I am surprised that a quote
@@ -263,7 +268,7 @@
             (observation-cw
              'nonlinearp-default-hint++
              "Prefer-positive-exponents.")
-	    `(:computed-hint-replacement ((nonlinearp-default-hint++ id 
+	    `(:computed-hint-replacement ((nonlinearp-default-hint++ id
 								     stable-under-simplificationp
 								     hist 'non-linear-arithmetic))
 					 :nonlinearp t)))
@@ -272,7 +277,7 @@
             (observation-cw
              'nonlinearp-default-hint++
              "Recycle.")
-	    `(:computed-hint-replacement ((nonlinearp-default-hint++ id 
+	    `(:computed-hint-replacement ((nonlinearp-default-hint++ id
 								     stable-under-simplificationp
 								     hist 'non-linear-arithmetic))
 					 :nonlinearp t)))
@@ -285,7 +290,7 @@
               (observation-cw
                'nonlinearp-default-hint++
                "Check-branch-taken prefer-positive-exponents.")
-	      `(:computed-hint-replacement ((nonlinearp-default-hint++ id 
+	      `(:computed-hint-replacement ((nonlinearp-default-hint++ id
 								       stable-under-simplificationp
 								       hist 'prefer-positive-exponents))
 					   :no-op t)))
@@ -294,7 +299,7 @@
               (observation-cw
                'nonlinearp-default-hint++
                "Check-branch-taken non-linear-arithmetic.")
-	      `(:computed-hint-replacement ((nonlinearp-default-hint++ id 
+	      `(:computed-hint-replacement ((nonlinearp-default-hint++ id
 								       stable-under-simplificationp
 								       hist 'recycle))
 					   :nonlinearp nil)))
@@ -312,7 +317,7 @@
      (observation-cw
       'nonlinearp-default-hint++
       "Non-linear-arithmetic.")
-     `(:computed-hint-replacement ((nonlinearp-default-hint++ id 
+     `(:computed-hint-replacement ((nonlinearp-default-hint++ id
 							      stable-under-simplificationp
 							      hist 'recycle))
 				  :nonlinearp nil)))

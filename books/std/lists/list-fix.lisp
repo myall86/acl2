@@ -37,41 +37,31 @@
 (include-book "abstract")
 
 (defsection list-fix
-  :parents (std/lists)
+  :parents (std/lists true-listp)
   :short "@(call list-fix) converts @('x') into a @(see true-listp) by, if
 necessary, changing its @(see final-cdr) to @('nil')."
 
-  :long "<p>Many functions that processes lists follows the <b>list-fix
-convention</b>: whenever @('f') is given a some non-@('true-listp') @('a')
-where it expected a list, it will act as though it had been given @('(list-fix
-a)') instead.  As a few examples, logically,</p>
+  :long "<p>@('list-fix') is really a macro which expands to a call to
+  @(tsee true-list-fix) with the same argument.</p>
 
-<ul>
-<li>@('(endp x)') ignores the final @('cdr') of @('x'),</li>
-<li>@('(len x)') ignores the final @('cdr') of @('x'),</li>
-<li>@('(append x y)') ignores the final @('cdr') of @('x') (but not @('y'))</li>
-<li>@('(member a x)') ignores the final @('cdr') of @('x'), etc.</li>
-</ul>
+<p>See also @(see llist-fix), a \"logical list fix\" that is guarded with
+@(see true-listp) for greater efficiency.</p>
 
-<p>Having a @('list-fix') function is often useful when writing theorems about
-how list-processing functions behave.  For example, it allows us to write
-strong, hypothesis-free theorems such as:</p>
+ @(def list-fix-exec)
 
-@({
-    (equal (character-listp (append x y))
-           (and (character-listp (list-fix x))
-                (character-listp y)))
-})
+ @(def list-fix)"
 
-<p>Indeed, @('list-fix') is the basis for @(see list-equiv), an extremely
-common @(see equivalence) relation.</p>"
+  (defmacro list-fix-exec (x) `(true-list-fix-exec ,x))
 
-  (defund list-fix (x)
-    (declare (xargs :guard t))
-    (if (consp x)
-        (cons (car x)
-              (list-fix (cdr x)))
-      nil))
+  (table macro-aliases-table 'list-fix-exec 'true-list-fix-exec)
+
+  (defmacro list-fix (x) `(true-list-fix ,x))
+
+  (table macro-aliases-table 'list-fix 'true-list-fix)
+
+  (in-theory (disable list-fix))
+
+  (local (in-theory (enable list-fix-exec)))
 
   (defthm list-fix-when-not-consp
     (implies (not (consp x))
@@ -82,6 +72,11 @@ common @(see equivalence) relation.</p>"
   (defthm list-fix-of-cons
     (equal (list-fix (cons a x))
            (cons a (list-fix x)))
+    :hints(("Goal" :in-theory (enable list-fix))))
+
+  (defthm list-fix-exec-removal
+    (equal (list-fix-exec x)
+           (list-fix x))
     :hints(("Goal" :in-theory (enable list-fix))))
 
   (defthm car-of-list-fix
@@ -171,3 +166,24 @@ common @(see equivalence) relation.</p>"
   (def-mapappend-rule elementlist-mapappend-of-list-fix
     (equal (elementlist-mapappend (list-fix x))
            (elementlist-mapappend x))))
+
+
+(defsection llist-fix
+  :parents (list-fix)
+  :short "@(call llist-fix) is locally just @(see list-fix), but it is guarded
+with @(see true-listp) so that in the execution it is just an identity
+function."
+
+  :long "<p>This is very similar in spirit to functions like @(see lnfix).</p>
+
+<p>Note that @(see list-fix) already avoids consing in the case where @('x') is
+a @(see true-listp), but of course checking @('true-listp') is linear in the
+length of the list, so @('llist-fix') may save this overhead.</p>
+
+<p>We leave this function enabled and always reason about @(see list-fix)
+instead.</p>"
+
+  (defun-inline llist-fix (x)
+    (declare (xargs :guard (true-listp x)))
+    (mbe :logic (list-fix x)
+         :exec x)))

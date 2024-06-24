@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 8.4 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2022, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -362,7 +362,8 @@
         :ttree ttree))
 
 (defun intrinsic-suggested-induction-cand
-  (term formals quick-block-info justification machine xterm ttree ens wrld)
+  (induction-rune term formals quick-block-info justification machine xterm
+                  ttree)
 
 ; Note: An "intrinsically suggested" induction scheme is an induction scheme
 ; suggested by a justification of a recursive function.  The rune controlling
@@ -381,27 +382,25 @@
 ; unrelated to term and is the term appearing in the original conjecture from
 ; which we (somehow) obtained term for consideration.
 
-  (let ((induction-rune (list :induction (ffn-symb term))))
+  (let ((mask (sound-induction-principle-mask term formals
+                                              quick-block-info
+                                              (access justification
+                                                      justification
+                                                      :subset))))
     (cond
-     ((enabled-runep induction-rune ens wrld)
-      (let ((mask (sound-induction-principle-mask term formals
-                                                  quick-block-info
-                                                  (access justification
-                                                          justification
-                                                          :subset))))
-        (cond
-         (mask
-          (list (flesh-out-induction-principle term formals
-                                               justification
-                                               mask
-                                               machine
-                                               xterm
-                                               (push-lemma induction-rune
-                                                           ttree))))
-         (t nil))))
+     (mask
+      (list (flesh-out-induction-principle term formals
+                                           justification
+                                           mask
+                                           machine
+                                           xterm
+                                           (push-lemma induction-rune
+                                                       ttree))))
      (t nil))))
 
-(defrec induction-rule (nume (pattern . condition) scheme . rune) nil)
+; The following is now defined in rewrite.lisp.
+
+; (defrec induction-rule (nume (pattern . condition) scheme . rune) nil)
 
 (mutual-recursion
 
@@ -510,13 +509,14 @@
                                                               rule
                                                               :rune)
                                                       ttree)
+                                                     nil ; eflg
                                                      (cons nume seen)
                                                      ens wrld)))))))))
         (t nil))))
      (t nil))))
 
 (defun suggested-induction-cands1
-  (induction-rules term type-alist xterm ttree seen ens wrld)
+  (induction-rules term type-alist xterm ttree eflg seen ens wrld)
 
 ; We map down induction-rules and apply each enabled rule to term, which is
 ; known to be an application of the function symbol fn to some args.  Each rule
@@ -528,11 +528,14 @@
 ; Seen is a list of numes of induction-rules already encountered, used in order
 ; to prevent infinite loops.
 
+; Eflg represents an "enable flag".  When true, an induction rune that
+; represents the induction scheme of a recursive definition must be enabled in
+; order to be applicable.  When false (nil), it may be applied regardless.
+
   (cond
    ((null induction-rules)
     (let* ((fn (ffn-symb term))
-           (machine (getprop fn 'induction-machine nil
-                             'current-acl2-world wrld)))
+           (machine (getpropc fn 'induction-machine nil wrld)))
       (cond
        ((null machine) nil)
        (t
@@ -553,29 +556,31 @@
 ;           (and induct-hint-val
 ;                (not (equal induct-hint-val *t*))))
 
-        (intrinsic-suggested-induction-cand
-         term
-         (formals fn wrld)
-         (getprop fn 'quick-block-info
-                  '(:error "See SUGGESTED-INDUCTION-CANDS1.")
-                  'current-acl2-world wrld)
-         (getprop fn 'justification
-                  '(:error "See SUGGESTED-INDUCTION-CANDS1.")
-                  'current-acl2-world wrld)
-         machine
-         xterm
-         ttree
-         ens
-         wrld)))))
+        (let ((induction-rune (list :induction (ffn-symb term))))
+          (and (or (null eflg)
+                   (enabled-runep induction-rune ens wrld))
+               (intrinsic-suggested-induction-cand
+                induction-rune
+                term
+                (formals fn wrld)
+                (getpropc fn 'quick-block-info
+                          '(:error "See SUGGESTED-INDUCTION-CANDS1.")
+                          wrld)
+                (getpropc fn 'justification
+                          '(:error "See SUGGESTED-INDUCTION-CANDS1.")
+                          wrld)
+                machine
+                xterm
+                ttree)))))))
    (t (append (apply-induction-rule (car induction-rules)
                                     term type-alist
                                     xterm ttree seen ens wrld)
               (suggested-induction-cands1 (cdr induction-rules)
                                           term type-alist
-                                          xterm ttree seen ens wrld)))))
+                                          xterm ttree eflg seen ens wrld)))))
 
 (defun suggested-induction-cands
-  (term type-alist xterm ttree seen ens wrld)
+  (term type-alist xterm ttree eflg seen ens wrld)
 
 ; Term is some fn applied to args.  Xterm is some term occurring in the
 ; conjecture we are exploring and is the term upon which this induction
@@ -592,8 +597,8 @@
   (cond
    ((flambdap (ffn-symb term)) nil)
    (t (suggested-induction-cands1
-       (getprop (ffn-symb term) 'induction-rules nil 'current-acl2-world wrld)
-       term type-alist xterm ttree seen ens wrld))))
+       (getpropc (ffn-symb term) 'induction-rules nil wrld)
+       term type-alist xterm ttree eflg seen ens wrld))))
 )
 
 (mutual-recursion
@@ -611,7 +616,9 @@
             (fargs term)
             type-alist ens wrld
             (append (suggested-induction-cands term type-alist
-                                               term nil nil ens wrld)
+                                               term nil
+                                               t ; eflg
+                                               nil ens wrld)
                     ans)))))
 
 (defun get-induction-cands-lst (lst type-alist ens wrld ans)
@@ -993,7 +1000,7 @@
 ; no antagonistic pairs, that every alist in lst1 has a mate somewhere in
 ; lst2, and that the process of merging alists from lst1 with their
 ; mates will not produce alists that are antagonistic with other alists
-; in lst1.  We now develop the code for merging nonantagonistic alists
+; in lst1.  We now develop the code for merging non-antagonistic alists
 ; and work up the structural hierarchy to merging lists of tests and alists.
 
 (defun merge-alist1-into-alist2 (alist1 alist2 vars)
@@ -1287,7 +1294,7 @@
 
 (defun induct-vars1 (lst wrld)
 
-; Lst is a list of terms.  We collect every variable symbol occuring in a
+; Lst is a list of terms.  We collect every variable symbol occurring in a
 ; controller slot of any term in lst.
 
   (cond ((null lst) nil)
@@ -1310,7 +1317,7 @@
 ; to the variables as "skos" (Skolem constants) suggests that it may
 ; date from the Interlisp version.  Meta comment: Perhaps someday some
 ; enterprising PhD student (in History?) will invent Software
-; Archeology, in which decrepit fragments of archive tapes are pieced
+; Archaeology, in which decrepit fragments of archive tapes are pieced
 ; together and scrutinized for clues as to the way people thought back
 ; in the early days.
 
@@ -1452,8 +1459,7 @@
 ; non pr fns supported.
 
   (cond ((null lst) 0)
-        ((getprop (ffn-symb (car lst)) 'primitive-recursive-defunp nil
-                  'current-acl2-world wrld)
+        ((getpropc (ffn-symb (car lst)) 'primitive-recursive-defunp nil wrld)
          (induction-complexity1 (cdr lst) wrld))
         (t (1+ (induction-complexity1 (cdr lst) wrld)))))
 
@@ -1594,7 +1600,7 @@
 
 ; Without assuming any properties of fn, this function can be
 ; specified as follows: If the first element, x, of the unprocessed
-; bag, mates with some y in the rest of the uprocessed bag, then put
+; bag, mates with some y in the rest of the unprocessed bag, then put
 ; the merge of x and the first such y in place of x, delete that y,
 ; and iterate.  If the first element has no such mate, put it in the
 ; answer accumulator ans.  N, by the way, is the next available unique
@@ -1840,8 +1846,8 @@
 ; universe of objects in some order.  Then the full binary tree with
 ; depth |U| can be thought of as the powerset of U.  In particular,
 ; any branch through the tree, from top-most node to tip, represents a
-; subset of U by labelling the nodes at successive depth by the
-; successive elements of U (the topmost node being labelled with the
+; subset of U by labeling the nodes at successive depth by the
+; successive elements of U (the topmost node being labeled with the
 ; first element of U) and adopting the convention that taking a
 ; right-hand (cdr) branch at a node indicates that the label is in the
 ; subset and a left-hand (car) branch indicates that the label is not
@@ -1861,7 +1867,7 @@
 
 ; Observe that there is a correspondence between these trees and the
 ; function ps above for generating the power set.  The recursion
-; labelled "rhs" above is going down the right-hand side of the tree
+; labeled "rhs" above is going down the right-hand side of the tree
 ; and the "lhs" recursion is going down the left-hand side.  Note that
 ; we go down the rhs first.
 
@@ -1869,7 +1875,7 @@
 ; relationship between the right-hand subtree (rhs) and left-hand
 ; subtree (lhs) of any given node of the tree: lhs can be obtained
 ; from rhs by turning some nils into ts.  The reason is that the tips
-; of the lhs of a node labelled by x denote exactly the same subsets
+; of the lhs of a node labeled by x denote exactly the same subsets
 ; as the corresponding tips of the right-hand side, except that on the
 ; right x was present in the subset and on the left it is not.  So
 ; when we do the right hand side we come back with a tree and if we
@@ -2068,7 +2074,7 @@
 ; Cl is a clause in cl-set, which is a set of clauses we are proving
 ; by induction.  Ta-lst is the tests-and-alists-lst component of the
 ; induction candidate we are applying to prove cl-set.  We are now
-; focussed on the proof of cl, using the induction schema of ta-lst
+; focused on the proof of cl, using the induction schema of ta-lst
 ; but getting to assume all the clauses in cl-set in our induction
 ; hypothesis.  We will map across ta-lst, getting a set of tests and
 ; some alists at each stop, and for each stop add a bunch of clauses
@@ -2230,6 +2236,7 @@
 ; understood to be implicitly conjoined and we therefore produce a
 ; conjunction expressed as (if cl1 cl2 nil).
 
+  (declare (xargs :guard (pseudo-term-list-listp clauses)))
   (cond ((null clauses) *t*)
         ((null (cdr clauses)) (disjoin (car clauses)))
         (t (mcons-term* 'if
@@ -2327,7 +2334,7 @@
 (defun all-vars1-lst-lst (lst ans)
 
 ; Lst is a list of lists of terms.  For example, it might be a set of
-; clauses.  We compute the set of all variables occuring in it.
+; clauses.  We compute the set of all variables occurring in it.
 
   (cond ((null lst) ans)
         (t (all-vars1-lst-lst (cdr lst)
@@ -2443,6 +2450,13 @@
 
 ; Warning: This function should be called under (io? prove ...).
 
+  (declare (xargs
+
+; Avoid blow-up from (skip-proofs (verify-termination ...)), which otherwise
+; takes a long time (e.g., when executed on behalf of community books utility
+; verify-guards-program).
+
+            :normalize nil))
   (cond
    ((and (gag-mode)
          (or (eq (gag-mode-evisc-tuple state) t)
@@ -2567,8 +2581,10 @@
                                       :tests-and-alists-lst))
                              (let*-abstractionp state)
                              wrld))
-                  (cons #\g (access candidate winning-candidate
-                                    :xinduction-term))
+                  (cons #\g (untranslate (access candidate winning-candidate
+                                                 :xinduction-term)
+                                         nil
+                                         wrld))
                   (cons #\h (if (access candidate winning-candidate :xancestry)
                                 1 0))
                   (cons #\i (tilde-*-untranslate-lst-phrase
@@ -2600,7 +2616,7 @@
         ((flambda-applicationp term)
          (union-eq (rec-fnnames (lambda-body (ffn-symb term)) wrld)
                    (rec-fnnames-lst (fargs term) wrld)))
-        ((getprop (ffn-symb term) 'recursivep nil 'current-acl2-world wrld)
+        ((getpropc (ffn-symb term) 'recursivep nil wrld)
          (add-to-set-eq (ffn-symb term)
                         (rec-fnnames-lst (fargs term) wrld)))
         (t (rec-fnnames-lst (fargs term) wrld))))
@@ -2612,7 +2628,7 @@
 
 )
 
-(defun induct-msg/lose (pool-name induct-hint-val state)
+(defun induct-msg/lose (pool-name induct-hint-val pspv state)
 
 ; We print the message that no induction was suggested.
 
@@ -2631,7 +2647,6 @@
               (cons #\?
                     (and induct-hint-val ; optimization
                          (let* ((wrld (w state))
-                                (ens (ens state))
                                 (all-fns (all-fnnames induct-hint-val))
                                 (rec-fns (rec-fnnames induct-hint-val wrld)))
                            (cond
@@ -2649,14 +2664,16 @@
                               defined recursively, so they cannot suggest ~
                               induction schemes.)")
                             ((and (all-variablep (fargs induct-hint-val))
-                                  (not (enabled-runep
-                                        (list :induction (car rec-fns))
-                                        ens
-                                        wrld))
-                                  (not (enabled-runep
-                                        (list :definition (car rec-fns))
-                                        ens
-                                        wrld)))
+                                  (let ((ens (ens-from-pspv pspv)))
+                                    (and
+                                     (not (enabled-runep
+                                           (list :induction (car rec-fns))
+                                           ens
+                                           wrld))
+                                     (not (enabled-runep
+                                           (list :definition (car rec-fns))
+                                           ens
+                                           wrld)))))
                              (msg "  (Note that ~x0 (including its :induction ~
                                    rune) is disabled, so it cannot suggest an ~
                                    induction scheme.  Consider providing an ~
@@ -2674,30 +2691,74 @@
 ; the hint settings into the pspv it returns.  Most of the content of
 ; the hint-settings is loaded into the rewrite-constant of the pspv.
 
-(defun@par load-hint-settings-into-rcnst (hint-settings rcnst cl-id wrld ctx
-                                                        state)
+(defun set-difference-augmented-theories (lst1 lst2 ans)
+
+; Lst1 and lst2 are augmented runic theories.  This is similar to
+; set-difference-augmented-theories-fn1 and
+; set-difference-augmented-theories-fn1+, except here we return an augumented
+; runic theory (not a runic theory) when ans is nil.
+
+  (cond ((endp lst1) (reverse ans))
+        ((endp lst2) (revappend ans lst1))
+        ((= (car (car lst1)) (car (car lst2)))
+         (set-difference-augmented-theories (cdr lst1) (cdr lst2) ans))
+        ((> (car (car lst1)) (car (car lst2)))
+         (set-difference-augmented-theories
+          (cdr lst1) lst2 (cons (car lst1) ans)))
+        (t (set-difference-augmented-theories lst1 (cdr lst2) ans))))
+
+(defun@par load-hint-settings-into-rcnst (hint-settings rcnst
+                                                        incrmt-array-name-info
+                                                        wrld ctx state)
 
 ; Certain user supplied hint settings find their way into the rewrite-constant.
 ; They are :expand, :restrict, :hands-off, and :in-theory.  Our convention is
 ; that if a given hint key/val is provided it replaces what was in the rcnst.
 ; Otherwise, we leave the corresponding field of rcnst unchanged.
 
-; Cl-id is either a clause-id or nil.  If it is a clause-id and we install a
-; new enabled structure, then we we will use that clause-id to build the array
-; name, rather than simply incrementing a suffix.
+; Incrmt-array-name-info is either a clause-id, a keyword, or nil.  If it is a
+; clause-id and we install a new enabled structure, then we will use that
+; clause-id to build the array name, rather than simply incrementing a suffix.
+; Otherwise incrmt-array-name-info is a keyword.  A keyword value should be
+; used for calls made by user applications, for example in community book
+; books/tools/easy-simplify.lisp, so that enabled structures maintained by the
+; ACL2 system do not lose their associated von Neumann arrays.
 
   (er-let*@par
    ((new-ens
      (cond
       ((assoc-eq :in-theory hint-settings)
-       (load-theory-into-enabled-structure@par
-        :from-hint
-        (cdr (assoc-eq :in-theory hint-settings))
-        nil
-        (access rewrite-constant rcnst :current-enabled-structure)
-        (or cl-id t)
-        nil
-        wrld ctx state))
+       (let* ((theory0 (cdr (assoc-eq :in-theory hint-settings)))
+              (theory1 (augment-runic-theory theory0 wrld))
+              (active-useless-runes (active-useless-runes state))
+              (old-ens (access rewrite-constant rcnst
+                               :current-enabled-structure))
+              (theory
+               (if (and active-useless-runes
+
+; The following two conditions are just an optimization.  If old-ens is (ens
+; state), then presumably active-useless-runes was already subtracted and we
+; don't need to subtract that list again.  We check the name first since that
+; should be fastest: when the names are EQ, very likely the two
+; enabled-structures are EQ.
+
+                        (eq (access enabled-structure old-ens
+                                    :array-name)
+                            (access enabled-structure (ens state)
+                                    :array-name))
+                        (equal old-ens (ens state)))
+                   (set-difference-augmented-theories theory1
+                                                      active-useless-runes
+                                                      nil)
+                 theory1)))
+         (load-theory-into-enabled-structure@par
+          :from-hint
+          theory
+          t
+          old-ens
+          (or incrmt-array-name-info t)
+          nil
+          wrld ctx state)))
       (t (value@par (access rewrite-constant rcnst
                             :current-enabled-structure))))))
    (value@par (change rewrite-constant rcnst
@@ -2751,8 +2812,8 @@
     (update-hint-settings
      (cdr new-hint-settings)
      (cons (car new-hint-settings)
-           (delete-assoc-eq (caar new-hint-settings)
-                            old-hint-settings))))
+           (remove1-assoc-eq (caar new-hint-settings)
+                             old-hint-settings))))
    (t (update-hint-settings
        (cdr new-hint-settings)
        (cons (car new-hint-settings) old-hint-settings)))))
@@ -2870,11 +2931,39 @@
                                        wrld))))
 
 #+:non-standard-analysis
-(defun remove-adjacent-duplicates (lst)
-  (cond ((or (null lst) (null (cdr lst))) lst)
-        ((equal (car lst) (car (cdr lst)))
-         (remove-adjacent-duplicates (cdr lst)))
-        (t (cons (car lst) (remove-adjacent-duplicates (cdr lst))))))
+(defun remove-adjacent-duplicates (x)
+
+; We have slightly modified the original definition so as to match the
+; definition (quite likely adapted from the original one here) in community
+; book books/defsort/remove-dups.lisp.  Sol Swords points out that an
+; unconditional rule true-listp-of-remove-adjacent-duplicates in that book
+; relies on (list (car x)) in the second case below, rather than x.
+
+  (declare (xargs :guard t))
+  (cond ((atom x)
+         nil)
+        ((atom (cdr x))
+         (list (car x))) ; See comment above for why this is not x.
+        ((equal (car x) (cadr x))
+         (remove-adjacent-duplicates (cdr x)))
+        (t
+         (cons (car x)
+               (remove-adjacent-duplicates (cdr x))))))
+
+(defun remove-adjacent-duplicates-eq (x)
+
+; See remove-adjacent-duplicates.
+
+  (declare (xargs :guard t))
+  (cond ((atom x)
+         nil)
+        ((atom (cdr x))
+         (list (car x)))
+        ((eq (car x) (cadr x))
+         (remove-adjacent-duplicates-eq (cdr x)))
+        (t
+         (cons (car x)
+               (remove-adjacent-duplicates-eq (cdr x))))))
 
 #+:non-standard-analysis
 (defun non-standard-induction-vars (candidate wrld)
@@ -2913,20 +3002,20 @@
 ; the hint-settings is non-nil and non-*t*, then we explore the clause
 ; set {{v}} for candidates.
 
-  (let ((cl-set (remove-guard-holders-lst-lst cl-set))
+  (let ((cl-set (remove-guard-holders-lst-lst cl-set wrld))
         (pool-name
          (tilde-@-pool-name-phrase forcing-round pool-lst))
         (induct-hint-val
          (let ((induct-hint-val0
                 (cdr (assoc-eq :induct hint-settings))))
            (and induct-hint-val0
-                (remove-guard-holders induct-hint-val0)))))
+                (remove-guard-holders induct-hint-val0 wrld)))))
     (mv-let
      (erp new-pspv state)
      (load-hint-settings-into-pspv
       nil
       (if induct-hint-val
-          (delete-assoc-eq :induct hint-settings)
+          (remove1-assoc-eq :induct hint-settings)
         hint-settings)
       pspv nil wrld ctx state)
      (cond
@@ -2997,7 +3086,7 @@
 ; where p is a single term.  This eliminates the combinatoric
 ; explosion at the expense of making the rest of the theorem prover
 ; suffer through opening things back up.  The idea, however, is that
-; it is better to give the user something to look at, so he see's the
+; it is better to give the user something to look at, so he sees the
 ; problem blowing up in front of him in rewrite, than to just
 ; disappear into induction and never come out.  We have seen simple
 ; cases where failed guard conjectures would have led to inductions
@@ -3076,8 +3165,9 @@
 ; 'lose signal.
 
            (pprogn (io? prove nil state
-                        (induct-hint-val pool-name)
-                        (induct-msg/lose pool-name induct-hint-val state))
+                        (induct-hint-val pool-name new-pspv)
+                        (induct-msg/lose pool-name induct-hint-val new-pspv
+                                         state))
                    (mv 'lose nil pspv state))))))))))
 
 ; We now define the elimination of irrelevance.  Logically this ought
@@ -3122,48 +3212,72 @@
         (t nil)))
 )
 
-;; RAG - I added realp and complexp to the list of function names
+;; Historical Comment from Ruben Gamboa:
+;; I added realp and complexp to the list of function names
 ;; simplification can decide.
 
 (defun probably-not-validp (cl)
 
-; Cl is a clause.  We return t if we think there is an instantiation
-; of cl that makes each literal false.  It is assumed that cl has
-; survived simplification.
+; Cl is a clause that is a subset of some clause, cl2, that has survived
+; simplification.  We are considering whether cl seems useless in proving cl2;
+; if so, we return t.  In particular, we return t if we think there is an
+; instantiation of cl that makes each literal false.
 
-; We have two trivial heuristics.  One is to detect whether the only
-; function symbols in cl are ones that we think make up a fragment
-; of the theory that simplification can decide.  The other heuristic
-; is to bet that any cl consisting of a single literal which is of the
-; form (fn v1 ... vn) or (not (fn v1 ... vn)), where the vi are
-; distinct variables, is probably not valid.
+; We have two trivial heuristics.  One is to detect whether the only function
+; symbols in cl are ones that we think make up a fragment of the theory that
+; simplification can decide.  The other heuristic is to bet that any cl
+; consisting of a single literal which is of the form (fn v1 ... vn) or (not
+; (fn v1 ... vn)), where the vi are distinct variables, is probably not valid.
 
-; It's pretty bold to include a recursive function, namely true-listp, in the
-; list below.  However, as long as it's the only one, we feel safe.
+; We elaborate a bit.  For eliminating irrelevance, we view a clause as
 
-  (or (ffnnames-subsetp-listp cl '(consp integerp rationalp
-                                         #+:non-standard-analysis realp
-                                         acl2-numberp
-                                         true-listp complex-rationalp
-                                         #+:non-standard-analysis complexp
-                                         stringp characterp
-                                         symbolp cons car cdr equal
-                                         binary-+ unary-- < apply))
+; (forall x y)(p(x) \/ q(y))
+
+; where p(x) is a possibly irrelevant literal (or set of literals, but we focus
+; here on the case of a single literal) and q(y) is the disjunction of the
+; other literals.  In general, of course, each of these terms may have several
+; free variables; but even in general, in order for p(x) to be a candidate for
+; irrelevance, its set of variables must be disjoint from the set of variables
+; in q.  In that case the clause is logically equivalent to the following.
+
+; (forall x)p(x) \/ (forall y)q(y)
+
+; We'd like to ignore one of those disjuncts when choosing an induction
+; (actually q could itself be a disjunction on which we recur); but which one?
+; If p(x) is probably not valid then we consider it reasonable to ignore p(x) in
+; the hope that q(y) may be valid, and indeed provable by ACL2.
+
+; See also the Essay on Alternate Heuristics for Eliminate-Irrelevance.
+
+  (or (ffnnames-subsetp-listp cl '(not consp integerp rationalp
+                                       #+:non-standard-analysis realp
+                                       acl2-numberp
+                                       true-listp complex-rationalp
+                                       #+:non-standard-analysis complexp
+                                       stringp characterp
+                                       symbolp cons car cdr equal
+                                       binary-+ unary-- < apply))
       (case-match cl
-                  ((('not (& . args)))
-                   (and (all-variablep args)
-                        (no-duplicatesp-equal args)))
-                  (((& . args))
-                   (and (all-variablep args)
-                        (no-duplicatesp-equal args)))
-                  (& nil))))
+        ((('not (& . args)))
+
+; To understand why we require args to be non-nil, see the Essay on Alternate
+; Heuristics for Eliminate-Irrelevance.
+
+         (and args ; do not drop zero-ary call (see above)
+              (all-variablep args)
+              (no-duplicatesp-eq args)))
+        (((& . args))
+         (and args  ; do not drop zero-ary call (see above)
+              (all-variablep args)
+              (no-duplicatesp-eq args)))
+        (& nil))))
 
 (defun irrelevant-lits (alist)
 
-; Alist is an alist that associates a set of literals with each key.
-; The keys are irrelevant.  We consider each set of literals and decide
-; if it is probably not valid.  If so we consider it irrelevant.
-; We return the concatenation of all the irrelevant literal sets.
+; Alist is an alist that associates a set of literals with each key.  The keys
+; are irrelevant.  We consider each set of literals and decide if it is
+; probably not valid.  If so we consider it irrelevant.  We return the
+; concatenation of all the irrelevant literal sets.
 
   (cond ((null alist) nil)
         ((probably-not-validp (cdar alist))
@@ -3181,6 +3295,153 @@
 ; history-entry for this elimination, and the fourth is an
 ; unmodified pspv.  (We return the fourth thing to adhere to the
 ; convention used by all clause processors in the waterfall (q.v.).)
+
+; Essay on Alternate Heuristics for Eliminate-Irrelevance
+
+; The algorithm for dropping "irrelevant" literals is based on first
+; partitioning the literals of a clause into components with respect to the
+; symmetric binary relation defined by: two literals are related if and only if
+; they share at least one free variable.  We consider two ways for a component
+; to be irrelevant: either (A) its function symbols are all from among a small
+; fixed set of primitives, or else (B) the component has a single literal whose
+; atom is the application of a function symbol to distinct variables.
+; Criterion B, however, is somewhat problematic, and below we discuss
+; variations of it that we have considered.  (See function probably-not-validp
+; for relevant code.)
+
+; Through Version_7.2, Criterion B was exactly as stated above.  However, we
+; encountered an unfortunate aspect of that heuristic, which is illustrated by
+; the following example (which is simpler than the one actually encountered,
+; but is similar in spirit).  The THM below failed to prove in Version_7.2.
+
+;   (encapsulate
+;     ((p () t)
+;      (my-app (x y) t))
+;     (local (defun p () t))
+;     (local (defun my-app (x y) (append x y)))
+;     (defthm my-app-def
+;       (implies (p)
+;                (equal (my-app x y)
+;                       (if (consp x)
+;                           (cons (car x) (my-app (cdr x) y))
+;                         y)))
+;       :rule-classes ((:definition
+;                       :controller-alist ((my-app t nil))))))
+;
+;   (defun rev (x)
+;     (if (consp x)
+;         (my-app (rev (cdr x))
+;                 (cons (car x) nil))
+;       nil))
+;
+;   (thm (implies (and (p)
+;                      (true-listp x))
+;                 (equal (rev (rev x)) x)))
+
+; The problem was that before entering a sub-induction, the hypothesis (P) --
+; that is, the literal (NOT (P)) -- was dropped.  Here is the relevant portion
+; of a log using Version_7.2.
+
+;   Subgoal *1/2'5'
+;   (IMPLIES (AND (P) (TRUE-LISTP X2))
+;            (EQUAL (REV (MY-APP RV (LIST X1)))
+;                   (CONS X1 (REV RV)))).
+;
+;   We suspect that the terms (TRUE-LISTP X2) and (P) are irrelevant to
+;   the truth of this conjecture and throw them out.  We will thus try
+;   to prove
+;
+;   Subgoal *1/2'6'
+;   (EQUAL (REV (MY-APP RV (LIST X1)))
+;          (CONS X1 (REV RV))).
+;
+;   Name the formula above *1.1.
+
+; Since the exported defthm above requires (P) in order to expand MY-APP, the
+; goal displayed immediately above isn't a theorem.  So we desired a
+; modification of the Criterion B above, on components, that would no longer
+; drop (P).
+
+; Our initial solution was a bit elaborate.  In essence, it maintained a world
+; global whose value is an alist that identifies "never irrelevant" function
+; symbols.  For a rewrite rule, if a hypothesis and the left-hand side had
+; disjoint sets of free variables, and the hypothesis was the application of
+; some function symbol F to distinct variables, then F was identified as "never
+; irrelevant".  We actually went a bit further, by associating a "parity" with
+; each such function symbol, both because the hypothesis might actually be (NOT
+; (F ...)) and because we allowed the left-hand side to contribute.  The
+; "parity" could be t or nil, or even :both (to represent both parities).  We
+; extended this world global not only for rewrite rules but also for rules of
+; class :definition, :forward-chaining, :linear, and :type-prescription.
+
+; That seemed to work well: it solved our original problem without noticeably
+; slowing down the regression suite or even the time for the expensive form
+; (include-book "doc/top" :dir :system).
+
+; We then presented this change in the UT Austin ACL2 seminar, and a sequence
+; of events caused us to change our heuristics again.
+
+;   (1) During that talk, we stressed the importance of dropping irrelevant
+;       literals so that an unsuitable induction isn't selected.  Marijn Heule
+;       thus made the intriguing suggestion of keeping the literals and simply
+;       ignoring them in our induction heuristics.
+;
+;   (2) We tried such a change.  Our implementation actually caused
+;       eliminate-irrelevance-clause to hide the irrelevant literals rather
+;       then to delete then; then, induction would unhide them immediately
+;       after choosing an induction scheme.
+;
+;   (3) The regression exhibited failures, however, because subsumption was no
+;       longer succeeding in cases where it had previously -- a goal was no
+;       longer subsumed by a previous sibling, but was subsumed by the original
+;       goal, causing the proof to abort immediately.  (See below for details.)
+;
+;   (4) So we decided to drop literals once again, rather than merely to hide
+;       them.
+;
+;   (5) But on further reflection, it seemed a bit far-fetched that a
+;       hypothesis (P1 X) could be relevant to simplifying (P2 Y Z) in the way
+;       shown above that (P) can be relevant to simplifying (P2 Y Z).  We can
+;       construct an example; but we think such examples are likely to be rare.
+;       The failures due to lack of subsumption led us to be nervous about
+;       keeping literals that Criterion B would otherwise delete.  So we
+;       decided on a very simple modification of Criterion B: only drop
+;       applications of functions to one or more variables.  This very limited
+;       case of keeping a literal seems unlikely to interfere with subsumption,
+;       since that literal could typically be reasonably expected to occur in
+;       all goals that are stable under simplification.
+
+; Returning to (3) above, here is how subsumption failed for lemma perm-del in
+; community book books/models/jvm/m5/perm.lisp, when we merely applied HIDE to
+; literals rather than deleting them.  In the failed proof, we see the
+; following.
+
+;   Subgoal *1.1/4'''
+;   (IMPLIES (AND (NOT (HIDE (CONSP X2)))
+;                 (NOT (EQUAL A X1))
+;                 (MEM X1 Y)
+;                 (NOT (HIDE (CONSP DL))))
+;            (MEM X1 (DEL A Y))).
+;
+;   Name the formula above *1.1.1.
+
+; Then later we see:
+
+;   So we now return to *1.1.2, which is
+;
+;   (IMPLIES (AND (NOT (PERM (DEL X3 X4) (DEL X3 DL0)))
+;                 (NOT (EQUAL X3 X1))
+;                 (MEM X1 Y)
+;                 (MEM X3 DL)
+;                 (PERM X4 DL0))
+;            (MEM X1 (DEL X3 Y))).
+
+; In Version_7.2 and also currently, the terms with HIDE in the first goal are
+; simply gone; so the first goal subsumes the second goal under the
+; substitution mapping A to X3.  However, with the first goal as shown above
+; (from our experiment in hiding irrelevant literals), subsumption fails
+; because the hypothesis (NOT (HIDE (CONSP X2))) -- that is, the literal (HIDE
+; (CONSP X2)) -- is not present in the second goal.
 
   (declare (ignore hist wrld state))
   (cond

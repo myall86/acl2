@@ -1,19 +1,5 @@
-; Arithmetic-3 Library
-; Copyright (C) 2004 Robert Krug <rkrug@cs.utexas.edu>
-;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT
-; ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-; FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
-; details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; if not, write to the Free Software Foundation, Inc., 51
-; Franklin Street, Suite 500, Boston, MA 02110-1335, USA.
+; See the top-level arithmetic-3 LICENSE file for authorship,
+; copyright, and license information.
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
@@ -57,10 +43,10 @@
 (local
  (include-book "collect"))
 
-(local 
+(local
  (in-theory (enable collect-*)))
 
-(local 
+(local
  (in-theory (enable collect-+)))
 
 (defun arith-bubble-down (x match)
@@ -98,8 +84,8 @@
          nil)))
 
 (defthm arith-normalize-factors-gather-exponents
-    (implies (and (bind-free 
-                   (arith-find-matching-factor-gather-exponents 
+    (implies (and (bind-free
+                   (arith-find-matching-factor-gather-exponents
                     (arith-factor-pattern-gather-exponents x) y)
                    (match))
                   (syntaxp (proveably-non-zero x mfc state)))
@@ -129,7 +115,7 @@
          nil)))
 
 (defthm arith-normalize-factors-scatter-exponents
-    (implies (and (bind-free 
+    (implies (and (bind-free
                    (arith-find-matching-factor-scatter-exponents
                     (arith-factor-pattern-scatter-exponents x) y)
                    (match))
@@ -291,7 +277,7 @@
 
 (defthm |arith (expt x 1)|
   (implies (acl2-numberp x)
-           (equal (expt x 1) 
+           (equal (expt x 1)
                   x)))
 
 (defthm |arith (expt 1 n)|
@@ -299,7 +285,7 @@
            1))
 
 (defthm |arith (expt x -1)|
-  (equal (expt x -1) 
+  (equal (expt x -1)
 	 (/ x)))
 
 (defthm |arith (expt (/ x) n)|

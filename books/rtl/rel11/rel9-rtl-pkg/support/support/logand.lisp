@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -36,7 +24,7 @@ Todo:
  should logand-with-0 be both sides? what about logand-with-minus-one
  how order rules for efficiency? perhaps make a separate documentation book?
  any other log lemmas?
- are the 4 enough for assoc comm functions? 
+ are the 4 enough for assoc comm functions?
 
 |#
 (local ; ACL2 primitive
@@ -186,7 +174,7 @@ Todo:
 
 
 
-; If logand is less than -1, then both i and j are <= -1, and at least one of them is strictly < -1. 
+; If logand is less than -1, then both i and j are <= -1, and at least one of them is strictly < -1.
 (defthm logand-less-than-minus-one
   (implies (and (case-split (integerp i))
                 (case-split (integerp j))
@@ -361,7 +349,7 @@ Todo:
 
 
 ;BOZO also have logand-with-zero
-(defthm logand-0 
+(defthm logand-0
   (equal (logand 0 j) 0))
 
 

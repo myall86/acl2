@@ -32,7 +32,6 @@
 (include-book "cat")
 (include-book "strprefixp")
 
-(local (include-book "misc/assert" :dir :system))
 (local (include-book "arithmetic"))
 
 (defsection strsubst-aux
@@ -80,7 +79,6 @@
                   (stringp new)
                   (stringp x)
                   (natp n)
-                  (natp xl)
                   (posp oldl)
                   (= oldl (length old))
                   (= xl (length x))
@@ -118,23 +116,19 @@ individual characters, whereas @('strsubst') works on substrings.</p>"
                                 (stringp new)
                                 (stringp x))))
     (let ((oldl (mbe :logic (len (explode old))
-                     :exec (length old))))
+                     :exec (length old)))
+          (xl (mbe :logic (len (explode x))
+                   :exec (length x))))
       (if (zp oldl)
           (mbe :logic (str-fix x)
                :exec x)
-        (rchars-to-string (strsubst-aux old new x 0 (length x) oldl nil)))))
+        (rchars-to-string (strsubst-aux old new x 0 xl oldl nil)))))
 
   (local (in-theory (enable strsubst)))
 
   (defthm stringp-of-strsubst
     (stringp (strsubst old new x))
-    :rule-classes :type-prescription)
-
-  (local (assert! (equal (strsubst "World" "Star" "Hello, World!")
-                         "Hello, Star!")))
-
-  (local (assert! (equal (strsubst "oo" "aa" "xoooyoo")
-                         "xaaoyaa"))))
+    :rule-classes :type-prescription))
 
 
 
@@ -189,7 +183,7 @@ individual characters, whereas @('strsubst') works on substrings.</p>"
     :hints(("Goal"
             :in-theory (disable l0)
             :use ((:instance l0 (x x))
-                  (:instance l0 (x acl2::x-equiv))))))
+                  (:instance l0 (x x-equiv))))))
 
   (defthm strsubst-list-of-append
     (equal (strsubst-list old new (append x y))

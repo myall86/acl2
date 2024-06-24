@@ -1,4 +1,4 @@
-#| 
+#|
 
 This file contains an interpreter for the "tiny" machine, an
 experimental machine loosely based on Boyer's and Moore's small
@@ -21,9 +21,9 @@ released versions of ACL2 2.4.)
   - Changed the definition of 32-bit add in order to avoid compiler
 replacements altogether, as described in the chapter.
 
-Dave Greve and Matt Wilding 
+Dave Greve and Matt Wilding
 
-September 1999 
+September 1999
 (updated January 2000)
 
 |#
@@ -36,7 +36,7 @@ September 1999
 
 (disable-theory (theory 'logops-functions))
 
-(set-verify-guards-eagerness 2) 
+(set-verify-guards-eagerness 2)
 
 (defstobj st
           (progc :type (unsigned-byte 10) :initially 0)
@@ -55,8 +55,10 @@ September 1999
 ;; Some proof speedup lemmas
 ;; Changed after Version 6.1 by Matt Kaufmann to replace obsolete the-error by
 ;; the-check.
-(defthm the-check-noop
-  (equal (the-check g x y) y))
+;; Removed 11/2021 by Matt Kaufmann with the addition of the-check to
+;; guard-holcers.
+;(defthm the-check-noop
+;  (equal (the-check g x y) y))
 
 (defthm nth-update-nth-const
   (implies
@@ -67,7 +69,10 @@ September 1999
 	  (if (equal (nfix n1) (nfix n2)) v (nth n1 l))))
   :rule-classes ((:rewrite :loop-stopper nil)))
 
-(in-theory (disable the-check nth update-nth))
+;; Removed disabling of 11/2021 by Matt Kaufmann with the addition of the-check
+;; to guard-holcers.
+;(in-theory (disable the-check nth update-nth))
+(in-theory (disable nth update-nth))
 
 ;; Some macros for convenient expression of declarations
 (defmacro Int32 (x) `(the   (signed-byte 32) ,x))
@@ -100,7 +105,7 @@ September 1999
 	   (type (signed-byte 32) b)
            ;; Added by Matt K. for v2-7:
            (xargs :guard-hints (("Goal" :in-theory (enable signed-byte-p)))))
-  (Int32 
+  (Int32
    (if (< a 0)
        (if (>= b 0) (+<32> a b)
 	 (let ((psum (+<32> (+<32> (+<32> a (MAX_INT<32>)) 1) b)))
@@ -148,7 +153,7 @@ September 1999
    (rationalp (+bv32 a b))
    (< (+bv32 a b) 2147483648) ; modified by Matt K. for v2-7
    (>= (+bv32 a b) -2147483648))
-  :hints (("goal" 
+  :hints (("goal"
 	   :in-theory (set-difference-theories (enable signed-byte-p) '(signed-byte-p-logext))
 	   :use
 	   ((:instance integerp-means-rationalp
@@ -161,7 +166,7 @@ September 1999
 (in-theory (disable plus<32> +bv32))
 (in-theory (enable signed-byte-p))
 
-;; Macros for convenient arithmetic 
+;; Macros for convenient arithmetic
 (defmacro +|10| (x y)
   `(Nat10 (logand (+<32> ,x ,y) (MAX_NAT<10>))))
 
@@ -200,7 +205,7 @@ September 1999
   :hints (("goal" :in-theory (enable update-nth))))
 
 ; Modified by Matt Kaufmann for ACL2 Version 2.6.
-(defthm arb-memory-proof 
+(defthm arb-memory-proof
   (implies
    (and
     (memp mem)
@@ -226,7 +231,7 @@ September 1999
     (< (nth n2 mem) 2147483648)
     (not (< 2147483648 (NTH n2 mem))) ; needed later on.
     (<= (MIN_INT<32>) (nth n2 mem))
-    (implies (not (equal (min_int<32>) (nth n2 mem))) 
+    (implies (not (equal (min_int<32>) (nth n2 mem)))
 	     (< (MIN_INT<32>) (nth n2 mem)))
     (integerp (nth n2 mem))
     (rationalp (nth n2 mem))
@@ -391,7 +396,7 @@ September 1999
   (if (not (consp list)) st
       (let ((st (update-memi address (car list) st)))
 	(load-memory-block (+|10| address 1) (cdr list) st))))
-  
+
 (defun load-memory (assoc st)
   (declare (xargs :stobjs (st)
 		  :verify-guards nil))
@@ -446,7 +451,7 @@ September 1999
 				 sub
 				 jumpz 45
                                  jump 49
-				 pushsi 0 ;45 
+				 pushsi 0 ;45
 				 pop 18
 				 pop 19   ;49
 				 pushs 18
@@ -458,7 +463,7 @@ September 1999
   (let ((st (load-tiny 4 (list (cons 4 *mod-caller-prog*) (cons 20 *mod-prog*)) st)))
     (tiny st n)))
 
-#|  
+#|
 ACL2 !>:q
 
 Exiting the ACL2 read-eval-print loop.  To re-enter, execute (LP).
@@ -510,14 +515,14 @@ ACL2>
 ;;; The proof begins with many preliminaries that help us reason about
 ;;; programs of this type.
 
-;;; We are not interested in guard-proofs about functions we 
+;;; We are not interested in guard-proofs about functions we
 ;;; use for specification and proof
-(set-verify-guards-eagerness 0) 
+(set-verify-guards-eagerness 0)
 
 ;; Is "program" loaded at "location" in Tiny state?
 (defun program-loaded (st program location)
   (declare (xargs :stobjs (st)))
-  (if (consp program) 
+  (if (consp program)
       (and
        (equal (memi location st) (car program))
        (program-loaded st (cdr program) (1+ location)))
@@ -558,7 +563,7 @@ ACL2>
     (>= y 0))
    (equal (+bv32 x (- y)) (+ x (- y))))
   :hints (("goal" :in-theory (enable +bv32 signed-byte-p))))
-  
+
 (defthm logand-1023-hack
   (implies
    (and
@@ -580,7 +585,7 @@ ACL2>
 (defthm tiny-straightline
   (implies
    (syntaxp (quotep n))
-   (equal (tiny st n) 
+   (equal (tiny st n)
 	  (if (zp n) st (tiny (next st) (1- n)))))
   :hints (("goal" :in-theory (disable next))))
 
@@ -748,7 +753,7 @@ ACL2>
 
 (defthm car-update-nth
   (equal (car (update-nth i v l)) (if (zp i) v (car l)))
-  :hints (("goal" :in-theory (enable update-nth))))  
+  :hints (("goal" :in-theory (enable update-nth))))
 
 (defthm len-pushus
   (implies
@@ -846,7 +851,7 @@ ACL2>
     (< (unary-- n2) n1)))
   :hints (("goal" :use (:instance iff-equal (x (< (unary-- n1) n2)) (y (< (unary-- n2) n1))))))
 
-;; We start proving facts about the benchmark 
+;; We start proving facts about the benchmark
 
 ;; Effect of running loop once (taken from theorem prover output)
 (defun mod-loop-once-effect (st)

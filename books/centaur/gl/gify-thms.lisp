@@ -30,13 +30,12 @@
 
 (in-package "GL")
 ;; (include-book "gify-clause-proc")
-(include-book "std/misc/two-nats-measure" :dir :system)
+(include-book "std/basic/two-nats-measure" :dir :system)
 (include-book "generic-geval")
 (include-book "gtypes")
 (include-book "general-objects")
 (include-book "gl-mbe")
 (local (include-book "gtype-thms"))
-(local (include-book "gobjectp-thms"))
 (local (include-book "general-object-thms"))
 (local (include-book "hyp-fix"))
 

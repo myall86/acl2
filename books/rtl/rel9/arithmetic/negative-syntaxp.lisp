@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -52,7 +40,7 @@ negative" regardless of the sign of the value of x.
   (if (not (consp term))
       nil
     (case (car term)
-      (quote (and (rationalp (cadr term)) 
+      (quote (and (rationalp (cadr term))
                   (< (cadr term) 0)))
       (unary-- (not (negative-syntaxp (cadr term))))  ;perhaps we should use "positive-syntaxp" here...
       (binary-+ (and ;(equal (length term) 3) ;ok since binary-+ should always have 2 args
@@ -91,15 +79,15 @@ pos
  a product with an even number of negative factors
  a sum of two or more positive terms?
 
-It might be nice to someday decide how to handle a mixed sum.  For example, we might prefer 
+It might be nice to someday decide how to handle a mixed sum.  For example, we might prefer
   (integerp (+ 2 (* -1 x) y))
 to
-  (integerp (+ -1 x (* -1 y)) 
-since the former has one fewer negated addend.  And, when exactly half the terms are negated, we might prefer 
+  (integerp (+ -1 x (* -1 y))
+since the former has one fewer negated addend.  And, when exactly half the terms are negated, we might prefer
   (integerp (+ x (* -1 y)))
 to
   (integerp (+ (* -1 x) y))
-since the latter has the negation around the "smaller" term.  Or something like that. 
+since the latter has the negation around the "smaller" term.  Or something like that.
 
 
 so that the rules don't loop, we must ensure that a negative term * -1 is not negative

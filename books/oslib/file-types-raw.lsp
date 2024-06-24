@@ -40,10 +40,17 @@
          (osicat::file-kind path :follow-symlinks follow-symlinks)
        (cond ((and follow-symlinks broken)
               (assert (eq main-kind :symbolic-link))
-              (mv (msg "Error in file-kind for ~x0: broken symlink." path)
-                  nil))
+              (mv nil :broken-symbolic-link))
              ((file-kind-p main-kind)
-              (mv nil main-kind))
+              (mv nil
+
+; Work around issue with LispWorks, which returns nil for the application of
+; osicat::file-kind to "."  and to "./".
+
+                  (cond ((and (null main-kind)
+			      (member path '("." "./") :test 'equal))
+			 :DIRECTORY)
+			(t main-kind))))
              (t
               (mv (msg "Error in file-kind for ~x0: osicat::file-kind returned ~
                         unexpected value ~s1."

@@ -36,13 +36,15 @@
 (verify-termination arglistp1)
 (verify-termination arglistp)
 (verify-termination lambda-keywordp)
-(verify-termination legal-constantp1)
 
 (verify-guards legal-variable-or-constant-namep)
 (verify-guards legal-variablep)
 (verify-guards arglistp1)
 (verify-guards arglistp)
 (verify-guards lambda-keywordp)
+
+(verify-termination legal-constantp ; and guards [added by Matt K.]
+  (declare (xargs :verify-guards t)))
 
 (verify-termination find-first-bad-arg ; See later in file for verify-guards.
                     (declare (xargs :verify-guards nil)))

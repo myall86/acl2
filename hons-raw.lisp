@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 8.4 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2022, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -256,7 +256,7 @@
   #+gcl
 
 ; Camm Maguire tells us that conses are always 16-byte aligned in 64-bit GCL
-; and 8-bit aligned in 32-bit GCL.
+; and 8-byte aligned in 32-bit GCL.
 
   `(the fixnum
         (ash (the fixnum (si::address ,x))
@@ -306,7 +306,7 @@
 ;
   `(the fixnum (ash (the fixnum
                          (logand #x1FFFFF
-				 #+gcl (ash (si::address ,x) -4)
+                                 #+gcl (ash (si::address ,x) -4)
                                  #+ccl (ccl::strip-tag-to-fixnum ,x)
                                  #-(or gcl ccl)
                                  (error "~s is not implemented in this Lisp."
@@ -913,7 +913,18 @@
 ; is fixed in CCL, in which case this code could be simplified.
 
   (let ((table (hl-mht :test #'eq :size (max 100 fal-ht-size)
-; We could specify :lock-free t, but perhaps it's faster with default nil.
+
+; In early 2019, Rob Sumners told us that Centaur was hitting an apparent bug
+; in how CCL resizes :weak :key hash-tables with :lock-free nil.  He and the
+; Centaur folks suggested, after he did some timing tests, that we work around
+; that issue by using :lock-free t here.  Our own stress test (see the comment
+; in mf-mht about an experiment in directory books/centaur/esim/tutorial/)
+; showed about 1/2% slowdown with :lock-free t here.  On March 22, 2019, Rob
+; Sumners followed up to request that :lock-free is once again (the default of)
+; nil.  He let us know at that time that CCL has been stable for awhile and
+; that there were issues when :lock-free t tables were stressed.  Thus, we no
+; longer include :lock-free t for #+ccl.
+
                        :weak :key)))
     #+ccl
     ;; This isn't necessary with lock-free, but doesn't hurt.  Note that T is
@@ -1138,7 +1149,7 @@
                                (18cdrs (cddr 16cdrs)))
                           (consp 18cdrs)))))))))
 
-(defabbrev hl-flex-assoc (key al)
+(defmacro hl-flex-assoc (key al)
 
 ; (hl-flex-assoc key al) returns the entry associated with key, or returns nil
 ; if key is not bound.  Note that the comparisons performed by flex-assoc are
@@ -1172,9 +1183,11 @@
 ;    NIL
 ;    ?
 
-  (if (listp al)
-      (assoc key al)
-    (gethash key (the hash-table al))))
+  `(let ((key ,key)
+         (al ,al))
+     (if (listp al)
+         (assoc key al)
+       (gethash key (the hash-table al)))))
 
 (defmacro hl-flex-acons (elem al &optional shared)
 
@@ -1245,7 +1258,7 @@
                 (= 1 (the fixnum (aref sbits (the fixnum idx)))))))))
 
 #-static-hons
-(defabbrev hl-hspace-find-flex-alist-for-cdr (b ctables)
+(defmacro hl-hspace-find-flex-alist-for-cdr (b ctables)
 
 ; (HL-HSPACE-FIND-FLEX-ALIST-FOR-CDR B CTABLES) --> FLEX ALIST
 ;
@@ -1255,14 +1268,16 @@
 ; though the NIL-HT starts out as a hash table, we can still regard it as a
 ; flex alist.
 
-  (cond ((null b)
-         (hl-ctables-nil-ht ctables))
-        ((or (consp b)
-             (symbolp b)
-             (stringp b))
-         (gethash b (hl-ctables-cdr-ht ctables)))
-        (t
-         (gethash b (hl-ctables-cdr-ht-eql ctables)))))
+  `(let ((b ,b)
+         (ctables ,ctables))
+     (cond ((null b)
+            (hl-ctables-nil-ht ctables))
+           ((or (consp b)
+                (symbolp b)
+                (stringp b))
+            (gethash b (hl-ctables-cdr-ht ctables)))
+           (t
+            (gethash b (hl-ctables-cdr-ht-eql ctables))))))
 
 (declaim (inline hl-hspace-honsp))
 (defun hl-hspace-honsp (x hs)
@@ -1495,7 +1510,7 @@
          'hl-with-lock-grabbed))
 
 #+static-hons
-(defabbrev hl-symbol-addr (s)
+(defmacro hl-symbol-addr (s)
 
 ; (HL-SYMBOL-ADDR S) --> NAT
 ;
@@ -1519,28 +1534,29 @@
 ; without-interrupts because installing the new 'hl-static-address cons is a
 ; single setf.
 
-  (let ((addr-cons (get (the symbol s) 'hl-static-address)))
-    (if addr-cons
-        ;; Already have an address.  ADDR-CONS = (S . TRUE-ADDR), where
-        ;; TRUE-ADDR is Index(ADDR-CONS) + BASE.  So, we just need to
-        ;; return the TRUE-ADDR.
-        (cdr addr-cons)
-      ;; We need to assign an address.  Must lock!
-      (hl-with-lock-grabbed
-       (*hl-symbol-addr-lock*)
-       ;; Some other thread might have assigned S an address before we
-       ;; got the lock.  So, double-check and make sure that there still
-       ;; isn't an address.
-       (setq addr-cons (get (the symbol s) 'hl-static-address))
+  `(let ((s ,s))
+     (let ((addr-cons (get (the symbol s) 'hl-static-address)))
        (if addr-cons
+           ;; Already have an address.  ADDR-CONS = (S . TRUE-ADDR), where
+           ;; TRUE-ADDR is Index(ADDR-CONS) + BASE.  So, we just need to
+           ;; return the TRUE-ADDR.
            (cdr addr-cons)
-         ;; Okay, safe to generate a new address.
-         (let* ((new-addr-cons (hl-static-cons s nil))
-                (true-addr     (+ hl-dynamic-base-addr
-                                  (hl-staticp new-addr-cons))))
-           (rplacd (the cons new-addr-cons) true-addr)
-           (setf (get (the symbol s) 'hl-static-address) new-addr-cons)
-           true-addr))))))
+         ;; We need to assign an address.  Must lock!
+         (hl-with-lock-grabbed
+          (*hl-symbol-addr-lock*)
+          ;; Some other thread might have assigned S an address before we
+          ;; got the lock.  So, double-check and make sure that there still
+          ;; isn't an address.
+          (setq addr-cons (get (the symbol s) 'hl-static-address))
+          (if addr-cons
+              (cdr addr-cons)
+            ;; Okay, safe to generate a new address.
+            (let* ((new-addr-cons (hl-static-cons s nil))
+                   (true-addr     (+ hl-dynamic-base-addr
+                                     (hl-staticp new-addr-cons))))
+              (rplacd (the cons new-addr-cons) true-addr)
+              (setf (get (the symbol s) 'hl-static-address) new-addr-cons)
+              true-addr)))))))
 
 #+static-hons
 (defun hl-addr-of-unusual-atom (x str-ht other-ht)
@@ -1632,25 +1648,27 @@
      b))
 
 #+static-hons
-(defabbrev hl-addr-combine* (a b)
+(defmacro hl-addr-combine* (a b)
   ;; Inlined version of hl-addr-combine, defined in community book
   ;; books/system/hl-addr-combine.lisp.  See that book for all documentation
   ;; and a proof that this function is one-to-one.  The only change we make
   ;; here is to use typep to see if the arguments are fixnums in the
   ;; comparisons, which speeds up our test loop by about 1/3.
-  (if (and (typep a 'fixnum)
-           (typep b 'fixnum)
-           (< (the fixnum a) 1073741824) ; (expt 2 30)
-           (< (the fixnum b) 1073741824))
-      ;; Optimized version of the small case
-      (the (signed-byte 61)
-           (- (the (signed-byte 61)
-                   (logior (the (signed-byte 61)
-                                (ash (the (signed-byte 31) a) 30))
-                           (the (signed-byte 31) b)))))
-    ;; Large case.
-    (- (hl-nat-combine* a b)
-       576460752840294399))) ; (+ (expt 2 59) (expt 2 29) -1)
+  `(let ((a ,a)
+         (b ,b))
+     (if (and (typep a 'fixnum)
+              (typep b 'fixnum)
+              (< (the fixnum a) 1073741824) ; (expt 2 30)
+              (< (the fixnum b) 1073741824))
+         ;; Optimized version of the small case
+         (the (signed-byte 61)
+              (- (the (signed-byte 61)
+                      (logior (the (signed-byte 61)
+                                   (ash (the (signed-byte 31) a) 30))
+                              (the (signed-byte 31) b)))))
+       ;; Large case.
+       (- (hl-nat-combine* a b)
+          576460752840294399)))) ; (+ (expt 2 59) (expt 2 29) -1)
 
 
 ; ----------------------------------------------------------------------
@@ -1802,6 +1820,7 @@
     (format note-stream "; Hons-Note: ADDR-LIMIT reached, ~:D used of ~:D slots.~%"
             (hash-table-count (hl-hspace-addr-ht hs))
             (hash-table-size (hl-hspace-addr-ht hs)))
+    (force-output note-stream)
 
     (unless (> (hash-table-size (hl-hspace-addr-ht hs)) *hl-addr-limit-minimum*)
       ;; The table is small so it's not worth doing anything.  So, just bump up
@@ -1816,7 +1835,8 @@
     (when *hl-addr-limit-should-clear-memo-tables*
       (clear-memoize-tables))
 
-    (hl-hspace-hons-wash hs)
+    (time$ (hl-hspace-hons-wash hs)
+           :msg "; Hons-wash: ~st sec, ~sa bytes~%")
 
     (format note-stream "; Hons-Note: After ADDR-LIMIT actions, ~:D used of ~:D slots.~%"
             (hash-table-count (hl-hspace-addr-ht hs))
@@ -2062,9 +2082,9 @@
 ; in every call of hons!  On the other hand, we don't want to use a global hash
 ; table that never gets cleaned out, because such a table could grow very large
 ; over time.  Our first solution was to split norming into two functions.  An
-; auxilliary function did all the work, and freely used a hash table without
+; auxiliary function did all the work, and freely used a hash table without
 ; regard to how large it might grow.  Meanwhile, a top-level wrapper function
-; examined the hash table after the auxillary function was finished, and if the
+; examined the hash table after the auxiliary function was finished, and if the
 ; table had been resized, we threw it away and started over.
 ;
 ; Using a global Cache Table nicely solves this problem.  The Cache Table keeps
@@ -2160,7 +2180,7 @@
         (setf (gethash x persist-ht) t)))
     x))
 
-(defabbrev hl-hspace-hons (x y hs)
+(defmacro hl-hspace-hons (x y hs)
 
 ; (HL-HSPACE-HONS X Y HS) --> (X . Y) which is normed, and destructively
 ; updates HS.
@@ -2171,10 +2191,13 @@
 ; Space.  We produce a new cons, (X . Y), destructively extend HS so that this
 ; new cons is considered normed, and return it.
 
-  (declare (type hl-hspace hs))
-  (hl-hspace-hons-normed (hl-hspace-norm x hs)
-                         (hl-hspace-norm y hs)
-                         nil hs))
+  `(let ((x ,x)
+         (y ,y)
+         (hs ,hs))
+     (declare (type hl-hspace hs))
+     (hl-hspace-hons-normed (hl-hspace-norm x hs)
+                            (hl-hspace-norm y hs)
+                            nil hs)))
 
 
 ; ----------------------------------------------------------------------
@@ -2262,22 +2285,74 @@
 ; alists that are bound to them.  This weaker criterion means that the progn
 ; below is adequate.
 
+(defvar *defeat-slow-alist-action*
+
+; Bind this to 'stolen to defeat the slow-alist-action only for stolen fast
+; alists, and to t to defeat the slow-alist-action unconditionally.
+
+  nil)
+
+(defun get-slow-alist-action (stolen-p state)
+
+; Stolen-p is t if we are determing the action on discovering a stolen
+; fast-alist, and is nil otherwise (i.e., slow hons-get).
+
+  (and (if stolen-p
+           (not *defeat-slow-alist-action*)
+         (not (eq *defeat-slow-alist-action* t)))
+       (let* ((alist   (table-alist 'hons (w state)))
+              (warning (hons-assoc-equal 'slow-alist-warning alist)))
+         (and (consp warning)
+              (cdr warning)))))
 
 (defun hl-slow-alist-warning (name)
-  ;; Name is the name of the function wherein we noticed a problem.
-  (let ((action (get-slow-alist-action *the-live-state*)))
+
+; Formerly, name is the name of the function wherein we noticed a problem.
+; However, for the user's sake we typically print a user-friendly version of
+; the name, such as HONS-GET rather than HL-HSPACE-HONS-GET.
+
+  (let ((action (get-slow-alist-action nil *the-live-state*)))
     (when action
-      (format *error-output* "
+      (let* ((path (global-val 'include-book-path
+                              (w *the-live-state*)))
+             (book-string (if path
+                              (concatenate
+                               'string
+                               "
+This violation occurred while attempting to include the book:
+"
+                               (car path))
+                            ""))
+             (normal-string "
 *****************************************************************
 Fast alist discipline violated in ~a.
-See the documentation for fast alists for how to fix the problem,
-or suppress this warning message with~%  ~a~%
-****************************************************************~%"
-              name
-              '(set-slow-alist-action nil))
+See :DOC slow-alist-warning to suppress or break on this warning.~a
+*****************************************************************~%"))
+        #-acl2-par
+        (format *error-output* normal-string name book-string)
+        #+acl2-par
+        (let ((prover-par (and (f-get-global 'waterfall-parallelism *the-live-state*)
+                               (f-get-global 'in-prove-flg *the-live-state*))))
+          (cond ((or prover-par
+                     (f-get-global 'parallel-execution-enabled *the-live-state*))
+                 (format *error-output* "
+*****************************************************************
+Fast alist discipline violated in ~a.  (May be from
+~aparallelism; see :DOC unsupported-~aparallelism-features.)
+See :DOC slow-alist-warning to suppress or break on this warning.~a
+*****************************************************************~%"
+                         name
+                         (if prover-par
+                             "waterfall-"
+                           "")
+                         (if prover-par
+                             "waterfall-"
+                           "")
+                         book-string))
+                (t (format *error-output* normal-string name book-string)))))
       (when (eq action :break)
         (format *error-output* "
-To avoid the following break and get only the above warning:~%  ~a~%"
+To avoid the following break and get only the above warning:~%  ~s~%"
                 '(set-slow-alist-action :warning))
         (break$)))))
 
@@ -2460,7 +2535,7 @@ To avoid the following break and get only the above warning:~%  ~a~%"
         ;; Bad discipline, val is just nil and hence is unusable, look
         ;; up the key slowly in the alist.
         (progn
-          (hl-slow-alist-warning 'hl-hspace-hons-get)
+          (hl-slow-alist-warning 'hons-get)
           (hons-assoc-equal key alist))))))
 
 (defun hl-hspace-hons-acons (key value alist hs)
@@ -2515,7 +2590,7 @@ To avoid the following break and get only the above warning:~%  ~a~%"
 
         (if (not val)
             ;; Discipline failure, no valid backing alist.
-            (hl-slow-alist-warning 'hl-hspace-hons-acons)
+            (hl-slow-alist-warning 'hons-acons)
           (progn ; see warning above
             ;; We temporarily set the KEY to nil to break the old association
             ;; from ALIST to VAL.  Then, install the new entry into the VAL,
@@ -2530,19 +2605,30 @@ To avoid the following break and get only the above warning:~%  ~a~%"
 
 (defun hl-alist-stolen-warning (name)
   ;; Name is the name of the function wherein we noticed a problem.
-  (let ((action (get-slow-alist-action *the-live-state*)))
-    (when action
-      (format *error-output* "
+  (let ((action (get-slow-alist-action t *the-live-state*)))
+    (when (and action
+               (not (eq *defeat-slow-alist-action* 'stolen)))
+      (let ((path (global-val 'include-book-path
+                              (w *the-live-state*))))
+        (format *error-output* "
 *****************************************************************
 Fast alist stolen by ~a.
 See the documentation for fast alists for how to fix the problem,
-or suppress this warning message with~%  ~a~%
+or suppress this warning message with:~%  ~a~a
 ****************************************************************~%"
-              name
-              '(set-slow-alist-action nil))
+                name
+                '(set-slow-alist-action nil)
+                (if path
+                    (concatenate
+                     'string
+                     "
+This violation occurred while attempting to include the book:
+"
+                     (car path))
+                  "")))
       (when (eq action :break)
         (format *error-output* "
-To avoid the following break and get only the above warning:~%  ~a~%"
+To avoid the following break and get only the above warning:~%  ~s~%"
                 '(set-slow-alist-action :warning))
         (break$)))))
 
@@ -2592,7 +2678,7 @@ To avoid the following break and get only the above warning:~%  ~a~%"
 ; Safety for Fast Alists.
 
         (if (not val)
-            (hl-slow-alist-warning 'hl-hspace-hons-acons)
+            (hl-slow-alist-warning 'hons-acons)
           (progn ; see warning above
             (setf (hl-falslot-key slot) nil)
             (setf (gethash key (the hash-table val)) entry)
@@ -2851,7 +2937,7 @@ To avoid the following break and get only the above warning:~%  ~a~%"
 
       (unless ans-table
         ;; Bad discipline.  ANS is not an atom or fast alist.
-        (hl-slow-alist-warning 'hl-hspace-fast-alist-fork)
+        (hl-slow-alist-warning 'fast-alist-fork)
         (return-from hl-hspace-fast-alist-fork
           (hl-fast-alist-fork-aux-really-slow alist ans honsp hs)))
 
@@ -2960,7 +3046,7 @@ To avoid the following break and get only the above warning:~%  ~a~%"
       (if val
           (hash-table-count val)
         (progn
-          (hl-slow-alist-warning 'hl-hspace-fast-alist-len)
+          (hl-slow-alist-warning 'fast-alist-len)
           (let* ((fast-alist (hl-hspace-fast-alist-fork alist nil nil hs))
                  (result     (hl-hspace-fast-alist-len fast-alist hs)))
             (hl-hspace-fast-alist-free fast-alist hs)
@@ -3082,7 +3168,10 @@ To avoid the following break and get only the above warning:~%  ~a~%"
 ; At one time, we thought that ccl::gc only schedules a GC to happen, and we
 ; worked here to ensure that the GC has actually completed.  However, Gary
 ; Byers has explained (4/28/15) that all other threads are suspended until
-; after the thread performing the GC completes the GC.
+; after the thread performing the GC completes the GC.  But based on an email
+; from Bob Boyer sent 2/5/2017, and based on behavior described in
+; a comment in hl-hspace-hons-wash, we no longer believe that garbage
+; collection is complete when gc$ returns.
 
   (gc$))
 
@@ -3102,7 +3191,7 @@ To avoid the following break and get only the above warning:~%  ~a~%"
 ; reinstalled.
 ;
 ; The other arguments are the correspondingly named fields in the hons space,
-; which we assume are detatched from any hons space.  Because of this, we do
+; which we assume are detached from any hons space.  Because of this, we do
 ; not need to worry about interrupts and can freely update the fields in an
 ; order that violates the usual hons space invariants.
 
@@ -3244,7 +3333,7 @@ To avoid the following break and get only the above warning:~%  ~a~%"
 ; STR-HT or (for static honsing) the OTHER-HT.
 ;
 ; The other fields are the corresponding fields from a Hons Space, but we
-; assume they are detatched from any Hons Space and do not need to be updated
+; assume they are detached from any Hons Space and do not need to be updated
 ; in a manner that maintains their invariants in the face of interrupts.
 ;
 ; Note that we don't bother to do anything about the ADDR-LIMIT in this
@@ -3400,23 +3489,32 @@ To avoid the following break and get only the above warning:~%  ~a~%"
 ; (HL-REBUILD-ADDR-HT SBITS ADDR-HT STR-HT OTHER-HT) destructively modifies
 ; ADDR-HT.
 ;
-; This is a subtle function which is really the key to washing.  We assume that
-; SBITS has already been fixed up so that only survivors are marked.  We assume
-; that ADDR-HT is empty to begin with.  We walk over the SBITS and install each
-; survivor into its proper place in the ADDR-HT.
+; This is a subtle function which is really the key to washing.  We expect that
+; SBITS has already been fixed up so that only survivors are marked, but we
+; gracefully handle rare cases when some erstwhile survivors died after SBITS
+; was already fixed up.
+;
+; We assume that ADDR-HT is empty to begin with.  We walk over the SBITS and
+; install each survivor into its proper place in the ADDR-HT.
 ;
 ; The STR-HT and OTHER-HT are only needed for address computations.
 
   (declare (type (simple-array bit (*)) sbits)
            (type hash-table addr-ht))
-  (let ((max-index (length sbits)))
-    (declare (fixnum max-index))
+  (let ((max-index (length sbits))
+        (num-dead-survivors 0))
+    (declare (fixnum max-index)
+             (fixnum num-dead-survivors))
     (loop for i fixnum below max-index do
           (when (= (aref sbits i) 1)
             ;; This object was previously normed.
             (let ((object (hl-static-inverse-cons i)))
               (cond ((not object)
-                     (error "Expected SBITS to already be fixed up."))
+                     ;; SBITS contained an inconsistent entry, meaning that
+                     ;; some static cons was freed after SBITS was fixed up.
+                     ;; We amend SBITS on the fly to account for this.
+                     (setf (aref sbits i) 0)
+                     (incf num-dead-survivors))
                     (t
                      (let* ((a      (car object))
                             (b      (cdr object))
@@ -3429,7 +3527,17 @@ To avoid the following break and get only the above warning:~%  ~a~%"
                             (addr-a (hl-addr-of a str-ht other-ht))
                             (addr-b (hl-addr-of b str-ht other-ht))
                             (key    (hl-addr-combine* addr-a addr-b)))
-                       (setf (gethash key addr-ht) object)))))))))
+                       (setf (gethash key addr-ht) object)))))))
+    (when (< 0 num-dead-survivors)
+      (let ((note-stream (get-output-stream-from-channel *standard-co*)))
+        (format
+         note-stream
+         "; Hons-Note: ~:D conses unexpectedly disappeared before we could~%~
+          ;   restore them, probably because additional garbage collection~%~
+          ;   passes occurred after washing.  This is safe, but means that~%~
+          ;   we may have allocated more space than necessary for ADDR-HT.~%"
+         num-dead-survivors)
+        (force-output note-stream)))))
 
 #+static-hons
 (defparameter *hl-addr-ht-resize-cutoff*
@@ -3906,7 +4014,7 @@ To avoid the following break and get only the above warning:~%  ~a~%"
   (hl-maybe-initialize-default-hs))
 
 (defun hons (x y)
-  ;; hl-hspace-hons is inlined via defabbrev
+  ;; hl-hspace-hons is inlined via defmacro
   (hl-maybe-initialize-default-hs)
   (hl-hspace-hons x y *default-hs*))
 
@@ -3954,7 +4062,7 @@ To avoid the following break and get only the above warning:~%  ~a~%"
              #-ccl
 
 ; Currently only CCL, SBCL, and LispWorks support ACL2(p) builds.  We do not
-; currently have sufficient confidents in worker-threads for SBCL and LispWorks
+; currently have sufficient confidence in worker-threads for SBCL and LispWorks
 ; (as per email from David Rager, 4/18/2015) to use the test above, so for
 ; those Lisps we simply insist on using hons-clear! instead when parallel
 ; execution is enabled.
@@ -4154,15 +4262,4 @@ To avoid the following break and get only the above warning:~%  ~a~%"
     ,form
     (fast-alist-free ,alist)))
 
-;  COMPATIBILITY WITH OLD HONS FUNCTIONS ------------------------
-
-(defun clear-hash-tables ()
-  (clear-memoize-tables)
-  #+static-hons (hons-wash)
-  #-static-hons (hons-clear t))
-
-(defun wash-memory ()
-  ;; Deprecated.
-  (clear-memoize-tables)
-  (hons-wash))
 

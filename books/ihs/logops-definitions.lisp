@@ -124,12 +124,14 @@
 (defsection bitp-basics
   :parents (bitp)
 
-  (defthm bitp-forward
-    (implies (bitp i)
-             (and (integerp i)
-                  (>= i 0)
-                  (< i 2)))
-    :rule-classes :forward-chaining)
+  ;; [Jared] 2016-04-08: I think we shouldn't need this now that bitp is
+  ;; more deeply known to type-set.
+  ;; (defthm bitp-forward
+  ;;   (implies (bitp i)
+  ;;            (and (integerp i)
+  ;;                 (>= i 0)
+  ;;                 (< i 2)))
+  ;;   :rule-classes :forward-chaining)
 
   (defthm bitp-mod-2
     (implies (integerp i)
@@ -155,12 +157,11 @@
                   (< i (expt 2 bits))))
     :rule-classes :forward-chaining)
 
-  (defthm unsigned-byte-p-unsigned-byte-p
+  (defthmd unsigned-byte-p-unsigned-byte-p
     (implies (and (unsigned-byte-p size i)
                   (integerp size1)
                   (>= size1 size))
              (unsigned-byte-p size1 i))
-    :rule-classes nil
     :hints (("Goal" :in-theory (disable expt-is-weakly-increasing-for-base>1)
              :use ((:instance expt-is-weakly-increasing-for-base>1
                     (r 2) (i size) (j size1)))))))
@@ -177,13 +178,13 @@
 
   <ol>
 
-  <li><it>Arithmetic</it> -- Leave unsigned-byte-p's regular definition
-  enabled and try to reason about the resulting inequalities.  This sometimes
-  works and may be a good approach if you have goals involving \"non bit-vector
+  <li><i>Arithmetic</i> -- Leave unsigned-byte-p's regular definition enabled
+  and try to reason about the resulting inequalities.  This sometimes works and
+  may be a good approach if you have goals involving \"non bit-vector
   functions\" like +, *, /, etc.  I usually don't use this approach but I
   haven't done a lot of proofs about true arithmetic functions.</li>
 
-  <li><it>Induction</it> -- Disable unsigned-byte-p's regular definition but
+  <li><i>Induction</i> -- Disable unsigned-byte-p's regular definition but
   instead enable an alternate definition, e.g., the
   centaur/bitops/ihsext-basics book has unsigned-byte-p**, which is a recursive
   version that works well for induction.  This definition is in the
@@ -192,10 +193,10 @@
   unsigned-byte-p but is probably mainly useful when reasoning about new
   recursive functions.</li>
 
-  <li><it>Vector</it> -- Leave @(see unsigned-byte-p) disabled except to
-  prove lemmas, and expect to reason about (unsigned-byte-p n x) via lemmas.  I
-  think I usually prefer this strategy as it feels more reliable/less magical
-  than reasoning about arithmetic inequalities.  Some useful books:
+  <li><i>Vector</i> -- Leave @(see unsigned-byte-p) disabled except to prove
+  lemmas, and expect to reason about (unsigned-byte-p n x) via lemmas.  I think
+  I usually prefer this strategy as it feels more reliable/less magical than
+  reasoning about arithmetic inequalities.  Some useful books:
 
     <ol>
 
@@ -224,7 +225,7 @@
   reason you do want to use them then that is probably basically fine.  Note
   here that you have some choice for your fixing function.  You can fix to 0 as
   you've done in your examples, but you might instead prefer to fix to
-  @'(loghead n x)').  Why?  When you use loghead, it preserves the lower @('N')
+  @('(loghead n x)').  Why?  When you use loghead, it preserves the lower @('N')
   bits, and this may interact much more nicely with rules about true bit-vector
   functions.  This approach is also good for GL, where loghead is supported in
   an especially good way.</p>
@@ -245,8 +246,8 @@
    (defthm lousy-unsigned-byte-p-of-*-mixed
      ;; Probably won't ever unify with anything.
      (implies (and (unsigned-byte-p n1 a)
-		   (unsigned-byte-p n2 b))
-	      (unsigned-byte-p (+ n1 n2) (* a b)))
+                   (unsigned-byte-p n2 b))
+              (unsigned-byte-p (+ n1 n2) (* a b)))
      :hints((\"Goal\" :use ((:instance upper-bound)))))
   })
 
@@ -260,7 +261,7 @@
   <p>If you find yourself going down this road, you might see in particular Dave
   Greve's \"Parameterized Congruences\" paper from the 2006 workshop, which is
   implemented in the coi/nary/nary.lisp book.  You could also look at Sol
-  Swords' book to do something similar, see :doc contextual-rewriting.</p>")
+  Swords' book to do something similar, see @(see contextual-rewriting).</p>")
 
 
 (defsection signed-byte-p-basics
@@ -462,6 +463,14 @@
   (defthm loghead-upper-bound
     (< (loghead size i) (expt 2 size))
     :rule-classes (:linear :rewrite)))
+
+
+(defmacro lloghead (n x)
+  ;; bozo maybe should be a function?
+  ;; Useful for guard of (unsigned-byte-p n x).
+  `(mbe :logic (loghead ,n ,x)
+        :exec ,x))
+
 
 (local (in-theory (disable loghead)))
 
@@ -951,7 +960,7 @@ function.
     binary-LOGXOR binary-LOGAND binary-LOGEQV LOGNAND LOGNOR LOGANDC1
     LOGANDC2 LOGORC1 LOGORC2 LOGNOT LOGTEST LOGBITP ASH
     LOGCOUNT INTEGER-LENGTH
-    BITP$inline
+    BITP
     SIGNED-BYTE-P
     UNSIGNED-BYTE-P
     LOGCAR$inline
@@ -1129,7 +1138,7 @@ DEFUN-TYPE/EXEC-THEORY of the functions.</li>
             (:SIGNED `(SIGNED-BYTE-P ,size X))
             (:UNSIGNED `(UNSIGNED-BYTE-P ,size X))))
        (DEFUN ,name (I)
-         ,@(when$ doc (list doc))
+         ,@(when$cl doc (list doc))
          (DECLARE (XARGS :GUARD (INTEGERP I)))
          ,(case s/u
             (:SIGNED `(LOGEXT ,size I))
@@ -1148,22 +1157,22 @@ DEFUN-TYPE/EXEC-THEORY of the functions.</li>
              (:UNSIGNED `(AND (INTEGERP X)
 			      (>= X 0)))))
          :RULE-CLASSES :FORWARD-CHAINING)
-       ,@(when$ saturating-coercion
+       ,@(when$cl saturating-coercion
            (list
             `(DEFUN ,saturating-coercion (I)
                (DECLARE (XARGS :GUARD (INTEGERP I)))
 	       (LOGSAT ,size I))
             `(DEFTHM ,sat-lemma
 	       (,predicate (,saturating-coercion I)))))
-       (IN-THEORY (DISABLE ,predicate ,name ,@(when$ saturating-coercion
+       (IN-THEORY (DISABLE ,predicate ,name ,@(when$cl saturating-coercion
                                                 (list saturating-coercion))))
        (DEFTHEORY ,theory
          (UNION-THEORIES
           (DEFUN-TYPE/EXEC-THEORY
-            '(,predicate ,name ,@(when$ saturating-coercion
+            '(,predicate ,name ,@(when$cl saturating-coercion
                                    (list saturating-coercion))))
           '(,predicate-lemma ,coercion-lemma ,forward-lemma
-			     ,@(when$ saturating-coercion
+			     ,@(when$cl saturating-coercion
 				 (list sat-lemma))))))))
 
 ;;;****************************************************************************
@@ -1522,4 +1531,3 @@ building the word.</p>"
     (cond
      ((endp bits) 0)
      (t `(LOGAPP 1 ,(car bits) (MAKE-WORD-FROM-BITS ,@(cdr bits)))))))
-

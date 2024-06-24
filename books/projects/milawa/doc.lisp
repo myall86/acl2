@@ -64,9 +64,9 @@ so on.  In this way, Milawa discovers its own soundness proof, hence
 \"self-verifying\".</p>
 
 <p>Milawa was originally developed as part of <a
-href='http://www.cs.utexas.edu/users/jared/'>Jared Davis'</a>
+href='https://www.kookamara.com/jared/'>Jared Davis'</a>
 Ph.D. dissertation, <a
-href='http://www.cs.utexas.edu/users/jared/milawa/Documentation/dissertation.pdf'>A
+href='https://www.kookamara.com/jared/milawa/Documentation/dissertation.pdf'>A
 self-verifying theorem prover.</a>.  The dissertation covers the process
 described above, i.e., it explains how the question of trusting the prover's
 tactics may be reduced to that of trusting its kernel.  The kernel and its
@@ -87,9 +87,7 @@ correctness of a heuristic, Boyer-Moore style theorem prover, all the way down
 to the x86 machine code that runs it.</p>
 
 <p>Milawa is <a href='http://www.gnu.org/philosophy/free-sw.html'>free
-software</a> released under the <a
-href='http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt'>GNU General Public
-License</a>, \"version 2 or later.\"</p>
+software</a> released under an MIT/X11 style license.</p>
 
 <p>See @(see build) for information about how to obtain and build Milawa.</p>
 
@@ -99,10 +97,10 @@ License</a>, \"version 2 or later.\"</p>
 <p>The authoritative description of Milawa is:</p>
 
 <box><p>Jared Davis.  <i><a
-href=\"http://www.cs.utexas.edu/users/jared/milawa/Documentation/dissertation.pdf\">A
+href=\"https://www.kookamara.com/jared/milawa/Documentation/dissertation.pdf\">A
 self-verifying theorem prover</a></i>. Ph.D. thesis, University of Texas at
 Austin, December 2009.  <a
-href=\"http://www.cs.utexas.edu/users/jared/milawa/Documentation/defense.pdf\">Defense
+href=\"https://www.kookamara.com/jared/milawa/Documentation/defense.pdf\">Defense
 slides.</a> See also @(see errata).</p></box>
 
 <p>See @(see jitawa) for information about Jitawa and the HOL4 verification of
@@ -117,37 +115,37 @@ and how things went.</p>
 <ul>
 
 <li>Jared Davis. <i><a
-href=\"http://www.cs.utexas.edu/users/jared/milawa/Documentation/Rewriter/rewrite.pdf\">The
+href=\"https://www.kookamara.com/jared/milawa/Documentation/Rewriter/rewrite.pdf\">The
 Milawa rewriter<br/>and an ACL2 proof of its soundness</a></i>.  Unpublished.
 October 5, 2007.</li>
 
 <li>Jared Davis.  <i><a
-href='http://www.cs.utexas.edu/users/jared/milawa/Documentation/Proposal/proposal-web.pdf'>A
+href='https://www.kookamara.com/jared/milawa/Documentation/Proposal/proposal-web.pdf'>A
 trustworthy, extensible theorem prover</a></i>.  Ph.D. dissertation proposal.
 October 22, 2007.  Also a technical report: The University of Texas at Austin,
 Department of Computer Sciences, <a
 href=\"ftp://ftp.cs.utexas.edu/pub/techreports/tr08-14.pdf\">Report
 #TR-08-14</a>, March 2008.  See also the <a
-href='http://www.cs.utexas.edu/users/jared/milawa/Documentation/Proposal/oral/proposal.pdf'>slides</a>
+href='https://www.kookamara.com/jared/milawa/Documentation/Proposal/oral/proposal.pdf'>slides</a>
 from the proposal talk.</li>
 
 <li>Jared Davis.  <i><a
-href=\"http://www.cs.utexas.edu/users/jared/milawa/Documentation/Talks/2007-11-acl2-rewriter/rewriter.pdf\">The
+href=\"https://www.kookamara.com/jared/milawa/Documentation/Talks/2007-11-acl2-rewriter/rewriter.pdf\">The
 Milawa rewriter and an ACL2 proof of its soundness</a></i><br/> Slides from the
 <a href=\"http://www.cs.uwyo.edu/~ruben/acl2-07/\">ACL2 Workshop
 2007</a>. November 16, 2007.</li>
 
 <li>Jared Davis.  <i><a
-href=\"http://www.cs.utexas.edu/users/jared/milawa/Documentation/Talks/2007-03-28-acl2-meeting/Update.pdf\">Tactics
+href=\"https://www.kookamara.com/jared/milawa/Documentation/Talks/2007-03-28-acl2-meeting/Update.pdf\">Tactics
 and tracing</a></i>.  Slides from an ACL2 Seminar talk, March 28, 2007.</li>
 
 <li>Jared Davis.  <i><a
-href=\"http://www.cs.utexas.edu/users/jared/milawa/Documentation/Talks/2006-summer-acl2/talk.pdf\">Adding
+href=\"https://www.kookamara.com/jared/milawa/Documentation/Talks/2006-summer-acl2/talk.pdf\">Adding
 a computation rule</a></i>.  Slides from an ACL2 Seminar talk, August 2,
 2006.</li>
 
 <li>Jared Davis.  <i><a
-href=\"http://www.cs.utexas.edu/users/jared/milawa/Documentation/Talks/2005-11-acl2-talk/talk.pdf\">Milawa:
+href=\"https://www.kookamara.com/jared/milawa/Documentation/Talks/2005-11-acl2-talk/talk.pdf\">Milawa:
 an extensible proof checker</a></i>.  Slides form an ACL2 Seminar talk,
 November 16, 2005.</li>
 
@@ -186,14 +184,14 @@ also be interested in the following papers and slides.</p>
 <ul>
 
 <li>Magnus Myreen and Jared Davis.  <i><a
-href=\"http://www.cs.utexas.edu/users/jared/publications/2012-itp-milawa/2012-itp-milawa.pdf\">The
+href=\"https://www.kookamara.com/jared/publications/2012-itp-milawa/2012-itp-milawa.pdf\">The
 reflective Milawa theorem prover is sound (down to the machine code that runs
 it)</a></i>.  Unpublished.  There are also related <a
-href=\"http://www.cs.utexas.edu/users/jared/milawa/Documentation/Talks/2012-northeastern/milawa-northeastern.pdf\">Slides</a>
+href=\"https://www.kookamara.com/jared/milawa/Documentation/Talks/2012-northeastern/milawa-northeastern.pdf\">Slides</a>
 from Jared's July 2012 talk at Northeastern University.</li>
 
 <li>Magnus Myreen and Jared Davis.  <i><a
-href=\"http://www.cs.utexas.edu/users/jared/publications/2011-itp-jitawa/2011-itp-jitawa.pdf\">A
+href=\"https://www.kookamara.com/jared/publications/2011-itp-jitawa/2011-itp-jitawa.pdf\">A
 verified runtime for a verified theorem prover</a></i>.  ITP 2011.</li>
 
 </ul>")
@@ -569,14 +567,14 @@ Books, because building it:</p>
 <ul>
 <li>takes several hours</li>
 <li>requires a lot of memory and hard disk space, and</li>
-<li>requires both Clozure Common Lisp (CCL) and ACL2(h).</li>
+<li>requires Clozure Common Lisp (CCL).</li>
 </ul>
 
 <p>Instead, to build Milawa, you should:</p>
 
 <ol>
 
-<li>Build CCL and ACL2(h) according to the instructions in
+<li>Build CCL and ACL2 according to the instructions in
 @('books/centaur/README.html').</li>
 
 <li>Then run these commands:
@@ -709,7 +707,7 @@ successful runs Linux machines, I use a ulimit of 65535.</p>
 <h5><a href='http://www.franz.com/products/allegrocl/'>Allegro</a> -- commercial, fast, NOT KNOWN TO WORK</h5>
 
 <p>Instructions:</p>
-<ul> 
+<ul>
   <li>After installing, add a symlink named @('acl') to your $PATH</li>
 </ul>
 
@@ -721,11 +719,11 @@ function to create a copy of Allegro with a larger Lisp heap size, e.g.,</p>
 
 @({
   (build-lisp-image \"big-acl.dxl\"
-                    :lisp-heap-start \"500M\" 
+                    :lisp-heap-start \"500M\"
                     :c-heap-start \"3000M\")
 })
 
-<p>Then, I used <tt>acl -I big-acl.dxl</tt> when building the base Milawa program, but this 
+<p>Then, I used <tt>acl -I big-acl.dxl</tt> when building the base Milawa program, but this
 is still not successful.  It may be that a more recent version of Allegro or more powerful
 computer will be successful.</p>
 
@@ -739,8 +737,8 @@ NOT KNOWN TO WORK</h5>
 </ul>
 
 <p>I have not been able to get <tt>scl</tt> to complete the proofs, as it
-segfaults on me during the proofs in the utilities directory.  I have not spent much 
-effort to debug this, and perhaps the problem is specific to my platform (Linux x86-64) 
+segfaults on me during the proofs in the utilities directory.  I have not spent much
+effort to debug this, and perhaps the problem is specific to my platform (Linux x86-64)
 or fixed in a more recent version.</p>
 
 <h5>Other Lisps?</h5>

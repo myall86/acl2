@@ -1,85 +1,20 @@
 (in-package "RTL")
 
-(include-book "../rel9-rtl-pkg/lib/util")
+(local (include-book "arithmetic-5/top" :dir :system))
+
+(local (include-book "rtl/rel11/support/basic" :dir :system))
+(local (include-book "rtl/rel11/support/bits" :dir :system))
+(include-book "rtl/rel11/support/definitions" :dir :system)
 
 (local (encapsulate ()
 
-(local (include-book "../rel9-rtl-pkg/lib/top"))
-
-(local (include-book "arithmetic-5/top" :dir :system))
+(local (include-book "rtl/rel11/rel9-rtl-pkg/lib/log" :dir :system))
 
 ;; The following lemmas from arithmetic-5 have given me trouble:
 
 (local-in-theory #!acl2(disable |(mod (+ x y) z) where (<= 0 z)| |(mod (+ x (- (mod a b))) y)| |(mod (mod x y) z)| |(mod (+ x (mod a b)) y)|
-                    simplify-products-gather-exponents-equal mod-cancel-*-const cancel-mod-+ reduce-additive-constant-< 
+                    simplify-products-gather-exponents-equal mod-cancel-*-const cancel-mod-+ reduce-additive-constant-<
                     |(floor x 2)| |(equal x (if a b c))| |(equal (if a b c) x)| mod-logand))
-
-;; From basic.lisp:
-
-(defund fl (x)
-  (declare (xargs :guard (real/rationalp x)))
-  (floor x 1))
-
-;; From bits.lisp:
-
-(defund bvecp (x k)
-  (declare (xargs :guard (integerp k)))
-  (and (integerp x)
-       (<= 0 x)
-       (< x (expt 2 k))))
-
-(defund bits (x i j)
-  (declare (xargs :guard (and (integerp x)
-                              (integerp i)
-                              (integerp j))))
-  (mbe :logic (if (or (not (integerp i))
-                      (not (integerp j)))
-                  0
-                (fl (/ (mod x (expt 2 (1+ i))) (expt 2 j))))
-       :exec  (if (< i j)
-                  0
-                (logand (ash x (- j)) (1- (ash 1 (1+ (- i j))))))))
-
-(defund bitn (x n)
-  (declare (xargs :guard (and (integerp x)
-                              (integerp n))))
-  (mbe :logic (bits x n n)
-       :exec  (if (evenp (ash x (- n))) 0 1)))
-
-(defund binary-cat (x m y n)
-  (declare (xargs :guard (and (integerp x)
-                              (integerp y)
-                              (natp m)
-                              (natp n))))
-  (if (and (natp m) (natp n))
-      (+ (* (expt 2 n) (bits x (1- m) 0))
-         (bits y (1- n) 0))
-    0))
-
-(defun formal-+ (x y)
-  (declare (xargs :guard t))
-  (if (and (acl2-numberp x) (acl2-numberp y))
-      (+ x y)
-    (list '+ x y)))
-
-(defun cat-size (x)
-  (declare (xargs :guard (and (true-listp x) (evenp (length x)))))
-  (if (endp (cddr x))
-      (cadr x)
-    (formal-+ (cadr x)
-	      (cat-size (cddr x)))))
-
-(defmacro cat (&rest x)
-  (declare (xargs :guard (and x (true-listp x) (evenp (length x)))))
-  (cond ((endp (cddr x))
-         `(bits ,(car x) ,(formal-+ -1 (cadr x)) 0))
-        ((endp (cddddr x))
-         `(binary-cat ,@x))
-        (t
-         `(binary-cat ,(car x) 
-                      ,(cadr x) 
-                      (cat ,@(cddr x)) 
-                      ,(cat-size (cddr x))))))
 
 
 ;;;**********************************************************************
@@ -173,7 +108,7 @@
 		    (logxor (mod x (expt 2 n))
                             (mod y (expt 2 n)))))
   :hints (("Goal" :use ((:instance bits-logxor (i (1- n)) (j 0)))
-                  :in-theory (enable bits-mod)))) 
+                  :in-theory (enable bits-mod))))
 
 (defthmd fl-logand$
   (implies (and (integerp x)
@@ -198,8 +133,6 @@
            (equal (fl (* (expt 2 (- n)) (logxor x y)))
                   (logxor (fl (* (expt 2 (- n)) x)) (fl (* (expt 2 (- n)) y)))))
   :hints (("Goal" :use ((:instance fl-logxor (k n) (n 0))))))
-
-(local (include-book "bits"))
 
 (local-defthmd logand-cat-1
   (implies (and (case-split (integerp x1))
@@ -365,6 +298,38 @@
 		(+ (* (expt 2 n) x) y)))
   :rule-classes ()
   :hints (("Goal" :use logior-expt)))
+
+(local-defthm logior-2**n-1
+  (implies (and (natp n)
+                (integerp x))
+           (= (mod (logior (expt 2 n) x) (expt 2 (1+ n)))
+              (if (= (bitn x n) 1)
+                  (mod x (expt 2 (1+ n)))
+                (+ (mod x (expt 2 (1+ n))) (expt 2 n)))))
+  :rule-classes ()
+  :hints (("Goal" :use (bitn-0-1
+                        (:instance bitn-plus-bits (m 0))
+                        (:instance logior-cat (x1 (bitn x n)) (y1 (bits x (1- n) 0)) (x2 1) (y2 0) (m 1)))
+                  :in-theory (enable logior-mod bits binary-cat))))
+
+(local-defthm logior-2**n-2
+  (implies (and (natp n)
+                (integerp x))
+           (= (fl (/ (logior (expt 2 n) x) (expt 2 (1+ n))))
+              (fl (/ x (expt 2 (1+ n))))))
+  :rule-classes ()
+  :hints (("Goal" :use (:instance fl-logior$ (x (expt 2 n)) (y x) (n (1+ n))))))
+
+(defthmd logior-2**n
+  (implies (and (natp n)
+                (integerp x))
+           (equal (logior (expt 2 n) x)
+                  (if (= (bitn x n) 1)
+                      x
+                    (+ x (expt 2 n)))))
+  :hints (("Goal" :use (logior-2**n-1 logior-2**n-2
+                        (:instance mod-def (y (expt 2 (1+ n))))
+                        (:instance mod-def (x (logior (expt 2 n) x)) (y (expt 2 (1+ n))))))))
 
 (defthmd logand-bits
     (implies (and (integerp x)
@@ -670,6 +635,21 @@
            (equal (logior x (logand y z))
                   (logand (logior x y) (logior x z)))))
 
+(defthmd logior-logand-1
+  (implies (and (integerp x)
+                (integerp y))
+           (equal (logior x (logand x y))
+                  x))
+  :hints (("Goal"
+           :in-theory (enable bitn-logior bitn-logand)
+           :use ((:instance bit-diff-diff
+                            (y (logior x (logand x y))))
+                 (:instance bitn-0-1
+                            (n (bit-diff x (logior x (logand x y)))))
+                 (:instance bitn-0-1
+                            (x (logior x (logand x y)))
+                            (n (bit-diff x (logior x (logand x y)))))))))
+
 (defthmd logand-logior
   (implies (and (integerp x)
                 (integerp y)
@@ -681,7 +661,7 @@
   (implies (and (integerp x)
                 (integerp y)
                 (integerp z))
-    (equal (logand  (logior y z) x)
+    (equal (logand (logior y z) x)
 	   (logior (logand y x) (logand z x)))))
 
 (defthmd log3
@@ -707,76 +687,6 @@
   :hints (("Goal" :use lognot-logxor)))
 
 ))
-
-;;************************************************************************************
-
-;; From basic.lisp:
-
-(defund fl (x)
-  (declare (xargs :guard (real/rationalp x)))
-  (floor x 1))
-
-;; From bits.lisp:
-
-(defund bvecp (x k)
-  (declare (xargs :guard (integerp k)))
-  (and (integerp x)
-       (<= 0 x)
-       (< x (expt 2 k))))
-
-(defund bits (x i j)
-  (declare (xargs :guard (and (integerp x)
-                              (integerp i)
-                              (integerp j))))
-  (mbe :logic (if (or (not (integerp i))
-                      (not (integerp j)))
-                  0
-                (fl (/ (mod x (expt 2 (1+ i))) (expt 2 j))))
-       :exec  (if (< i j)
-                  0
-                (logand (ash x (- j)) (1- (ash 1 (1+ (- i j))))))))
-
-(defund bitn (x n)
-  (declare (xargs :guard (and (integerp x)
-                              (integerp n))))
-  (mbe :logic (bits x n n)
-       :exec  (if (evenp (ash x (- n))) 0 1)))
-
-(defund binary-cat (x m y n)
-  (declare (xargs :guard (and (integerp x)
-                              (integerp y)
-                              (natp m)
-                              (natp n))))
-  (if (and (natp m) (natp n))
-      (+ (* (expt 2 n) (bits x (1- m) 0))
-         (bits y (1- n) 0))
-    0))
-
-(defun formal-+ (x y)
-  (declare (xargs :guard t))
-  (if (and (acl2-numberp x) (acl2-numberp y))
-      (+ x y)
-    (list '+ x y)))
-
-(defun cat-size (x)
-  (declare (xargs :guard (and (true-listp x) (evenp (length x)))))
-  (if (endp (cddr x))
-      (cadr x)
-    (formal-+ (cadr x)
-	      (cat-size (cddr x)))))
-
-(defmacro cat (&rest x)
-  (declare (xargs :guard (and x (true-listp x) (evenp (length x)))))
-  (cond ((endp (cddr x))
-         `(bits ,(car x) ,(formal-+ -1 (cadr x)) 0))
-        ((endp (cddddr x))
-         `(binary-cat ,@x))
-        (t
-         `(binary-cat ,(car x) 
-                      ,(cadr x) 
-                      (cat ,@(cddr x)) 
-                      ,(cat-size (cddr x))))))
-
 
 ;;;**********************************************************************
 ;;;                       LOGAND, LOGIOR, and LOGXOR
@@ -981,6 +891,14 @@
 	   	    (+ (* (expt 2 n) x) y)))
   :hints (("Goal" :use logior-expt-cor$)))
 
+(defthmd logior-2**n
+  (implies (and (natp n)
+                (integerp x))
+           (equal (logior (expt 2 n) x)
+                  (if (= (bitn x n) 1)
+                      x
+                    (+ x (expt 2 n))))))
+
 (defthmd logand-bits
     (implies (and (integerp x)
 		  (natp n)
@@ -1040,6 +958,28 @@
 		  (case-split (integerp n)))
 	     (equal (bitn (logxor x y) n)
 		    (logxor (bitn x n) (bitn y n)))))
+
+
+
+(defun log-induct (x y)
+  (declare (xargs :measure (abs (* (ifix x) (ifix y)))
+                  :hints (("Subgoal 1" :nonlinearp t
+		                       :use ((:instance fl-half-int (n x))
+                                             (:instance fl-half-int (n y)))))))
+  (if (or (not (integerp x)) (not (integerp y)) (= x 0) (= y 0) (= x y))
+      (+ x y)
+    (log-induct (fl (/ x 2)) (fl (/ y 2)))))
+    
+(defthmd logand-plus-logxor
+  (implies (and (integerp x)
+                (integerp y))
+	   (equal (+ (logand x y) (logxor x y))
+	          (logior x y)))
+  :hints (("Goal" :induct (log-induct x y))
+          ("Subgoal *1/2" :use (logand-def logior-def logxor-def
+			        (:instance mod012 (m x))
+			        (:instance mod012 (m y))))))
+
 
 
 ;;;**********************************************************************
@@ -1269,6 +1209,21 @@
                 (integerp z))
            (equal (logior x (logand y z))
                   (logand (logior x y) (logior x z)))))
+
+(defthmd logior-logand-1
+  (implies (and (integerp x)
+                (integerp y))
+           (equal (logior x (logand x y))
+                  x))
+  :hints (("Goal"
+           :in-theory (enable bitn-logior bitn-logand)
+           :use ((:instance bit-diff-diff
+                            (y (logior x (logand x y))))
+                 (:instance bitn-0-1
+                            (n (bit-diff x (logior x (logand x y)))))
+                 (:instance bitn-0-1
+                            (x (logior x (logand x y)))
+                            (n (bit-diff x (logior x (logand x y)))))))))
 
 (defthmd logand-logior
   (implies (and (integerp x)

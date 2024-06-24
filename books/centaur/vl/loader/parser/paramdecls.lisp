@@ -29,7 +29,8 @@
 ; Original author: Jared Davis <jared@centtech.com>
 
 (in-package "VL")
-(include-book "datatypes")
+(include-book "expressions")
+(include-book "../../parsetree")
 (local (include-book "../../util/arithmetic"))
 
 (defxdoc parse-paramdecls
@@ -131,6 +132,55 @@ data type for a local type parameter.  We enforce this in the parser.</p>")
 
 ; Value Parameters ------------------------------------------------------------
 
+(define vl-update-paramtype-udims ((udims vl-dimensionlist-p)
+                                   (x     vl-paramtype-p))
+  :guard (and (consp udims)
+              (member (vl-paramtype-kind x)
+                      '(:vl-implicitvalueparam :vl-explicitvalueparam)))
+  :returns (new-x vl-paramtype-p)
+  (vl-paramtype-case x
+    :vl-implicitvalueparam
+    ;; Special hack.  We currently believe that there is no difference between
+    ;;
+    ;;    parameter [3:0] foo [1:0] = ...
+    ;;    parameter logic [3:0] foo [1:0] = ...
+    ;;
+    ;; I.e., the presence of unpacked dimensions seems to imply that the
+    ;; parameter has an explicit type.  So: if we started with an implicit
+    ;; parameter and have now encountered some udims, we're going to go ahead
+    ;; and turn it into an explicit parameter right at parse time.
+    (b* ((signedp (cond ((not x.sign) nil)
+                        ((vl-exprsign-equiv x.sign :vl-signed) t)
+                        (t nil)))
+         (pdims (and x.range
+                     (list (vl-range->dimension x.range))))
+         (datatype (make-vl-coretype :name :vl-logic
+                                     :pdims pdims
+                                     :signedp signedp
+                                     :udims udims)))
+      (make-vl-explicitvalueparam :type datatype
+                                  :default x.default
+                                  :final-value nil))
+    :vl-explicitvalueparam
+    (change-vl-explicitvalueparam x :type (vl-datatype-update-udims udims x.type))
+    :otherwise
+    (progn$ (impossible)
+            (vl-paramtype-fix x))))
+
+(local (defthmd vl-dimension-p-when-vl-range-p
+         (implies (vl-range-p x)
+                  (vl-dimension-p x))
+         :hints(("Goal" :expand ((vl-dimension-p x)))
+                (and stable-under-simplificationp
+                     '(:expand ((vl-range-p x) (tag x)))))))
+
+(local (defthm vl-dimensionlist-p-when-vl-rangelist-p
+         (implies (vl-rangelist-p x)
+                  (vl-dimensionlist-p x))
+         :hints(("Goal" :in-theory (enable vl-dimension-p-when-vl-range-p
+                                           vl-rangelist-p
+                                           vl-dimensionlist-p)))))
+
 (defparser vl-parse-param-assignment (atts localp type)
   ;; Verilog-2005:       param_assignment ::= identifier = mintypmax_expression
   ;; SystemVerilog-2012: param_assignment ::= identifier { unpacked_dimension } [ '=' constant_param_expression ]
@@ -146,27 +196,27 @@ data type for a local type parameter.  We enforce this in the parser.</p>")
   (seq tokstream
         (id := (vl-match-token :vl-idtoken))
 
-        (when (vl-parsestate-is-user-defined-type-p (vl-idtoken->name id)
-                                                    (vl-tokstream->pstate))
-          ;; We make this very strict because otherwise it seems that ambiguities
-          ;; can arise.
-          (return-raw
-           (vl-parse-error (cat "Parameter names that shadow types are not supported: " (vl-idtoken->name id)))))
+        (when (not (eq (vl-loadconfig->edition config) :verilog-2005))
+          ;; Per the SystemVerilog-2012 grammar, only unpacked_dimensions, not
+          ;; variable_dimensions, are allowed here.
+          (udims := (vl-parse-0+-unpacked-dimensions)))
 
-        ;; For SystemVerilog-2012, there's an optional {unpacked_dimension} part here.  But we don't
-        ;; support it because we don't know what it's supposed to mean.
-
-        ;; For SystemVerilog-2012, the right hand side is optional but only for non-local parameters.
+        ;; For SystemVerilog-2012, the right hand side is optional but only for
+        ;; non-local parameters.
         (when (and (not (vl-is-token? :vl-equalsign))
                    (not (eq (vl-loadconfig->edition config) :verilog-2005))
                    (not localp))
           ;; Special case: SystemVerilog-2012 with a non-local parameter, so
           ;; we're allowed to not have a default value here.
-          (return (make-vl-paramdecl :loc (vl-token->loc id)
-                                     :name (vl-idtoken->name id)
-                                     :atts atts
-                                     :localp localp
-                                     :type type)))
+          (return
+           (let ((type (if (atom udims)
+                           type
+                         (vl-update-paramtype-udims udims type))))
+             (make-vl-paramdecl :loc (vl-token->loc id)
+                                :name (vl-idtoken->name id)
+                                :atts atts
+                                :localp localp
+                                :type type))))
 
         ;; Otherwise, a default value has been given or is required.
         (:= (vl-match-token :vl-equalsign))
@@ -178,15 +228,19 @@ data type for a local type parameter.  We enforce this in the parser.</p>")
         ;;   (2) The lone $ is already supported as a kind of base expression
         ;; So this all just collapses down into a mintypmax expression.
         (default := (vl-parse-mintypmax-expression))
-        (return (make-vl-paramdecl
-                 :loc (vl-token->loc id)
-                 :name (vl-idtoken->name id)
-                 :atts atts
-                 :localp localp
-                 :type
-                 (if (eq (vl-paramtype-kind type) :vl-implicitvalueparam)
-                     (change-vl-implicitvalueparam type :default default)
-                   (change-vl-explicitvalueparam type :default default))))))
+        (return
+         (let* ((type (if (eq (vl-paramtype-kind type) :vl-implicitvalueparam)
+                          (change-vl-implicitvalueparam type :default default)
+                        (change-vl-explicitvalueparam type :default default)))
+                (type (if (atom udims)
+                          type
+                        (vl-update-paramtype-udims udims type))))
+           (make-vl-paramdecl :loc (vl-token->loc id)
+                              :name (vl-idtoken->name id)
+                              :atts atts
+                              :localp localp
+                              :type type)))))
+
 
 (defparser vl-parse-list-of-param-assignments (atts localp type)
   ;; list_of_param_assignments ::= param_assignment { ',' param_assignment }
@@ -226,14 +280,6 @@ data type for a local type parameter.  We enforce this in the parser.</p>")
   :count strong
   (seq tokstream
         (id := (vl-match-token :vl-idtoken))
-
-        (when (vl-parsestate-is-user-defined-type-p (vl-idtoken->name id)
-                                                    (vl-tokstream->pstate))
-          ;; We make this very strict because otherwise it seems that ambiguities
-          ;; can arise.
-          (return-raw
-           (vl-parse-error (cat "Parameter names that shadow types are not supported: " (vl-idtoken->name id)))))
-
         (:= (vl-match-token :vl-equalsign))
         (type := (vl-parse-datatype))
         (return (make-vl-paramdecl
@@ -255,7 +301,12 @@ data type for a local type parameter.  We enforce this in the parser.</p>")
   :count strong
   (seq tokstream
         (first := (vl-parse-type-assignment atts localp))
-        (when (vl-is-token? :vl-comma)
+        ;; Tricky.  A list_of_type_assignments can occur in a
+        ;; parameter_port_declaration, and parameter_port_declarations are
+        ;; comma-separated.  So, just seeing a comma here isn't good enough; we
+        ;; need to also look for a subsequent identifier.
+        (when (and (vl-is-token? :vl-comma)
+                   (vl-lookahead-is-token? :vl-idtoken (cdr (vl-tokstream->tokens))))
           (:= (vl-match))
           (rest := (vl-parse-list-of-type-assignments atts localp)))
         (return (cons first rest))))
@@ -395,21 +446,45 @@ data type for a local type parameter.  We enforce this in the parser.</p>")
           (signing := (vl-match)))
 
         (when (vl-is-token? :vl-lbrack)
-          ;; the grammar allows things like parameter signed [3:0][4:0] ..., but I don't
-          ;; know what we would really do with those, so for now I'm just going to accept
-          ;; at most a single range here.
-          (range := (vl-parse-range)))
+          (dims := (vl-parse-0+-packed-dimensions)))
 
-        (when (or signing range)
-          ;; This is similar to what we do in the Verilog-2005 version.
+        (when (or signing dims)
           (decls := (vl-parse-list-of-param-assignments
                      atts
                      (eq (vl-token->type start) :vl-kwd-localparam)
-                     (make-vl-implicitvalueparam :range range
-                                                 :sign (and signing
-                                                            (case (vl-token->type signing)
-                                                              (:vl-kwd-signed   :vl-signed)
-                                                              (:vl-kwd-unsigned :vl-unsigned))))))
+                     (if (or (atom dims)
+                             (and (atom (cdr dims))
+                                  (vl-dimension-case (car dims) :range)))
+                         ;; If any dimensions are provided, there is only one
+                         ;; of them and it is an ordinary sized dimension, so
+                         ;; this is something like parameter [3:0] foo.  This
+                         ;; is a partially implicit parameter; do basically
+                         ;; like the Verilog-2005 version does.
+                         (make-vl-implicitvalueparam :range (if (atom dims)
+                                                                nil
+                                                              (vl-dimension->range (car dims)))
+                                                     :sign (and signing
+                                                                (case (vl-token->type signing)
+                                                                  (:vl-kwd-signed   :vl-signed)
+                                                                  (:vl-kwd-unsigned :vl-unsigned))))
+                       ;; Otherwise: there are multiple or complex dimensions
+                       ;; here, but there is no base type like "logic".  That
+                       ;; is, we're dealing with something like "parameter
+                       ;; signed [3:0][4:0] foo" or perhaps "parameter
+                       ;; [3:0][4:0] bar".  I don't know how to reconcile this
+                       ;; with the different Verilog rules for implicit versus
+                       ;; explicit parameters.  I think the most sensible thing
+                       ;; to do here is treat this like an *explicitly* typed
+                       ;; parameter, by acting as though it was written as
+                       ;; "parameter logic [3:0][4:0] bar" or similar.
+                       (make-vl-explicitvalueparam
+                        :type (make-vl-coretype :name :vl-logic
+                                                :pdims dims
+                                                :udims nil
+                                                :signedp (and signing
+                                                              (case (vl-token->type signing)
+                                                                (:vl-kwd-signed   t)
+                                                                (:vl-kwd-unsigned nil))))))))
           (return decls))
 
         ;; Now this is tricky.  We know we don't have a signing or range, but
@@ -532,6 +607,68 @@ data type for a local type parameter.  We enforce this in the parser.</p>")
 ;                                    | local_parameter_declaration
 ;                                    | data_type list_of_param_assignments
 ;                                    | 'type' list_of_type_assignments
+;
+; This is a bit tricky.
+;
+; The list_of_param_assignments can match plain, untyped parameters like #( FOO
+; = 1, BAR = 2 ).  If this is followed by a data_type parameter port declaration,
+; then we could have something like this:
+;
+;     #( FOO = 1,
+;        BAR [3:0] = 4,
+;        foo_t BAZ = 2,
+;        ...)
+;
+; Our strategy is to use back-tracking to match as many plain parameter
+; assignments as we can, and then switch to just parsing a parameter port
+; declaration list.
+
+(defconst *vl-parse-0+-param-assignments-implicit-type*
+  ;; Type for plain param_assignments (to avoid re-consing)
+  ;;  - I'm not at all clear what the type of these parameter assignments should be, but
+  ;;    it seems most reasonable to treat them as plain-Jane, implicit value parameters,
+  ;;    as we would do if someone had written "parameter" first.
+  (make-vl-implicitvalueparam :range nil :sign nil))
+
+(defparser vl-parse-0+-param-assignments (leading-comma-required)
+  ;; Only intended for use in vl-parse-module-parameter-port-list-2012
+  ;;
+  ;; We match an optional list_of_param_assignments.
+  ;;   If it is followed by a comma, we read up to the comma (but does not eat the comma)
+  ;;   If it is followed by a right paren, we read up to the paren (but do not eat the paren)
+  ;;
+  ;; Otherwise, we assume we have made a mistake and there are no
+  ;; param_assignments here that we want.  Note that it is legal to have type-
+  ;; and RHS-free param_assignments like #(foo).  So by naively looking for as
+  ;; many param assignments as we can find, if we encounter a parameter
+  ;; declaration like #(foo_t SIZE_B = 1), we might mistakenly think that foo_t
+  ;; is a type- and RHS-free param assignment.  To avoid this ambiguity, make
+  ;; sure that we see a comma or right-paren in order to succeed.
+  :result (vl-paramdecllist-p val)
+  :resultp-of-nil t
+  :true-listp t
+  :fails never
+  :count strong-on-value
+  (declare (xargs :ruler-extenders :all))
+  (b* ((backup (vl-tokstream-save))
+       ((mv err assigns tokstream)
+        (seq tokstream
+             (when leading-comma-required
+               (:= (vl-match-token :vl-comma)))
+             (first := (vl-parse-param-assignment nil ;; atts
+                                                  nil ;; localp
+                                                  *vl-parse-0+-param-assignments-implicit-type*))
+             (unless (vl-is-some-token? '(:vl-comma :vl-rparen))
+               (return-raw (mv t nil tokstream)))
+             (rest := (vl-parse-0+-param-assignments t))
+             (return (cons first rest))))
+       ((unless err)
+        (mv err assigns tokstream))
+       ;; The error can only come from trying to parse 'first', so this is the
+       ;; case where we have no more parameter assignments to return.  Restore
+       ;; parse state and return nothing.
+       (tokstream (vl-tokstream-restore backup)))
+    (mv nil nil tokstream)))
 
 (defparser vl-parse-parameter-port-declaration-2012 ()
   ;; SystemVerilog-2012 only.
@@ -541,7 +678,7 @@ data type for a local type parameter.  We enforce this in the parser.</p>")
   :fails gracefully
   :count strong
   (seq tokstream
-       (when (vl-is-some-token? '(:vl-kwd-parameter :vl-kwd-localparameter))
+       (when (vl-is-some-token? '(:vl-kwd-parameter :vl-kwd-localparam))
          (decls := (vl-parse-param-or-localparam-declaration-2012
                     nil ;; no attributes
                     '(:vl-kwd-parameter :vl-kwd-localparam) ;; allowed to be local or non-local
@@ -577,6 +714,9 @@ data type for a local type parameter.  We enforce this in the parser.</p>")
        (return (append first rest))))
 
 (defparser vl-parse-module-parameter-port-list-2012 ()
+;       parameter_port_list ::= '#' '(' list_of_param_assignments { ',' parameter_port_declaration } ')'
+;                             | '#' '(' parameter_port_declaration { ',' parameter_port_declaration } ')'
+;                             | '#' '(' ')'
   :result (vl-paramdecllist-p val)
   :resultp-of-nil t
   :true-listp t
@@ -590,25 +730,17 @@ data type for a local type parameter.  We enforce this in the parser.</p>")
         (:= (vl-match-token :vl-pound))
         (:= (vl-match-token :vl-lparen))
 
-        (when (and (vl-is-token? :vl-idtoken)
-                   (not (vl-parsestate-is-user-defined-type-p (vl-idtoken->name (car (vl-tokstream->tokens)))
-                                                              (vl-tokstream->pstate))))
-          ;; Identifier that is not a type.  Seems like a list_of_param_assignments.
-          ;; Some notes:
-          ;;  - The parser for list-of-param-assignments is careful not to eat the comma afterward
-          ;;    unless things continue to look like additional param-assignments.
-          ;;  - I'm not at all clear what the type of these parameter assignments should be, but
-          ;;    it seems most reasonable to treat them as plain-Jane, implicit value parameters,
-          ;;    as we would do if someone had written "parameter" first.
-          (decls1 := (vl-parse-list-of-param-assignments nil ;; no attributes
-                                                         nil ;; not local
-                                                         (make-vl-implicitvalueparam :range nil :sign nil)))
+        ;; Try to match as many plain param_assignment as we can
+        (decls1 := (vl-parse-0+-param-assignments
+                    nil ; No comma required before the first param assignment
+                    ))
 
-          ;; At this point we should have eaten everything except for the { , parameter_port_declaration }
-          ;; section.  Eat the comma so that we can handle these parameter_port_declarations uniformly
-          ;; with the other cases.
-          (when (vl-is-token? :vl-comma)
-            (:= (vl-match))))
+        ;; At this point we should have eaten everything except for the { ,
+        ;; parameter_port_declaration } section.  Eat the comma so that we can
+        ;; handle these parameter_port_declarations uniformly with the other
+        ;; cases.
+        (when (vl-is-token? :vl-comma)
+          (:= (vl-match)))
 
         ;; Now either we had a list_of_param_assignments first or we didn't.
         ;; Either way, we ate the commas and now we should be looking at a list

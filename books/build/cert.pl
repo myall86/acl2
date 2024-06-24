@@ -38,32 +38,61 @@
 # dependencies of all files needed.  When it is finished, it writes
 # out a file Makefile-tmp which can be used to make all the targets.
 
-# This script assumes that the ACL2 system books directory is where it
-# itself is located.  Therefore, if you call this script from a
-# different directory, it should still be able to resolve ":dir
-# :system" include-books.  It also scans the relevant .acl2 files for
-# each book for add-include-book-dir commands.
+# This script chooses which ACL2 to use by the following methods, in
+# decreasing order of priority:
+#   - use the ACL2 specified by the -a or --acl2 command line argument
+#   - use the ACL2 specified by the environment variable $ACL2
+#   - use whatever "acl2" exists in the $PATH
+
+# This script chooses which community books directory to use by the
+# following methods, in decreasing order of priority:
+#   - use the directory specified by the -b or --acl2-books command line argument
+#   - use the directory specified by the environment variable $ACL2_SYSTEM_BOOKS
+#   - look for a "books" directory where the ACL2 we're using is located
+#   - run ACL2 and check if (@ system-books-dir) evaluates to a directory that exists
+#   - use the parent of the directory containing this script
+
+# This script also scans the relevant .acl2 files for each book, looking for
+# (add-include-book-dir ...) commands, and scans the relevant .image files to
+# determine alternative ACL2 executables to use for certain books.  These
+# alternative ACL2 executables will be searched for in the directory specified
+# by the --bin command line argument, if any, or in the $PATH if --bin is not
+# provided.
 
 
 
 use strict;
 use warnings;
+use File::Basename;
+use File::Spec;
+
 use FindBin qw($RealBin);
 use Getopt::Long qw(:config bundling_override);
 
-(do "$RealBin/certlib.pl") or die ("Error loading $RealBin/certlib.pl:\n!: $!\n\@: $@\n");
-(do "$RealBin/paths.pl") or die ("Error loading $RealBin/paths.pl:\n!: $!\n\@: $@\n");
+use lib "$RealBin/lib";
+use Certlib;
+use Bookscan;
+use Cygwin_paths;
+
+# (do "$RealBin/certlib.pl") or die ("Error loading $RealBin/certlib.pl:\n!: $!\n\@: $@\n");
+# (do "$RealBin/paths.pl") or die ("Error loading $RealBin/paths.pl:\n!: $!\n\@: $@\n");
 
 my %reqparams = ("hons-only"      => "HONS_ONLY",
-		 "uses-glucose"   => "USES_GLUCOSE",
-		 "uses-quicklisp" => "USES_QUICKLISP",
-		 "ansi-only"      => "ANSI_ONLY",
-		 "uses-acl2r"     => "USES_ACL2R",
-		 "non-acl2r"      => "NON_ACL2R",
-		 "ccl-only"       => "CCL_ONLY",
-		 'non-lispworks'  => "NON_LISPWORKS",
-		 'non-allegro'    => "NON_ALLEGRO",
-		 'non-sbcl'       => "NON_SBCL"
+                 "uses-glucose"   => "USES_GLUCOSE",
+                 "uses-ipasir"    => "USES_IPASIR",
+                 "uses-abc"       => "USES_ABC",
+                 "uses-smtlink"   => "USES_SMTLINK",
+                 "uses-stp"       => "USES_STP",
+                 "uses-quicklisp" => "USES_QUICKLISP",
+                 "ansi-only"      => "ANSI_ONLY",
+                 "uses-acl2r"     => "USES_ACL2R",
+                 "non-acl2r"      => "NON_ACL2R",
+                 "ccl-only"       => "CCL_ONLY",
+                 'non-cmucl'      => "NON_CMUCL",
+                 'non-lispworks'  => "NON_LISPWORKS",
+                 'non-allegro'    => "NON_ALLEGRO",
+                 'non-sbcl'       => "NON_SBCL",
+                 'non-gcl'        => "NON_GCL"
     );
 
 # use lib "/usr/lib64/perl5/5.8.8/x86_64-linux-thread-multi/Devel";
@@ -80,37 +109,61 @@ my $no_build = 0;
 my $no_makefile = 0;
 my $no_boilerplate = 0;
 my $mf_name = "Makefile-tmp";
+my $smf_name = "Makefile-tmp.lsp";  # gets assigned based on $mf_name later
+my $ysmf = 0;   # if 1, also write out S-expression version of Makefile
 my @includes = ();
 my @include_afters = ();
 my $svn_mode = 0;
 my $quiet = 0;
 my @run_sources = ();
+my @run_otherdeps = ();
+my @run_out_of_date = ();
+my @run_up_to_date = ();
+my @run_all_out_of_date = ();
+my @run_all_up_to_date = ();
 my $make = $ENV{"MAKE"} || "make";
 my @make_args = ();
 my $acl2 = $ENV{"ACL2"};
 my $acl2_books = $ENV{"ACL2_SYSTEM_BOOKS"};
+# add default useless runes setting if undefined
+if (! defined($ENV{"ACL2_USELESS_RUNES"}) ) {
+    $ENV{"ACL2_USELESS_RUNES"} = "-25";
+}
+my $startjob = $ENV{"STARTJOB"};
+if (! $startjob ) { $startjob = "bash"; }
 my $keep_going = 0;
 my $var_prefix = "CERT_PL";
 my %certlib_opts = ( "debugging" => 0,
-		     "clean_certs" => 0,
-		     "print_deps" => 0,
-		     "all_deps" => 1,
+                     "clean_certs" => 0,
+                     "print_deps" => 0,
+                     "all_deps" => 1,
                      "believe_cache" => 0,
-                     "pcert_all" => 0 );
+                     "pcert_all" => 0,
+                     "debug_up_to_date" => 0,
+                     "force_up_to_date" => {},
+                     "force_out_of_date" => {});
 my $target_ext = "cert";
 my $cache_file = 0;
+my $cache_read_only = 0;
+my $cache_write_only = 0;
 my $bin_dir = $ENV{'CERT_PL_BIN_DIR'};
 my $params_file = 0;
+my $print_relocs = 0;
+
+my $write_timestamps = 0;
+my $read_timestamps = 0;
+
 # Remove trailing slash from and canonicalize bin_dir
 if ($bin_dir) {
     my $cbin_dir = canonical_path(remove_trailing_slash($bin_dir));
     if (! $cbin_dir) {
-	die("Fatal: bad path in environment var CERT_PL_BIN_DIR=$bin_dir");
+        die("Fatal: bad path in environment var CERT_PL_BIN_DIR=$bin_dir");
     }
     $bin_dir = $cbin_dir;
 }
 
 my $write_sources=0;
+my $write_otherdeps=0;
 my $write_certs=0;
 
 $base_path = abs_canonical_path(".");
@@ -148,7 +201,10 @@ The following forms are recognized:
 
  - (include-book "<bookname>" [:dir :<dirname>])
      Adds the included book\'s :cert file as a dependency of the
-current book.
+current book.  Note: Adding a comment \";; no_port\" on the same line
+after the closing parenthesis will override the build system\'s default
+behavior of loading the .port file for the included book before certifying
+the containing book; see the xdoc topic pre-certify-book-commands.
 
  - (add-include-book-dir :<dirname> "<dirpath>")
      Registers an association between the given dirname and dirpath so
@@ -157,7 +213,11 @@ that we may correctly decode include-book and other forms with :dir
 
  - (depends-on "<filename>" [:dir :<dirname>])
      Adds the named file as a dependency of the current book.  May
-occur in a comment, since depends-on is not defined in ACL2.
+occur in a comment, since depends-on is not defined in ACL2.  Note: If
+you want to add a dependency on a book, just use include-book (inside
+a multiline comment, if you don\'t want it actually included.
+Depends-on is intended for non-book dependencies, so cert.pl won\'t
+scan the target for its dependencies.
 
  - (loads "<filename>" [:dir :<dirname>])
      Adds the named file as a dependency of the current book, and also
@@ -175,7 +235,8 @@ if it were part of the current file.
      Cert_param directives control various things about how the file
 gets certified, such as whether it uses provisional certification
 (pcert), acl2x expansion (acl2x), and skip-proofs during acl2x
-expansion (acl2xskip).
+expansion (acl2xskip).  See the \"cert_param\" xdoc topic for various
+other variables that can be set.
 
 See the documentation topic BOOKS-CERTIFICATION for supported uses of
 cert.pl.
@@ -197,6 +258,10 @@ makefile with several distinct targets that depend on overlapping sets
 of books.
 
 CERT_PL_EXCLUDE FILES
+
+Note: The following behavior is nullified if the --include-excludes
+command line option is given; that is, the existence of cert_pl_exclude
+files will just be ignored.
 
 Cert.pl can be prevented from exploring a directory (recursively) by
 creating a file called "cert_pl_exclude".  Any book found to be
@@ -235,24 +300,21 @@ COMMAND LINE OPTIONS
    -j <n>
            Use n processes to build certificates in parallel.
 
-   --all-deps
-   -d
-           Toggles writing out dependency information for all targets
-           encountered, including ones which don\'t need updating.  This is
-           done by default, so using -d or --all-deps actually means that
-           only targets that need updating are written to the makefile.
-
    --acl2 <cmd>
    -a <cmd>
-           Use <cmd> as the ACL2 executable, overriding the ACL2
-           environment variable and the location of an executable
-           named "acl2" in the PATH.
+           Use <cmd> as the ACL2 executable.  This overrides the ACL2
+           environment variable, if that variable is set.  If neither
+           is set, the location of the ACL2 executable is guessed by
+           searching the PATH for an executable named "acl2".
 
    --acl2-books <dir>
    -b <dir>
-           Use <dir> as the ACL2 system books directory, overriding
-           the ACL2_SYSTEM_BOOKS environment variable, the location of
-           acl2 in the PATH, and the location of this script.
+           Use <dir> as the ACL2 system books directory.  This
+           overrides the ACL2_SYSTEM_BOOKS environment variable, if
+           that variable is set.  If neither is set, a directory is
+           guessed based on the location of the ACL2 executable, or
+           the value of (@ system-books-dir) as reported by the ACL2
+           executable, or the location of this script, in that order.
 
    --clean-certs
    --cc
@@ -276,6 +338,11 @@ COMMAND LINE OPTIONS
    -o <makefile-name>
            Determines where to write the dependency information;
            default is Makefile-tmp.
+
+   --smakefile
+           Also write out S-expression version of the dependency information.
+           Appends ".lsp" to the <makefile-name> provided by "-o",
+           or Makefile-tmp.lsp by default.
 
    --verbose-deps
    -v
@@ -340,7 +407,6 @@ COMMAND LINE OPTIONS
            not itself added as a target, but anything necessary for
            its certification will be.
 
-
    --quiet
    -q
            Don\'t print any asides except for errors and output from
@@ -356,6 +422,38 @@ COMMAND LINE OPTIONS
                cert.pl top.lisp -n --source-cmd "echo {}; wc {}"
            Any number of --source-cmd directives may be given; the
            commands will then be run in the order in which they are given.
+
+   --otherdep-cmd <command-str>
+           Run the command on each non-source dependency file, in the same
+           manner as --source-cmd.  Non-source dependencies include files
+           referenced by depends-on comments as well as .image files.
+
+   --out-of-date-cmd <command-str>
+           Like --source-cmd, but runs the command on all of the bottommost
+           out of date certificates in the dependency tree.  {} is replaced
+           by the base name of the book, that is, without the ".cert".
+
+   --up-to-date-cmd <command-str>
+           Like --source-cmd, but runs the command on all of the top-most
+           up to date certificates in the dependency tree.  {} is replaced
+           by the base name of the book, that is, without the ".cert".
+
+   --all-out-of-date-cmd <command-str>
+           Like --source-cmd, but runs the command on all of the
+           out of date certificates in the dependency tree.  {} is replaced
+           by the base name of the book, that is, without the ".cert".
+
+   --all-up-to-date-cmd <command-str>
+           Like --source-cmd, but runs the command on all of the
+           up to date certificates in the dependency tree.  {} is replaced
+           by the base name of the book, that is, without the ".cert".
+
+   --force-up-to-date <fname>
+   --force-out-of-date <fname>
+           Consider the given file(s) up to date or out of date regardless
+           of the actual facts, for purposes of the above command forms,
+           --out-of-date-cmd and the rest. Note these do not affect the set
+           of files to be built by make.
 
    --tags-file <tagfile>
            Create an Emacs tags file containing the tags for all
@@ -413,11 +511,20 @@ COMMAND LINE OPTIONS
           events.  File modification times are used to determine when
           the cached information about a file must be updated.
 
+   --cache-read-only
+          Only read from the cache file, don\'t update it.
+
+   --cache-write-only
+          Only write out a cache file, don\'t read from it.
+
    --write-sources <filename>
           Dump the list of all source files, one per line, into filename.
 
    --write-certs <filename>
           Dump the list of all cert files, one per line, into filename.
+
+   --write-otherdeps <filename>
+          Dump the list of all non-source dependencies, one per line, into filename.
 
    --pcert-all
           Allow provisional certification for all books, not just the ones with
@@ -431,96 +538,202 @@ COMMAND LINE OPTIONS
           of some book with \'-p\', the target extension used is \'cert\'.
           This option allows you to specify this default extension as (say)
           \'pcert0\' instead.
+
+   --include-excludes
+          If this option is set then cert_pl_exclude files are ignored; see the
+          section CERT_PL_EXCLUDE FILES above.
+
+   --print-relocs
+          Causes relocation stub warnings to be printed even if --quiet.  By
+          default cert.pl prints warnings about "relocation stubs", which are
+          books containing the \'reloc_stub\' cert_param, signifying that they
+          are placeholders for books that have been refactored away or moved to
+          new locations.  Normally --quiet suppresses these warnings, but this
+          option causes them to print anyway.
+
+USEFUL ENVIRONMENT VARIABLES
+
+    TIME_CERT (default: "")
+         Can be set to 1 to enable .cert.time files, which can be used by tools
+         such as critpath.pl for build profiling.
+
+    CERT_PL_NO_COLOR (default: "")
+         Can be set to disable ANSI color coded output.
+
+    CERT_PL_SHOW_HOSTNAME (default: "")
+         Off by default.  Set to 1 to instruct cert.pl to include hostname
+         information in its output.  Potentially useful if you are using a
+         cluster of machines to certify books, but adds some file IO because
+         hostnames are read out of the .cert.out files.
+
+    ACL2_BOOKS_DEBUG (default: "")
+         Can be set to 1 to enable extra debugging information and to preserve
+         temporary files.
+
+    CERT_PL_RM_OUTFILES (default: "")
+         Can be set to 1 to instruct cert.pl to delete .cert.out files after
+         successful book certification.  (The output will be kept for failed
+         certification attempts, since in that case you may want to inspect
+         it.)
+
+    CERT_PL_TEMP_DIR (default: "")
+         Can be set to a directory to instruct cert.pl to use this other
+         directory for temporary files such as workxxx files (which contain
+         certification instructions) and .cert.out files.  Note that this
+         does not affect .cert.time files.
+
+    STARTJOB (default: "bash")
+         Can be set to the name of a command to use instead of bash
+         when launching a subprocess that will run ACL2.  The command
+         will be called as `$STARTJOB -c "bash code"`.  This is mainly
+         useful if you wish ACL2 to always be run in some environment
+         other than the current shell -- for example, if you want to
+         run ACL2 on a managed compute cluster, you might set
+         $STARTJOB to the name of a script that queues a job on the cluster.
+
 ';
 
-GetOptions ("help|h"               => sub { print $summary_str;
-					    print $helpstr;
-					    exit 0 ; },
-	    "jobs|j=i"             => \$jobs,
-	    "clean-certs|cc"       => \$certlib_opts{"clean_certs"},
-	    "no-build|n"           => \$no_makefile,
-	    "clean-all|c"          => sub {$no_makefile = 1;
-					   $certlib_opts{"clean_certs"} = 1;},
-	    "verbose-deps|v"       => \$certlib_opts{"print_deps"},
-	    "makefile-only|m"      => \$no_build,
-	    "no-boilerplate"       => \$no_boilerplate,
-	    "var-prefix=s"         => \$var_prefix,
-	    "o=s"                  => \$mf_name,
-	    "all-deps|d"           => sub { print("The --all-deps/-d option no longer does anything."); },
-	    "static-makefile|s=s"  => sub {shift;
-					   $mf_name = shift;
-					   $certlib_opts{"all_deps"} = 1;
-					   $no_build = 1;},
-	    "acl2|a=s"             => \$acl2,
-	    "acl2-books|b=s"       => \$acl2_books,
-	    "bin=s"                => sub {
-		shift;
-		my $arg = shift;
-		$bin_dir = canonical_path(remove_trailing_slash($arg));
-		if (!$bin_dir) {
-		    die("Fatal: bad path in directive --bin $arg\n");
-		}
-	    },
-	    "include|i=s"          => sub {shift;
-					   push(@includes, shift);},
-	    "include-after|ia=s"     => sub {shift;
-					     push(@include_afters,
-						  shift);},
-	    "relative-paths|r=s"   => sub {
-		shift;
-		my $arg = shift;
-		$base_path = abs_canonical_path($arg);
-		if (! $base_path) {
-		    die("Fatal: bad path in directive --relative-paths/-r $arg\n");
-		}
-	    },
-	    "svn-status"           => sub {push (@run_sources,
-						 sub { my $target = shift;
-						       print `svn status --no-ignore $target`;
-						   })},
-	    "tags-file=s"          => sub { shift;
-					    my $tagfile = shift;
-					    push (@run_sources,
-						  sub { my $target = shift;
-							print `etags -a -o $tagfile $target`;})},
-	    "source-cmd=s"         => sub { shift;
-					    my $cmd = shift;
-					    push (@run_sources,
-						  sub { my $target = shift;
-							my $line = $cmd;
-							$line =~ s/{}/$target/g;
-							print `$line`;})},
-	    "quiet|q"              => \$quiet,
-	    "make-args=s"          => \@make_args,
+# Called by GetOptions to handle options like source-cmd,
+# otherdep-cmd, up-to-date-cmd.  First we pick, based on the option
+# name, the list that holds functions that we"ll run on the
+# appropriate set of files.  Then we add a function to that array
+# that, when run on a target file, will replace the {} from the
+# command with the filename and run that with backticks (printing its
+# stdout).
+
+sub add_command {
+    my ($opt_name, $opt_value) = @_;
+    my $runlist;
+    # opt_name is not a string to begin with, coerce it to one
+    $opt_name = "$opt_name";
+    if ($opt_name eq "source-cmd") {
+	$runlist = \@run_sources;
+    } elsif ($opt_name eq "otherdep-cmd") {
+	$runlist = \@run_otherdeps;
+    }  elsif ($opt_name eq "up-to-date-cmd") {
+	$runlist = \@run_up_to_date;
+    } elsif ($opt_name eq  "out-of-date-cmd") {
+        $runlist = \@run_out_of_date;
+    } elsif ($opt_name eq  "all-up-to-date-cmd") {
+	$runlist = \@run_all_up_to_date;
+    } elsif ($opt_name eq "all-out-of-date-cmd") {
+	$runlist = \@run_all_out_of_date;
+    } else {
+	die "Programming error in add_command: opt_name = $opt_name";
+    }
+    push (@$runlist,
+    	  sub { my $target = shift;
+    		my $line = $opt_value;
+    		$line =~ s/{}/$target/g;
+		# Print outputs from commands
+    		print `$line`;
+    	  });
+}
+
+GetOptions ("help|h"               => sub {
+    STDERR->print($summary_str);
+    STDERR->print($helpstr);
+    exit 0 ; },
+            "jobs|j=i"             => \$jobs,
+            "clean-certs|cc"       => \$certlib_opts{"clean_certs"},
+            "no-build|n"           => \$no_makefile,
+            "clean-all|c"          => sub {$no_makefile = 1;
+                                           $certlib_opts{"clean_certs"} = 1;},
+            "verbose-deps|v"       => \$certlib_opts{"print_deps"},
+            "makefile-only|m"      => \$no_build,
+            "no-boilerplate"       => \$no_boilerplate,
+            "var-prefix=s"         => \$var_prefix,
+            "o=s"                  => \$mf_name,
+            "smakefile"            => \$ysmf,
+            "all-deps|d"           => sub { print STDERR "The --all-deps/-d option no longer does anything."; },
+            "static-makefile|s=s"  => sub {shift;
+                                           $mf_name = shift;
+                                           $certlib_opts{"all_deps"} = 1;
+                                           $no_build = 1;},
+            "acl2|a=s"             => \$acl2,
+            "acl2-books|b=s"       => \$acl2_books,
+            "bin=s"                => sub {
+                shift;
+                my $arg = shift;
+                $bin_dir = canonical_path(remove_trailing_slash($arg));
+                if (!$bin_dir) {
+                    die("Fatal: bad path in directive --bin $arg\n");
+                }
+            },
+            "include|i=s"          => sub {shift;
+                                           push(@includes, shift);},
+            "include-after|ia=s"     => sub {shift;
+                                             push(@include_afters,
+                                                  shift);},
+            "relative-paths|r=s"   => sub {
+                shift;
+                my $arg = shift;
+                $base_path = abs_canonical_path($arg);
+                if (! $base_path) {
+                    die("Fatal: bad path in directive --relative-paths/-r $arg\n");
+                }
+            },
+            "svn-status"           => sub {push (@run_sources,
+                                                 sub { my $target = shift;
+						       # print command outputs  to stdout
+                                                       print `svn status --no-ignore $target`;
+                                                   })},
+            "tags-file=s"          => sub { shift;
+                                            my $tagfile = shift;
+                                            push (@run_sources,
+                                                  sub { my $target = shift;
+							# print command outputs to stdout
+                                                        print `etags -a -o $tagfile $target`;})},
+            "source-cmd=s"          => \&add_command,
+            "otherdep-cmd=s"        => \&add_command,
+            "up-to-date-cmd=s"      => \&add_command,
+            "out-of-date-cmd=s"     => \&add_command,
+            "all-up-to-date-cmd=s"  => \&add_command,
+            "all-out-of-date-cmd=s" => \&add_command,
+            "quiet|q"              => \$quiet,
+            "make-args=s"          => \@make_args,
             "keep-going|k"         => \$keep_going,
-	    "targets|t=s"          => sub { shift;
-					    read_targets(shift, \@user_targets);
-					},
-	    "debug"                => \$certlib_opts{"debugging"},
-	    "cache=s"              => \$cache_file,
-	    "accept-cache"         => \$certlib_opts{"believe_cache"},
-	    "deps-of|p=s"          => sub { shift; push(@user_targets, "-p " . shift); },
-	    "params=s"             => \$params_file,
+            "targets|t=s"          => sub { shift;
+                                            read_targets(shift, \@user_targets);
+                                        },
+            "debug"                => \$certlib_opts{"debugging"},
+            "cache=s"              => \$cache_file,
+            "cache-read-only"      => \$cache_read_only,
+            "cache-write-only"     => \$cache_write_only,
+            "accept-cache"         => \$certlib_opts{"believe_cache"},
+            "deps-of|p=s"          => sub { shift; push(@user_targets, "-p " . shift); },
+            "params=s"             => \$params_file,
             "write-certs=s"        => \$write_certs,
-            "write-sources=s"        => \$write_sources,
+            "write-sources=s"      => \$write_sources,
+            "write-otherdeps=s"    => \$write_otherdeps,
             "pcert-all"            =>\$certlib_opts{"pcert_all"},
+            "include-excludes"     =>\$certlib_opts{"include_excludes"},
             "target-ext|e=s"       => \$target_ext,
-	    "<>"                   => sub { push(@user_targets, shift); },
-	    );
+            "print-relocs"         => \$print_relocs,
+	    "write-timestamps=s"   => \$write_timestamps,
+	    "read-timestamps=s"    => \$read_timestamps,
+            "debug-up-to-date"     => \$certlib_opts{"debug_up_to_date"},
+	    "force-up-to-date=s"   => sub { shift; my $target = shift; $certlib_opts{"force_up_to_date"}->{$target} = 1; },
+	    "force-out-of-date=s"  => sub { shift; my $target = shift; $certlib_opts{"force_out_of_date"}->{$target} = 1; },
+            "<>"                   => sub { push(@user_targets, shift); },
+            );
 
 sub remove_trailing_slash {
     my $dir = shift;
     return ( substr($dir,-1) eq "/" && $dir ne "/" )
-	? substr($dir,0,-1) : $dir;
+        ? substr($dir,0,-1) : $dir;
 }
 
 certlib_set_opts(\%certlib_opts);
 
-my $cache = retrieve_cache($cache_file);
+my $cache = $cache_write_only ? {} : retrieve_cache($cache_file);
 
-# If $acl2_books is still not set, then:
-# - set it based on the location of acl2 in the path, if available
-# - otherwise set it to the directory containing this script.
+if ($read_timestamps) {
+    read_timestamps($read_timestamps);
+}
+
+# If $acl2 is still not set, then set it based on the location of acl2
+# in the path, if available
 
 unless ($acl2) {
     $acl2 = "acl2";
@@ -538,35 +751,67 @@ if ($acl2) {
     # canonicalize the path
     $acl2 = abs_canonical_path($acl2);
     unless($quiet || $no_build) {
-	print "ACL2 executable is ${acl2}\n";
+        print STDERR "ACL2 executable is ${acl2}\n";
     }
     $ENV{"ACL2"} = $acl2;
 } else {
     unless ($quiet || $no_build) {
-	print
+        print(STDERR
 "ACL2 executable not found.  Please specify with --acl2 command line
-flag or ACL2 environment variable.\n";
+flag or ACL2 environment variable.\n");
     }
 }
 
-if (! $acl2_books) {
-    if ($acl2) {
-	# was:
-	# my $tmp_acl2_books = rel_path(dirname($acl2), "books");
-	my $tmp_acl2_books = File::Spec->catfile(dirname($acl2), "books");
-	if (-d $tmp_acl2_books) {
-	    $acl2_books = $tmp_acl2_books;
-	} else {
-	    $acl2_books = "$RealBin/..";
-	}
-    } else {
-	$acl2_books = "$RealBin/..";
+# At this point, $acl2 is set, so we know which ACL2 we're using.  To
+# choose a value for $acl2_books if it is not yet set, we try the
+# following in order until one succeeds:
+#   - look for a "books" directory where the ACL2 we're using is located
+#   - run ACL2 and check if (@ system-books-dir) evaluates to a directory that exists
+#   - use the parent of the directory containing this script
+
+if (! $acl2_books && $acl2 ) {
+    # was:
+    # my $tmp_acl2_books = rel_path(dirname($acl2), "books");
+    my $tmp_acl2_books = File::Spec->catfile(dirname($acl2), "books");
+    if (-d $tmp_acl2_books) {
+        $acl2_books = $tmp_acl2_books;
+    }
+}
+
+if (! $acl2_books && $acl2 ) {
+    my $dumper1 = # command to send to ACL2
+        '(cw \"~%CERT_PL_VAL:~S0~%\" (@ acl2::system-books-dir))';
+    my $dumper2 = # command to send to STARTJOB
+        'echo "' . $dumper1 . '" | ' .
+        "$acl2 2>$devnull | " .
+        'awk -F: "/CERT_PL_VAL/ { print \$2 }"';
+    my $dumper3 = # command to send to the shell
+        "$startjob -c '$dumper2'";
+    my $tmp_acl2_books = `$dumper3`;
+    chomp($tmp_acl2_books);
+    if (-d $tmp_acl2_books) {
+        $acl2_books = $tmp_acl2_books;
+    }
+}
+
+if (! $acl2_books ) {
+    my $tmp_acl2_books = "$RealBin/..";
+    if (-d $tmp_acl2_books) {
+        $acl2_books = $tmp_acl2_books;
+    }
+}
+
+if (! $acl2_books ) {
+    unless ($quiet || $no_build) {
+        print(STDERR
+"ACL2 system books not found.  Please specify with --acl2-books
+command line flag or ACL2_SYSTEM_BOOKS environment variable.");
     }
 }
 
 $acl2_books = abs_canonical_path($acl2_books);
 unless($quiet) {
-    print "System books directory is ${acl2_books}\n";
+    print(STDERR "System books directory is ${acl2_books}\n");
 }
 
 certlib_add_dir("SYSTEM", $acl2_books);
@@ -577,21 +822,21 @@ certlib_add_dir("SYSTEM", $acl2_books);
 my $acl2_books_env = path_export($acl2_books);
 $ENV{"ACL2_SYSTEM_BOOKS"} = $acl2_books_env;
 
-my $depdb = new Depdb(evcache => $cache);
+my $depdb = new Depdb(evcache => $cache, pcert_all => $certlib_opts{"pcert_all"});
 
-$target_ext =~ s/^\.//; 
+$target_ext =~ s/^\.//;
 
 my @valid_exts = ("cert", "acl2x", "pcert0", "pcert1");
 my $ext_valid = 0;
 foreach my $ext (@valid_exts) {
     if ($target_ext eq $ext) {
-	$ext_valid = 1;
-	last;
+        $ext_valid = 1;
+        last;
     }
 }
 if (! $ext_valid) {
     die("Bad --target-ext/-e option: ${target_ext}.  Possibilities are:\n" +
-	join(", ", @valid_exts));
+        join(", ", @valid_exts));
 }
 
 
@@ -606,8 +851,8 @@ my %labels = %$labels_ref;
 # print "end targets\n";
 
 unless (@targets) {
-    print "\nError: No targets provided.\n";
-    print $helpstr;
+    print STDERR "\nError: No targets provided.\n";
+    print STDERR $helpstr;
     exit 1;
 }
 
@@ -618,68 +863,121 @@ foreach my $target (@targets) {
 
 if ($params_file && open (my $params, "<", $params_file)) {
     while (my $pline = <$params>) {
-	my @parts = $pline =~ m/([^:]*):(.*)/;
-	if (@parts) {
-	    my ($certname, $paramstr) = @parts;
-	    my $certpars = cert_get_params($certname, $depdb);
-	    if ($certpars) {
-		my $passigns = parse_params($paramstr);
-		foreach my $pair (@$passigns) {
-		    $certpars->{$pair->[0]} = $pair->[1];
-		}
-	    }
-	}
+        my @parts = $pline =~ m/([^:]*):(.*)/;
+        if (@parts) {
+            my ($certname, $paramstr) = @parts;
+            my $certpars = $depdb->cert_get_params($certname);
+            if ($certpars) {
+                my $passigns = parse_params($paramstr);
+                foreach my $pair (@$passigns) {
+                    $certpars->{$pair->[0]} = $pair->[1];
+                }
+            }
+        }
     }
     close($params);
 }
 
 
-store_cache($cache, $cache_file);
+store_cache($cache, $cache_file) if (! $cache_read_only);
 
 my @sources = sort(keys %{$depdb->sources});
-
+my @otherdeps = sort(keys %{$depdb->others});
 # Is this how we want to nest these?  Pick a command, run it on
 # every source file, versus pick a source file, run every command?
 # This way seems more flexible; commands can be grouped together.
 foreach my $run (@run_sources) {
     foreach my $source (@sources) {
-	&$run($source);
+        &$run($source);
     }
 }
+
+foreach my $run (@run_otherdeps) {
+    foreach my $source (@otherdeps) {
+        &$run($source);
+    }
+}
+
+if (@run_out_of_date || @run_up_to_date || @run_all_up_to_date || @run_all_out_of_date) {
+    my $up_to_date_db = check_up_to_date(\@targets, $depdb);
+    if (@run_out_of_date) {
+        my $out_of_date = collect_bottom_out_of_date(\@targets, $depdb, $up_to_date_db);
+        foreach my $run (@run_out_of_date) {
+            foreach my $cert (@$out_of_date) {
+                (my $book = $cert) =~ s/\.cert$//;
+                &$run($book);
+            }
+        }
+    }
+    if (@run_up_to_date) {
+        my $up_to_date = collect_top_up_to_date_modulo_local(\@targets, $depdb, $up_to_date_db);
+        foreach my $run (@run_up_to_date) {
+            foreach my $cert (@$up_to_date) {
+                (my $book = $cert) =~ s/\.cert$//;
+                &$run($book);
+            }
+        }
+    }
+    if (@run_all_up_to_date || @run_all_out_of_date) {
+	my ($all_up_to_date, $all_out_of_date) = collect_all_up_to_date(\@targets, $depdb, $up_to_date_db);
+	foreach my $run (@run_all_up_to_date) {
+	    foreach my $cert (@$all_up_to_date) {
+                (my $book = $cert) =~ s/\.cert$//;
+                &$run($book);
+	    }
+	}
+	foreach my $run (@run_all_out_of_date) {
+	    foreach my $cert (@$all_out_of_date) {
+                (my $book = $cert) =~ s/\.cert$//;
+                &$run($book);
+	    }
+	}
+    }
+}
+
+
 
 my @certs = sort(keys %{$depdb->certdeps});
 
 # Warn about books that include relocation stubs
 my %stubs = (); # maps stub files to the books that include them
 foreach my $cert (@certs) {
-    my $certdeps = cert_bookdeps($cert, $depdb);
+    my $certdeps = $depdb->cert_bookdeps($cert);
     foreach my $dep (@$certdeps) {
-	if (cert_get_param($dep, $depdb, "reloc_stub")) {
-	    if (exists $stubs{$dep}) {
-		push(@{$stubs{$dep}}, $cert);
-	    } else {
-		$stubs{$dep} = [ $cert ];
-	    }
-	}
+        if ($depdb->cert_get_param($dep, "reloc_stub")
+            || $depdb->cert_get_param($dep, "reloc-stub")) {
+            if (exists $stubs{$dep}) {
+                push(@{$stubs{$dep}}, $cert);
+            } else {
+                $stubs{$dep} = [ $cert ];
+            }
+        }
     }
 }
-if (%stubs && ! $quiet) {
-    print "Relocation warnings:\n";
-    print "--------------------------\n";
+if (%stubs && (! $quiet || $print_relocs)) {
+    # Print relocation warnings to STDERR.  Skipped when $quiet.
+    print STDERR "Relocation warnings:\n";
+    print STDERR "--------------------------\n";
     my @stubbooks = sort(keys %stubs);
     foreach my $stub (@stubbooks) {
-	print "Stub file:       $stub\n";
-	# note: assumes each stub file includes only one book.
-	print "relocated to:    ${cert_bookdeps($stub, $depdb)}[0]\n";
-	print "is included by:\n";
-	foreach my $cert (sort(@{$stubs{$stub}})) {
-	    print "                 $cert\n";
-	}
-	print "--------------------------\n";
+        print STDERR "Stub file:       $stub\n";
+        # note: assumes each stub file includes only one book.
+        print STDERR "relocated to:    ${$depdb->cert_bookdeps($stub)}[0]\n";
+        print STDERR "is included by:\n";
+        foreach my $cert (sort(@{$stubs{$stub}})) {
+            print STDERR "                 $cert\n";
+        }
+        print STDERR "--------------------------\n";
     }
 }
 
 
+# Write the timestamp file if requested. When exactly this happens is
+# somewhat arbitrary but it needs to be after the regular scan and
+# also after the up_to_date/out_of_date commands are run.
+if ($write_timestamps) {
+    write_timestamps($write_timestamps);
+}
 
 my $mf_intro_string = '
 # Cert.pl is a build system for ACL2 books.  The cert.pl executable is
@@ -700,28 +998,53 @@ sub make_encode { # encode a filename for MAKE
     return $str;
 }
 
+# Although the print $smf calls are supposed to be conditioned on $ysmf,
+# this will prevent any leakage to the file system if output goes to $smf.
+$smf_name = $ysmf ? ( $mf_name . ".lsp" ) : "/dev/null";
+
 unless ($no_makefile) {
     # Build the makefile and run make.
     open (my $mf, ">", $mf_name)
-	or die "Failed to open output file $mf_name\n";
+        or die "Failed to open output file $mf_name\n";
+
+    open (my $smf, ">", $smf_name)
+        or die "Failed to open output file $smf_name\n";
 
     print $mf "\n# This makefile was generated by running:\n# cert.pl";
     foreach my $arg (@orig_cmd_line_args) {
-	print $mf " $arg";
+        print $mf " $arg";
     }
     print $mf "\n";
     print $mf $mf_intro_string;
 
+    $ysmf and print $smf "; This file contains most of the information in\n";
+    $ysmf and print $smf "; \"$mf_name\"\n";
+    $ysmf and print $smf "; but in S-expression format so that we can read it in ACL2.\n";
+    # The entire thing printed to $smf should be in one list.
+    $ysmf and print $smf "(\n\n";
+
     unless ($no_boilerplate) {
-	print $mf "ACL2_SYSTEM_BOOKS ?= " . canonical_path("$RealBin/..") . "\n";
-	if ($bin_dir) {
-	    print $mf "export ACL2_BIN_DIR := ${bin_dir}\n";
-	}
-	print $mf "include \$(ACL2_SYSTEM_BOOKS)/build/make_cert\n\n";
+        print $mf "ACL2_SYSTEM_BOOKS ?= " . canonical_path("$RealBin/..") . "\n";
+        if ($bin_dir) {
+            print $mf "export ACL2_BIN_DIR := ${bin_dir}\n";
+        }
+        print $mf "include \$(ACL2_SYSTEM_BOOKS)/build/make_cert\n\n";
+
+	# NOTE: it's sometimes nice to have a record of when the build
+	# began, but these invocations of date aren't cross-platform
+	# enough.
+        # print $mf 'STARTTIME := $(shell date +\'%s.%N\')';
+	# print $mf "\n";
+	# print $mf '$(info Beginning build at $(shell date +\'%d-%b-%Y %H:%M:%S.%N\' --date "@$(STARTTIME)")';
+	# if ($ENV{'CERT_PL_PARSEABLE_TIMESTAMPS'}) {
+	#     print $mf ' [$(STARTTIME)]';
+	# }
+	# print $mf ")\n";
+
     }
 
     foreach my $incl (@includes) {
-	print $mf "\ninclude $incl\n";
+        print $mf "\ninclude $incl\n";
     }
 
     print $mf "\n.PHONY: all-cert-pl-certs\n\n";
@@ -729,27 +1052,69 @@ unless ($no_makefile) {
     print $mf "all-cert-pl-certs:\n\n";
 
     # declare $var_prefix_CERTS to be the list of certificates
+    print $mf "# Note: This variable lists the certificates for all books to be built.\n";
+    $ysmf and print $smf "; Note: This is a list of the certificates for all books to be built.\n";
+
     print $mf $var_prefix . "_CERTS :=";
+    $ysmf and print $smf "( " . ":" . $var_prefix . "_CERTS\n ";
 
     foreach my $cert (@certs) {
-	print $mf " \\\n     " . make_encode($cert);
-	# if (cert_get_param($cert, $depdb, "acl2x")) {
-	#     my $acl2xfile = cert_to_acl2x($cert);
-	#     print $mf " \\\n     $acl2xfile";
-	# }
+        print $mf " \\\n     " . make_encode($cert);
+        $ysmf and print $smf " \"" . make_encode($cert) . "\"\n ";
+        # if (cert_get_param($cert, $depdb, "acl2x")) {
+        #     my $acl2xfile = cert_to_acl2x($cert);
+        #     print $mf " \\\n     $acl2xfile";
+        # }
     }
-
+    $ysmf and print $smf ")\n\n";
     print $mf "\n\n";
+
+    print $mf "# Note: This variable lists the certificates for all books to be built\n";
+    print $mf "# along with any pcert or acl2x files to be built along the way.\n";
+    print $mf "${var_prefix}_ALLCERTS := \$(${var_prefix}_CERTS)";
+
+    # we don't repeat the _CERTS in the s-expression version, just list the additional files.
+    $ysmf and print $smf "; Note: this is a list of the additional pcert and acl2x files to be built.\n";
+    $ysmf and print $smf "( " . ":" . $var_prefix . "_ALLCERTS\n ";
+
+    my $pcert_all = $certlib_opts{"pcert_all"};
+    foreach my $cert (@certs) {
+        my $useacl2x = $depdb->cert_get_param($cert, "acl2x") || 0;
+        # BOZO acl2x implies no pcert
+        my $pcert_ok = (! $useacl2x && ($depdb->cert_get_param($cert, "pcert") || $pcert_all)) || 0;
+        if (! $pcert_ok && ! $useacl2x) {
+            next;
+        }
+	(my $base = $cert) =~ s/\.cert$//;
+	my $encbase = make_encode($base);
+	if ($useacl2x) {
+	    print $mf " \\\n     ${encbase}.acl2x";
+            $ysmf and print $smf " \"" . "${encbase}.acl2x" . "\"\n ";
+        }
+	if ($pcert_ok) {
+	    print $mf " \\\n     ${encbase}.pcert0";
+	    print $mf " \\\n     ${encbase}.pcert1";
+            $ysmf and print $smf " \"" . "${encbase}.pcert0" . "\"\n ";
+            $ysmf and print $smf " \"" . "${encbase}.pcert1" . "\"\n ";
+	}
+        # if (cert_get_param($cert, $depdb, "acl2x")) {
+        #     my $acl2xfile = cert_to_acl2x($cert);
+        #     print $mf " \\\n     $acl2xfile";
+        # }
+    }
+    $ysmf and print $smf ")\n\n";
+    print $mf "\n\n";
+
 
     # print $mf "ifneq (\$(ACL2_PCERT),)\n\n";
     # print $mf "${var_prefix}_CERTS := \$(${var_prefix}_CERTS)";
     # foreach my $cert (@certs) {
-    # 	if ($cert =~ /\.cert$/) {
-    # 	    my $base = $cert;
-    # 	    $base =~ s/\.cert$//;
-    # 	    print $mf " \\\n     $base.pcert0";
-    # 	    print $mf " \\\n     $base.pcert1";
-    # 	}
+    #   if ($cert =~ /\.cert$/) {
+    #       my $base = $cert;
+    #       $base =~ s/\.cert$//;
+    #       print $mf " \\\n     $base.pcert0";
+    #       print $mf " \\\n     $base.pcert1";
+    #   }
     # }
     # print $mf "\n\nendif\n";
 
@@ -757,240 +1122,288 @@ unless ($no_makefile) {
 
     # declare $var_prefix_SOURCES to be the list of sources
     print $mf $var_prefix . "_SOURCES :=";
+    $ysmf and print $smf "; Note: this is a list of the sources to be certified.\n";
+    $ysmf and print $smf "( " . ":" . $var_prefix . "_SOURCES\n ";
+
     foreach my $source (@sources) {
-	print $mf " \\\n     " . make_encode($source);
+        print $mf " \\\n     " . make_encode($source);
+        $ysmf and print $smf " \"" . make_encode($source) . "\"\n ";
     }
+    $ysmf and print $smf ")\n\n";
     print $mf "\n\n";
 
-    # Write out the list of hons-only certs
-    # Propagate the hons-only requirement:
+    # Write out the list of hons-only certs and other reqparams.
     my %visited;
+    $ysmf and print $smf "; Note: following are lists of cert files needed for various optional build parameters.\n";
     foreach my $reqparam (keys %reqparams) {
-	%visited = ();
-	foreach my $cert (@certs) {
-	    propagate_reqparam($cert, $reqparam, \%visited, $depdb);
-	}
+        %visited = ();
+        # Propagate the reqparam:
+        foreach my $cert (@certs) {
+            propagate_reqparam($cert, $reqparam, \%visited, $depdb);
+        }
 
-	print $mf "${var_prefix}_${reqparams{$reqparam}} :=";
-	foreach my $cert (@certs) {
-	    if (cert_get_param($cert, $depdb, $reqparam)) {
-		print $mf " \\\n     " . make_encode($cert) . " ";
-	    }
-	}
-	print $mf "\n\n";
+        print $mf "${var_prefix}_${reqparams{$reqparam}} :=";
+        $ysmf and print $smf "( " . ":" . "${var_prefix}_${reqparams{$reqparam}}" . "\n ";
+
+        foreach my $cert (@certs) {
+            if ($depdb->cert_get_param($cert, $reqparam)) {
+                print $mf "  \\\n     " . make_encode($cert);
+                $ysmf and print $smf " \"" . make_encode($cert) . "\"\n ";
+            }
+        }
+        $ysmf and print $smf ")\n\n";
+        print $mf "\n\n";
     }
+
+    # $smf does not yet handle labels.
+    # Labels seem rare; they never came up during regression builds.
+
     # If there are labels, write out the sources and certs for those
     foreach my $label (sort(keys %labels)) {
-	my @topcerts = @{$labels{$label}};
-	my @labelcerts = ();
-	my @labelsources = ();
-	%visited = ();
-	# print "Processing label: $label\n";
-	foreach my $topcert (@topcerts) {
-	    # print "Visiting $topcert\n";
-	    deps_dfs($topcert, $depdb, \%visited, \@labelsources, \@labelcerts);
-	}
-	@labelcerts = sort(@labelcerts);
-	@labelsources = sort(@labelsources);
-	print $mf "${label}_CERTS :=";
-	foreach my $cert (@labelcerts) {
-	    print $mf " \\\n     " . make_encode($cert);
-	    # if (cert_is_two_pass($cert, $depdb)) {
-	    # 	my $acl2x = cert_to_acl2x($cert);
-	    # 	print $mf " \\\n     $acl2x";
-	    # }
-	}
-	print $mf "\n\n";
-	# print $mf "ifneq (\$(ACL2_PCERT),)\n\n";
-	# print $mf "${label}_CERTS := \$(${label}_CERTS)";
-	# foreach my $cert (@labelcerts) {
-	#     my $base = $cert;
-	#     $base =~ s/\.cert$//;
-	#     print $mf " \\\n     $base.pcert";
-	#     print $mf " \\\n     $base.acl2x";
-	# }
-	# print $mf "\n\nendif\n";
+        my @topcerts = @{$labels{$label}};
+        my @labelcerts = ();
+        my @labelsources = ();
+        my @others = ();
+        %visited = ();
+        # print "Processing label: $label\n";
+        foreach my $topcert (@topcerts) {
+            # print "Visiting $topcert\n";
+            deps_dfs($topcert, $depdb, \%visited, \@labelsources, \@labelcerts, \@others);
+        }
+        @labelcerts = sort(@labelcerts);
+        @labelsources = sort(@labelsources);
+        print $mf "${label}_CERTS :=";
+        foreach my $cert (@labelcerts) {
+            print $mf " \\\n     " . make_encode($cert);
+            # if (cert_is_two_pass($cert, $depdb)) {
+            #   my $acl2x = cert_to_acl2x($cert);
+            #   print $mf " \\\n     $acl2x";
+            # }
+        }
+        print $mf "\n\n";
+        # print $mf "ifneq (\$(ACL2_PCERT),)\n\n";
+        # print $mf "${label}_CERTS := \$(${label}_CERTS)";
+        # foreach my $cert (@labelcerts) {
+        #     my $base = $cert;
+        #     $base =~ s/\.cert$//;
+        #     print $mf " \\\n     $base.pcert";
+        #     print $mf " \\\n     $base.acl2x";
+        # }
+        # print $mf "\n\nendif\n";
 
-	print $mf "${label}_SOURCES :=";
-	foreach my $source (@labelsources) {
-	    print $mf " \\\n     " . make_encode($source);
-	}
-	print $mf "\n\n";
+        print $mf "${label}_SOURCES :=";
+        foreach my $source (@labelsources) {
+            print $mf " \\\n     " . make_encode($source);
+        }
+        print $mf "\n\n";
     }
 
     my $warned_bindir = 0;
-    my $pcert_all = $certlib_opts{"pcert_all"};
+
+    $ysmf and print $smf "; Note: The following is the dependency map.\n";
+    $ysmf and print $smf "; For each element of the map, the first string is the target cert\n";
+    $ysmf and print $smf "; and the rest of the strings are its immediate dependencies.\n";
+    $ysmf and print $smf "; Note: As of now, we do not write out the acl2x and pcert indicators.\n";
+    $ysmf and print $smf "( :DEPENDENCY-MAP\n ";
 
     # write out the dependencies
     foreach my $cert (@certs) {
-	my $certdeps = cert_deps($cert, $depdb);
-	my $srcdeps = cert_srcdeps($cert, $depdb);
-	my $otherdeps = cert_otherdeps($cert, $depdb);
-	my $image = cert_image($cert, $depdb);
-	my $useacl2x = cert_get_param($cert, $depdb, "acl2x") || 0;
-	# BOZO acl2x implies no pcert
-	my $pcert_ok = ( ! $useacl2x && (cert_get_param($cert, $depdb, "pcert") || $pcert_all)) || 0;
-	my $acl2xskip = cert_get_param($cert, $depdb, "acl2xskip") || 0;
+        my $certdeps = $depdb->cert_deps($cert);
+        my $srcdeps = $depdb->cert_srcdeps($cert);
+        my $otherdeps = $depdb->cert_otherdeps($cert);
+        my $image = $depdb->cert_image($cert);
+        my $useacl2x = $depdb->cert_get_param($cert, "acl2x") || 0;
+        # BOZO acl2x implies no pcert
+        my $pcert_ok = ( ! $useacl2x && ($depdb->cert_get_param($cert, "pcert") || $pcert_all)) || 0;
+        my $acl2xskip = $depdb->cert_get_param($cert, "acl2xskip") || 0;
 
-	print $mf make_encode($cert) . " : acl2x = $useacl2x\n";
-	print $mf make_encode($cert) . " : pcert = $pcert_ok\n";
-	# print $mf "#$cert params: ";
-	# my $params = cert_get_params($cert, $depdb);
-	# while (my ($key, $val) = each %$params) {
-	#     print $mf "$key = $val ";
-	# }
-	print $mf "\n";
-	print $mf make_encode($cert) . " :";
-	foreach my $dep (@$certdeps, @$srcdeps, @$otherdeps) {
-	    print $mf " \\\n     " . make_encode($dep);
-	}
-	if ($image && ($image ne "acl2")) {
-	    if ($bin_dir) {
-		# was:
-		# print $mf " \\\n     " . rel_path($bin_dir, $image);
-		print $mf " \\\n     " . File::Spec->catfile($bin_dir, $image);
-	    } elsif (! $warned_bindir) {
-		print "Warning: no --bin set, so not adding image dependencies,\n";
-		print " e.g.   $cert : $image\n";
-		$warned_bindir = 1;
-	    }
-	}
-	print $mf "\n";
-	if ($useacl2x) {
-	    my $acl2xfile = cert_to_acl2x($cert);
+        print $mf make_encode($cert) . " : acl2x = $useacl2x\n";
+        print $mf make_encode($cert) . " : pcert = $pcert_ok\n";
+        # print $mf "#$cert params: ";
+        # my $params = cert_get_params($cert, $depdb);
+        # while (my ($key, $val) = each %$params) {
+        #     print $mf "$key = $val ";
+        # }
+        print $mf "\n";
+        print $mf make_encode($cert) . " :";
+        $ysmf and print $smf " (\"" . make_encode($cert) . "\"";
+        foreach my $dep (@$certdeps, @$srcdeps, @$otherdeps) {
+            print $mf " \\\n     " . make_encode($dep);
+            $ysmf and print $smf "\n    \"" . make_encode($dep) . "\"";
+        }
+        # $smf does not yet support alternate images
+        if ($image && ($image ne "acl2")) {
+            if ($bin_dir) {
+                # was:
+                # print $mf " \\\n     " . rel_path($bin_dir, $image);
+                print $mf " \\\n     " . File::Spec->catfile($bin_dir, $image);
+            } elsif (! $warned_bindir) {
+                print "Warning: no --bin set, so not adding image dependencies,\n";
+                print " e.g.   $cert : $image\n";
+                $warned_bindir = 1;
+            }
+        }
+        print $mf "\n";
+        $ysmf and print $smf ")\n";
+
+        # $smf is not yet writing out the order-only prerequisites to smf
+        if ($useacl2x) {
+            my $acl2xfile = cert_to_acl2x($cert);
 #     This would be a nice way to do things, but unfortunately the "private"
 #     keyword for target-specific variables was introduced in GNU Make 3.82,
 #     which isn't widely used yet --
-#	    print $mf "$cert : private TWO_PASS := 1\n";
+#           print $mf "$cert : private TWO_PASS := 1\n";
 #     Instead, sadly, we'll individually set the TWO_PASS variable for
 #     each target instead.  (Note the ELSE case below.)
-	    print $mf make_encode($cert) . " : |";   # order-only prerequisite
-	    print $mf " \\\n     " . make_encode($acl2xfile);
-	    print $mf "\n\n";
-	    print $mf make_encode($acl2xfile) . " : acl2xskip = $acl2xskip\n";
-	    print $mf make_encode($acl2xfile) . " :";
-	    foreach my $dep (@$certdeps) {
-		# Note: Ideally we would only depend on the sequential dep here.
-		# But currently ACL2 doesn't allow inclusion of provisionally-certified
-		# books by a write-acl2x step.
-		# print $mf " \\\n     " . make_encode(cert_sequential_dep($dep, $depdb));
-		print $mf " \\\n     " . make_encode($dep);
-	    }
-	    foreach my $dep (@$srcdeps, @$otherdeps) {
-		print $mf " \\\n     " . make_encode($dep);
-	    }
-	    if ($image && ($image ne "acl2")) {
-		if ($bin_dir) {
-		    # was:
-		    # print $mf " \\\n     " . rel_path($bin_dir, $image);
-		    print $mf " \\\n     " . make_encode(File::Spec->catfile($bin_dir, $image));
-		} elsif (! $warned_bindir) {
-		    print "Warning: no --bin set, so not adding image dependencies,\n";
-		    print " e.g.   $cert : $image\n";
-		    $warned_bindir = 1;
-		}
-	    }
-	}
+            print $mf make_encode($cert) . " : |";   # order-only prerequisite
+            print $mf " \\\n     " . make_encode($acl2xfile);
+            print $mf "\n\n";
+            print $mf make_encode($acl2xfile) . " : acl2xskip = $acl2xskip\n";
+            print $mf make_encode($acl2xfile) . " :";
+            foreach my $dep (@$certdeps) {
+                # Note: Ideally we would only depend on the sequential dep here.
+                # But currently ACL2 doesn't allow inclusion of provisionally-certified
+                # books by a write-acl2x step.
+                # print $mf " \\\n     " . make_encode(cert_sequential_dep($dep, $depdb));
+                print $mf " \\\n     " . make_encode($dep);
+            }
+            foreach my $dep (@$srcdeps, @$otherdeps) {
+                print $mf " \\\n     " . make_encode($dep);
+            }
+            if ($image && ($image ne "acl2")) {
+                if ($bin_dir) {
+                    # was:
+                    # print $mf " \\\n     " . rel_path($bin_dir, $image);
+                    print $mf " \\\n     " . make_encode(File::Spec->catfile($bin_dir, $image));
+                } elsif (! $warned_bindir) {
+                    print STDERR "Warning: no --bin set, so not adding image dependencies,\n";
+                    print STDERR " e.g.   $cert : $image\n";
+                    $warned_bindir = 1;
+                }
+            }
+        }
 
-	print $mf "\n\n";
+        print $mf "\n\n";
     }
+    $ysmf and print $smf ")\n\n";
 
     # Write dependencies for pcert mode.
     # print $mf "ifneq (\$(ACL2_PCERT),)\n\n";
 
+    # $smf is not yet capturing acl2x or pcert dependencies here
+
     foreach my $cert (@certs) {
-	my $useacl2x = cert_get_param($cert, $depdb, "acl2x") || 0;
-	# BOZO acl2x implies no pcert
-	my $pcert_ok = (! $useacl2x && (cert_get_param($cert, $depdb, "pcert") || $pcert_all)) || 0;
-	if (! $pcert_ok) {
-	    next;
-	}
-	my $deps = cert_deps($cert, $depdb);
-	my $srcdeps = cert_srcdeps($cert, $depdb);
-	my $otherdeps = cert_otherdeps($cert, $depdb);
-	my $image = cert_image($cert, $depdb);
-	(my $base = $cert) =~ s/\.cert$//;
-	# this is either the pcert0 or pcert1 depending on pcert_ok
-	my $pcert = cert_sequential_dep($cert, $depdb);
-	my $encpcert = make_encode($pcert);
-	print $mf "$encpcert : pcert = $pcert_ok\n";
-	print $mf "$encpcert : acl2x = $useacl2x\n";
-	print $mf "$encpcert :";
-	foreach my $dep (@$deps) {
-	    # this is either the pcert0 or pcert1 depending whether the dependency
-	    # has pcert set
-	    print $mf " \\\n     " . make_encode(cert_sequential_dep($dep, $depdb));
-	}
-	foreach my $dep (@$srcdeps, @$otherdeps) {
-	    print $mf " \\\n     " . make_encode($dep);
-	}
-	if ($image && ($image ne "acl2")) {
-	    if ($bin_dir) {
-		# was:
-		# print $mf " \\\n     " . rel_path($bin_dir, $image);
-		print $mf " \\\n     " . make_encode(File::Spec->catfile($bin_dir, $image));
-	    } elsif (! $warned_bindir) {
-		print "Warning: no --bin set, so not adding image dependencies,\n";
-		print " e.g.   $cert : $image\n";
-		$warned_bindir = 1;
-	    }
-	}
-	print $mf "\n";
-	# If we're doing prov cert, pcert1 depends on pcert0 and cert depends on pcert1
-	my $encbase = make_encode($base);
-	if ($pcert_ok) {
-	    # Pcert1 files depend only on the corresp. pcert0.
-	    print $mf "$encbase.pcert1 : acl2x = $useacl2x\n";
-	    print $mf "$encbase.pcert1 : pcert = $pcert_ok\n";
-	    print $mf "$encbase.pcert1 : $encbase.pcert0\n";
-	} elsif ($useacl2x) {
-	    # pcert1 depends on .acl2x
-	    print $mf "$encbase.pcert1 : $encbase.acl2x\n";
-	}
-	print $mf make_encode($cert) . " : $encbase.pcert1\n";
-	print $mf ".INTERMEDIATE: $encbase.pcert1\n";
-	print $mf ".PRECIOUS: $encbase.pcert1\n";
-	# print $mf ".SECONDARY: $encbase.pcert0\n";
-	print $mf ".PRECIOUS: $encbase.pcert0\n";
-	print $mf "\n";
+        my $useacl2x = $depdb->cert_get_param($cert, "acl2x") || 0;
+        # BOZO acl2x implies no pcert
+        my $pcert_ok = (! $useacl2x && ($depdb->cert_get_param($cert, "pcert") || $pcert_all)) || 0;
+        if (! $pcert_ok) {
+            next;
+        }
+        my $deps = $depdb->cert_deps($cert);
+        my $srcdeps = $depdb->cert_srcdeps($cert);
+        my $otherdeps = $depdb->cert_otherdeps($cert);
+        my $image = $depdb->cert_image($cert);
+        (my $base = $cert) =~ s/\.cert$//;
+        # this is either the pcert0 or pcert1 depending on pcert_ok
+        my $pcert = $depdb->cert_sequential_dep($cert);
+        my $encpcert = make_encode($pcert);
+        print $mf "$encpcert : pcert = $pcert_ok\n";
+        print $mf "$encpcert : acl2x = $useacl2x\n";
+        print $mf "$encpcert :";
+        foreach my $dep (@$deps) {
+            # this is either the pcert0 or pcert1 depending whether the dependency
+            # has pcert set
+            print $mf " \\\n     " . make_encode($depdb->cert_sequential_dep($dep));
+        }
+        foreach my $dep (@$srcdeps, @$otherdeps) {
+            print $mf " \\\n     " . make_encode($dep);
+        }
+        if ($image && ($image ne "acl2")) {
+            if ($bin_dir) {
+                # was:
+                # print $mf " \\\n     " . rel_path($bin_dir, $image);
+                print $mf " \\\n     " . make_encode(File::Spec->catfile($bin_dir, $image));
+            } elsif (! $warned_bindir) {
+                print STDERR "Warning: no --bin set, so not adding image dependencies,\n";
+                print STDERR " e.g.   $cert : $image\n";
+                $warned_bindir = 1;
+            }
+        }
+        print $mf "\n";
+        # If we're doing prov cert, pcert1 depends on pcert0 and cert depends on pcert1
+        my $encbase = make_encode($base);
+        if ($pcert_ok) {
+            # Pcert1 files depend only on the corresp. pcert0.
+            print $mf "$encbase.pcert1 : acl2x = $useacl2x\n";
+            print $mf "$encbase.pcert1 : pcert = $pcert_ok\n";
+            print $mf "$encbase.pcert1 : $encbase.pcert0\n";
+        } elsif ($useacl2x) {
+            # pcert1 depends on .acl2x
+            print $mf "$encbase.pcert1 : $encbase.acl2x\n";
+        }
+        print $mf make_encode($cert) . " : $encbase.pcert1\n";
+        print $mf ".INTERMEDIATE: $encbase.pcert1\n";
+        print $mf ".PRECIOUS: $encbase.pcert1\n";
+        # print $mf ".SECONDARY: $encbase.pcert0\n";
+        print $mf ".PRECIOUS: $encbase.pcert0\n";
+        print $mf "\n";
     }
 
     # print $mf "\nendif\n\n";
 
+    # Add a dependency from every certificate to build/acl2-version.certdep and build/universal-dependency.certdep.
+    # $smf does not yet handle .certdep dependencies
+    print $mf "\n";
+    my $builddir = make_encode(canonical_path("$acl2_books/build"));
+    print $mf "\$(${var_prefix}_ALLCERTS) : ${builddir}/acl2-version.certdep ${builddir}/universal-dependency.certdep\n\n";
+
+    # Add a trivial recipe to build the required files in case they're missing.
+    print $mf "${builddir}/%.certdep :\n\ttouch \$@\n\n";
 
     foreach my $incl (@include_afters) {
-	print $mf "\ninclude $incl\n";
+        print $mf "\ninclude $incl\n";
     }
 
     close($mf);
+    $ysmf and print $smf ")\n";
+    close($smf);
 
     unless ($no_build) {
-	my $make_cmd = join(' ', ("$make -j $jobs -f $mf_name",
-				  ($keep_going ? " -k" : ""),
-				  @make_args,
-				  "all-cert-pl-certs"));
-	print "$make_cmd\n";
-	if ($certlib_opts{"debugging"}) {
-	    print "$make_cmd\n";
-	}
-	exec $make_cmd;
+        my $make_cmd = join(' ', ("$make -j $jobs -f $mf_name --no-builtin-rules ",
+                                  ($keep_going ? " -k" : ""),
+                                  @make_args,
+                                  "all-cert-pl-certs"));
+        if ($certlib_opts{"debugging"}) {
+	    # Print debugging output on stdout
+            print "$make_cmd\n";
+        }
+        exec $make_cmd;
     }
 }
 
 if ($write_sources) {
     open (my $sourcesfile, ">", $write_sources)
-	or die "Failed to open output file $write_sources\n";
+        or die "Failed to open output file $write_sources\n";
     foreach my $source (@sources) {
-	print $sourcesfile "${source}\n";
+        print $sourcesfile "${source}\n";
     }
     close($sourcesfile);
 }
 
+if ($write_otherdeps) {
+    open (my $otherdepsfile, ">", $write_otherdeps)
+        or die "Failed to open output file $write_otherdeps\n";
+    foreach my $source (@otherdeps) {
+        print $otherdepsfile "${source}\n";
+    }
+    close($otherdepsfile);
+}
+
 if ($write_certs) {
     open (my $certsfile, ">", $write_certs)
-	or die "Failed to open output file $write_certs\n";
+        or die "Failed to open output file $write_certs\n";
     foreach my $cert (@certs) {
-	print $certsfile "${cert}\n";
+        print $certsfile "${cert}\n";
     }
     close($certsfile);
 }
@@ -998,5 +1411,3 @@ if ($write_certs) {
 
 
 # print_times_seen();
-
-

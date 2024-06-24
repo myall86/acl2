@@ -31,10 +31,10 @@
 (in-package "VL2014")
 (include-book "centaur/vl2014/util/defs" :dir :system)
 (include-book "centaur/fty/deftypes" :dir :system)
-(local (include-book "misc/assert" :dir :system))
+(local (include-book "std/testing/assert-bang" :dir :system))
 (local (include-book "centaur/vl2014/util/arithmetic" :dir :system))
 (local (include-book "centaur/vl2014/util/position" :dir :system))
-(local (include-book "std/misc/intern-in-package-of-symbol" :dir :system))
+(local (include-book "std/basic/intern-in-package-of-symbol" :dir :system))
 
 (defxdoc exploding-vectors
   :parents (e-conversion)
@@ -122,16 +122,16 @@ on the expression-slicing code.</p>")
             :hints(("Goal" :in-theory (enable digit-to-char)))))
 
    (local (defthm c1
-            (and (not (member-equal #\! (str::basic-natchars x)))
-                 (not (member-equal #\. (str::basic-natchars x)))
-                 (not (member-equal #\/ (str::basic-natchars x))))
-            :hints(("Goal" :in-theory (enable str::basic-natchars)))))
+            (and (not (member-equal #\! (str::basic-nat-to-dec-chars x)))
+                 (not (member-equal #\. (str::basic-nat-to-dec-chars x)))
+                 (not (member-equal #\/ (str::basic-nat-to-dec-chars x))))
+            :hints(("Goal" :in-theory (enable str::basic-nat-to-dec-chars)))))
 
    (local (defthm c2
-            (and (not (member-equal #\! (str::natchars x)))
-                 (not (member-equal #\. (str::natchars x)))
-                 (not (member-equal #\/ (str::natchars x))))
-            :hints(("Goal" :in-theory (enable str::natchars)))))
+            (and (not (member-equal #\! (str::nat-to-dec-chars x)))
+                 (not (member-equal #\. (str::nat-to-dec-chars x)))
+                 (not (member-equal #\/ (str::nat-to-dec-chars x))))
+            :hints(("Goal" :in-theory (enable str::nat-to-dec-chars)))))
 
    (defthm no-specials-in-natstr
      (and (not (member-equal #\! (explode (natstr x))))
@@ -140,12 +140,12 @@ on the expression-slicing code.</p>")
      :hints(("Goal" :in-theory (enable natstr))))))
 
 
-(local (defthm digit-listp-encoding-help
-         (implies (str::digit-listp x)
+(local (defthm dec-digit-char-listp-encoding-help
+         (implies (str::dec-digit-char-listp x)
                   (and (not (member-equal #\] x))
                        (not (member-equal #\[ x))
                        (not (member-equal #\{ x))))
-         :hints(("Goal" :in-theory (enable str::digit-listp)))))
+         :hints(("Goal" :in-theory (enable str::dec-digit-char-listp)))))
 
 
 
@@ -710,20 +710,20 @@ details.</p>"
 
   ;; (in-theory (disable nthcdr-of-increment))
 
-  ;; (defthm str::take-leading-digits-of-replicate
-  ;;   (equal (str::take-leading-digits (replicate n char))
+  ;; (defthm str::take-leading-dec-digit-chars-of-replicate
+  ;;   (equal (str::take-leading-dec-digit-chars (replicate n char))
   ;;          (if (str::digitp char)
   ;;              (replicate n char)
   ;;            nil))
-  ;;   :hints(("Goal" :in-theory (enable str::take-leading-digits
+  ;;   :hints(("Goal" :in-theory (enable str::take-leading-dec-digit-chars
   ;;                                     replicate))))
 
 
   ;; (defthm c1
   ;;   (implies (not (str::digitp (nth n x)))
-  ;;            (equal (str::take-leading-digits (take n x))
-  ;;                   (str::take-leading-digits x)))
-  ;;   :hints(("Goal" :in-theory (enable str::take-leading-digits
+  ;;            (equal (str::take-leading-dec-digit-chars (take n x))
+  ;;                   (str::take-leading-dec-digit-chars x)))
+  ;;   :hints(("Goal" :in-theory (enable str::take-leading-dec-digit-chars
   ;;                                     nth))))
 
   ;; (defthm c2
@@ -734,10 +734,10 @@ details.</p>"
   ;;         (<= 2 (+ (- OPEN) (LEN X))))
   ;;    (EQUAL
   ;;     (STR::DIGIT-LIST-VALUE
-  ;;      (STR::TAKE-LEADING-DIGITS (TAKE (+ -2 (- OPEN) (LEN X))
-  ;;                                              (NTHCDR (+ 1 OPEN) X))))
+  ;;      (STR::TAKE-LEADING-DEC-DIGIT-CHARS (TAKE (+ -2 (- OPEN) (LEN X))
+  ;;                                               (NTHCDR (+ 1 OPEN) X))))
   ;;     (STR::DIGIT-LIST-VALUE
-  ;;      (STR::TAKE-LEADING-DIGITS (NTHCDR (+ 1 OPEN) X))))))
+  ;;      (STR::TAKE-LEADING-DEC-DIGIT-CHARS (NTHCDR (+ 1 OPEN) X))))))
 
   ;; (defthm c3
   ;;   (implies (and (stringp name)
@@ -830,6 +830,7 @@ details.</p>"
 
 
 (define vl-emodwire-fix ((x vl-emodwire-p))
+  :parents (vl-emodwire-p)
   :returns (x-prime vl-emodwire-p)
   :inline t
   :hooks nil
@@ -1110,10 +1111,8 @@ index of @('|reset|') is @('nil').</p>"
 
 ;; Introduce defaggregate like make-vl-emodwire and change-vl-emodwire macros.
 
-(make-event (std::da-make-maker-fn 'vl-emodwire '(basename index) nil))
-(make-event (std::da-make-maker 'vl-emodwire '(basename index)))
-(make-event (std::da-make-changer-fn 'vl-emodwire '(basename index)))
-(make-event (std::da-make-changer 'vl-emodwire '(basename index)))
+(make-event (std::da-make-maker 'vl-emodwire '(basename index) nil))
+(make-event (std::da-make-changer 'vl-emodwire '(basename index) nil))
 
 
 
@@ -1237,7 +1236,7 @@ index of @('|reset|') is @('nil').</p>"
                  :hints(("Goal"
                          :induct (my-induct n x)
                          :in-theory (enable vl-emodwire-encoding-valid-p
-                                            acl2::take-redefinition)))))
+                                            acl2::take)))))
 
         (defthm f2
           (implies (vl-emodwire-p x)

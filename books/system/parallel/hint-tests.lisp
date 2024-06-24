@@ -12,10 +12,11 @@
 #+acl2-par
 (progn
 
-(include-book "misc/eval" :dir :system)
+(include-book "std/testing/must-fail" :dir :system)
+(include-book "std/testing/must-succeed" :dir :system)
 
 ;==============================================================================
-; Computed Hints 
+; Computed Hints
 ;==============================================================================
 
 ;;;;;;;;;;;;;;;;;;;;;;;;
@@ -71,7 +72,7 @@
 
 (defun my-state-modifying-computed-hint (id state)
   (declare (xargs :mode :program :stobjs state))
-  (pprogn 
+  (pprogn
    (fms "*** MODIFYING STATE. ***~%" nil *standard-co* state nil)
    (if (equal id *initial-clause-id*)
        (value '(:induct t))
@@ -119,7 +120,7 @@
 (must-succeed
 
 ; Check that we don't receive a message about state being unbound.
- 
+
  (thm (equal (append (append x y) z)
              (append x (append y z)))
       :hints ((my-non-modifying-computed-hint2 id state))))
@@ -130,7 +131,7 @@
 (must-succeed
 
 ; Check that we don't receive a message about state being unbound.
- 
+
  (thm (equal (append (append x y) z)
              (append x (append y z)))
       :hints ((my-non-modifying-computed-hint2 id state))))
@@ -155,7 +156,7 @@
 (set-override-hints
  '((append '(:no-thanks t) keyword-alist)))
 
-(must-fail 
+(must-fail
  (make-event (er-progn (set-waterfall-parallelism :full)
                        (value '(value-triple nil)))))
 
@@ -167,9 +168,10 @@
 (set-override-hints
  '((append '(:no-thanks t) keyword-alist)))
 
-(must-fail 
- (make-event (er-progn (set-waterfall-parallelism nil)
-                       (value '(value-triple nil)))))
+; Matt K. mod: This failed until the change on August 16, 2020, that allows
+; (set-waterfall-parallelism nil) to succeed even with override-hints in place.
+(make-event (er-progn (set-waterfall-parallelism nil)
+                      (value '(value-triple nil))))
 
 (set-override-hints nil)
 
@@ -199,12 +201,12 @@
 ; every attempt to select a hint.
 
  '((mv-let (col state)
-           (fmx "**Applying override hints**")
+           (fmx "~%**Applying override hints**")
            (declare (ignore col))
            (value (append '(:no-thanks t) keyword-alist)))))
 
 (must-succeed
- (thm (equal (append (append x y) z) 
+ (thm (equal (append (append x y) z)
              (append x (append y z)))
       :hints (("Goal" :induct t))))
 
@@ -220,20 +222,20 @@
 (must-fail
  (set-override-hints
   '((mv-let (col state)
-            (fmx "**Applying override hints**")
+            (fmx "~%**Applying override hints**")
             (declare (ignore col))
             (value (append '(:no-thanks t) keyword-alist))))))
 
 
-(make-event (er-progn (set-waterfall-parallelism 
+(make-event (er-progn (set-waterfall-parallelism
 
 ; so we see "Thanks for the hint" messages
-                       
+
                        :full)
                       (value '(value-triple nil))))
 
 (must-succeed
- (thm (equal (append (append x y) z) 
+ (thm (equal (append (append x y) z)
              (append x (append y z)))
       :hints (("Goal" :induct t))))
 
@@ -247,7 +249,7 @@
 ; The proof will still fail, because we haven't enabled the use of waterfall
 ; parallelism hacks (of which, override hints is one).
 
- (thm (equal (append (append x y) z) 
+ (thm (equal (append (append x y) z)
              (append x (append y z)))
       :hints (("Goal" :induct t))))
 
@@ -260,7 +262,7 @@
 ; The proof will succeed, but the "Thanks for the hint" message shouldn't be
 ; printed.
 
- (thm (equal (append (append x y) z) 
+ (thm (equal (append (append x y) z)
              (append x (append y z)))
       :hints (("Goal" :induct t))))
 
@@ -288,7 +290,7 @@
 
 (add-custom-keyword-hint :no-thanks-state-in-generator-and-checker
                          (mv-let (col state)
-                                 (fmx "**Applying custom-keyword hint**")
+                                 (fmx "~%**Applying custom-keyword hint**")
                                  (declare (ignore col))
                                  (if (equal clause clause)
                                      (value (splice-keyword-alist
@@ -300,7 +302,7 @@
 (must-fail
  (add-custom-keyword-hint :no-thanks-state-in-generator-only
                           (mv-let (col state)
-                                  (fmx "**Applying custom-keyword hint**")
+                                  (fmx "~%**Applying custom-keyword hint**")
                                   (declare (ignore col))
                                   (if (equal clause clause)
                                       (value (splice-keyword-alist
@@ -324,7 +326,7 @@
                           :checker t))
 
 (add-custom-keyword-hint :no-thanks-state-in-checker
-                         (prog2$ 
+                         (prog2$
                           (cw "**Applying custom-keyword hint**")
                           (if (equal clause clause)
                               (splice-keyword-alist
@@ -338,7 +340,7 @@
                                           (value t)))
 
 (add-custom-keyword-hint :no-thanks-default-checker1
-                         (prog2$ 
+                         (prog2$
                           (cw "**Applying custom-keyword hint**")
                           (if (equal clause clause)
                              (splice-keyword-alist
@@ -348,7 +350,7 @@
                            keyword-alist)))
 
 (add-custom-keyword-hint :no-thanks-default-checker2
-                         (prog2$ 
+                         (prog2$
                           (cw "**Applying custom-keyword hint**")
                           (if (equal clause clause)
                               (splice-keyword-alist
@@ -776,7 +778,7 @@
   enabled.  In short, they will probably work as you expect.
 
   Our intent is to support ~il[computed-hints] and ~il[custom-keyword-hints]
-  that do not modify state.  
+  that do not modify state.
 
   Using a computed-hint that does not modify state is the same, regardless of
   whether waterfall parallelism is enabled.  It is our intent that the user
@@ -788,7 +790,7 @@
   ~il[add-custom-keyword-hint] for use whenever ~il[waterfall-parallelism] is
   enabled.  This macro is named ~il[add-custom-keyword-hint@par].  Our intent
   is the following:  any custom-keyword-hint added with add-custom-keyword-hint@par
-  can be used in either 
+  can be used in either
 
   that if the user tries to use a custom-keyword-hint added with
   add-custom-keyword-hint (with no @par suffix) while waterfall parallelism is
@@ -799,7 +801,7 @@
 ; tracing functions relevant to debugging the processing of computed, override,
 ; and custom-keyword hints.
 
-(trace$ 
+(trace$
  (TRANSLATE-HINTS+1)
  (TRANSLATE-HINTS+1@PAR)
  (TRANSLATE-HINTS2)

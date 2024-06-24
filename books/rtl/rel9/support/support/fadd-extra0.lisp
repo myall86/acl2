@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -59,28 +47,28 @@
 
 ; Proof of bits-sum-swallow:
 
-; Proof:  Since y < 2^(k+1), y[i:k+1] = 0.  
-; 
+; Proof:  Since y < 2^(k+1), y[i:k+1] = 0.
+;
 ; Since x[k] = 0, x[k:0] = x[k-1:0] < 2^k.
-; 
-; Hence, 
-; 
-;   x[k:0] + y[k:0] < 2^k + 2^k = 2^(k+1) 
-; 
-; and 
-; 
+;
+; Hence,
+;
+;   x[k:0] + y[k:0] < 2^k + 2^k = 2^(k+1)
+;
+; and
+;
 ;   (x[k:0] + y[k:0])[k+1] = 0.
-; 
+;
 ; By BITS-SUM-ORIGINAL,
-; 
+;
 ;   (x+y)[i:k+1] = (x[i:k+1] + y[i:k+1] + (x[k:0] + y[k:0])[k+1])[i-k-1:0]
 ;                = (x[i:k+1])[i-k-1:0]
 ;                = x[i:k+1] {by BITS-BITS}.
-; 
+;
 ; By BITS-BITS,
-; 
-;   (x+y)[i:j] = (x+y)[i:k+1][i-k-1:j-k-1] 
-;              = x[i:k+1][i-k-1:j-k-1] 
+;
+;   (x+y)[i:j] = (x+y)[i:k+1][i-k-1:j-k-1]
+;              = x[i:k+1][i-k-1:j-k-1]
 ;              = x[i:j].
 
 (local-defthm bits<expt
@@ -399,7 +387,7 @@
                        0                     j)
                   (- (expt 2 i) (expt 2 j))))
   ;; The following hint is very weird!!  It can't be on Goal or Goal'.  The
-  ;; idea came from a proof-checker proof.  I should investigate....
+  ;; idea came from a proof-builder proof.  I should investigate....
   :hints (("Goal''" :in-theory (enable cat expt)))
   :rule-classes nil)
 
@@ -513,7 +501,7 @@
                                      (k (1- (expt 2 (- i (1+ j)))))
                                      (m (1+ j))
                                      (n j))))))))
-                                   
+
 (local-defun prop-as-lxor0-thm (i j x y)
   (implies (and (natp i)
                 (natp j)

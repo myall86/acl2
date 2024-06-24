@@ -1,19 +1,5 @@
-; Arithmetic-2 Library
-; Copyright (C) 1999 Robert Krug <rkrug@cs.utexas.edu>
-;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT
-; ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-; FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
-; details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; if not, write to the Free Software Foundation, Inc., 51
-; Franklin Street, Suite 500, Boston, MA 02110-1335, USA.
+; See the top-level arithmetic-2 LICENSE file for authorship,
+; copyright, and license information.
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
@@ -224,7 +210,7 @@
 		   (floor x y))
 		(<= (floor x y)
 		    (/ x y))))
-  :rule-classes ((:generalize) 
+  :rule-classes ((:generalize)
 		 (:linear :trigger-terms ((floor x y)))
                  (:forward-chaining :trigger-terms ((floor x y)))))
 
@@ -233,7 +219,7 @@
 		(integerp (/ x y)))
 	   (equal (floor x y)
 		  (/ x y)))
-  :rule-classes ((:generalize) 
+  :rule-classes ((:generalize)
 		 (:linear :trigger-terms ((floor x y)))
                  (:forward-chaining :trigger-terms ((floor x y)))))
 
@@ -242,7 +228,7 @@
 		(not (integerp (/ x y))))
 	   (< (floor x y)
 	      (/ x y)))
-  :rule-classes ((:generalize) 
+  :rule-classes ((:generalize)
 		 (:linear :trigger-terms ((floor x y)))
                  (:forward-chaining :trigger-terms ((floor x y)))))
 
@@ -306,7 +292,7 @@
 		    (<= y x)
 		  (<= x y)))
 	   (< 0 (floor x y)))
-  :hints (("Subgoal 4.1.2'" :in-theory 
+  :hints (("Subgoal 4.1.2'" :in-theory
                             (enable prefer-positive-exponents-gather-exponents)))
   :otf-flg t
   :rule-classes ((:rewrite :backchain-limit-lst 0)
@@ -658,7 +644,7 @@
 		      0
 		    (- y (mod x y)))))
   :hints (("Goal" :in-theory (enable mod))))
-		   
+
 (defthm simplify-mod-*xxx
   (implies (fm-guard x (y z))
 	    (equal (mod (* x y) (* y z))
@@ -676,7 +662,7 @@
 		(integerp i)
 		(fm-guard (x y) z))
 	   (and (equal (floor (+ x y) z)
-		       (+ i (floor y z))) 
+		       (+ i (floor y z)))
 		(equal (floor (+ y x) z)
 		       (+ i (floor y z))))))
 
@@ -692,7 +678,7 @@
 		(integerp i)
 		(fm-guard (x y) z))
 	   (and (equal (mod (+ x y) z)
-		       (mod y z)) 
+		       (mod y z))
 		(equal (mod (+ y x) z)
 		       (mod y z))))
   :hints (("Goal" :in-theory (enable mod))))

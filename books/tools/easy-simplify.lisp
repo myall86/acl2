@@ -89,7 +89,13 @@ e.g. ((\"Goal\" :foo)).</p>")
                 :force-info t))
        ((er rcnst)
         (load-hint-settings-into-rcnst
-         hint-settings base-rcnst nil world 'easy-simplify-term state))
+         hint-settings base-rcnst
+
+; Matt K. mod April 2016 to accommodate the issue in :doc note-7-3 regarding a
+; slow-array-warning from computed hints.
+
+         :easy-simplify
+         world 'easy-simplify-term state))
        (ens (access rewrite-constant rcnst :current-enabled-structure))
        ((mv flg hyps-type-alist ?ttree)
         (hyps-type-alist hyps ens world state))
@@ -148,11 +154,11 @@ e.g. ((\"Goal\" :foo)).</p>")
   :short "A simple event generator that creates a theorem by finding out what a
 term simplifies to under some hyp and with some hint."
 
-  :long "<p>In contrast to @('misc/defopener'), the reductions carried out by
-@('defopen') may be less powerful because we only do simplification (no
-clausify).  However, this seems to produce more compact expressions than
-@('defopener'), where the result is formed by combining several clauses
-produced from the original term.</p>
+  :long "<p>In contrast to @('misc/defopener') (see @(see defopener)), the
+reductions carried out by @('defopen') may be less powerful because we only do
+simplification (no clausify).  However, this seems to produce more compact
+expressions than @('defopener'), where the result is formed by combining
+several clauses produced from the original term.</p>
 
 <p>General form:</p>
 

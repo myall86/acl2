@@ -74,8 +74,10 @@ routine for gathering comments.</p>"
               (cw "; vl-gather-comments: min/max have different filenames.~%")))
 
         ;; Actual implementation:
-        (with-local-nrev
-          (vl-gather-comments-nrev min max cmap nrev))))
+        (if (atom cmap)
+            nil
+          (with-local-nrev
+            (vl-gather-comments-nrev min max cmap nrev)))))
   ///
   (defthm vl-gather-comments-nrev-removal
     (equal (vl-gather-comments-nrev min max cmap nrev)
@@ -277,7 +279,8 @@ and max, gathering their comments.</p>"
 (define vl-description-has-comments-p ((x vl-description-p))
   (b* ((x (vl-description-fix x)))
     (case (tag x)
-      ((:vl-module :vl-udp :vl-interface :vl-package :vl-program :vl-config :vl-typedef)
+      ((:vl-module :vl-udp :vl-interface :vl-package :vl-program
+        :vl-class :vl-config :vl-typedef)
        t)
       (otherwise
        nil))))
@@ -293,15 +296,22 @@ and max, gathering their comments.</p>"
       (:vl-interface (vl-interface->minloc x))
       (:vl-package   (vl-package->minloc x))
       (:vl-program   (vl-program->minloc x))
+      (:vl-class     (vl-class->minloc x))
       (:vl-config    (vl-config->minloc x))
       (:vl-typedef   (vl-typedef->minloc x))
       ;; Other things don't necessarily have minlocs, but we'll just use their
       ;; ordinary locations.
+      (:vl-vardecl    (vl-vardecl->loc x))
       (:vl-taskdecl   (vl-taskdecl->loc x))
       (:vl-fundecl    (vl-fundecl->loc x))
       (:vl-paramdecl  (vl-paramdecl->loc x))
       (:vl-import     (vl-import->loc x))
       (:vl-fwdtypedef (vl-fwdtypedef->loc x))
+      (:vl-dpiimport  (vl-dpiimport->loc x))
+      (:vl-dpiexport  (vl-dpiexport->loc x))
+      (:vl-bind       (vl-bind->loc x))
+      (:vl-property   (vl-property->loc x))
+      (:vl-sequence   (vl-sequence->loc x))
       (otherwise      (progn$ (impossible) *vl-fakeloc*)))))
 
 (define vl-description->maxloc ((x vl-description-p))
@@ -313,15 +323,22 @@ and max, gathering their comments.</p>"
       (:vl-interface (vl-interface->maxloc x))
       (:vl-package   (vl-package->maxloc x))
       (:vl-program   (vl-program->maxloc x))
+      (:vl-class     (vl-class->maxloc x))
       (:vl-config    (vl-config->maxloc x))
       (:vl-typedef   (vl-typedef->maxloc x))
       ;; Other things don't have separate min/max locs, but we'll just use
       ;; their ordinary locations.
+      (:vl-vardecl    (vl-vardecl->loc x))
       (:vl-taskdecl   (vl-taskdecl->loc x))
       (:vl-fundecl    (vl-fundecl->loc x))
       (:vl-paramdecl  (vl-paramdecl->loc x))
       (:vl-import     (vl-import->loc x))
       (:vl-fwdtypedef (vl-fwdtypedef->loc x))
+      (:vl-dpiimport  (vl-dpiimport->loc x))
+      (:vl-dpiexport  (vl-dpiexport->loc x))
+      (:vl-bind       (vl-bind->loc x))
+      (:vl-property   (vl-property->loc x))
+      (:vl-sequence   (vl-sequence->loc x))
       (otherwise      (progn$ (impossible) *vl-fakeloc*)))))
 
 (define vl-description->comments ((x vl-description-p))
@@ -334,6 +351,7 @@ and max, gathering their comments.</p>"
       (:vl-interface (vl-interface->comments x))
       (:vl-package   (vl-package->comments x))
       (:vl-program   (vl-program->comments x))
+      (:vl-class     (vl-class->comments x))
       (:vl-config    (vl-config->comments x))
       (:vl-typedef   (vl-typedef->comments x))
       (otherwise     (impossible)))))
@@ -349,6 +367,7 @@ and max, gathering their comments.</p>"
       (:vl-interface (change-vl-interface x :warnings (cons warning (vl-interface->warnings x))))
       (:vl-package   (change-vl-package   x :warnings (cons warning (vl-package->warnings x))))
       (:vl-program   (change-vl-program   x :warnings (cons warning (vl-program->warnings x))))
+      (:vl-class     (change-vl-class     x :warnings (cons warning (vl-class->warnings x))))
       (:vl-config    (change-vl-config    x :warnings (cons warning (vl-config->warnings x))))
       (:vl-typedef   (change-vl-typedef   x :warnings (cons warning (vl-typedef->warnings x))))
       (otherwise     (progn$ (impossible) x))))
@@ -370,6 +389,7 @@ and max, gathering their comments.</p>"
       (:vl-interface (change-vl-interface x :comments comments))
       (:vl-package   (change-vl-package   x :comments comments))
       (:vl-program   (change-vl-program   x :comments comments))
+      (:vl-class     (change-vl-class     x :comments comments))
       (:vl-config    (change-vl-config    x :comments comments))
       (:vl-typedef   (change-vl-typedef   x :comments comments))
       (otherwise     (progn$ (impossible) x))))

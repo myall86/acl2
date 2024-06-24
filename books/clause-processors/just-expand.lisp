@@ -1,3 +1,31 @@
+; Copyright (C) 2012 Centaur Technology
+;
+; Contact:
+;   Centaur Technology Formal Verification Group
+;   7600-C N. Capital of Texas Highway, Suite 300, Austin, TX 78731, USA.
+;   http://www.centtech.com/
+;
+; License: (An MIT/X11-style license)
+;
+;   Permission is hereby granted, free of charge, to any person obtaining a
+;   copy of this software and associated documentation files (the "Software"),
+;   to deal in the Software without restriction, including without limitation
+;   the rights to use, copy, modify, merge, publish, distribute, sublicense,
+;   and/or sell copies of the Software, and to permit persons to whom the
+;   Software is furnished to do so, subject to the following conditions:
+;
+;   The above copyright notice and this permission notice shall be included in
+;   all copies or substantial portions of the Software.
+;
+;   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+;   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+;   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+;   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+;   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+;   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+;   DEALINGS IN THE SOFTWARE.
+;
+; Original author: Sol Swords <sswords@centtech.com>
 
 (in-package "ACL2")
 (include-book "unify-subst")
@@ -21,7 +49,7 @@
   x)
 (in-theory (disable (expand-me-with) (:t expand-me-with)))
 
-(defevaluator-fast expev expev-lst
+(defevaluator expev expev-lst
   ((if a b c) (equal a b) (not a) (use-by-hint a)
    (cons a b) (binary-+ a b)
    (typespec-check ts x)
@@ -94,7 +122,7 @@
 
 
 (defsection expand-if-marked
-  
+
 
   (defund expand-if-marked (fn args w)
     (declare (xargs :guard (and (symbolp fn)
@@ -171,8 +199,8 @@
              (expev-termlist/alist-ind (cdr x) al)))))
 
   (make-flag expev-term/alist-flag expev-term/alist-ind
-             :flag-mapping ((expev-term/alist-ind . term)
-                            (expev-termlist/alist-ind . list))))
+             :flag-mapping ((expev-term/alist-ind term)
+                            (expev-termlist/alist-ind list))))
 
 
 
@@ -323,7 +351,7 @@
       :hints ('(:expand ((remove-expand-mes-list x)
                          (remove-expand-mes-list nil))))
       :flag list)))
-  
+
 
 
 
@@ -336,6 +364,7 @@
 ;;   (if (not rule)
 ;;       (b* ((def (def-body fn w))
 ;;            ((unless (and def (not (access def-body def :hyp))))
+;; ; Matt K. note: With new :equiv field, maybe also need (eq 'equal (access def-body def :equiv)).
 ;;             (er hard? 'just-expand-cp "couldn't find a hyp-free definition for ~x0"
 ;;                 fn)
 ;;             nil))
@@ -364,7 +393,7 @@
     (b* (((when (atom term))
           (er hard? 'just-expand-cp "atom in term position in hints: ~x0~%" term)) ;; error
          ((mv erp trans-term)
-          (translate-cmp term t nil nil 'just-expand-cp w 
+          (translate-cmp term t nil nil 'just-expand-cp w
                          (default-state-vars nil)))
          ((when erp)
           (er hard? 'just-expand-cp "translate failed: ~@0~%" trans-term))
@@ -393,7 +422,7 @@
       ((':with rule term)
        (just-expand-cp-finish-hint rule nil term w))
       (& (just-expand-cp-finish-hint nil nil hint w))))
-  
+
 
   (defun just-expand-cp-parse-hints (hints w)
     (declare (Xargs :mode :program))
@@ -719,8 +748,8 @@
 ;;            (termlist-apply-expansions (cdr x) hints lambdasp)))))
 
 ;; (make-flag term-apply-expansions-flg term-apply-expansions
-;;            :flag-mapping ((term-apply-expansions . term)
-;;                           (termlist-apply-expansions . list)))
+;;            :flag-mapping ((term-apply-expansions term)
+;;                           (termlist-apply-expansions list)))
 
 ;; (defthm len-of-termlist-apply-expansions
 ;;   (equal (len (termlist-apply-expansions x hints lambdasp))
@@ -765,8 +794,8 @@
 ;;            (termlist-apply-expansions-correct-ind (cdr x) hints a lambdasp)))))
 
 ;; (make-flag term-apply-expansions-correct-flg term-apply-expansions-correct-ind
-;;            :flag-mapping ((term-apply-expansions-correct-ind . term)
-;;                           (termlist-apply-expansions-correct-ind . list)))
+;;            :flag-mapping ((term-apply-expansions-correct-ind term)
+;;                           (termlist-apply-expansions-correct-ind list)))
 
 
 
@@ -1158,16 +1187,16 @@
   ;;
   ;;  (std::set-returnspec-default-hints
   ;;   ((just-induct/expand-default-hint 'fnname id t world)))
-  ;; 
+  ;;
   ;; to wait until stable after inducting to expand calls, or
   ;;
   ;;  (std::set-returnspec-default-hints
   ;;   ((just-induct/expand-default-hint 'fnname id nil world)))
   ;;
   ;; to expand calls of the function immediately after inducting.
-  ;; 
+  ;;
   ;; (replace with set-deffixequiv-default-hints to use in deffixequiv proofs.)
-  (and (eql (len (acl2::recursivep fnname world)) 1) ;; singly recursive
+  (and (eql (len (acl2::recursivep fnname t world)) 1) ;; singly recursive
        (eql 0 (acl2::access acl2::clause-id id :forcing-round))
        (let* ((pool-lst (acl2::access acl2::clause-id id :pool-lst))
               (formals (fgetprop fnname 'formals nil world)))
@@ -1206,7 +1235,7 @@
   ;; expanding calls.
   (and (eql 0 (acl2::access acl2::clause-id id :forcing-round))
        (equal '(1) (acl2::access acl2::clause-id id :pool-lst))
-       (let* ((fns (acl2::recursivep fnname world))
+       (let* ((fns (acl2::recursivep fnname t world))
               (expand-hints (just-expand-cp-parse-hints
                              (just-expand-mrec-expanders fns world)
                              world)))
@@ -1220,7 +1249,7 @@
   (declare (Xargs :mode :program))
   (if (atom fnnames)
       nil
-    (append (recursivep (car fnnames) world)
+    (append (recursivep (car fnnames) t world)
             (all-fns-in-cliques (cdr fnnames) world))))
 
 (defun just-expand-mrec-multi-hint (fnnames id wait-til-stablep world)

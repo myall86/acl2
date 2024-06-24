@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -29,7 +17,7 @@
 
 (local (include-book "../lib1/bits"))
 
-(local 
+(local
  (defthmd cat-expand-bits
   (implies (and (syntaxp (and (quotep k)
                               (quotep n)))
@@ -78,13 +66,13 @@
 
 
 
-(local 
+(local
  (defthmd bitn-0-or-1
    (implies (not (equal (bitn x 0) 0))
             (equal (bitn x 0) 1))
    :hints (("Goal" :use ((:instance bitn-0-1))))))
 
-(local 
+(local
  (defthm bitn-0-less-than-1
    (<= (bitn x 0) 1)
    :hints (("Goal" :use ((:instance bitn-0-1))))
@@ -96,7 +84,7 @@
    :hints (("Goal" :use ((:instance bitn-0-1))))
    :rule-classes (:linear :type-prescription)))
 
-(local 
+(local
  (defthmd bits-than-2
    (implies (and (integerp n)
                  (>= n 0))
@@ -108,10 +96,10 @@
             :use ((:instance bits-bvecp
                              (i n) (j 0) (k (+ 1 n))))
             :expand (bvecp (bits x n 0) (+ 1 n))))))
-           
+
 (local (in-theory (enable bits-than-2)))
 
-(local 
+(local
  (defthm cat-expansion-specific
    (implies (and (integerp n)
                  (> n 0))
@@ -123,8 +111,8 @@
 
 
 
-(local 
- (encapsulate () 
+(local
+ (encapsulate ()
     (local (include-book "../../arithmetic/top"))
     (defthm bits-plus-reduce
       (implies (and (integerp n)
@@ -151,7 +139,7 @@
                                        (x y)
                                        (n (+ 1 n)))
                             (:instance sumbits-bits
-                                       (x y) 
+                                       (x y)
                                        (n (+ 1 n))))
                :in-theory (e/d (bvecp
                                 expt-2-reduce-leading-constant)
@@ -159,7 +147,7 @@
 
 
 
- 
+
 
 (DEFTHM CAT-FACT-7
   (IMPLIES (EQUAL (CAT X 1 Y 1 Z 1) 1)
@@ -168,16 +156,16 @@
 (DEFTHM CAT-FACT-8
   (IMPLIES (EQUAL (CAT X 1 Y 1 Z 1) 3)
            (NOT (EQUAL (CAT X 1 Y1 1 Z1 1) 5))))
- 
+
 (DEFTHM CAT-FACT-9
   (IMPLIES (EQUAL (CAT X 1 Y 1 Z 1) 1)
            (NOT (EQUAL (CAT X 1 Y 1 Z1 1) 3))))
- 
+
 
 (DEFTHM CAT-FACT-10
   (IMPLIES (EQUAL (CAT 1 1 X 1 Y 1) 4)
            (NOT (EQUAL (CAT Z 1 X 1 Y 1) 1))))
- 
+
 
 ;; [Jared] added this to fix the proof after building these into ACL2
 (local (in-theory (disable acl2::commutativity-2-of-+
@@ -187,13 +175,13 @@
   (IMPLIES (EQUAL (CAT X 1 Y 1 Z 1 U 1 V 1 W 1 1 1)
                   125)
            (NOT (EQUAL (CAT X 1 Y 1 Z 1 U 1 V 1 W 1 P 1)
-                       127)))) 
+                       127))))
 
 (DEFTHM CAT-FACT-12
   (IMPLIES (EQUAL (CAT X 1 Y 1 Z 1 U 1 V 1 3 2)
                   123)
            (NOT (EQUAL (CAT X 1 Y 1 Z 1 U 1 V 1 W 1 1 1)
-                       125)))) 
+                       125))))
 
 (DEFTHM CAT-FACT-13
   (IMPLIES (EQUAL (CAT X 1 Y 1 Z 1 U 1 7 3) 119)
@@ -201,159 +189,159 @@
                        123))))
 
 
- 
+
 (DEFTHM CAT-FACT-14
   (IMPLIES (EQUAL (CAT X 1 Y 1 Z 1 15 4) 111)
            (NOT (EQUAL (CAT X 1 Y 1 Z 1 U 1 7 3)
                        119))))
- 
+
 
 (DEFTHM CAT-FACT-15
   (IMPLIES (EQUAL (CAT X 1 Y 1 31 5) 95)
            (NOT (EQUAL (CAT X 1 Y 1 Z 1 15 4) 111))))
- 
+
 (DEFTHM CAT-FACT-16
   (IMPLIES (EQUAL (CAT X 1 63 6) 63)
            (NOT (EQUAL (CAT X 1 Y 1 31 5) 95))))
- 
+
 
 (DEFTHM CAT-FACT-17
   (IMPLIES (EQUAL (CAT X 1 63 6) 63)
            (NOT (EQUAL (CAT X 1 Y 1 Z 1 15 4) 111))))
- 
+
 (DEFTHM CAT-FACT-18
   (IMPLIES (EQUAL (CAT X 1 63 6) 63)
            (NOT (EQUAL (CAT X 1 Y 1 Z 1 U 1 7 3)
                        119))))
- 
+
 
 (DEFTHM CAT-FACT-19
   (IMPLIES (EQUAL (CAT X 1 63 6) 63)
            (NOT (EQUAL (CAT X 1 Y 1 Z 1 U 1 V 1 3 2)
                        123))))
- 
+
 
 (DEFTHM CAT-FACT-20
   (IMPLIES (EQUAL (CAT X 1 63 6) 63)
            (NOT (EQUAL (CAT X 1 Y 1 Z 1 U 1 V 1 W 1 1 1)
                        125))))
- 
+
 
 (DEFTHM CAT-FACT-21
   (IMPLIES (EQUAL (CAT X 1 63 6) 63)
            (NOT (EQUAL (CAT X 1 Y 1 Z 1 U 1 V 1 W 1 P 1)
                        127))))
- 
+
 (DEFTHM CAT-FACT-22
   (IMPLIES (EQUAL (CAT X 1 Y 1 31 5) 95)
            (NOT (EQUAL (CAT X 1 Y 1 Z 1 U 1 7 3)
                        119))))
- 
+
 
 (DEFTHM CAT-FACT-23
   (IMPLIES (EQUAL (CAT X 1 Y 1 31 5) 95)
            (NOT (EQUAL (CAT X 1 Y 1 Z 1 U 1 V 1 3 2)
                        123))))
- 
+
 
 (DEFTHM CAT-FACT-24
   (IMPLIES (EQUAL (CAT X 1 Y 1 31 5) 95)
            (NOT (EQUAL (CAT X 1 Y 1 Z 1 U 1 V 1 W 1 1 1)
                        125))))
- 
+
 
 (DEFTHM CAT-FACT-25
   (IMPLIES (EQUAL (CAT X 1 Y 1 31 5) 95)
            (NOT (EQUAL (CAT X 1 Y 1 Z 1 U 1 V 1 W 1 P 1)
                        127))))
- 
+
 
 (DEFTHM CAT-FACT-26
   (IMPLIES (EQUAL (CAT X 1 Y 1 Z 1 15 4) 111)
            (NOT (EQUAL (CAT X 1 Y 1 Z 1 U 1 V 1 W 1 P 1)
                        127))))
- 
+
 
 (DEFTHM CAT-FACT-27
   (IMPLIES (EQUAL (CAT X 1 Y 1 Z 1 15 4) 111)
            (NOT (EQUAL (CAT X 1 Y 1 Z 1 U 1 V 1 W 1 1 1)
                        125))))
- 
+
 
 (DEFTHM CAT-FACT-28
   (IMPLIES (EQUAL (CAT X 1 Y 1 Z 1 15 4) 111)
            (NOT (EQUAL (CAT X 1 Y 1 Z 1 U 1 V 1 3 2)
                        123))))
- 
+
 (DEFTHM CAT-FACT-29
   (IMPLIES (EQUAL (CAT X 1 Y 1 Z 1 15 4) 111)
            (NOT (EQUAL (CAT X 1 Y 1 Z 1 U 1 7 3)
                        119))))
- 
+
 
 (DEFTHM CAT-FACT-30
   (IMPLIES (EQUAL (CAT X 1 Y 1 Z 1 U 1 7 3) 119)
            (NOT (EQUAL (CAT X 1 Y 1 Z 1 U 1 V 1 W 1 1 1)
                        125))))
- 
+
 
 (DEFTHM CAT-FACT-31
   (IMPLIES (EQUAL (CAT X 1 Y 1 Z 1 U 1 7 3) 119)
            (NOT (EQUAL (CAT X 1 Y 1 Z 1 U 1 V 1 W 1 P 1)
                        127))))
- 
+
 
 (DEFTHM CAT-FACT-32
   (IMPLIES (EQUAL (CAT X 1 Y 1 Z 1 U 1 V 1 3 2)
                   123)
            (NOT (EQUAL (CAT X 1 Y 1 Z 1 U 1 V 1 W 1 P 1)
                        127))))
- 
+
 
 (DEFTHM CAT-FACT-33
   (IMPLIES (EQUAL (CAT X 1 Y 1 Z 1 U 1 V 1 W 1 1 1)
                   125)
            (NOT (EQUAL (CAT X 1 Y 1 Z 1 U 1 V 1 W 1 P 1)
                        127))))
- 
+
 
 (DEFTHM CAT-FACT-34
   (IMPLIES (EQUAL (CAT X 1 Y 1 Z 1 U 1 V 1 W 1 1 1)
                   125)
            (NOT (EQUAL (CAT X 1 Y 1 Z 1 U 1 V 1 W 1 P 1)
                        126))))
- 
+
 
 (DEFTHM CAT-FACT-35
   (IMPLIES (EQUAL (CAT X 1 Y 1 Z 1 U 1 V 1 3 2)
                   123)
            (NOT (EQUAL (CAT X 1 Y 1 Z 1 U 1 V 1 W 1 P 1)
                        126))))
- 
+
 
 (DEFTHM CAT-FACT-36
   (IMPLIES (EQUAL (CAT X 1 Y 1 Z 1 U 1 7 3) 119)
            (NOT (EQUAL (CAT X 1 Y 1 Z 1 U 1 V 1 W 1 P 1)
                        126))))
- 
+
 
 (DEFTHM CAT-FACT-37
   (IMPLIES (EQUAL (CAT X 1 Y 1 Z 1 15 4) 111)
            (NOT (EQUAL (CAT X 1 Y 1 Z 1 U 1 V 1 W 1 P 1)
                        126))))
- 
+
 
 (DEFTHM CAT-FACT-38
   (IMPLIES (EQUAL (CAT X 1 Y 1 31 5) 95)
            (NOT (EQUAL (CAT X 1 Y 1 Z 1 U 1 V 1 W 1 P 1)
                        126))))
- 
+
 
 (DEFTHM CAT-FACT-39
   (IMPLIES (EQUAL (CAT X 1 63 6) 63)
            (NOT (EQUAL (CAT X 1 Y 1 Z 1 U 1 V 1 W 1 P 1)
                        126))))
- 
+
 
 
 

@@ -59,7 +59,6 @@
 (local (include-book "booth-support"))
 (local (include-book "centaur/esim/stv/stv-decomp-proofs-even-better" :dir :system))
 ; (depends-on "boothmul.v")
-; cert_param: (hons-only)
 ; cert_param: (uses-glucose)
 (value-triple (set-max-mem (* 3 (expt 2 30))))
 (value-triple (tshell-ensure))
@@ -217,7 +216,7 @@
  (progn
    (defun my-glucose-config ()
      (declare (xargs :guard t))
-     (satlink::make-config :cmdline "glucose"
+     (satlink::make-config :cmdline "glucose -model"
                            :verbose t
                            :mintime 1/2
                            :remove-temps t))

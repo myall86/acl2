@@ -157,7 +157,7 @@ Fortunately that can all be wrapped up into @(see with-local-nrev).</p>"
 
 (progn
 ; Pure ACL2 nrev solution (no ttags)
-; (MY-MAP *INS*) took 
+; (MY-MAP *INS*) took
 ; 3.81 seconds realtime, 3.81 seconds runtime
 ; (3,200,000,160 bytes allocated).
   (acl2::hl-system-gc)
@@ -171,7 +171,7 @@ Fortunately that can all be wrapped up into @(see with-local-nrev).</p>"
 
 (progn
 ; Optimized ACL2 nrev solution (ttags)
-; (MY-MAP *INS*) took 
+; (MY-MAP *INS*) took
 ; 2.71 seconds realtime, 2.70 seconds runtime
 ; (1,600,000,176 bytes allocated).
   (acl2::hl-system-gc)
@@ -186,7 +186,7 @@ Fortunately that can all be wrapped up into @(see with-local-nrev).</p>"
 
 
 (include-book "fast")
-(include-book "misc/assert" :dir :system)
+(include-book "std/testing/assert-bang" :dir :system)
 
 ; Some basic sanity checks.
 
@@ -224,5 +224,3 @@ Fortunately that can all be wrapped up into @(see with-local-nrev).</p>"
 
 (assert! (equal (my-map 5)
                 (map-spec 5)))
-
-

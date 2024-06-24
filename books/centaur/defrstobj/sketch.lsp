@@ -44,15 +44,12 @@
 (include-book "misc/records" :dir :system)
 ;; (include-book "clause-processors/generalize" :dir :system)
 ;; (include-book "clause-processors/find-subterms" :dir :system)
-(include-book "centaur/misc/arith-equivs" :dir :system)
+(include-book "std/basic/arith-equivs" :dir :system)
 (include-book "std/util/defaggregate" :dir :system)
 (include-book "std/lists/resize-list" :dir :system)
-(include-book "centaur/misc/absstobjs" :dir :system)
+(include-book "std/stobjs/absstobjs" :dir :system)
 
 (include-book "arithmetic/top-with-meta" :dir :system)
-
-(include-book "std/lists/resize-list" :dir :system)
-(include-book "centaur/misc/absstobjs" :dir :system)
 
 
 (include-book "def-typed-record")
@@ -295,7 +292,7 @@
 
 
 ;;     (local
-;;      (progn 
+;;      (progn
 ;;        (defconst *rstobj-tmp-field-map*
 ;;          (list (make-array-fieldinfo :tr-key :natarr :size-key :natarr-length)
 ;;                (make-array-fieldinfo :tr-key :u8arr :size-key :u8arr-length)
@@ -656,7 +653,7 @@
 ;;                        (create-st$c))))
 
 ;;     (defabsstobj-events st
-;;       :concrete st$c
+;;       :foundation st$c
 ;;       :corr-fn rstobj-tmp-corr
 ;;       :creator (create-st :logic create-st$a :exec create-st$c)
 ;;       :recognizer (stp :logic stp$a :exec st$cp)
@@ -679,7 +676,7 @@
 
 
 (with-output :off (event prove)
-  :summary (acl2::form time)
+  :summary-off (:other-than acl2::form time)
   (make-event
    `(encapsulate nil
 
@@ -759,7 +756,7 @@
                     :initially 0)
         (natarr7$c  :type (array (integer 0 *) (32))
                     :initially 0)
-        
+
 
         (u8arr0$c   :type (array (unsigned-byte 8) (64))
                     :initially 0
@@ -1436,7 +1433,7 @@
 
 
       (local
-       (progn 
+       (progn
 
          (defconst *rstobj-tmp-field-map*
            (list (make-array-fieldinfo :tr-key :natarr0 :size-key :natarr0-length)
@@ -2294,7 +2291,7 @@
                          (create-st$c))))
 
       (acl2::defabsstobj-events st
-        :concrete st$c
+        :foundation st$c
         :corr-fn rstobj-tmp-corr
         :creator (create-st :logic create-st$a :exec create-st$c)
         :recognizer (stp :logic stp$a :exec st$cp)

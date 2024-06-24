@@ -40,10 +40,10 @@
 (include-book "../mlib/json")
 (include-book "oslib/file-types" :dir :system)
 (include-book "std/io/unsound-read" :dir :system)
-(include-book "centaur/quicklisp/hunchentoot" :dir :system)
-(include-book "centaur/quicklisp/bordeaux" :dir :system)
-(include-book "centaur/quicklisp/bt-semaphore" :dir :system)
-(include-book "centaur/quicklisp/html-template" :dir :system)
+(include-book "quicklisp/hunchentoot" :dir :system)
+(include-book "quicklisp/bordeaux" :dir :system)
+(include-book "quicklisp/bt-semaphore" :dir :system)
+(include-book "quicklisp/html-template" :dir :system)
 (include-book "centaur/bridge/to-json" :dir :system)
 (include-book "xdoc/defxdoc-raw" :dir :system)
 (include-book "centaur/misc/memory-mgmt" :dir :system)
@@ -90,7 +90,7 @@ viewing Verilog designs.")
   (b* (((vl-translation trans) trans)
        (orig           (cwtime (hons-copy (cwtime (vl-annotate-design trans.orig)))))
        ;;(orig-depalist  (fast-alist-free (vl-depalist (vl-design->mods orig))))
-       (orig-descalist (fast-alist-free (vl-descalist (vl-design-descriptions orig)))))
+       (orig-descalist (fast-alist-free (vl-make-descalist (vl-design-descriptions orig)))))
     (make-vls-data
      :good           trans.good
      :bad            trans.bad
@@ -219,6 +219,11 @@ viewing Verilog designs.")
 (define-vls-json vls-get-desctypes (data)
   (b* ((desctypes (vl-descalist->descriptions/types (vls-data->orig-descalist data))))
     (vls-success :json (bridge::json-encode desctypes))))
+
+(local (defthm vl-module-p-by-tag-when-vl-description-p-unlimited
+         (implies (and (vl-description-p x)
+                       (eq (tag x) :vl-module))
+                  (vl-module-p x))))
 
 (define-vls-html vls-describe (origname what data)
   (b* (((vls-data data))

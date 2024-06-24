@@ -3,13 +3,15 @@
 
 (in-package "ACL2")
 
-(include-book "misc/assert" :dir :system)
-(include-book "misc/eval" :dir :system)
+(include-book "std/testing/assert-bang" :dir :system)
+(include-book "std/testing/assert-bang-stobj" :dir :system)
+(include-book "std/testing/must-fail" :dir :system)
+(include-book "std/testing/must-succeed" :dir :system)
 ;(include-book "make-event/dotimes" :dir :system)
 
 (defun plet-test10 ()
   (declare (xargs :guard t))
-  (plet ((x 4) 
+  (plet ((x 4)
          (y 6))
         (+ x y)))
 
@@ -45,7 +47,7 @@
             (binary-+ (pfib (- x 1))
                       (pfib (- x 2)))))))
 
-(must-succeed 
+(must-succeed
  (assert! (equal (pfib 10) 55)))
 
 ; Test the ability of plet to bind variables in weird locations.
@@ -71,7 +73,7 @@
 ; Finally, use the lexical variable q inside both the binding and the body of
 ; the plet.
 (assert!
- (equal 
+ (equal
   (let ((q 10))
     (plet ((x 4)
            (y (+ 9 q)))
@@ -79,7 +81,7 @@
   33))
 
 (assert!
- (equal 
+ (equal
   (plet () 4)
   4))
 
@@ -94,16 +96,16 @@
 
 (defun test-granularity1 (x)
   (declare (xargs :guard (natp x)))
-  (pargs 
-   (declare (granularity (> x 5))) 
+  (pargs
+   (declare (granularity (> x 5)))
    (binary-+ x x)))
 
 ; Needs to error
 (must-fail
  (defun test-granularity2 (x)
    (declare (xargs :guard (natp x)))
-   (pargs 
-    (declare (wrong-name (> x 5))) 
+   (pargs
+    (declare (wrong-name (> x 5)))
     (binary-+ x x))))
 
 (defun foo-por-check (x)
@@ -112,7 +114,7 @@
 
 (defun foo-por-check2 (x)
   (declare (xargs :guard (natp x)))
-  (por 
+  (por
    (declare (granularity (< x 5)))
    (+ x x) 20))
 
@@ -122,22 +124,22 @@
 
 (defun foo-pand-check2 (x)
   (declare (xargs :guard (natp x)))
-  (pand 
+  (pand
    (declare (granularity (< x 5)))
    (+ x x) *tmp* 20))
 
 ; The below should not admit because of guard violations.  Pand is different
 ; from And!
 (must-fail
- (defun error-pand (x) 
+ (defun error-pand (x)
    (declare (xargs :guard t))
-   (pand (consp x) 
+   (pand (consp x)
          (equal (car x) 4))))
 
 ; The below should not admit because of guard violations.  Por is different
 ; from Or!
 (must-fail
- (defun error-por (x) 
+ (defun error-por (x)
    (declare (xargs :guard t))
    (por (atom x)
         (equal (car x) 4))))
@@ -145,17 +147,17 @@
 ; The below should not admit, because it doesn't make sense to pargs a let or a
 ; plet!
 (must-fail
- (defun pargs-let () 
+ (defun pargs-let ()
    (pargs
     (let ((x 4)
-          (y 5)) 
+          (y 5))
       (+ x y)))))
 
 (must-fail
- (defun pargs-plet () 
+ (defun pargs-plet ()
    (pargs
     (plet ((x 4)
-           (y 5)) 
+           (y 5))
           (+ x y)))))
 
 (defstobj foo field1 field2)
@@ -225,8 +227,8 @@
   (plet ((bar (update-fielda 17 bar)))
         (update-fieldb 14 bar)))
 
-(must-succeed 
- (defun plet-declare-test0 (x) 
+(must-succeed
+ (defun plet-declare-test0 (x)
    (declare (xargs :guard (integerp x)))
    (plet (declare (granularity (> x 4)))
          ((y x)
@@ -235,7 +237,7 @@
          y)))
 
 (must-fail
- (defun plet-declare-test1 (x) 
+ (defun plet-declare-test1 (x)
    (declare (xargs :guard t))
    (plet (declare (granularity (> x 4)))
          ((y x)
@@ -244,10 +246,10 @@
          y)))
 
 (must-succeed
- (defun plet-declare-test2 (x) 
+ (defun plet-declare-test2 (x)
    (declare (xargs :guard (integerp x)))
    (plet (declare (granularity (> x 4)))
-         ((y x) 
+         ((y x)
           (z 8)
           (booga 'the_clouds))
          (declare (ignore z))
@@ -255,7 +257,7 @@
          y)))
 
 (must-fail
- (defun plet-declare-test3 (x) 
+ (defun plet-declare-test3 (x)
    (declare (xargs :guard (integerp x)))
    (plet (declare (granularity (> x 4)))
          ((y x) (z 8))
@@ -264,7 +266,7 @@
          y)))
 
 (must-fail
- (defun plet-declare-test4 (x) 
+ (defun plet-declare-test4 (x)
    (declare (xargs :guard (integerp x)))
    (plet (declare (granularity (> x 4)))
          ((y x) (z 8))
@@ -272,7 +274,7 @@
          y)))
 
 (must-fail
- (defun let-declare-test0 (x) 
+ (defun let-declare-test0 (x)
    (declare (xargs :guard t))
    (let ((y x)
          (z 8))

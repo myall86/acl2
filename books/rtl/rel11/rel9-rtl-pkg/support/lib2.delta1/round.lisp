@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -43,9 +31,10 @@
 
 
 (defund trunc (x n)
-  (declare (xargs :guard (integerp n)))
-  (* (sgn x) 
-     (fl (* (expt 2 (1- n)) (sig x))) 
+  (declare (xargs :guard (integerp n)
+                  :verify-guards nil))
+  (* (sgn x)
+     (fl (* (expt 2 (1- n)) (sig x)))
      (expt 2 (- (1+ (expo x)) n))))
 
 (defthmd trunc-integer-type-prescription
@@ -60,8 +49,8 @@
 		  (integerp n)
 		  (> n 0))
 	     (equal (trunc x n)
-		    (* (sgn x) 
-		       (fl (* (expt 2 (- (1- n) (expo x))) (abs x))) 
+		    (* (sgn x)
+		       (fl (* (expt 2 (- (1- n) (expo x))) (abs x)))
 		       (expt 2 (- (1+ (expo x)) n))))))
 
 (defthmd abs-trunc
@@ -195,7 +184,7 @@
 
 (defthm trunc-exactp-b
     (implies (and (rationalp x)
-		  (integerp n) 
+		  (integerp n)
 		  (> n 0))
 	     (iff (= x (trunc x n))
 		  (exactp x n)))
@@ -278,8 +267,8 @@
   :hints (("Goal" :use ((:instance bits_alt-trunc)))))
 
 ;;; Fri Feb 13 14:02:03 2009
-;;; 
-;;; Some truly new result. 
+;;;
+;;; Some truly new result.
 
 
 
@@ -306,22 +295,7 @@
 ;;                                   (LAND X (- (EXPT 2 M) (EXPT 2 (- N K)))
 ;;                                         N)))
 ;;                       :RULE-CLASSES NIL)
-;;
-;;
-;; (defthm land-slice
-;;   (implies (and (<= j i) ;drop? or not?
-;;                 (<= i n)
-;;                 (integerp n)
-;;                 (integerp i)
-;;                 (integerp j)
-;;                 (<= 0 j)
-;;                 )
-;;            (equal (land x (- (expt 2 i) (expt 2 j)) n)
-;;                   (* (expt 2 j) (bits x (1- i) j))))
-;;   :hints (("Goal" :use land0-slice))
-;;   :rule-classes ())
-;;
-  
+
 (defthm trunc-logand
   (implies (and (>= x (expt 2 (1- n)))
                 (< x (expt 2 n))
@@ -353,8 +327,8 @@
 
 
 (defund away (x n)
-  (* (sgn x) 
-     (cg (* (expt 2 (1- n)) (sig x))) 
+  (* (sgn x)
+     (cg (* (expt 2 (1- n)) (sig x)))
      (expt 2 (- (1+ (expo x)) n))))
 
 (defthmd away-integer-type-prescription
@@ -369,14 +343,14 @@
 		  (integerp n)
 		  (> n 0))
 	     (equal (away x n)
-		    (* (sgn x) 
-		       (cg (* (expt 2 (- (1- n) (expo x))) (abs x))) 
+		    (* (sgn x)
+		       (cg (* (expt 2 (- (1- n) (expo x))) (abs x)))
 		       (expt 2 (- (1+ (expo x)) n))))))
 
 (defthmd abs-away
     (implies (and (rationalp x)
 		  (integerp n))
-	     (equal (abs (away x n)) 
+	     (equal (abs (away x n))
 		    (* (cg (* (expt 2 (1- n)) (sig x))) (expt 2 (- (1+ (expo x)) n))))))
 
 
@@ -514,7 +488,7 @@
 
 (defthm away-exactp-b
     (implies (and (rationalp x)
-		  (integerp n) 
+		  (integerp n)
 		  (> n 0))
 	     (iff (= x (away x n))
 		  (exactp x n)))
@@ -546,7 +520,7 @@
 		  (not (exactp x n)))
 	     (= (away x n)
 		(+ (trunc x n)
-		   (expt 2 (+ (expo x) 1 (- n))))))		
+		   (expt 2 (+ (expo x) 1 (- n))))))
   :rule-classes ())
 
 
@@ -684,7 +658,7 @@
   :rule-classes (:type-prescription :linear))
 
 (defthm near-0
-  (equal (near 0 n) 
+  (equal (near 0 n)
          0))
 
 
@@ -695,7 +669,7 @@
 
 (defthm near-exactp-b
     (implies (and (rationalp x)
-		  (integerp n) 
+		  (integerp n)
 		  (> n 0))
 	     (iff (= x (near x n))
 		  (exactp x n)))
@@ -734,7 +708,7 @@
   :rule-classes ())
 
 ;;
-;; druss: the following may be wrong. 
+;; druss: the following may be wrong.
 ;;
 ;; (defthm expo-near
 ;;     (implies (and (rationalp x)
@@ -808,7 +782,7 @@
 
 
 (defthm near-est
-    (implies (and (integerp n) 
+    (implies (and (integerp n)
 		  (> n 0)
 		  (rationalp x))
 	     (<= (abs (- x (near x n)))
@@ -852,7 +826,7 @@
 		  (integerp n)
 		  (integerp k)
 		  (> k 0)
-		  (>= n k)		  
+		  (>= n k)
 		  (< 0 a)
 		  (< a x)
 		  (< 0 y)
@@ -879,7 +853,7 @@
 
 (defthm near-exact
     (implies (and (rationalp x)
-		  (integerp n) 
+		  (integerp n)
 		  (> n 1)
 		  (exactp x (1+ n))
 		  (not (exactp x n)))
@@ -974,7 +948,7 @@
 
 (defthm near+-exactp-b
     (implies (and (rationalp x)
-		  (integerp n) 
+		  (integerp n)
 		  (> n 0))
 	     (iff (= x (near+ x n))
 		  (exactp x n)))
@@ -1043,7 +1017,7 @@
 
 
 (defthm near+-est
-    (implies (and (integerp n) 
+    (implies (and (integerp n)
 		  (> n 0)
 		  (rationalp x))
 	     (<= (abs (- x (near+ x n)))
@@ -1141,7 +1115,7 @@
 		  (integerp n)
 		  (> n 0))
 	     (= (near+ x n)
-		(trunc (+ x (expt 2 (- (expo x) n))) n)))		
+		(trunc (+ x (expt 2 (- (expo x) n))) n)))
   :rule-classes ())
 
 
@@ -1175,7 +1149,7 @@
 
 (defthmd sticky-positive
     (implies (and (< 0 x)
-                  (rationalp x) 
+                  (rationalp x)
 		  (integerp n)
                   (> n 0))
 	     (> (sticky x n) 0))
@@ -1183,7 +1157,7 @@
 
 (defthmd sticky-negative
     (implies (and (< x 0)
-                  (rationalp x) 
+                  (rationalp x)
 		  (integerp n)
                   (> n 0))
 	     (< (sticky x n) 0))
@@ -1202,7 +1176,7 @@
 		  (integerp n) (> n 0)
 		  (integerp k))
 	     (= (sticky (* (expt 2 k) x) n)
-		(* (expt 2 k) (sticky x n))))		
+		(* (expt 2 k) (sticky x n))))
   :rule-classes ())
 
 
@@ -1223,7 +1197,7 @@
 
 (defthm sticky-exactp-b
     (implies (and (rationalp x)
-		  (integerp n) 
+		  (integerp n)
 		  (> n 0))
 	     (iff (= x (sticky x n))
 		  (exactp x n)))
@@ -1242,7 +1216,7 @@
 (defthm sticky-exactp-m
     (implies (and (rationalp x)
 		  (integerp m)
-		  (integerp n) 
+		  (integerp n)
 		  (> n m)
 		  (> m 0))
 	     (iff (exactp (sticky x n) m)
@@ -1446,7 +1420,7 @@
 (defthm rnd-exactp-b
   (implies (and (rationalp x)
                 (common-rounding-mode-p mode)
-                (integerp n) 
+                (integerp n)
                 (> n 0))
            (equal (equal x (rnd x mode n))
 		  (exactp x n))))
@@ -1485,7 +1459,7 @@
 
 (defthm rnd>=trunc
     (implies (and (rationalp x)
-		  (> x 0) ;; 
+		  (> x 0) ;;
 		  (common-rounding-mode-p mode)
                   (INTEGERP N)
                   (> N 0))
@@ -1551,9 +1525,9 @@
 (defthmd rnd-sticky
   (implies (and (common-rounding-mode-p mode)
                 (rationalp x)
-                (integerp m) 
+                (integerp m)
 		(> m 0)
-                (integerp n) 
+                (integerp n)
 		(>= n (+ m 2)))
            (equal (rnd (sticky x n) mode m)
                   (rnd x mode m))))
@@ -1608,11 +1582,11 @@
                   (trunc x n))))
   :rule-classes ()
   :hints (("Goal" :use roundup_alt-thm)))
-  
+
 
 
 ;;;**********************************************************************
-;;;                         Denormal Rounding 
+;;;                         Denormal Rounding
 ;;;**********************************************************************
 
 

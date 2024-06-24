@@ -2,7 +2,58 @@
 ; Written by Matt Kaufmann and J Strother Moore
 ; License: A 3-clause BSD license.  See the LICENSE file distributed with ACL2.
 
+; Members of the ACL2 community are invited to strengthen the
+; predicate pseudo-good-worldp that is defined in this book.  If you
+; do so, then please include your name in a standard-form comment in
+; the relevant code, like this, and also add your name to the list of
+; additional contributors just above this comment.
+
+; Contributed by: Frank N. Stein
+
+; Also, please understand that you are responsible for fixing any
+; resulting errors in running "make chk-include-book-worlds" (in
+; either the top-level ACL2 directory or, equivalently, in the books/
+; subdirectory).  That target checks worlds after including most
+; community books (some with ttags are exempted, for example, since
+; they put unusual triples in the world).  Note that every ordinary
+; regression does one such check by certifying
+; books/system/worldp-check.lisp.
+
 (in-package "ACL2")
+
+; -----------------------------------------------------------------
+
+; The files included here were originally part of this file, but they have been
+; factored out so that they can be used by other files in the community books
+; in a more modular way.
+
+(include-book "std/typed-alists/keyword-to-keyword-value-list-alistp" :dir :system)
+(include-book "std/typed-lists/string-or-symbol-listp" :dir :system)
+(include-book "pseudo-event-form-listp")
+(include-book "pseudo-command-formp")
+(include-book "pseudo-event-landmarkp")
+(include-book "pseudo-command-landmarkp")
+(include-book "pseudo-tests-and-calls-listp")
+
+; -----------------------------------------------------------------
+
+; This book is used by the book worldp-check.lisp to check the concept of a
+; ``good world'', as discussed below.  If that check fails, proceed as follows.
+
+;   (include-book "pseudo-good-worldp")
+;   (chk-pseudo-good-worldp "pseudo-good-worldp")
+
+; You will typically see an error message of the following form, for some value
+; of N:
+
+;   Bad World detected by PSEUDO-GOOD-WORLDP2:  (nth N ...) is an illegal
+;   triple.
+
+; In the loop, execute (nth N (w state)), which should evaluate to the
+; offending form.  Then you need to figure out why that form causes a failure.
+; (There are other error messages, probably much less common.  The context, in
+; this case PSEUDO-GOOD-WORLDP2, gives you a function to look at as a starting
+; point.)
 
 ; -----------------------------------------------------------------
 
@@ -216,16 +267,6 @@
 
 ; EVENT-LANDMARK [GLOBAL-VALUE]
 
-; A ``form'' in the sense used here is an untranslated event or command form or
-; even a raw List form.  Because of macros it is almost impossible to put
-; constraints on forms.  For example, with an appropriate defmacro of barf,
-; this could be a form (barf (1 . 2)).  But even macros have to be symbols and
-; take a true-list of args.  So we know that much at the top but all bets are
-; off after that.  The most rigorous test would translate the alleged form, but
-; that would require state and the specification of translate's many options
-; like whether stobjs are treated specially.  Until we need it, we're not going
-; to try to implement the stronger test.
-
 (defun pseudo-function-symbolp (fn n)
 
 ; The n above is just a placeholder to allow me to record the requirements on
@@ -242,92 +283,15 @@
       (and (pseudo-function-symbolp (car lst) n)
            (pseudo-function-symbol-listp (cdr lst) n))))
 
-(defun pseudo-formp (x)
-  (or (atom x)
-      (and (consp x)
-           (true-listp x)
-           (symbolp (car x)))))   ; This symbolp could be a macro or a function.
-
-(defun pseudo-form-listp (x)
-  (if (atom x)
-      (equal x nil)
-      (and (pseudo-formp (car x))
-           (pseudo-form-listp (cdr x)))))
-
-(defun string-or-symbol-listp (x)
-  (if (atom x)
-      (null x)
-      (and (or (stringp (car x))
-               (symbolp (car x)))
-           (string-or-symbol-listp (cdr x)))))
-
-
-(defun pseudo-event-landmarkp (val)
-
-; If this function has to be changed, see whether there is more to say in the
-; comment, labeled Event Tuples, just above make-event-tuple, or the comment in
-; make-event-tuple.
-
-; xxx change the commment in make-event-tuple:
-
-; An event tuple is always a cons.  Except in the initial case created by
-; primordial-world-globals, the car is always either a natural (denoting n and
-; implying d=0) or a cons of two naturals, n and d.    Its cadr is
-; either a symbol, denoting its type and signalling that the cdr is the form,
-; the symbol-class is :program and that the namex can be recovered from the
-; form, or else the cadr is the pair (ev-type namex . symbol-class) signalling
-; that the form is the cddr.
-
-; Generally, the val encodes:
-;  n - absolute event number
-;  d - embedded event depth
-;  form - form that created the event
-;  ev-type - name of the primitive event macro we use, e.g., defun, defthm, defuns
-;  namex - name or names introduced (0 is none)
-;  symbol-class - of names (or nil)
-
-  (or (equal val '(-1 (NIL 0)))   ; bogus tuple by primordial-world-globals
-      (and (consp val)
-           (or (natp (car val))       ; n = (car val), d = 0
-               (and (consp (car val))
-                    (natp (car (car val)))  ; = n
-                    (natp (cdr (car val))))) ; = d
-           (consp (cdr val))
-           (if (symbolp (cadr val))    ; ev-type is recoverable from form
-               (pseudo-formp (cdr val))  ; (cdr val) here is the event form
-               (and (consp (cadr val))
-                    (symbolp (car (cadr val))) ; ev-type
-                    (consp (cdr (cadr val)))
-                    (or (symbolp (cadr (cadr val))) ; name introduced
-                        (stringp (cadr (cadr val))) ; name introduced
-                        (equal 0 (cadr (cadr val))) ; no names introduced
-                        (string-or-symbol-listp (cadr (cadr val)))) ; list of names introduced
-                    (member-eq (cddr (cadr val)) ; symbol-class
-                               '(nil :program :ideal :common-lisp-compliant))
-                    (pseudo-formp (cddr val))))))) ; (cddr val) here is the event form
+; See pseudo-event-landmarkp in pseudo-event-landmarkp.lisp.
+; That function was originally here in this file.
 
 ; -----------------------------------------------------------------
 
 ; COMMAND-LANDMARK [GLOBAL-VALUE]
 
-(defun pseudo-command-landmarkp (val)
-
-; Warning: Keep this in sync with (defrec command-tuple ...) in the ACL2
-; sources.
-
-  (and (consp val)
-       (or (eql (car val) -1) (natp (car val)))
-       (consp (cdr val))
-       (consp (cadr val))
-       (if (keywordp (car (cadr val)))
-           (and (eq (car (cadr val)) :logic)
-                (pseudo-formp (cdr (cadr val))))
-           (pseudo-formp (cadr val)))
-       (consp (cddr val))
-       (or (null (caddr val))
-           (stringp (caddr val)))
-       (or (null (cdddr val))
-           (pseudo-formp (cdddr val)))))
+; See pseudo-command-landmarkp in pseudo-command-landmarkp.lisp.
+; That function was originally here in this file.
 
 ; -----------------------------------------------------------------
 ; KNOWN-PACKAGE-ALIST [GLOBAL-VALUE]
@@ -359,15 +323,12 @@
         (t nil)))
 
 ; -----------------------------------------------------------------
-; RECOGNIZER-ALIST [GLOBAL-VALUE]
+; BUILT-IN-CLAUSES [GLOBAL-VALUE]
 
-; The recognizer-alist contains records of the following form:
+; Built-in-clauses is an alist associating function symbols with lists of
+; built-in-clause records.
 
-; (defrec recognizer-tuple
-;   (fn (nume . true-ts)
-;       (false-ts . strongp)
-;       . rune)
-;   t)
+; (defrec built-in-clause ((nume . all-fnnames) clause . rune) t)
 
 (defun pseudo-numep (n)
 
@@ -377,36 +338,6 @@
 ; many as there are runes (a function of the world).
 
   (natp n))
-
-
-(defun type-setp (n)
-  (and (integerp n)
-       (<= *min-type-set* n)
-       (<= n *max-type-set*)))
-
-(defun pseudo-recognizer-tuplep (x)
-  (case-match x
-    ((fn (nume . true-ts) (false-ts . strongp) . rune)
-     (and (pseudo-function-symbolp fn 1)
-          (or (null nume) (pseudo-numep nume))  ; nil corresponds to the fake rune
-          (type-setp true-ts)
-          (type-setp false-ts)
-          (booleanp strongp)
-          (pseudo-runep rune)))
-    (& nil)))
-
-(defun pseudo-recognizer-alistp (x)
-  (if (atom x)
-      (null x)
-      (and (pseudo-recognizer-tuplep (car x))
-           (pseudo-recognizer-alistp (cdr x)))))
-
-; -----------------------------------------------------------------
-; BUILT-IN-CLAUSES [GLOBAL-VALUE]
-
-; Built-in-clauses is an alist associating function symbols with lists of built-in-clause records.
-
-; (defrec built-in-clause ((nume . all-fnnames) clause . rune) t)
 
 (defun pseudo-built-in-clause-recordp (x)
   (case-match x
@@ -430,6 +361,14 @@
            (pseudo-function-symbolp (car (car x)) nil)
            (pseudo-built-in-clause-record-listp (cdr (car x)))
            (pseudo-built-in-clausesp (cdr x)))))
+
+; -----------------------------------------------------------------
+; ATTACH-NIL-LST [GLOBAL-VALUE]
+
+; Attach-nil-lst is a list of function symbols.
+
+(defun pseudo-attach-nil-lst (lst)
+  (pseudo-function-symbol-listp lst nil))
 
 ; -----------------------------------------------------------------
 ; ATTACHMENT-RECORDS [GLOBAL-VALUE]
@@ -477,6 +416,16 @@
                 (pseudo-attachment-recordsp (cdr x))))))
 
 ; -----------------------------------------------------------------
+; ATTACHMENTS-AT-GROUND-ZERO [GLOBAL-VALUE]
+
+(defun pseudo-attachments-at-ground-zerop (x)
+  (cond ((atom x) (null x))
+        (t (and (consp (car x))
+                (pseudo-function-symbolp (caar x) nil)
+                (pseudo-function-symbolp (cdar x) nil)
+                (pseudo-attachments-at-ground-zerop (cdr x))))))
+
+; -----------------------------------------------------------------
 ; HALF-LENGTH-BUILT-IN-CLAUSES [GLOBAL-VALUE]
 
 ; This is always a number set to (floor n 2), where n is the length of built-in-clauses.
@@ -489,6 +438,11 @@
 
 ; This is a list of records:
 ; (defrec type-set-inverter-rule ((nume . ts) terms . rune) nil)
+
+(defun type-setp (n)
+  (and (integerp n)
+       (<= *min-type-set* n)
+       (<= n *max-type-set*)))
 
 (defun pseudo-type-set-inverter-rule-recordp (x)
   (case-match x
@@ -653,8 +607,20 @@
                    (eq (car ignorep) 'defstobj)
                    (pseudo-function-symbolp (cdr ignorep) nil)) ; really must be stobj-name
               (null ignorep))
-          (pseudo-form-listp defs)))
-    (& (pseudo-formp val))))
+
+; We could do better than (true-listp defs) below.  For example
+; (pseudo-event-form-listp defs) should be true, as it is defined in late
+; December 2019 (but perhaps it won't be true in the future -- after all, defs
+; is a list of CDRs of events).  Much more should also be true, but in the
+; "pseudo" spirit we keep this simple.
+
+          (true-listp defs)))
+    (&
+
+; We could probably insist that val be a true-listp in this case, but that is
+; such a weak check that given our lack of certainty, we don't bother.
+
+     t)))
 
 ; The value of TOP-LEVEL-CLTL-COMMAND-STACK is a list of CLTL-COMMAND objects.
 
@@ -683,13 +649,13 @@
 ; Cert-annotationsp is defined in the source code and uses ttag-alistp.
 ; We need to admit guard-verified versions of each.
 
-(verify-termination sysfile-p)
+(verify-termination sysfile-p) ; and guards
 
-(verify-termination sysfile-or-string-listp)
+(verify-termination sysfile-or-string-listp) ; and guards
 
-(verify-termination ttag-alistp)
+(verify-termination ttag-alistp) ; and guards
 
-(verify-termination cert-annotationsp)
+(verify-termination cert-annotationsp) ; and guards
 
 (defun pseudo-include-book-alist-entryp (entry)
   (case-match entry
@@ -711,8 +677,13 @@
 
           (or (null cert-annotations)
               (cert-annotationsp cert-annotations t))
-          (or (integerp chk-sum)
-              (eq chk-sum nil))))
+          (case-match chk-sum
+            (((':BOOK-LENGTH . book-length)
+              (':BOOK-WRITE-DATE . book-write-date))
+             (and (natp book-length)
+                  (natp book-write-date)))
+            (& (or (integerp chk-sum)
+                   (eq chk-sum nil))))))
     (& nil)))
 
 (defun pseudo-include-book-alist-entry-listp (x local-markers-allowedp)
@@ -882,7 +853,8 @@
 ; -----------------------------------------------------------------
 ; CURRENT-THEORY-INDEX [GLOBAL-VALUE]
 
-; The current-theory-index is the highest nume in use as of the setting of current-theory.
+; The current-theory-index is the highest nume in use as of the setting of
+; current-theory.
 
 (defun pseudo-current-theory-indexp (val)
   (or (pseudo-numep val)
@@ -936,30 +908,28 @@
 
 (defun skip-proofs-seenp (val)
 
-; Legal values are nil, (:include-book full-book-name), or any translatable form which might be
-; found in a skip-proofs.
+; Legal values are nil, (:include-book full-book-name), or any event form.
 
   (or (null val)
       (and (true-listp val)
            (equal (len val) 2)
            (eq (car val) :include-book)
            (stringp (cadr val)))
-      (pseudo-formp val)))
+      (pseudo-event-formp val)))
 
 ; -----------------------------------------------------------------
 ; REDEF-SEEN [GLOBAL-VALUE]
 
 (defun redef-seenp (val)
 
-; Legal values are nil, (:include-book full-book-name), or any translatable form which might be
-; found in a skip-proofs.
+; Legal values are nil, (:include-book full-book-name), or any event form.
 
   (or (null val)
       (and (true-listp val)
            (equal (len val) 2)
            (eq (car val) :include-book)
            (stringp (cadr val)))
-      (pseudo-formp val)))
+      (pseudo-event-formp val)))
 
 ; -----------------------------------------------------------------
 ; CERT-REPLAY [GLOBAL-VALUE]
@@ -998,6 +968,21 @@
 
 (defun pseudo-free-var-runes-oncep (val)
   (pseudo-theoryp1 val))
+
+; -----------------------------------------------------------------
+; TRANSLATE-CERT-DATA [GLOBAL-VALUE]
+
+(defun weak-translate-cert-data-record-listp (lst)
+  (cond ((atom lst) (null lst))
+        (t (and (weak-translate-cert-data-record-p (car lst))
+                (weak-translate-cert-data-record-listp (cdr lst))))))
+
+(defun pseudo-translate-cert-datap (val)
+  (cond ((atom val) (null val))
+        (t (and (consp (car val))
+                (symbolp (caar val))
+                (weak-translate-cert-data-record-listp (cdar val))
+                (pseudo-translate-cert-datap (cdr val))))))
 
 ; -----------------------------------------------------------------
 ; CHK-NEW-NAME-LST [GLOBAL-VALUE]
@@ -1057,16 +1042,20 @@
         (t (and (pseudo-evg-singletonp (car lst))
                 (pseudo-evg-singletonsp1 (cdr lst))))))
 
-(defun lexordered-ascendingp (lst)
+(defun lexorder-strict-ascendingp-without-list-nil (lst)
   (cond ((atom lst) t)
         ((atom (cdr lst)) t)
-        ((lexorder (car lst) (cadr lst))
-         (lexordered-ascendingp (cdr lst)))
-        (t nil)))
+        ((lexorder (cadr lst) (car lst))
+         nil)
+        (t
+         (lexorder-strict-ascendingp-without-list-nil (cdr lst)))))
 
 (defun pseudo-evg-singletonsp (lst)
   (and (pseudo-evg-singletonsp1 lst)
-       (lexordered-ascendingp lst)))
+       (lexorder-strict-ascendingp-without-list-nil
+        (if (equal (car lst) '(nil))
+            (cdr lst)
+          lst))))
 
 ; (defrec tau-interval (domain (lo-rel . lo) . (hi-rel . hi)) t)
 
@@ -1107,7 +1096,7 @@
 ;   t)
 ; where
 ; pos-evg:   nil or a singleton list containing an evg
-; neg-evgs:  list of singleton lists of evgs, duplicate-free ordered ascending
+; neg-evgs:  list of singleton lists of evgs, duplicate-free, suitably ordered
 ; interval:  pseudo-tau-intervalp
 ; pos-pairs: list of tau-pairs, duplicate-free, ordered descending
 ; neg-pairs: list of tau-pairs, duplicate-free ordered descending
@@ -1172,10 +1161,54 @@
 (defun ttags-seenp (val)
   (cond ((atom val) (null val))
         (t (and (consp (car val))
-                (symbolp (car (car val)))            ; a ttag
-                (or (equal (cdr (car val)) '(NIL))   ; ttag declared at top-level
-                    (string-listp (cdr (car val))))  ; ttag declared in given filenames
+                (symbolp (car (car val))) ; a ttag
+                (true-listp (cdr (car val))) ; guard for next conjunct
+
+; The cdr of (car val) is a list of strings, indicating books in which the ttag
+; has been declared, and possibly nil, indicating that the ttag was declared at
+; top-level.
+
+                (string-listp (remove1-eq 'nil (cdr (car val))))
                 (ttags-seenp (cdr val))))))
+
+; -----------------------------------------------------------------
+; NEVER-UNTOUCHABLE-FNS [GLOBAL-VALUE]
+
+; This is a symbol-alist pairing function names with lists of
+; well-formedness-guarantees.
+
+(verify-termination arity-alistp) ; and guards
+
+(defun well-formedness-guaranteep (x)
+
+; A well-formedness guarantee is actually: ((name fn thm-name1 hyp-fn
+; thm-name2) . arity-alist) where name is the name of a metatheorem or the
+; correctness of a clause-processor, fn is the metafunction or
+; clause-processor, thm-name1 is the name of the theorem establishing that the
+; output of fn is well-formed, and hyp-fn and thm-name2 are the analogous
+; things for those metatheorems with hyp-fns.  The last two elements are
+; omitted when there is no hyp-fn for name.  The arity-alist maps function
+; symbols to their assumed arities.  We just check the syntatic conditions.
+
+  (and (consp x)
+       (symbol-listp (car x))
+       (or (equal (len (car x)) 3)
+           (equal (len (car x)) 5))
+       (arity-alistp (cdr x))))
+
+(defun well-formedness-guarantee-listp (lst)
+  (if (atom lst)
+      (eq lst nil)
+      (and (well-formedness-guaranteep (car lst))
+           (well-formedness-guarantee-listp (cdr lst)))))
+
+(defun never-untouchable-fnsp (val)
+  (if (atom val)
+      (eq val nil)
+      (and (consp (car val))
+           (symbolp (car (car val)))
+           (well-formedness-guarantee-listp (cdr (car val)))
+           (never-untouchable-fnsp (cdr val)))))
 
 ; -----------------------------------------------------------------
 ; UNTOUCHABLE-FNS [GLOBAL-VALUE]
@@ -1195,6 +1228,14 @@
   (symbol-listp val))
 
 ; -----------------------------------------------------------------
+; NEVER-IRRELEVANT-FNS-ALIST [GLOBAL-VALUE]
+
+(defun never-irrelevant-fns-alistp (val)
+  (and (symbol-alistp val)
+       (subsetp-eq (strip-cdrs val)
+                   '(t nil :both))))
+
+; -----------------------------------------------------------------
 ; DEFINED-HEREDITARILY-CONSTRAINED-FNS [GLOBAL-VALUE]
 
 (defun pseudo-defined-hereditarily-constrained-fnsp (val)
@@ -1209,6 +1250,100 @@
   (symbol-listp val))
 
 ;-----------------------------------------------------------------
+; LAMBDA$-ALIST
+
+; Lambda$-alist maps the lambda expressions produced by the raw Lisp
+; macroexpansion of lambda$ expressions to the logic translations of the
+; lambda$ expressions.  See chk-acceptable-lambda$-translations.  But we just
+; insist it is an alist.
+
+(defun lambda$-alistp (val)
+  (alistp val))
+
+;-----------------------------------------------------------------
+; LOOP$-ALIST
+
+; Loop$-alist maps loop$ expressions to their logic translations.  We just
+; insist it is an alist.
+
+(defun loop$-alistp (val)
+  (alistp val))
+
+;-----------------------------------------------------------------
+; COMMON-LISP-COMPLIANT-LAMBDAS [GLOBAL-VALUE]
+(defun common-lisp-compliant-lambdasp (val)
+; This is really a list well-formed quoted lambda expressions (all of which
+; have been guard verified).  But we're just insisting it be a true list right
+; now!
+  (true-listp val))
+
+;-----------------------------------------------------------------
+; REWRITE-QUOTED-CONSTANT-RULES
+
+; This is a list of rewrite-rule records, all of which have the subclass
+; REWRITE-QUOTED-CONSTANT.
+
+(defun pseudo-loop-stopper-elementp (x)
+  (case-match x
+    ((var1 var2 . fns)
+     (and (symbolp var1)
+          (symbolp var2)
+          (pseudo-function-symbol-listp fns nil)))
+    (& nil)))
+
+(defun pseudo-loop-stopperp (x)
+  (cond ((atom x) (null x))
+        (t (and (pseudo-loop-stopper-elementp (car x))
+                (pseudo-loop-stopperp (cdr x))))))
+
+(defun nil-or-nat-listp (x)
+  (cond ((atom x) (null x))
+        (t (and (or (null (car x))
+                    (natp (car x)))
+                (nil-or-nat-listp (cdr x))))))
+
+(defun pseudo-match-freep (x)
+
+; According to a comment in the defrec for rewrite-rule, the match-free should
+; be :once or :all if there are free vars in the hypotheses of a rule.  This
+; function doesn't check that condition.
+
+  (or (null x)
+      (eq x :once)
+      (eq x :all)))
+
+(defun pseudo-rewrite-quoted-constant-rulep (x)
+  (case-match x
+    (('REWRITE-RULE rune nume hyps equiv lhs rhs
+                    subclass heuristic-info
+                    backchain-limit-lst
+                    var-info . match-free)
+     (cond
+      ((eq subclass 'rewrite-quoted-constant)
+       (and (pseudo-runep rune)
+            (pseudo-numep nume)
+            (pseudo-term-listp hyps)
+            (pseudo-function-symbolp equiv 2)
+            (pseudo-termp lhs)
+            (pseudo-termp rhs)
+            (consp heuristic-info)
+            (integerp (car heuristic-info))
+            (<= 1 (car heuristic-info))
+            (<= (car heuristic-info) 3)
+            (pseudo-loop-stopperp (cdr heuristic-info))
+            (or (null backchain-limit-lst) ; If the user explicitly sets this field to a nat
+                (nil-or-nat-listp backchain-limit-lst)) ; it is coerced to a list of nats.
+            (booleanp var-info)
+            (pseudo-match-freep match-free)))
+      (t nil)))
+    (& nil)))
+
+(defun pseudo-rewrite-quoted-constant-rulesp (x)
+  (cond ((atom x) (null x))
+        (t (and (pseudo-rewrite-quoted-constant-rulep (car x))
+                (pseudo-rewrite-quoted-constant-rulesp (cdr x))))))
+
+;-----------------------------------------------------------------
 ; ABSOLUTE-EVENT-NUMBER
 
 (defun absolute-event-numberp (sym val)
@@ -1221,9 +1356,13 @@
 (defun absstobj-infop (val)
   (and (weak-absstobj-info-p val)
        (symbolp (access absstobj-info val :st$c))
-       (let ((logic-exec-pairs (access absstobj-info val :logic-exec-pairs)))
-         (and (symbol-alistp logic-exec-pairs)
-              (r-symbol-alistp logic-exec-pairs)))))
+       (let ((absstobj-tuples (access absstobj-info val :absstobj-tuples)))
+         (and (symbol-alistp absstobj-tuples)
+              (let ((cdrs (strip-cdrs absstobj-tuples)))
+                (and (symbol-alistp cdrs)
+                     (let ((cddrs (strip-cdrs cdrs)))
+                       (and (symbol-alistp cddrs)
+                            (r-symbol-alistp cddrs)))))))))
 
 ;-----------------------------------------------------------------
 ; ACCESSOR-NAMES
@@ -1328,26 +1467,9 @@
 ; This is a list of fully elaborated rule classes as returned by translate-rule-classes.
 ; For the present purposes we just check that it is an alist mapping keywords to keyword alists.
 
-(defun keyword-alistp (x)
-
-; A keyword alist is an even length true list in which the elements in the even
-; (0-based) positions are keywords, (:key1 val1 :key2 val2 ...).
-
-  (cond ((atom x) (null x))
-        ((atom (cdr x)) nil)
-        (t (and (keywordp (car x))
-                (keyword-alistp (cddr x))))))
-
-(defun keyword-to-keyword-alist-alistp (x)
-  (cond ((atom x) (null x))
-        (t (and (consp (car x))
-                (keywordp (car (car x)))
-                (keyword-alistp (cdr (car x)))
-                (keyword-to-keyword-alist-alistp (cdr x))))))
-
 (defun classesp (sym val)
   (declare (ignore sym))
-  (keyword-to-keyword-alist-alistp val))
+  (keyword-to-keyword-value-list-alistp val))
 
 
 ;-----------------------------------------------------------------
@@ -1362,7 +1484,8 @@
 
 (defun clause-processorp (sym val)
   (declare (ignore sym))
-  (booleanp val))
+  (or (booleanp val)
+      (well-formedness-guaranteep val)))
 
 ;-----------------------------------------------------------------
 ; COARSENINGS
@@ -1435,8 +1558,8 @@
 ; whose elements is of the form (equiv pequiv1 ... pequivk), where equiv is
 ; some equivalence relation and each pequivi is a pequiv record.
 
-(verify-termination legal-variable-or-constant-namep)
-(verify-termination legal-variablep)
+(verify-termination legal-variable-or-constant-namep) ; and guards
+(verify-termination legal-variablep) ; and guards
 
 (defun pseudo-pequiv-pattern-p (p)
   (or (legal-variablep p)
@@ -1509,8 +1632,8 @@
 
 (defun constraint-lstp (sym val)
   (declare (ignore sym))
-  (or (eq val *unknown-constraints*)
-      (pseudo-function-symbolp val nil) ; the fn under which the constraints are stored
+  (or (unknown-constraints-p val)
+      (pseudo-function-symbolp val nil) ; the fn where constraints are stored
       (pseudo-term-listp val)))
 
 ;-----------------------------------------------------------------
@@ -1518,10 +1641,10 @@
 
 ; This is a list of def-body records:
 ; (defrec def-body
-;  ((nume hyp . concl) . (recursivep formals rune . controller-alist))
+;  ((nume hyp . concl) equiv . (recursivep formals rune . controller-alist))
 ;  t)
 
-; meaning (implies hyp (EQUAL (sym . formals) concl)), with recursivep listing
+; meaning (implies hyp (equiv (sym . formals) concl)), with recursivep listing
 ; the fns in the clique and controll-alist being the map from fn symbols to
 ; controller masks.  Rune and nume justify it.
 
@@ -1541,11 +1664,13 @@
 
 (defun pseudo-def-bodyp (x)
   (case-match x
-    (((nume hyp . concl) . (recursivep formals rune . controller-alist))
+    (((nume hyp . concl) equiv . (recursivep formals rune . controller-alist))
      (and (pseudo-numep nume)
           (or (null hyp)                ; means there is no hyp
               (pseudo-termp hyp))
           (pseudo-termp concl)
+          (and (symbolp equiv)
+               equiv) ; equality is represented by equal, not nil
           (pseudo-function-symbol-listp recursivep nil)
           (pseudo-arglistp formals)
           (pseudo-runep rune)
@@ -1628,16 +1753,6 @@
 ;   ((rune . nume) trigger hyps concls . match-free)
 ;   nil)
 
-(defun pseudo-match-freep (x)
-
-; According to a comment in the defrec for rewrite-rule, the match-free should
-; be :once or :all if there are free vars in the hypotheses of a rule.  This
-; function doesn't check that condition.
-
-  (or (null x)
-      (eq x :once)
-      (eq x :all)))
-
 (defun pseudo-forward-chaining-rulep (x)
   (case-match x
     (('FORWARD-CHAINING-RULE (rune . nume) trigger hyps concls . match-free)
@@ -1659,6 +1774,25 @@
   (pseudo-forward-chaining-rule-listp val))
 
 ;-----------------------------------------------------------------
+; GLOBAL-STOBJS
+
+(defun stobj-listp (x known-stobjs w)
+  (declare (xargs :guard (and (plist-worldp w)
+                              (or (eq known-stobjs t)
+                                  (true-listp known-stobjs)))))
+  (cond ((atom x) (null x))
+        (t (and (stobjp (car x) known-stobjs w)
+                (stobj-listp (cdr x) known-stobjs w)))))
+
+(defun global-stobjs-p (val w)
+  (declare (xargs :guard (plist-worldp w)))
+  (or (null val)
+      (and (consp val)
+           (stobj-listp (car val) t w)
+           (stobj-listp (cdr val) t w)
+           (not (intersectp-eq (car val) (cdr val))))))
+
+;-----------------------------------------------------------------
 ; GLOBAL-VALUE
 
 (defun pseudo-global-valuep (sym val w)
@@ -1675,9 +1809,10 @@
     (COMMAND-LANDMARK (pseudo-command-landmarkp val))
     (KNOWN-PACKAGE-ALIST (known-package-alistp val))
     (WELL-FOUNDED-RELATION-ALIST (pseudo-well-founded-relation-alistp val))
-    (RECOGNIZER-ALIST (pseudo-recognizer-alistp val))
     (BUILT-IN-CLAUSES (pseudo-built-in-clausesp val))
+    (ATTACH-NIL-LST (pseudo-attach-nil-lst val))
     (ATTACHMENT-RECORDS (pseudo-attachment-recordsp val))
+    (ATTACHMENTS-AT-GROUND-ZERO (pseudo-attachments-at-ground-zerop val))
     (HALF-LENGTH-BUILT-IN-CLAUSES (pseudo-half-length-built-in-clausesp val))
     (TYPE-SET-INVERTER-RULES (pseudo-type-set-inverter-rulesp val))
     (GLOBAL-ARITHMETIC-ENABLED-STRUCTURE (pseudo-global-arithmetic-enabled-structurep val))
@@ -1689,7 +1824,6 @@
     (EMBEDDED-EVENT-LST (pseudo-embedded-event-lstp val))
     (CLTL-COMMAND (pseudo-cltl-commandp val))
     (TOP-LEVEL-CLTL-COMMAND-STACK (pseudo-cltl-command-listp val))
-    (HONS-ENABLED (booleanp val))
     (INCLUDE-BOOK-ALIST (pseudo-include-book-alistp val))
     (INCLUDE-BOOK-ALIST-ALL (pseudo-include-book-alist-allp val))
     (PCERT-BOOKS (pseudo-pcert-booksp val))
@@ -1700,6 +1834,7 @@
     (NONCONSTRUCTIVE-AXIOM-NAMES (nonconstructive-axiom-namesp val))
     (STANDARD-THEORIES (pseudo-standard-theoriesp val))
     (CURRENT-THEORY (pseudo-current-theoryp val))
+    (CURRENT-THEORY-LENGTH (natp val))
     (CURRENT-THEORY-AUGMENTED (pseudo-current-theory-augmentedp val))
     (CURRENT-THEORY-INDEX (pseudo-current-theory-indexp val))
     (GENERALIZE-RULES (pseudo-generalize-rulesp val))
@@ -1712,6 +1847,7 @@
     (PROOF-SUPPORTERS-ALIST (proof-supporters-alistp val))
     (FREE-VAR-RUNES-ALL (pseudo-free-var-runes-allp val))
     (FREE-VAR-RUNES-ONCE (pseudo-free-var-runes-oncep val))
+    (TRANSLATE-CERT-DATA (pseudo-translate-cert-datap val))
     (CHK-NEW-NAME-LST (chk-new-name-lstp val))
     (TAU-CONJUNCTIVE-RULES (pseudo-tau-conjunctive-rulesp val))
     (TAU-NEXT-INDEX (natp val))
@@ -1719,11 +1855,18 @@
     (TAU-MV-NTH-SYNONYMS (pseudo-function-symbol-listp val nil))
     (TAU-LOST-RUNES (pseudo-runep-listp val))
     (TTAGS-SEEN (ttags-seenp val))
+    (NEVER-UNTOUCHABLE-FNS (never-untouchable-fnsp val))
     (UNTOUCHABLE-FNS (untouchable-fnsp val))
     (UNTOUCHABLE-VARS (untouchable-varsp val))
     (DEFINED-HEREDITARILY-CONSTRAINED-FNS
       (pseudo-defined-hereditarily-constrained-fnsp val))
     (WORLD-GLOBALS (world-globalsp val))
+    (LAMBDA$-ALIST (lambda$-alistp val))
+    (LOOP$-ALIST (loop$-alistp val))
+    (COMMON-LISP-COMPLIANT-LAMBDAS (common-lisp-compliant-lambdasp val))
+    (NEVER-IRRELEVANT-FNS-ALIST (never-irrelevant-fns-alistp val))
+    (REWRITE-QUOTED-CONSTANT-RULES
+     (pseudo-rewrite-quoted-constant-rulesp val))
     (otherwise nil)))
 
 ;-----------------------------------------------------------------
@@ -1746,18 +1889,6 @@
 ; An induction machine is a list of tests-and-calls records:
 ; (defrec tests-and-calls (tests . calls) nil), where each of the two
 ; fields is a list of terms.
-
-(defun pseudo-tests-and-callsp (x)
-  (case-match x
-    (('TESTS-AND-CALLS tests . calls)
-     (and (pseudo-term-listp tests)
-          (pseudo-term-listp calls)))
-    (& nil)))
-
-(defun pseudo-tests-and-calls-listp (x)
-  (cond ((atom x) (null x))
-        (t (and (pseudo-tests-and-callsp (car x))
-                (pseudo-tests-and-calls-listp (cdr x))))))
 
 (defun pseudo-induction-machinep (sym val)
   (declare (ignore sym))
@@ -1828,25 +1959,6 @@
 
 ; But the restrictions on the fields depend on the subclass of the rule.
 
-(defun pseudo-loop-stopper-elementp (x)
-  (case-match x
-    ((var1 var2 . fns)
-     (and (symbolp var1)
-          (symbolp var2)
-          (pseudo-function-symbol-listp fns nil)))
-    (& nil)))
-
-(defun pseudo-loop-stopperp (x)
-  (cond ((atom x) (null x))
-        (t (and (pseudo-loop-stopper-elementp (car x))
-                (pseudo-loop-stopperp (cdr x))))))
-
-(defun nil-or-nat-listp (x)
-  (cond ((atom x) (null x))
-        (t (and (or (null (car x))
-                    (natp (car x)))
-                (nil-or-nat-listp (cdr x))))))
-
 (defun pseudo-rewrite-rulep (x)
   (case-match x
     (('REWRITE-RULE rune nume hyps equiv lhs rhs
@@ -1886,7 +1998,8 @@
              (pseudo-function-symbolp lhs 1)           ; name of meta function
              (or (null rhs)
                  (eq rhs 'extended))
-             (null heuristic-info)
+             (or (null heuristic-info)
+                 (well-formedness-guaranteep heuristic-info))
              (or (null backchain-limit-lst)
                  (natp backchain-limit-lst))           ; backchain limit for meta rule really can be a nat
 ;            (null var-info) ; ignored
@@ -1951,23 +2064,30 @@
   (pseudo-linear-lemma-listp val))
 
 ;-----------------------------------------------------------------
+; LOOP$-RECURSION
+
+(defun loop$-recursionp (sym val)
+  (declare (ignore sym))
+  (booleanp val))
+
+;-----------------------------------------------------------------
 ; MACRO-ARGS
 
-(verify-termination legal-initp)
+(verify-termination legal-initp) ; and guards
 
-(verify-termination macro-arglist-keysp)
+(verify-termination macro-arglist-keysp) ; and guards
 
-(verify-termination macro-arglist-after-restp)
+(verify-termination macro-arglist-after-restp) ; and guards
 
-(verify-termination lambda-keywordp)
+(verify-termination lambda-keywordp) ; and guards
 
-(verify-termination macro-arglist-optionalp)
+(verify-termination macro-arglist-optionalp) ; and guards
 
-(verify-termination macro-arglist1p)
+(verify-termination macro-arglist1p) ; and guards
 
-(verify-termination subsequencep)
+(verify-termination subsequencep) ; and guards
 
-(verify-termination collect-lambda-keywordps)
+(verify-termination collect-lambda-keywordps) ; and guards
 
 ; We avoid exporting names that might conflict with names used in distributed
 ; books, so that we can use this book to check the well-formedness of the
@@ -2020,16 +2140,16 @@
 
 ; Thus ends the work for macro-vars-key.  Here it is:
 
-(verify-termination macro-vars-key)
+(verify-termination macro-vars-key) ; and guards
 
-(verify-termination macro-vars-after-rest)
+(verify-termination macro-vars-after-rest) ; and guards
 
 (defthm eqlable-listp-collect-lambda-keywordsp
   (eqlable-listp (collect-lambda-keywordps args)))
 
-(verify-termination macro-vars-optional)
+(verify-termination macro-vars-optional) ; and guards
 
-(verify-termination macro-args-structurep)
+(verify-termination macro-args-structurep) ; and guards
 
 (local
  (defthm true-listp-member-eq
@@ -2041,7 +2161,7 @@
 ; seconds; 10 subgoals are pushed and proved by induction (though some are
 ; subsumed by others).
 
-(verify-termination macro-vars)
+(verify-termination macro-vars) ; and guards
 
 ; The following function is a pseudo version of the negations of both
 ; chk-macro-arglist-msg and chk-macro-arglist.  The reason it is pseudo and not
@@ -2130,6 +2250,34 @@
 
   (pseudo-quick-block-info-listp val))
 
+; -----------------------------------------------------------------
+; RECOGNIZER-ALIST
+
+; Each property's recognizer-alist contains records of the following form:
+
+; (defrec recognizer-tuple
+;   (fn (nume . true-ts)
+;       (false-ts . strongp)
+;       . rune)
+;   t)
+
+(defun pseudo-recognizer-tuplep (fn x)
+  (case-match x
+    ((!fn (nume . true-ts) (false-ts . strongp) . rune)
+     (and (pseudo-function-symbolp fn 1)
+          (or (null nume) (pseudo-numep nume))  ; nil corresponds to the fake rune
+          (type-setp true-ts)
+          (type-setp false-ts)
+          (booleanp strongp)
+          (pseudo-runep rune)))
+    (& nil)))
+
+(defun pseudo-recognizer-alistp (fn x)
+  (if (atom x)
+      (null x)
+      (and (pseudo-recognizer-tuplep fn (car x))
+           (pseudo-recognizer-alistp fn (cdr x)))))
+
 ;-----------------------------------------------------------------
 ; RECURSIVEP
 
@@ -2151,6 +2299,16 @@
 
 ;-----------------------------------------------------------------
 ; REDUNDANCY-BUNDLE
+
+; Through Version_8.3 we stored a so-called redundancy-bundle for a defstobj
+; event.  We found however that this was not sufficient for determining
+; redundancy, as discussed in :doc note-8-4.  Perhaps everything in this
+; section could therefore be deleted; however, it seems harmless to leave these
+; functions in place for now, which could be helpful if they are useful
+; elsewhere.
+
+; At any rate, everything below in this section should be considered irrelevant
+; to well-formedness of a world.
 
 ; The structure of a redundancy-bundle of a stobj is actually pretty
 ; unimportant.  They are only used as fingerprints of a defstobj event,
@@ -2520,7 +2678,7 @@
 ;-----------------------------------------------------------------
 ; TYPE-PRESCRIPTIONS
 
-(verify-termination backchain-limit-listp)
+(verify-termination backchain-limit-listp) ; and guards
 
 (defun pseudo-type-prescriptionp (x)
   (case-match x
@@ -2572,8 +2730,12 @@
 ; UNTRANSLATED-THEOREM
 
 (defun untranslated-theoremp (sym val)
+
+; The form of an untranslated theorem is quite arbitrary, because of macros.
+
   (declare (ignore sym))
-  (pseudo-formp val))
+  (or (atom val)
+      (true-listp val)))
 
 ; -----------------------------------------------------------------
 
@@ -2662,10 +2824,10 @@
                            ABSOLUTE-EVENT-NUMBER
                            UNNORMALIZED-BODY
 
-; The following property is set by primordial-event-macro-and-fn for ;
-; ld-skip-proofsp and default-defun-mode-from-state.  (def-bodies is also set ;
-; for other primitives, like skip-when-logic and include-book-fn, but they ;
-; remain in :program mode and so the setting isn't shadowed out) ;
+; The following property is set by primordial-event-macro-and-fn for
+; ld-skip-proofsp and default-defun-mode-from-state.  (Def-bodies is also set
+; for other primitives, like skip-when-logic and include-book-fn, but they
+; remain in :program mode and so the setting isn't shadowed out.)
 
                            DEF-BODIES
 
@@ -2752,6 +2914,8 @@
            (or (eq val *acl2-property-unbound*)
                (pseudo-formalsp sym val)))
           (FORWARD-CHAINING-RULES (pseudo-forward-chaining-rulesp sym val))
+          (GLOBAL-STOBJS (or (eq val *acl2-property-unbound*)
+                             (global-stobjs-p val w)))
           (GLOBAL-VALUE
            (and (not (eq val *acl2-property-unbound*))
                 (pseudo-global-valuep sym val w)))
@@ -2769,6 +2933,7 @@
           (LEMMAS (pseudo-lemmasp sym val))
           (LEVEL-NO (level-nop sym val))
           (LINEAR-LEMMAS (pseudo-linear-lemmasp sym val))
+          (LOOP$-RECURSION (loop$-recursionp sym val))
           (MACRO-ARGS (pseudo-macro-argsp sym val))
           (MACRO-BODY (pseudo-macro-bodyp sym val))
           (NEG-IMPLICANTS (pseudo-neg-implicantsp sym val))
@@ -2781,9 +2946,9 @@
                           (predefinedp sym val)))
           (PRIMITIVE-RECURSIVE-DEFUNP (primitive-recursive-defunpp sym val))
           (QUICK-BLOCK-INFO (pseudo-quick-block-infop sym val))
+          (RECOGNIZER-ALIST (pseudo-recognizer-alistp sym val))
           (RECURSIVEP (pseudo-recursivepp sym val))
           (REDEFINED (redefinedp sym val))
-          (REDUNDANCY-BUNDLE (pseudo-redundancy-bundlep sym val))
           (RUNIC-MAPPING-PAIRS (pseudo-runic-mapping-pairsp sym val))
           (SIBLINGS (siblings-propertyp sym val))
           (SIGNATURE-RULES-FORM-1

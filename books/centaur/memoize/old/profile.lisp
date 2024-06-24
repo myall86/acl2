@@ -13,7 +13,6 @@
 
 (in-package "ACL2")
 (include-book "tools/include-raw" :dir :system)
-; cert_param: (hons-only)
 
 ; [Jared]: I pulled PROFILE-ACL2, PROFILE-ALL, and PROFILE-FILE, and related
 ; functionality out of ACL2(h) and into this ttag-based book.  They are not
@@ -149,7 +148,7 @@
  <li>@('forget') (default: @('nil')) is passed as the @(':forget') argument for
  each generated call of @(tsee profile); and</li>
 
- <li>('pkg'), when supplied, is a package name or list of package names to us
+ <li>@('pkg'), when supplied, is a package name or list of package names to use
  in place of the default, which is the list of names of all packages known to
  ACL2 except for packages @('\"ACL2-INPUT-CHANNEL\"'),
  @('\"ACL2-OUTPUT-CHANNEL\"'), @('\"COMMON-LISP\"'), and @('\"KEYWORD\"').</li>

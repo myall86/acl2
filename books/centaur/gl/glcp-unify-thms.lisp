@@ -1,6 +1,34 @@
+; GL - A Symbolic Simulation Framework for ACL2
+; Copyright (C) 2008-2013 Centaur Technology
+;
+; Contact:
+;   Centaur Technology Formal Verification Group
+;   7600-C N. Capital of Texas Highway, Suite 300, Austin, TX 78731, USA.
+;   http://www.centtech.com/
+;
+; License: (An MIT/X11-style license)
+;
+;   Permission is hereby granted, free of charge, to any person obtaining a
+;   copy of this software and associated documentation files (the "Software"),
+;   to deal in the Software without restriction, including without limitation
+;   the rights to use, copy, modify, merge, publish, distribute, sublicense,
+;   and/or sell copies of the Software, and to permit persons to whom the
+;   Software is furnished to do so, subject to the following conditions:
+;
+;   The above copyright notice and this permission notice shall be included in
+;   all copies or substantial portions of the Software.
+;
+;   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+;   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+;   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+;   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+;   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+;   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+;   DEALINGS IN THE SOFTWARE.
+;
+; Original author: Sol Swords <sswords@centtech.com>
 
 (in-package "GL")
-
 (include-book "glcp-unify-defs")
 (include-book "glcp-geval-thms")
 (include-book "var-bounds")
@@ -36,11 +64,6 @@
                  (glcp-generic-geval-alist al env)))))
 
 
-(local (defthm symbol-<-merge-under-set-equiv
-           (acl2::set-equiv (acl2::symbol-<-merge x y)
-                            (append x y))
-           :hints ((acl2::set-reasoning))))
-
 (defsection all-keys-bound
   (defund all-keys-bound (keys alist)
     (declare (xargs :guard t))
@@ -66,9 +89,9 @@
   (defcong acl2::set-equiv equal (all-keys-bound keys alist) 1
     :hints(("Goal" :in-theory (enable acl2::set-equiv)
             :use ((:instance all-keys-bound-subset
-                   (keys1 keys) (keys acl2::keys-equiv))
+                   (keys1 keys) (keys keys-equiv))
                   (:instance all-keys-bound-subset
-                   (keys1 acl2::keys-equiv) (keys keys)))
+                   (keys1 keys-equiv) (keys keys)))
             :do-not-induct t)))
 
   (defthm all-keys-bound-append
@@ -207,8 +230,8 @@
                             glcp-unify-term/gobj-list)))
 
   (flag::make-flag glcp-unify-term/gobj-flg glcp-unify-term/gobj
-                   :flag-mapping ((glcp-unify-term/gobj . term)
-                                  (glcp-unify-term/gobj-list . list)))
+                   :flag-mapping ((glcp-unify-term/gobj term)
+                                  (glcp-unify-term/gobj-list list)))
 
   (local (in-theory (disable glcp-unify-term/gobj
                              glcp-unify-term/gobj-list)))
@@ -346,7 +369,7 @@
            (implies (and (consp x)
                          (not (equal (tag x) :g-concrete))
                          (not (equal (tag x) :g-boolean))
-                         (not (equal (tag x) :g-number))
+                         (not (equal (tag x) :g-integer))
                          (not (equal (tag x) :g-ite))
                          (not (equal (tag x) :g-var))
                          (not (equal (tag x) :g-apply)))

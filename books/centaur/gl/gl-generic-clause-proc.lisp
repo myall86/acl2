@@ -29,7 +29,7 @@
 ; Original author: Sol Swords <sswords@centtech.com>
 
 (in-package "GL")
-(include-book "tools/clone-stobj" :dir :system)
+(include-book "std/stobjs/clone" :dir :system)
 (include-book "var-bounds")
 (include-book "shape-spec")
 (include-book "gl-generic-interp-defs")
@@ -42,6 +42,8 @@
 (include-book "clause-processors/decomp-hint" :dir :system)
 (include-book "centaur/misc/interp-function-lookup" :dir :system)
 (include-book "constraint-db-deps")
+(include-book "defsort/duplicated-members" :dir :system)
+(include-book "gl-util")
 (local (include-book "gl-generic-interp"))
 (local (include-book "general-object-thms"))
 (local (include-book "hyp-fix"))
@@ -51,6 +53,7 @@
 (local (include-book "std/lists/acl2-count" :dir :system))
 (local (include-book "clause-processors/find-matching" :dir :system))
 (local (include-book "clause-processors/just-expand" :dir :system))
+(local (include-book "std/basic/arith-equivs" :dir :system))
 (local (in-theory (disable* set::double-containment w)))
 
 
@@ -109,38 +112,14 @@
 ;; redundant but included only locally
 (make-event
  (b* (((er &) (in-theory nil))
-      ((er thm) (get-guard-verification-theorem 'glcp-generic-interp-term state)))
+      ((er thm) (get-guard-verification-theorem 'glcp-generic-interp-term nil state)))
    (value
-    `(progn
-       (defconst *glcp-generic-interp-guard-thm* ',thm)
-       (defthm glcp-generic-interp-guards-ok
-         ,thm
-         :rule-classes nil)))))
-
-
-(defun strip-cadrs (x)
-  (if (atom x)
-      nil
-    (cons (cadr (car x))
-          (strip-cadrs (cdr x)))))
-
-
-(mutual-recursion
- (defun collect-vars (x)
-   (cond ((null x) nil)
-         ((atom x) (list x))
-         ((eq (car x) 'quote) nil)
-         (t (collect-vars-list (cdr x)))))
- (defun collect-vars-list (x)
-   (if (atom x)
-       nil
-     (union-equal (collect-vars (car x))
-                  (collect-vars-list (cdr x))))))
-
-
-
-
-
+    `(with-output :off (prove event)
+       (progn
+         (defconst *glcp-generic-interp-guard-thm* ',thm)
+         (defthm glcp-generic-interp-guards-ok
+           ,thm
+           :rule-classes nil))))))
 
 
 
@@ -151,8 +130,6 @@
 
 (local
  (progn
-   (defthm alistp-shape-specs-to-interp-al
-     (alistp (shape-specs-to-interp-al x)))
 
    (defun norm-alist (vars alist)
      (if (atom vars)
@@ -173,7 +150,7 @@
             (and (member-equal v vars)
                  (cdr (assoc-equal v alist)))))
 
-   (flag::make-flag collect-vars-flg collect-vars)
+   (flag::make-flag simple-term-vars-flg simple-term-vars)
 
    (defthm subsetp-equal-union-equal
      (iff (subsetp-equal (union-equal a b) c)
@@ -181,24 +158,27 @@
                (subsetp-equal b c)))
      :hints ((acl2::set-reasoning)))
 
-   (defthm-collect-vars-flg
-     glcp-generic-geval-ev-norm-alist-collect-vars-lemma
-     (collect-vars
-      (implies (and (pseudo-termp x)
-                    (subsetp-equal (collect-vars x) vars))
+   (local (in-theory (enable glcp-generic-geval-ev-of-nonsymbol-atom)))
+
+   (defthm-simple-term-vars-flg
+     glcp-generic-geval-ev-norm-alist-simple-term-vars-lemma
+     (defthm glcp-generic-geval-ev-norm-alist-simple-term-vars1
+      (implies (subsetp-equal (simple-term-vars x) vars)
                (equal (glcp-generic-geval-ev x (norm-alist vars alist))
                       (glcp-generic-geval-ev x alist)))
-      :name glcp-generic-geval-ev-norm-alist-collect-vars1)
-     (collect-vars-list
-      (implies (and (pseudo-term-listp x)
-                    (subsetp-equal (collect-vars-list x) vars))
+      :hints ((and stable-under-simplificationp
+                   '(:in-theory (enable glcp-generic-geval-ev-of-fncall-args)
+                     :expand ((Simple-term-vars x)))))
+      :flag simple-term-vars)
+     (defthm glcp-generic-geval-ev-lst-norm-alist-simple-term-vars-lst1
+      (implies (subsetp-equal (simple-term-vars-lst x) vars)
                (equal (glcp-generic-geval-ev-lst x (norm-alist vars alist))
                       (glcp-generic-geval-ev-lst x alist)))
-      :name glcp-generic-geval-ev-lst-norm-alist-collect-vars-list1)
-     :hints (("goal" :induct (collect-vars-flg flag x)
-              :in-theory (enable subsetp-equal))
-             ("Subgoal *1/3"
-              :in-theory (enable glcp-generic-geval-ev-of-fncall-args))))
+      :hints ((and stable-under-simplificationp
+                   '(:expand ((simple-term-vars-lst x)))))
+      :flag simple-term-vars-lst)
+     :hints (("goal" :induct (simple-term-vars-flg flag x)
+              :in-theory (enable subsetp-equal))))
 
 
 
@@ -217,19 +197,6 @@
      :hints ((acl2::set-reasoning)))
 
 
-   (defun gobj-alistp (x)
-     (if (atom x)
-         (equal x nil)
-       (and (consp (car x))
-            (symbolp (caar x))
-            (not (keywordp (caar x)))
-            (caar x)
-            (gobj-alistp (cdr x)))))
-
-   (defthm gobj-alistp-shape-specs-to-interp-al
-     (implies (shape-spec-bindingsp x)
-              (gobj-alistp (shape-specs-to-interp-al x)))
-     :hints(("Goal" :in-theory (enable shape-specs-to-interp-al))))
 
    ;; (defthm gobj-listp-strip-cdrs
    ;;   (implies (gobj-alistp x)
@@ -268,13 +235,7 @@
                                (glcp-generic-geval-list (strip-cdrs x) env))))
      :hints(("Goal" :in-theory (enable strip-cars glcp-generic-geval-alist))))
 
-   (defthm strip-cdrs-shape-specs-to-interp-al
-     (implies (shape-spec-bindingsp x)
-              (equal (strip-cdrs (shape-specs-to-interp-al x))
-                     (shape-spec-to-gobj-list (strip-cadrs x))))
-     :hints(("Goal" :induct (len x)
-             :expand ((:free (a b) (shape-spec-to-gobj-list (cons a b)))))))
-
+   
 
    ;; (defthm gobject-alistp-gobj-alist-to-param-space
    ;;   (implies (gobject-alistp x)
@@ -313,17 +274,14 @@
      :hints(("Goal" :in-theory (enable nonnil-symbol-listp))))
 
 
-   (defthm shape-spec-listp-strip-cadrs
-     (implies (shape-spec-bindingsp x)
-              (shape-spec-listp (strip-cadrs x)))
-     :hints(("Goal" :in-theory (enable shape-spec-listp))))
+   ;; (defthm shape-spec-listp-strip-cadrs
+   ;;   (implies (shape-spec-bindingsp x)
+   ;;            (shape-spec-listp (strip-cadrs x)))
+   ;;   :hints(("Goal" :in-theory (enable shape-spec-listp))))
 
-   (defthm shape-specp-strip-cadrs-bindings
+   (defthm shape-specp-shape-spec-bindings->sspecs
      (implies (shape-spec-bindingsp x)
-              (shape-specp (strip-cadrs x)))
-     :hints(("Goal" :in-theory (enable shape-specp tag)
-             :induct (shape-spec-bindingsp x)
-             :expand ((:free (a b) (shape-specp (cons a b)))))))))
+              (shape-specp (shape-spec-bindings->sspecs x))))))
 
 
 
@@ -352,7 +310,7 @@
     (pattern-match x
       ((g-concrete &) 0)
       ((g-boolean b) (max-depth b))
-      ((g-number n) (max-max-max-depth n))
+      ((g-integer n) (acl2::max-max-depth n))
       ((g-ite if then else)
        (max (gobj-max-depth if)
             (max (gobj-max-depth then)
@@ -424,19 +382,6 @@
 
 ;; (in-theory (disable glcp-counterexample-wormhole))
 
-(defun glcp-error-fn (msg state)
-  (declare (xargs :guard t))
-  (mv msg nil state))
-
-(defmacro glcp-error (msg)
-  `(glcp-error-fn ,msg state))
-
-(add-macro-alias glcp-error glcp-error-fn)
-
-
-
-
-
 
 
 
@@ -460,7 +405,7 @@
              ((when config.abort-ctrex)
               (mv (msg
                    "~x0: Counterexamples found in ~@1; aborting~%"
-                   config.clause-proc-name id)
+                   config.clause-proc id)
                   nil state)))
           (value (list ''nil))))
        ((when false-succ)
@@ -468,10 +413,10 @@
         ;; (modulo side-goals).
         (value (list ''t))))
     ;; The SAT check failed:
-    (if config.abort-unknown
+    (if config.abort-indeterminate
         (mv
          (msg "~x0: SAT check failed in ~@1; aborting~%"
-              config.clause-proc-name id)
+              config.clause-proc id)
          nil state)
       (value (list ''nil)))))
 
@@ -554,16 +499,14 @@
 
 (local
  (defthm w-state-of-glcp-gen-assignments
-   (equal (w (mv-nth 2 (glcp-gen-assignments ctrex-info alist hyp-bfr n
-                                             state)))
+   (equal (w (mv-nth 2 (glcp-gen-assignments ctrex-info config state)))
           (w state))))
 
 (local (in-theory (disable glcp-gen-assignments)))
 (local (in-theory (disable glcp-bit-to-obj-ctrexamples)))
 (local
  (defthm w-state-of-glcp-gen-ctrexes
-   (equal (w (mv-nth 2 (glcp-gen-ctrexes ctrex-info alist hyp-bfr n
-                                             bvar-db state)))
+   (equal (w (mv-nth 2 (glcp-gen-ctrexes ctrex-info bvar-db config state)))
           (w state))
    :hints(("Goal" :in-theory (enable glcp-gen-ctrexes)))))
 (local (in-theory (disable glcp-gen-ctrexes)))
@@ -666,58 +609,8 @@
 
 (defthm strip-cars-shape-specs-to-interp-al
   (equal (strip-cars (shape-specs-to-interp-al al))
-         (strip-cars al))
-  :hints(("Goal" :in-theory (enable shape-specs-to-interp-al))))
-
-(defun preferred-defs-to-overrides (alist state)
-  (declare (xargs :stobjs state :guard t))
-  (if (atom alist)
-      (value nil)
-    (b* (((when (atom (car alist)))
-          (preferred-defs-to-overrides (cdr alist) state))
-         ((cons fn defname) (car alist))
-         ((unless (and (symbolp fn) (symbolp defname)))
-          (glcp-error
-           (acl2::msg "~
-The GL preferred-defs table contains an invalid entry ~x0.
-The key and value of each entry should both be symbols."
-                      (car alist))))
-         (rule (ec-call (fgetprop defname 'theorem nil (w state))))
-         ((unless rule)
-          (glcp-error
-           (acl2::msg "~
-The preferred-defs table contains an invalid entry ~x0.
-The :definition rule ~x1 was not found in the ACL2 world."
-                      (car alist) defname)))
-         ((unless (case-match rule
-                    (('equal (rulefn . &) &) (equal fn rulefn))))
-          (glcp-error
-           (acl2::msg "~
-The preferred-defs table contains an invalid entry ~x0.
-The :definition rule ~x1 is not suitable as a GL override.
-Either it is a conditional definition rule, it uses a non-EQUAL
-equivalence relation, or its format is unexpected.  The rule
-found is ~x2." (car alist) defname rule)))
-         (formals (cdadr rule))
-         (body (caddr rule))
-         ((unless (and (nonnil-symbol-listp formals)
-                       (acl2::no-duplicatesp formals)))
-          (glcp-error
-           (acl2::msg "~
-The preferred-defs table contains an invalid entry ~x0.
-The formals used in :definition rule ~x1 either are not all
-variable symbols or have duplicates, making this an unsuitable
-definition for use in a GL override.  The formals listed are
-~x2." (car alist) defname formals)))
-         ((unless (pseudo-termp body))
-          (glcp-error
-           (acl2::msg "~
-The preferred-defs table contains an invalid entry ~x0.
-The definition body, ~x1, is not a pseudo-term."
-                      (car alist) body)))
-         ((er rest) (preferred-defs-to-overrides (cdr alist) state)))
-      (value (hons-acons fn (list* formals body defname)
-                         rest)))))
+         (alist-keys al))
+  :hints(("Goal" :in-theory (enable shape-specs-to-interp-al alist-keys))))
 
 
 (local
@@ -737,34 +630,28 @@ The definition body, ~x1, is not a pseudo-term."
 (in-theory (disable preferred-defs-to-overrides))
 
 ;; A version of ACL2's dumb-negate-lit that behaves logically wrt an evaluator.
-(defun dumb-negate-lit (term)
-  (cond ((null term) ''t)
-        ((atom term) `(not ,term))
-        ((eq (car term) 'quote)
-         (acl2::kwote (not (cadr term))))
-        ((eq (car term) 'not)
-         (cadr term))
-        ((eq (car term) 'equal)
-         (cond ((or (eq (cadr term) nil)
-                    (equal (cadr term) ''nil))
-                (caddr term))
-               ((or (eq (caddr term) nil)
-                    (equal (caddr term) ''nil))
-                (cadr term))
-               (t `(not ,term))))
-        (t `(not ,term))))
+(defsection dumb-negate-lit
+
+  (local (in-theory (enable dumb-negate-lit)))
+  (defthm glcp-generic-geval-ev-dumb-negate-lit
+    (iff (glcp-generic-geval-ev (dumb-negate-lit lit) a)
+         (not (glcp-generic-geval-ev lit a))))
+
+
+  (defthm glcp-generic-geval-ev-list*-macro
+    (equal (glcp-generic-geval-ev (list*-macro (append x (list ''nil))) al)
+           (glcp-generic-geval-ev-lst x al))
+    :hints(("Goal" :in-theory (enable append))))
+
+  
+
+   (defthmd glcp-generic-geval-ev-disjoin-is-or-list-glcp-generic-geval-ev-lst
+     (iff (glcp-generic-geval-ev (disjoin lst) env)
+          (acl2::or-list (glcp-generic-geval-ev-lst lst env)))
+     :hints (("goal" :induct (len lst)))))
 
 (local
- (progn
-   (defthm glcp-generic-geval-ev-dumb-negate-lit
-     (iff (glcp-generic-geval-ev (dumb-negate-lit lit) a)
-          (not (glcp-generic-geval-ev lit a))))
-
-
-   (defthm glcp-generic-geval-ev-list*-macro
-     (equal (glcp-generic-geval-ev (list*-macro (append x (list ''nil))) al)
-            (glcp-generic-geval-ev-lst x al))
-     :hints(("Goal" :in-theory (enable append))))
+ (defsection norm-alist
 
 
    (defthm pairlis-eval-alist-is-norm-alist
@@ -776,37 +663,13 @@ The definition body, ~x1, is not a pseudo-term."
                                        pairlis$))))
 
 
-
-   (defthmd glcp-generic-geval-ev-disjoin-is-or-list-glcp-generic-geval-ev-lst
-     (iff (glcp-generic-geval-ev (disjoin lst) env)
-          (acl2::or-list (glcp-generic-geval-ev-lst lst env)))
-     :hints (("goal" :induct (len lst))))
-
    (defthm glcp-generic-geval-ev-disjoin-norm-alist
      (implies (and (pseudo-term-listp clause)
-                   (subsetp-equal (collect-vars-list clause) vars))
+                   (subsetp-equal (simple-term-vars-lst clause) vars))
               (iff (glcp-generic-geval-ev (disjoin clause) (norm-alist vars alist))
                    (glcp-generic-geval-ev (disjoin clause) alist)))
      :hints(("Goal" :in-theory (enable
                                 glcp-generic-geval-ev-disjoin-is-or-list-glcp-generic-geval-ev-lst))))))
-
-
-
-
-(defun shape-spec-bindingsp (x)
-  (declare (xargs :guard t))
-  (if (atom x)
-      (equal x nil)
-    (and (consp (car x))
-         (symbolp (caar x))
-         (not (keywordp (caar x)))
-         (caar x)
-         (consp (cdar x))
-         (shape-specp (cadar x))
-         (shape-spec-bindingsp (cdr x)))))
-
-
-
 
 
 
@@ -821,7 +684,8 @@ The definition body, ~x1, is not a pseudo-term."
                                             bfr-from-param-space)))))
 
 (defthm pbfr-vars-bounded-of-bfr-var
-  (implies (<= (+ 1 (nfix v)) (nfix k))
+  (implies (and (natp (bfr-varname-fix v))
+                (<= (+ 1 (bfr-varname-fix v)) (nfix k)))
            (pbfr-vars-bounded k t (bfr-var v)))
   :hints ((and stable-under-simplificationp
                `(:expand (,(car (last clause)))))))
@@ -831,7 +695,9 @@ The definition body, ~x1, is not a pseudo-term."
   (implies (<= (nat-list-max x) (nfix n))
            (pbfr-list-vars-bounded n t (numlist-to-vars x)))
   :hints (("goal" :induct (nat-list-max x)
-           :expand ((nat-list-max x)
+           :in-theory (disable nfix natp)
+           :expand ((nat-listp x)
+                    (nat-list-max x)
                     (numlist-to-vars x)))))
 
 ;; (defthm pbfr-list-vars-bounded-of-greater
@@ -851,32 +717,6 @@ The definition body, ~x1, is not a pseudo-term."
            (pbfr-list-vars-bounded k p (bfr-logapp-nus n x y)))
   :hints (("goal" :in-theory (enable pbfr-list-vars-bounded-in-terms-of-witness))))
 
-(defthm pbfr-list-vars-bounded-of-break-g-number
-  (implies (and (<= (nat-list-max (car num)) (nfix n))
-                (<= (nat-list-max (cadr num)) (nfix n))
-                (<= (nat-list-max (caddr num)) (nfix n))
-                (<= (nat-list-max (cadddr num)) (nfix n)))
-           (and (pbfr-list-vars-bounded
-                 n t (mv-nth 0 (break-g-number (num-spec-to-num-gobj num))))
-                (pbfr-list-vars-bounded
-                 n t (mv-nth 1 (break-g-number (num-spec-to-num-gobj num))))
-                (pbfr-list-vars-bounded
-                 n t (mv-nth 2 (break-g-number (num-spec-to-num-gobj num))))
-                (pbfr-list-vars-bounded
-                 n t (mv-nth 3 (break-g-number (num-spec-to-num-gobj num))))))
-  :hints(("Goal" :in-theory (enable break-g-number num-spec-to-num-gobj))))
-
-(defthm pbfr-list-vars-bounded-of-break-g-number-int
-  (implies (pbfr-list-vars-bounded k p int)
-           (and (pbfr-list-vars-bounded
-                 k p (mv-nth 0 (break-g-number (list int))))
-                (pbfr-list-vars-bounded
-                 k p (mv-nth 1 (break-g-number (list int))))
-                (pbfr-list-vars-bounded
-                 k p (mv-nth 2 (break-g-number (list int))))
-                (pbfr-list-vars-bounded
-                 k p (mv-nth 3 (break-g-number (list int))))))
-  :hints(("Goal" :in-theory (enable break-g-number))))
 
 
 
@@ -1064,13 +904,7 @@ The definition body, ~x1, is not a pseudo-term."
      (implies (alistp al)
               (equal (assoc k (glcp-generic-geval-alist al env))
                      (and (assoc k al)
-                          (cons k (glcp-generic-geval (cdr (assoc k al)) env))))))
-
-   (defthm assoc-in-shape-specs-to-interp-al
-     (implies (alistp al)
-              (equal (assoc k (shape-specs-to-interp-al al))
-                     (and (assoc k al)
-                          (cons k (shape-spec-to-gobj (cadr (assoc k al))))))))))
+                          (cons k (glcp-generic-geval (cdr (assoc k al)) env))))))))
 
 
 
@@ -1094,9 +928,9 @@ The definition body, ~x1, is not a pseudo-term."
 ;;                                       ALIST)))
 
 (local
- (defun-nx glcp-generic-run-parametrized-ctrex (alist hyp concl bindings obligs config state)
+ (defun-nx glcp-generic-run-parametrized-ctrex (alist hyp concl bindings obligs config interp-st state)
    (b* (((glcp-config config) config)
-        (obj (strip-cadrs bindings))
+        (obj (shape-spec-bindings->sspecs bindings))
         (config (change-glcp-config config :shape-spec-alist bindings))
         (al (shape-specs-to-interp-al bindings))
         (env-term (shape-spec-list-env-term
@@ -1105,20 +939,21 @@ The definition body, ~x1, is not a pseudo-term."
         (env1 (glcp-generic-geval-ev env-term alist))
         (env (cons (slice-to-bdd-env (car env1) nil) (cdr env1)))
         (next-bvar (shape-spec-max-bvar-list
-                    (strip-cadrs bindings)))
-        (interp-st (create-interp-st))
+                    (shape-spec-bindings->sspecs bindings)))
         (interp-st (update-is-obligs obligs interp-st))
         (interp-st (update-is-constraint (bfr-constr-init) interp-st))
         (interp-st (update-is-constraint-db
                     (gbc-db-make-fast
                      (table-alist 'gl-bool-constraints (w state)))
-                    interp-st)))
+                    interp-st))
+        (interp-st (update-is-add-bvars-allowed t interp-st))
+        (interp-st (update-is-prof-enabledp config.prof-enabledp interp-st)))
      (glcp-generic-interp-hyp/concl-env
       env hyp concl al config.concl-clk config interp-st next-bvar state))))
     ;;    ;; (bvar-db nil)
     ;;    ;; (bvar-db1 nil)
     ;;    (bvar-db (init-bvar-db (shape-spec-max-bvar-list
-    ;;                            (strip-cadrs bindings)) bvar-db))
+    ;;                            (shape-spec-bindings->sspecs bindings)) bvar-db))
     ;;    ;; (config1 (glcp-config-update-param t config))
     ;;    ((mv ?er obligs1 hyp-bfr bvar-db state)
     ;;     (glcp-generic-interp-top-level-term hyp al t config.hyp-clk obligs config1 bvar-db state))
@@ -1237,15 +1072,16 @@ The definition body, ~x1, is not a pseudo-term."
 
 
 ;; ;; (defthm gobj-alist-vars-bounded-of-shape-specs-to-interp-al
-;; ;;   (implies (<= (shape-spec-max-bvar-list (strip-cadrs bindings)) (nfix n))
+;; ;;   (implies (<= (shape-spec-max-bvar-list (shape-spec-bindings->sspecs bindings)) (nfix n))
 ;; ;;            (not (gobj-alist-depends-on n t (shape-specs-to-interp-al
 ;; ;;                                             bindings))))
 ;; ;;   :hints(("Goal" :in-theory (enable shape-specs-to-interp-al))))
 
-(local
- (defthm gobj-alist-vars-bounded-of-shape-specs-to-interp-al
-   (implies (<= (shape-spec-max-bvar-list (strip-cadrs bindings)) (nfix n))
-            (gobj-alist-vars-bounded n t (shape-specs-to-interp-al bindings)))))
+(defthm gobj-alist-vars-bounded-of-shape-specs-to-interp-al
+  (implies (<= (shape-spec-max-bvar-list (shape-spec-bindings->sspecs bindings)) (nfix n))
+           (gobj-alist-vars-bounded n t (shape-specs-to-interp-al bindings)))
+  :hints(("Goal" :in-theory (enable shape-spec-max-bvar-list shape-spec-bindings->sspecs
+                                    shape-specs-to-interp-al))))
 
 
 
@@ -1345,7 +1181,7 @@ The definition body, ~x1, is not a pseudo-term."
 ;;   (env hyp concl bindings obligs config state)
 ;;   (b* (((glcp-config config) config)
 ;;        (al (shape-specs-to-interp-al bindings))
-;;        (next-bvar (shape-spec-max-bvar-list (strip-cadrs bindings)))
+;;        (next-bvar (shape-spec-max-bvar-list (shape-spec-bindings->sspecs bindings)))
 ;;        (config (glcp-config-update-param t config)))
 ;;     (glcp-generic-interp-hyp/concl-env
 ;;      env hyp concl al config.concl-clk obligs config next-bvar state)))
@@ -1366,28 +1202,41 @@ The definition body, ~x1, is not a pseudo-term."
        ;; (mv erp val state bvar-db bvar-db1))
 
 
+(local (defthm alist-keys-when-shape-spec-bindingsp
+         (implies (shape-spec-bindingsp x)
+                  (equal (alist-keys x)
+                         (strip-cars x)))
+         :hints(("Goal" :in-theory (enable shape-spec-bindingsp alist-keys)))))
 
+
+
+
+(local (in-theory (disable glcp-generic-interp-hyp/concl-hyp)))
+
+(local (defthm eval-of-bfr-to-param-space-self
+         (implies (bfr-eval p (bfr-unparam-env p env))
+                  (bfr-eval (bfr-to-param-space p p) env))
+         :hints (("goal" :cases ((bdd-mode-or-p-true p env))
+                  :in-theory (enable bdd-mode-or-p-true))
+                 (and stable-under-simplificationp
+                      '(:in-theory (enable bfr-unparam-env))))))
 
 (local
  (defthm glcp-generic-run-parametrized-correct-lemma
-   (b* (((mv erp (list val-clause cov-clause out-obligs) &)
+   (b* (((mv erp (list val-clause cov-clause out-obligs) & &)
          (glcp-generic-run-parametrized
           hyp concl vars bindings id obligs
-          config state))
+          config interp-st state))
         (ctrex-env
          (glcp-generic-run-parametrized-ctrex
-          alist hyp concl bindings obligs config state)))
+          alist hyp concl bindings obligs config interp-st state)))
      (implies (and (glcp-generic-geval-ev hyp alist)
                    (not (glcp-generic-geval-ev concl alist))
                    (glcp-generic-geval-ev-theoremp
                     (conjoin-clauses
                      (acl2::interp-defs-alist-clauses out-obligs)))
                    (not erp)
-                   (acl2::interp-defs-alistp obligs)
-                   (acl2::interp-defs-alistp (glcp-config->overrides config))
-                   (pseudo-termp concl)
-                   (pseudo-termp hyp)
-                   (equal vars (collect-vars concl))
+                   (equal vars (simple-term-vars concl))
                    (glcp-generic-geval-ev-meta-extract-global-facts :state state1)
                    (equal (w state) (w state1))
                    (glcp-generic-geval-ev (disjoin cov-clause) alist)
@@ -1397,7 +1246,7 @@ The definition body, ~x1, is not a pseudo-term."
                     `((env . ,(list ctrex-env)))))))
    :hints (("goal" :do-not-induct t
             :in-theory (e/d (gbc-db-empty-implies-gbc-db-vars-bounded)
-                            (collect-vars nth update-nth
+                            (simple-term-vars nth update-nth
                                           pseudo-termp
                                           dumb-negate-lit))))))
 
@@ -1407,18 +1256,14 @@ The definition body, ~x1, is not a pseudo-term."
    (b* (((mv erp (list val-clause cov-clause out-obligs) &)
          (glcp-generic-run-parametrized
           hyp concl vars bindings id obligs
-          config state)))
+          config interp-st state)))
      (implies (and (glcp-generic-geval-ev hyp alist)
                    (not (glcp-generic-geval-ev concl alist))
                    (glcp-generic-geval-ev-theoremp
                     (conjoin-clauses
                      (acl2::interp-defs-alist-clauses out-obligs)))
                    (not erp)
-                   (acl2::interp-defs-alistp obligs)
-                   (acl2::interp-defs-alistp (glcp-config->overrides config))
-                   (pseudo-termp concl)
-                   (pseudo-termp hyp)
-                   (equal vars (collect-vars concl))
+                   (equal vars (simple-term-vars concl))
                    (glcp-generic-geval-ev-meta-extract-global-facts :state state1)
                    (equal (w state) (w state1))
                    (glcp-generic-geval-ev (disjoin cov-clause) alist)
@@ -1426,7 +1271,7 @@ The definition body, ~x1, is not a pseudo-term."
               (not (glcp-generic-geval-ev-theoremp
                     (disjoin val-clause)))))
    :hints (("goal" :do-not-induct t
-            :in-theory (disable collect-vars
+            :in-theory (disable simple-term-vars
                                 pseudo-termp
                                 dumb-negate-lit
                                 glcp-generic-run-parametrized
@@ -1434,9 +1279,9 @@ The definition body, ~x1, is not a pseudo-term."
             :use ((:instance glcp-generic-geval-ev-falsify
                    (x (disjoin (car (mv-nth 1 (glcp-generic-run-parametrized
                                                hyp concl vars bindings id obligs
-                                               config state)))))
+                                               config interp-st state)))))
                    (a `((env . ,(list (glcp-generic-run-parametrized-ctrex
-                                       alist hyp concl bindings obligs config state)))))))))))
+                                       alist hyp concl bindings obligs config interp-st state)))))))))))
 
 
 
@@ -1459,12 +1304,12 @@ The definition body, ~x1, is not a pseudo-term."
   ;;         (and stable-under-simplificationp
   ;;              (acl2::bind-as-in-definition
   ;;               (glcp-generic-run-parametrized
-  ;;                hyp concl  (collect-vars concl) bindings id obligs config state)
+  ;;                hyp concl  (simple-term-vars concl) bindings id obligs config state)
   ;;               (cov-clause val-clause hyp-bfr hyp-val)
   ;;               (b* ((binding-env
   ;;                     '(let ((slice (glcp-generic-geval-ev
   ;;                                    (shape-spec-env-term
-  ;;                                     (strip-cadrs bindings)
+  ;;                                     (shape-spec-bindings->sspecs bindings)
   ;;                                     (list*-macro (append (strip-cars
   ;;                                                           bindings) '('nil)))
   ;;                                     nil)
@@ -1513,7 +1358,7 @@ The definition body, ~x1, is not a pseudo-term."
    ;;                 no-duplicatesp-equal
    ;;                 (bfr-to-param-space)
    ;;                 gobj-alist-to-param-space
-   ;;                 list*-macro binary-append strip-cadrs strip-cars member-equal))))
+   ;;                 list*-macro binary-append shape-spec-bindings->sspecs strip-cars member-equal))))
    ;;   (defthm glcp-generic-run-parametrized-correct
    ;;     (b* (((mv erp (cons clauses out-obligs) &)
    ;;           (glcp-generic-run-parametrized
@@ -1529,7 +1374,7 @@ The definition body, ~x1, is not a pseudo-term."
    ;;                     (acl2::interp-defs-alistp (glcp-config->overrides config))
    ;;                     (pseudo-termp concl)
    ;;                     (pseudo-termp hyp)
-   ;;                     (equal vars (collect-vars concl))
+   ;;                     (equal vars (simple-term-vars concl))
    ;;                     (glcp-generic-geval-ev-meta-extract-global-facts :state state1)
    ;;                     (equal (w state) (w state1)))
    ;;                (not (glcp-generic-geval-ev-theoremp (conjoin-clauses clauses)))))
@@ -1552,12 +1397,12 @@ The definition body, ~x1, is not a pseudo-term."
    ;;             (and stable-under-simplificationp
    ;;                  (acl2::bind-as-in-definition
    ;;                   (glcp-generic-run-parametrized
-   ;;                    hyp concl  (collect-vars concl) bindings id obligs config state)
+   ;;                    hyp concl  (simple-term-vars concl) bindings id obligs config state)
    ;;                   (cov-clause val-clause hyp-bfr hyp-val)
    ;;                   (b* ((binding-env
    ;;                         '(let ((slice (glcp-generic-geval-ev
    ;;                                        (shape-spec-env-term
-   ;;                                         (strip-cadrs bindings)
+   ;;                                         (shape-spec-bindings->sspecs bindings)
    ;;                                         (list*-macro (append (strip-cars
    ;;                                                               bindings) '('nil)))
    ;;                                         nil)
@@ -1581,7 +1426,7 @@ The definition body, ~x1, is not a pseudo-term."
    (defthm glcp-generic-run-parametrized-bad-obligs
      (b* (((mv erp (list & & out-obligs) &)
            (glcp-generic-run-parametrized
-            hyp concl  vars bindings id obligs config state)))
+            hyp concl  vars bindings id obligs config interp-st state)))
        (implies (and (not erp)
                      (not (glcp-generic-geval-ev-theoremp
                            (conjoin-clauses
@@ -1589,13 +1434,13 @@ The definition body, ~x1, is not a pseudo-term."
                 (not (glcp-generic-geval-ev-theoremp
                       (conjoin-clauses
                        (acl2::interp-defs-alist-clauses out-obligs))))))
-     :hints(("Goal" :in-theory (disable collect-vars pseudo-termp
+     :hints(("Goal" :in-theory (disable simple-term-vars pseudo-termp
                                         dumb-negate-lit))))
 
    (defthm glcp-generic-run-parametrized-ok-obligs
      (b* (((mv erp (list & & out-obligs) &)
            (glcp-generic-run-parametrized
-            hyp concl  vars bindings id obligs config state)))
+            hyp concl  vars bindings id obligs config interp-st state)))
        (implies (and (not erp)
                      (glcp-generic-geval-ev-theoremp
                       (conjoin-clauses
@@ -1607,7 +1452,7 @@ The definition body, ~x1, is not a pseudo-term."
    (defthm glcp-generic-run-parametrized-defs-alistp
      (b* (((mv erp (list & & out-obligs) &)
            (glcp-generic-run-parametrized
-            hyp concl  vars bindings id obligs config state)))
+            hyp concl  vars bindings id obligs config interp-st state)))
        (implies (and (acl2::interp-defs-alistp obligs)
                      (acl2::interp-defs-alistp (glcp-config->overrides config))
                      (pseudo-termp concl)
@@ -1615,8 +1460,8 @@ The definition body, ~x1, is not a pseudo-term."
                 (acl2::interp-defs-alistp out-obligs))))
 
    (defthm glcp-generic-run-paremetrized-w-state
-     (equal (w (mv-nth 2 (glcp-generic-run-parametrized
-                          hyp concl  vars bindings id obligs config state)))
+     (equal (w (mv-nth 3 (glcp-generic-run-parametrized
+                          hyp concl  vars bindings id obligs config interp-st state)))
             (w state)))))
 
 
@@ -1638,7 +1483,7 @@ The definition body, ~x1, is not a pseudo-term."
    (defthm glcp-generic-run-cases-interp-defs-alistp
      (b* (((mv erp (cons & out-obligs) &)
            (glcp-generic-run-cases
-            param-alist concl  vars obligs config state)))
+            param-alist concl  vars obligs config interp-st state)))
        (implies (and (acl2::interp-defs-alistp obligs)
                      (acl2::interp-defs-alistp (glcp-config->overrides config))
                      (pseudo-termp concl)
@@ -1647,15 +1492,14 @@ The definition body, ~x1, is not a pseudo-term."
 
 
    (defthm glcp-generic-run-cases-ok-w-state
-     (equal (w (mv-nth 2 (glcp-generic-run-cases
-                          param-alist concl  vars obligs config
-                          state)))
+     (equal (w (mv-nth 3 (glcp-generic-run-cases
+                          param-alist concl  vars obligs config interp-st state)))
             (w state)))
 
    (defthm glcp-generic-run-cases-correct
      (b* (((mv erp (cons clauses out-obligs) &)
            (glcp-generic-run-cases
-            param-alist concl  vars obligs config state)))
+            param-alist concl  vars obligs config interp-st state)))
        (implies (and (glcp-generic-geval-ev-theoremp
                       (conjoin-clauses
                        (acl2::interp-defs-alist-clauses out-obligs)))
@@ -1663,11 +1507,7 @@ The definition body, ~x1, is not a pseudo-term."
                      (glcp-generic-geval-ev (disjoin (strip-cars param-alist))
                                       a)
                      (not erp)
-                     (acl2::interp-defs-alistp obligs)
-                     (acl2::interp-defs-alistp (glcp-config->overrides config))
-                     (pseudo-termp concl)
-                     (pseudo-term-listp (strip-cars param-alist))
-                     (equal vars (collect-vars concl))
+                     (equal vars (simple-term-vars concl))
                      (glcp-generic-geval-ev-meta-extract-global-facts :state state1)
                      (equal (w state) (w state1)))
                 (not (glcp-generic-geval-ev-theoremp (conjoin-clauses
@@ -1679,7 +1519,7 @@ The definition body, ~x1, is not a pseudo-term."
    (defthm glcp-generic-run-cases-bad-obligs
      (b* (((mv erp (cons & out-obligs) &)
            (glcp-generic-run-cases
-            param-alist concl  vars obligs config state)))
+            param-alist concl  vars obligs config interp-st state)))
        (implies (and (not erp)
                      (not (glcp-generic-geval-ev-theoremp
                            (conjoin-clauses
@@ -1691,7 +1531,7 @@ The definition body, ~x1, is not a pseudo-term."
    (defthm glcp-generic-run-cases-ok-obligs
      (b* (((mv erp (cons & out-obligs) &)
            (glcp-generic-run-cases
-            param-alist concl  vars obligs config state)))
+            param-alist concl  vars obligs config interp-st state)))
        (implies (and (not erp)
                      (glcp-generic-geval-ev-theoremp
                       (conjoin-clauses
@@ -1727,7 +1567,7 @@ The definition body, ~x1, is not a pseudo-term."
    (defthmd glcp-generic-run-parametrized-correct-rw
      (b* (((mv erp (list val-clause cov-clause out-obligs) &)
            (glcp-generic-run-parametrized
-            hyp concl  vars bindings id obligs config st)))
+            hyp concl  vars bindings id obligs config interp-st st)))
        (implies (and (bind-free (check-top-level-bind-free
                                  '((alist . alist)) acl2::mfc state)
                                 (alist))
@@ -1736,11 +1576,7 @@ The definition body, ~x1, is not a pseudo-term."
                        (acl2::interp-defs-alist-clauses out-obligs)))
                      (not erp)
                      (glcp-generic-geval-ev hyp alist)
-                     (acl2::interp-defs-alistp obligs)
-                     (acl2::interp-defs-alistp (glcp-config->overrides config))
-                     (pseudo-termp concl)
-                     (pseudo-termp hyp)
-                     (equal vars (collect-vars concl))
+                     (equal vars (simple-term-vars concl))
                      (glcp-generic-geval-ev-meta-extract-global-facts :state state1)
                      (equal (w st) (w state1))
                      (glcp-generic-geval-ev-theoremp (disjoin cov-clause)))
@@ -1758,7 +1594,7 @@ The definition body, ~x1, is not a pseudo-term."
    (defthmd glcp-generic-run-cases-correct-rw
      (b* (((mv erp (cons clauses out-obligs) &)
            (glcp-generic-run-cases
-            param-alist concl  vars obligs config st)))
+            param-alist concl  vars obligs config interp-st st)))
        (implies (and (bind-free (check-top-level-bind-free
                                  '((alist . alist)) mfc state) (alist))
                      (glcp-generic-geval-ev-theoremp
@@ -1767,11 +1603,7 @@ The definition body, ~x1, is not a pseudo-term."
                      (glcp-generic-geval-ev (disjoin (strip-cars param-alist))
                                       a)
                      (not erp)
-                     (acl2::interp-defs-alistp obligs)
-                     (acl2::interp-defs-alistp (glcp-config->overrides config))
-                     (pseudo-termp concl)
-                     (pseudo-term-listp (strip-cars param-alist))
-                     (equal vars (collect-vars concl))
+                     (equal vars (simple-term-vars concl))
                      (glcp-generic-geval-ev-meta-extract-global-facts :state state1)
                      (equal (w st) (w state1)))
                 (iff (glcp-generic-geval-ev-theoremp (conjoin-clauses clauses))
@@ -1785,6 +1617,7 @@ The definition body, ~x1, is not a pseudo-term."
           (w state))
    :hints(("Goal" :in-theory (enable preferred-defs-to-overrides)))))
 
+
 (defthm glcp-generic-correct
   (implies (and (pseudo-term-listp clause)
                 (alistp alist)
@@ -1792,11 +1625,11 @@ The definition body, ~x1, is not a pseudo-term."
                 (glcp-generic-geval-ev
                  (conjoin-clauses
                   (acl2::clauses-result
-                   (glcp-generic clause hints state)))
+                   (glcp-generic clause hints interp-st state)))
                  (glcp-generic-geval-ev-falsify
                   (conjoin-clauses
                    (acl2::clauses-result
-                    (glcp-generic clause hints state))))))
+                    (glcp-generic clause hints interp-st state))))))
            (glcp-generic-geval-ev (disjoin clause) alist))
   :hints
   (("goal" :do-not-induct
@@ -1824,7 +1657,7 @@ The definition body, ~x1, is not a pseudo-term."
            flush-hons-get-hash-table-link
            acl2::clauses-result
            glcp-generic glcp-error
-           assoc-equal pseudo-term-listp))
+           assoc-equal))
 
     :restrict ((glcp-generic-geval-ev-disjoin-append ((a alist)))
                (glcp-generic-geval-ev-disjoin-cons ((a alist)))))
@@ -1884,15 +1717,17 @@ The definition body, ~x1, is not a pseudo-term."
 (make-event (sublis *glcp-side-goals-subst*
                     *glcp-clause-proc-template*))
 
-(defun glcp-side-goals-clause-proc (clause hints state)
+(defun glcp-side-goals-clause-proc (clause hints interp-st state)
   ;; The cheat: We only allow this clause processor on the trivially
   ;; true clause ('T).
+  (declare (xargs :stobjs (interp-st state)
+                  :verify-guards nil))
   (b* (((unless (equal clause '('T)))
         (mv "This clause processor can be used only on clause '('T)."
-            nil state))
+            nil interp-st state))
        ((list* & & hyp & concl &) hints))
     (glcp-side-goals-clause-proc1
-     `((implies ,hyp ,concl)) hints state)))
+     `((implies ,hyp ,concl)) hints interp-st state)))
 
 (defevaluator glcp-side-ev glcp-side-ev-lst ((if a b c)))
 
@@ -1904,7 +1739,7 @@ The definition body, ~x1, is not a pseudo-term."
                 (glcp-side-ev
                  (conjoin-clauses
                   (acl2::clauses-result
-                   (glcp-side-goals-clause-proc clause hints state)))
+                   (glcp-side-goals-clause-proc clause hints interp-st state)))
                  a))
            (glcp-side-ev (disjoin clause) a))
   :hints (("goal" :in-theory
@@ -2085,7 +1920,7 @@ The definition body, ~x1, is not a pseudo-term."
        (interp-fn (cdr (assoc 'interp-term-under-hyp
                               (table-alist 'latest-greatest-gl-clause-proc
                                            (w state)))))
-       (next-bvar (shape-spec-max-bvar-list (strip-cadrs al)))
+       (next-bvar (shape-spec-max-bvar-list (shape-spec-bindings->sspecs al)))
        (form `(,interp-fn ',hyp-trans ',term-trans ',gobj-al ',next-bvar ',config
                           interp-st bvar-db bvar-db1 state))
        ((mv trans-eval-erp (cons ?stobjs-out

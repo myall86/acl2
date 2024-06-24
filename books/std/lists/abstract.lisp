@@ -97,7 +97,7 @@ additional keyword arguments as well; the following shows an elaborate example.<
 
 <p>To briefly describe the keyword arguments:</p>
 <ul>
-<li>@(':hints'), @(':rule-classes'), and @(':otf-flg) are the same as in @(see
+<li>@(':hints'), @(':rule-classes'), and @(':otf-flg') are the same as in @(see
 defthm) and do not affect what is stored for later instantiation</li>
 <li>@(':requirement') restricts this rule to only apply to certain kinds of
 typed lists; see the section \"Variants and Requirements\" below</li>
@@ -321,6 +321,7 @@ tagged with @(':osets') you could do:</p>
                                       &key
                                       (name 'nil name-p)
                                       (body 'nil body-p)
+                                      disable
                                       (requirement 'nil requirement-p)
                                       (inst-rule-classes 'nil inst-rule-classes-p)
                                       (cheap-rule-classes 'nil cheap-rule-classes-p)
@@ -331,11 +332,12 @@ tagged with @(':osets') you could do:</p>
   `(progn (defthm ,thmname ,thm :hints ,hints :rule-classes ,rule-classes :otf-flg ,otf-flg)
           (table ,tablename ',thmname
                  (or '(,@(and name-p `((:name ,name)))
-                         ,@(and body-p `((:body ,body)))
-                         ,@(and requirement-p `((:requirement ,requirement)))
-                         ,@(and inst-rule-classes-p `((:rule-classes ,inst-rule-classes)))
-                         ,@(and cheap-rule-classes-p `((:cheap-rule-classes ,cheap-rule-classes)))
-                         ,@(and tags `((:tags . ,tags))))
+                       ,@(and body-p `((:body ,body)))
+                       ,@(and disable `((:disable t)))
+                       ,@(and requirement-p `((:requirement ,requirement)))
+                       ,@(and inst-rule-classes-p `((:rule-classes ,inst-rule-classes)))
+                       ,@(and cheap-rule-classes-p `((:cheap-rule-classes ,cheap-rule-classes)))
+                       ,@(and tags `((:tags . ,tags))))
                      t))))
 
 (defun ruletable-delete-tags (tags table)
@@ -363,7 +365,7 @@ tagged with @(':osets') you could do:</p>
   `(table ,table-name nil (ruletable-keep-tags
                            ',tags (table-alist ',table-name world))
           :clear))
-  
+
 
 (defsection def-projection-rule
   :short "Define a theorem and save it in a table, denoting that it is a rule
@@ -376,6 +378,12 @@ about elementlist-projection."
 about element-list-p."
   (defmacro def-listp-rule (&rest args)
     `(def-generic-rule listp-rules . ,args)))
+
+(defsection def-nonempty-listp-rule
+  :short "Define a theorem and save it in a table, denoting that it is a rule
+about element-list-nonempty-p."
+  (defmacro def-nonempty-listp-rule (&rest args)
+    `(def-generic-rule nonempty-listp-rules . ,args)))
 
 (defsection def-listfix-rule
   :short "Define a theorem and save it in a table, denoting that it is a rule
@@ -413,7 +421,7 @@ about elementlist-mapappend."
     (implies (and (element-list-final-cdr-p t)
                   (not (consp x)))
              (element-list-p x))
-    
+
     :requirement (not true-listp)
     :name element-list-p-when-not-consp
     :body (implies (not (consp x))
@@ -432,7 +440,7 @@ about elementlist-mapappend."
                           (not x)))
     ;; (:rule-classes ((:rewrite :backchain-limit-lst 0)))
     )
-  
+
 
 
   (def-listp-rule element-p-of-car-when-element-list-p-when-element-p-nil
@@ -495,7 +503,7 @@ about elementlist-mapappend."
                   (and (not (consp x))
                        (non-element-p nil))))
     ;; :rule-classes ((:rewrite :backchain-limit-lst (0 nil)))
-    
+
     :requirement (and (not element-p-of-nil)
                       (not not-element-p-of-nil)
                       negatedp
@@ -541,6 +549,96 @@ about elementlist-mapappend."
     :body (equal (element-list-p (append a b))
                  (and (element-list-p a)
                       (element-list-p b)))))
+
+(defsection element-list-nonempty-p
+  :short "Generic typed list recognizer function."
+
+  (defun element-list-nonempty-p (x)
+    (and (consp x)
+         (element-p (car x))
+         (let ((x (cdr x)))
+           (if (consp x)
+               (element-list-nonempty-p x)
+             (element-list-final-cdr-p x)))))
+
+  (in-theory (disable (element-list-nonempty-p)))
+
+  (def-nonempty-listp-rule element-list-nonempty-p-of-cons
+    (implies  (element-list-nonempty-p x)
+              (iff (element-list-nonempty-p (cons a x))
+                   (element-p a))))
+
+  (def-nonempty-listp-rule element-list-nonempty-p-of-singleton-true-list
+    (iff (element-list-nonempty-p (cons a nil))
+         (element-p a))
+    :requirement true-listp
+    :name element-list-nonempty-p-of-singleton)
+
+  (def-nonempty-listp-rule element-list-nonempty-p-of-singleton-non-true-list
+    (implies (and (not (consp x))
+                  (element-list-final-cdr-p t))
+             (iff (element-list-nonempty-p (cons a x))
+                  (element-p a)))
+    :requirement (not true-listp)
+    :name element-list-nonempty-p-of-singleton
+    :body (implies (not (consp x))
+                   (iff (element-list-nonempty-p (cons a x))
+                        (element-p a))))
+
+  (def-nonempty-listp-rule element-list-nonempty-p-of-cdr-when-element-list-nonempty-p
+    (implies (and (element-list-nonempty-p (double-rewrite x))
+                  (consp (cdr x)))
+             (element-list-nonempty-p (cdr x))))
+
+  (def-nonempty-listp-rule element-list-nonempty-p-when-not-consp
+    (implies (not (consp x))
+             (not (element-list-nonempty-p x))))
+
+  (def-nonempty-listp-rule element-list-nonempty-p-implies-consp
+    (implies (element-list-nonempty-p x)
+             (consp x))
+    :rule-classes :forward-chaining)
+
+  (def-nonempty-listp-rule element-p-of-car-when-element-list-nonempty-p
+    (implies (element-list-nonempty-p x)
+             (element-p (car x)))
+    :requirement simple
+    :name element-p-of-car-when-element-list-nonempty-p
+    :body (implies (element-list-nonempty-p x)
+                   (element-p (car x)))
+    :cheap-rule-classes ((:rewrite :backchain-limit-lst 0)))
+
+
+  (def-nonempty-listp-rule true-listp-when-element-list-nonempty-p-rewrite
+    (implies (and (element-list-nonempty-p x)
+                  (not (element-list-final-cdr-p t)))
+             (true-listp x))
+    :rule-classes nil
+    :name true-listp-when-element-list-nonempty-p
+    :requirement (and true-listp (not single-var))
+    :body (implies (element-list-nonempty-p x)
+                   (true-listp x))
+    :inst-rule-classes :rewrite
+    :cheap-rule-classes ((:rewrite :backchain-limit-lst 0)))
+
+  (def-nonempty-listp-rule true-listp-when-element-list-nonempty-p-compound-recognizer
+    (implies (and (element-list-nonempty-p x)
+                  (not (element-list-final-cdr-p t)))
+             (true-listp x))
+    :rule-classes nil
+    ;; NOTE: above should be a compound-recognizer.  We record that in the table
+    ;; specially.
+    :name true-listp-when-element-list-nonempty-p
+    :requirement (and true-listp single-var)
+    :body (implies (element-list-nonempty-p x)
+                   (true-listp x))
+    :inst-rule-classes :compound-recognizer)
+
+
+  (def-nonempty-listp-rule element-list-nonempty-p-of-append
+    (implies (and (element-list-nonempty-p a)
+                  (element-list-nonempty-p b))
+             (element-list-nonempty-p (append a b)))))
 
 
 
@@ -762,11 +860,11 @@ about elementlist-mapappend."
 ;; member-of-xformer-in-projection
 ;; subsetp-of-projection-in-projection
 ;; nth-of-projection
-;; 
+;;
 
 (defsection element-listxformer
   :short "Generic element-list transform for mapappend"
-  
+
   (encapsulate (((element-listxformer *) => *))
 
     (local (defun element-listxformer (x)

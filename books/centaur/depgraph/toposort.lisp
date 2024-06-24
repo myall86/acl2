@@ -33,12 +33,12 @@
 (include-book "std/alists/alist-defuns" :dir :system)
 (include-book "std/typed-lists/cons-listp" :dir :system)
 (include-book "misc/hons-help" :dir :system)
-(include-book "std/misc/two-nats-measure" :dir :system)
+(include-book "std/basic/two-nats-measure" :dir :system)
 (include-book "centaur/misc/hons-extra" :dir :system)
 (local (include-book "centaur/misc/equal-sets" :dir :system))
 (local (include-book "std/alists/top" :dir :system))
 (local (include-book "std/lists/top" :dir :system))
-(local (include-book "misc/assert" :dir :system))
+(local (include-book "std/testing/assert-bang" :dir :system))
 
 (local (in-theory (disable acl2::alist-keys-member-hons-assoc-equal)))
 

@@ -1,23 +1,23 @@
 ;  Copyright (C) 2000 Panagiotis Manolios
- 
+
 ;  This program is free software; you can redistribute it and/or modify
 ;  it under the terms of the GNU General Public License as published by
 ;  the Free Software Foundation; either version 2 of the License, or
 ;  (at your option) any later version.
- 
+
 ;  This program is distributed in the hope that it will be useful,
 ;  but WITHOUT ANY WARRANTY; without even the implied warranty of
 ;  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 ;  GNU General Public License for more details.
- 
+
 ;  You should have received a copy of the GNU General Public License
 ;  along with this program; if not, write to the Free Software
 ;  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
- 
+
 ;  Written by Panagiotis Manolios who can be reached as follows.
- 
+
 ;  Email: pete@cs.utexas.edu
- 
+
 ;  Postal Mail:
 ;  Department of Computer Science
 ;  The University of Texas at Austin
@@ -35,7 +35,7 @@ if you can exhibit a witness.  Many times that is all one needs.
 
 |#
 
-(defmacro defun-weak-sk (name args body &key doc quant-ok skolem-name thm-name)
+(defmacro defun-weak-sk (name args body &key quant-ok skolem-name thm-name)
   (let* ((exists-p (and (true-listp body)
                         (symbolp (car body))
                         (equal (symbol-name (car body)) "EXISTS")))
@@ -62,7 +62,9 @@ if you can exhibit a witness.  Many times that is all one needs.
                (concatenate 'string (symbol-name name)
                             (if exists-p "-SUFF" "-NECC"))
                name)))
-         (msg (non-acceptable-defun-sk-p name args body doc quant-ok nil exists-p)))
+         (msg (non-acceptable-defun-sk-p name args body quant-ok nil exists-p
+                                         nil ; dcls (Matt K. mod)
+                                         )))
     (if msg
         `(er soft '(defun-sk . ,name)
              "~@0"
@@ -71,8 +73,8 @@ if you can exhibit a witness.  Many times that is all one needs.
 	((,name ,args ,(if (= (length bound-vars) 1)
 			   (car bound-vars)
 			 (cons 'mv bound-vars))))
-	(local 
-	 (encapsulate		
+	(local
+	 (encapsulate
 	  ((,skolem-name ,args
 			 ,(if (= (length bound-vars) 1)
 			      (car bound-vars)
@@ -86,8 +88,8 @@ if you can exhibit a witness.  Many times that is all one needs.
 
        	; A :type-prescription lemma is needed in the case of more than one bound
    	; variable, in case we want to do guard proofs.
-	  
-	  ,@(cond 
+
+	  ,@(cond
 	     ((null (cdr bound-vars)) nil)
 	     (t
 	      `((local (defthm ,(intern-in-package-of-symbol
@@ -107,7 +109,7 @@ if you can exhibit a witness.  Many times that is all one needs.
 	    :hints (("Goal"
 		     :use ,skolem-name))
 	    :rule-classes nil)))
-	(local 
+	(local
 	 (defun ,name ,args (declare (xargs :normalize nil))
 	   ,(if (= (length bound-vars) 1)
 		`(let ((,(car bound-vars) (,skolem-name ,@args)))
@@ -121,16 +123,14 @@ if you can exhibit a witness.  Many times that is all one needs.
 			 (,name ,@args))
 	     `(implies (not ,body-guts)
 		       (not (,name ,@args))))
-	  :hints (("Goal" 
+	  :hints (("Goal"
 		   :in-theory nil
 		   :use ((:instance ,skolem-constraint-name)
 			 (:instance ,name)))))
 
 	; The above was added to make sure that nothing
 	; interferes with the proof (e.g., function definitions and
-	; rewrites). 
+	; rewrites).
 
-	,@(if doc
-	      `((defdoc ,name ,doc))
-	    nil)))))
+	))))
 

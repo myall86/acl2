@@ -32,7 +32,7 @@
 ;; With destructive memoization on X using restore-array as the restore array,
 ;; accumulates the not-previously-seen AIG vars of X into acc.
 (defun accumulate-aig-vars-fast (x restore-array vartable acc)
-  (b* (((when (atom x)) (if (or (booleanp x)
+  (b* (((when (aig-atom-p x)) (if (or (booleanp x)
                                 (gethash x vartable))
                             (mv restore-array acc)
                           (progn 
@@ -83,7 +83,7 @@
 
 
 (defun aig-vars1 (x nodetable acc)
-  (if (atom x)
+  (if (aig-atom-p x)
       (if (or (booleanp x) (gethash x nodetable))
           acc
         (progn (setf (gethash x nodetable) t)
@@ -177,7 +177,6 @@
                (aig-vars-fast1 x nodetable memtable nil))))
       (setf (gethash x memtable) ans))))
 
-#+HONS
 (unless (memoizedp-raw 'aig-vars-fast)
   (mf-note-arity 'aig-vars-fast 1 1)
   (profile 'aig-vars-fast))
@@ -187,7 +186,7 @@
 
 
 (defun aig-vars-fast1 (x nodetable memtable acc)
-  (if (atom x)
+  (if (aig-atom-p x)
       (if (or (booleanp x)
               (gethash x nodetable))
           acc

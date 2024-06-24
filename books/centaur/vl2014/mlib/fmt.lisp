@@ -32,7 +32,7 @@
 (include-book "writer")
 (include-book "print-context")
 (local (include-book "../util/arithmetic"))
-(local (include-book "centaur/misc/arith-equivs" :dir :system))
+(local (include-book "std/basic/arith-equivs" :dir :system))
 (local (in-theory (enable acl2::arith-equiv-forwarding)))
 (local (std::add-default-post-define-hook :fix))
 
@@ -282,7 +282,7 @@ instead.</p>"
   (cond ((<= (len args) 10)
          (vl-fmt msg (pairlis$
                       '(#\0 #\1 #\2 #\3 #\4 #\5 #\6 #\7 #\8 #\9)
-                      (redundant-list-fix args))))
+                      (list-fix args))))
         (t
          (prog2$ (raise "vl-cw-obj is limited to 10 arguments.")
                  ps))))

@@ -29,7 +29,12 @@
 ; Original author: Jared Davis <jared@centtech.com>
 
 (in-package "VL")
-(include-book "defs")
+(include-book "std/strings/strprefixp" :dir :system)
+(include-book "std/strings/decimal" :dir :system)
+(include-book "std/util/defalist" :dir :system)
+(include-book "defsort/duplicated-members" :dir :system)
+(include-book "fast-memberp")
+(include-book "string-fix")
 (include-book "centaur/fty/deftypes" :dir :system)
 (include-book "centaur/fty/basetypes" :dir :system)
 (local (include-book "arithmetic"))
@@ -42,10 +47,9 @@
 generate good, fresh names that are not being used elsewhere.</p>
 
 <p>Name databases are a general-purpose mechanism that has nothing to do with
-Verilog.  When we want to generate fresh wire names for Verilog modules, we
-usually use a @(see vl-namefactory-p) instead.  Name factories build on top of
-name databases in a way that is specific to Verilog modules, and often allow us
-to avoid constructing the list of all wire names for a module.</p>
+Verilog.  This was not always true; historically name databases were originally
+part of a larger @('vl-namefactory') structure that had a deep understanding of
+Verilog modules, but that mechanism no longer exists.</p>
 
 <h3>Using Name Databases</h3>
 
@@ -125,7 +129,7 @@ vl-pgenstr->val).</p>"
     (and (< (+ 1 plen) slen)
          (str::strprefixp prefix str)
          (eql (char str plen) #\_)
-         (str::digit-string-p-aux str (+ 1 plen) slen)))
+         (str::dec-digit-string-p-aux str (+ 1 plen) slen)))
 
   ///
 
@@ -136,8 +140,8 @@ vl-pgenstr->val).</p>"
                   (force (natp n)))
              (vl-pgenstr-p prefix (vl-pgenstr prefix n))))
 
-  (local (defthm nth-underscore-when-digit-listp
-           (implies (str::digit-listp chars)
+  (local (defthm nth-underscore-when-dec-digit-char-listp
+           (implies (str::dec-digit-char-listp chars)
                     (not (equal (nth n chars) #\_)))))
 
   (local (in-theory (disable nthcdr-of-increment)))
@@ -482,10 +486,9 @@ bound in @('pmap').</p>
 currently in use.  We use a fast-alist representation so that we can very
 quickly determine whether a plain name is available.</p>
 
-<p>Meanwhile, the @('pmap') allows us to use something much like the \"historic
-scheme\" (described in @(see vl-namefactory-p)) to quickly generate indexed
-names.  In particular, it binds some prefixes with their highest used index.
-This way, we only need to scan the @('names') once per prefix.</p>
+<p>Meanwhile, the @('pmap') allows us to quickly generate indexed names.  In
+particular, it binds some prefixes with their highest used index.  This way, we
+only need to scan the @('names') once per prefix.</p>
 
 <p>The @('pset') is really just an optimization that allows us to avoid needing
 to shrink the psets.</p>")
@@ -768,8 +771,7 @@ matches a current prefix.</p>"
                    @('name_2'), or similar.")
       (new-db vl-namedb-p
               "Extended name database with @('fresh-name') being marked as
-               used."
-              :hyp (vl-namedb-p db)))
+               used."))
   :prepwork((local (in-theory (enable vl-namedb-pmap-okp))))
 
   (b* ((name    (string-fix name))
@@ -815,7 +817,11 @@ matches a current prefix.</p>"
         (equal (vl-namedb-allnames new-db)
                (cons fresh-name
                      (vl-namedb-allnames db))))
-      :hints(("Goal" :in-theory (disable CONS-OF-STR-FIX-K-UNDER-VL-NAMEDB-NAMESET-EQUIV))))
+      :hints(("Goal" :in-theory (disable
+                                 CONS-OF-STR-FIX-K-UNDER-VL-NAMEDB-NAMESET-EQUIV
+; Matt K. mod, 11/28/2020: Accommodate fix for storing patterned congruences.
+                                 (:congruence cons-streqv-congruence-on-k-under-vl-namedb-nameset-equiv)
+      ))))
 
     (defthm vl-namedb->names-of-vl-namedb-plain-name
       (vl-namedb->names (mv-nth 1 (vl-namedb-plain-name name db)))))
@@ -928,5 +934,3 @@ printed.</p>"
                       (vl-namedb-allnames db))))
 
   (deffixequiv vl-namedb-plain-names))
-
-

@@ -176,9 +176,9 @@ generally they'll need induction to do the proofs (future work).</p>")
     (if unchp
         `(or . ,equals)
       `(and . ,(dumb-negate-lit-lst equals)))))
-  
 
- 
+
+
 (defun def-stobj-nth-frame (fn stobj hints ruleset state)
   (declare (xargs :mode :program :stobjs state))
   (b* ((wrld (w state))
@@ -205,7 +205,7 @@ generally they'll need induction to do the proofs (future work).</p>")
        (concl$ `(equal (nth n ,mv-call$) (nth n ,stobj)))
        (concl `(equal (nth n ,mv-call) (nth n ,stobj)))
        (ind-hint (and (not hints)
-                      (let ((recp (recursivep fn$ wrld)))
+                      (let ((recp (recursivep fn$ t wrld)))
                         (if (and recp
                                  (not (cdr recp))) ;; not mutually recursive
                             `(:induct ,call
@@ -259,7 +259,7 @@ generally they'll need induction to do the proofs (future work).</p>")
                 `(equal ,upd-mvcall
                         ,mvcall)))
        (ind-hint (and (not hints)
-                      (let ((recp (recursivep fn$ wrld)))
+                      (let ((recp (recursivep fn$ t wrld)))
                         (if (and recp
                                  (not (cdr recp))) ;; not mutually recursive
                             `(:induct ,call
@@ -329,7 +329,7 @@ generally they'll need induction to do the proofs (future work).</p>")
                        nil (car stobjs-out) stobj fn fn$ formals formals-upd
                        stobj-len hints ruleset state))))
     (value forms)))
-      
+
 (def-ruleset! stobj-frame-rules nil)
 
 (defun def-stobj-frame-fn (fn stobj hints ruleset state)

@@ -1,10 +1,12 @@
 doc.lisp.backup
-workxxx
-workyyy
+make.log.bak
+workxxx*
+workyyy*
 aux
 saved
 logs
 TAGS
+TAGS-acl2-doc
 acl2-status.txt
 acl2r.lisp
 acl2-proclaims.lisp
@@ -12,12 +14,12 @@ acl2-proclaims.lisp
 *saved_acl2*
 TMP*.*
 temp-emacs-file.lsp
+devel-check.out
 *~
 *.log
 *.64ufasl
 *.axpf
 *.bin
-*.c
 *.d64fsl
 *.data
 *.dfsl
@@ -25,7 +27,6 @@ temp-emacs-file.lsp
 *.dx64fsl
 *.fas
 *.fasl
-*.h
 *.lbin
 *.lib
 *.lx32fsl
@@ -39,4 +40,6 @@ temp-emacs-file.lsp
 *.x86f
 *.sse2f
 *.fn
+*.certdep
+!universal-dependency.certdep
 gitlog-all.txt

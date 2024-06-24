@@ -32,7 +32,7 @@
 (include-book "defs")
 (include-book "defsort/remove-dups" :dir :system)
 (include-book "centaur/fty/deftypes" :dir :system)
-(include-book "centaur/fty/basetypes" :dir :system)
+(include-book "centaur/fty/baselists" :dir :system)
 (local (include-book "arithmetic"))
 (local (std::add-default-post-define-hook :fix))
 (local (xdoc::set-default-parents warnings))
@@ -47,12 +47,6 @@
           what kind of warning this is.  There is no particular discipline or
           strategy for assigning types to warnings, but the basic goal is to be
           able to use these types to filter out or group up similar warnings.")
-
-   (fatalp booleanp :rule-classes :type-prescription
-           "Indicates whether this error is so severe that the module ought to
-            be thrown away and not subjected to further translation.  See the
-            general discussion in @(see warnings) for more information on how
-            this is used.")
 
    (msg  stringp :rule-classes :type-prescription
          "A more detailed message describing what went wrong.  This string
@@ -70,7 +64,18 @@
        "A symbol, intended to be the name of the function that caused the
         warning.  This is intended to be useful for VL debugging, to help make
         the source of the warning more apparent.  Only good discipline (and
-        handy macros) ensure that this is correctly reported.")))
+        handy macros) ensure that this is correctly reported.")
+
+   (fatalp booleanp :rule-classes :type-prescription
+           "Indicates whether this error is so severe that the module ought to
+            be thrown away and not subjected to further translation.  See the
+            general discussion in @(see warnings) for more information on how
+            this is used.")
+
+   (suppressedp booleanp :rule-classes :type-prescription
+                "Indicates that this warning was suppressed by an ignore attribute.")
+
+   (context "Context object for this warning; should be NIL or printable with \"~a\".")))
 
 (fty::deflist vl-warninglist
   :elt-type vl-warning-p
@@ -157,11 +162,12 @@ explicit fixing.</li>
 
   (defmacro warn (&key type msg args
                        (fn '__function__)
-                       (acc 'warnings))
+                       (acc 'warnings)
+                       (fatalp 'nil))
     `(cons (make-vl-warning :type ,type
                             :msg ,msg
                             :args ,args
-                            :fatalp nil
+                            :fatalp ,fatalp
                             :fn ,fn)
            (vl-warninglist-fix ,acc))))
 
@@ -187,7 +193,7 @@ fatal warnings instead of non-fatal warnings.</p>"
   (b* (((vl-warning x) x)
        ((vl-warning y) y)
 
-       ((when (symbol-< x.type y.type)) t)
+       ((when (symbol< x.type y.type)) t)
        ((unless (eq x.type y.type)) nil)
 
        ((when (<< x.fn y.fn)) t)
@@ -209,17 +215,16 @@ fatal warnings instead of non-fatal warnings.</p>"
     :hints(("Goal" :in-theory (enable string<)))))
 
 (defsection vl-warning-sort
+  :parents (vl-clean-warnings)
   :short "Mergesort warnings using @(see vl-warning-<)"
 
-  (ACL2::defsort :comparablep vl-warning-p
-                 :compare< vl-warning-<
-                 :prefix vl-warning)
-
-  ;; Ugh, stupid defsort.  I should be able to rename these functions.
-  (defthm vl-warning-list-p-is-vl-warninglist-p
-    (equal (vl-warning-list-p x)
-           (vl-warninglist-p x))
-    :hints(("Goal" :in-theory (enable vl-warning-list-p))))
+  (ACL2::defsort vl-warning-sort
+    :comparablep vl-warning-p
+    :compare< vl-warning-<
+    :prefix vl-warning
+    :comparable-listp vl-warninglist-p
+    :true-listp nil
+    :weak t)
 
   (defthm vl-warninglist-p-of-vl-warning-sort
     (implies (force (vl-warninglist-p x))
@@ -267,13 +272,13 @@ fatal warnings instead of non-fatal warnings.</p>"
     :hints(("Goal" :cases ((consp x))))))
 
 (define vl-clean-warnings
-  :parents (warnings clean-warnings)
+  :parents (clean-warnings)
   :short "Sort and remove duplicates from a list of warnings."
   ((x vl-warninglist-p))
   :returns (ans vl-warninglist-p)
   (ACL2::remove-adjacent-duplicates
    (vl-warning-sort
-    (redundant-list-fix
+    (list-fix
      (vl-warninglist-fix x))))
   ///
   (defthm vl-clearn-warnings-under-iff
@@ -289,7 +294,7 @@ fatal warnings instead of non-fatal warnings.</p>"
 want to bother the user with.</p>"
   (cond ((atom x)
          nil)
-        ((member (vl-warning->type (car x)) types)
+        ((member (vl-warning->type (car x)) (acl2::symbol-list-fix types))
          (vl-remove-warnings types (cdr x)))
         (t
          (cons (vl-warning-fix (car x))
@@ -304,7 +309,7 @@ want to bother the user with.</p>"
 particular interest.</p>"
   (cond ((atom x)
          nil)
-        ((member (vl-warning->type (car x)) types)
+        ((member (vl-warning->type (car x)) (acl2::symbol-list-fix types))
          (cons (vl-warning-fix (car x))
                (vl-keep-warnings types (cdr x))))
         (t
@@ -312,49 +317,56 @@ particular interest.</p>"
 
 (define vl-some-warning-fatalp
   :short "Check if any warning is marked as fatal."
-  ((x vl-warninglist-p))
+  ((x vl-warninglist-p)
+   (suppress-fatals symbol-listp))
   :returns (bool booleanp :rule-classes :type-prescription)
   (cond ((atom x)
          nil)
-        ((vl-warning->fatalp (car x))
+        ((and (vl-warning->fatalp (car x))
+              (not (member-eq (vl-warning->type (car x)) (acl2::symbol-list-fix suppress-fatals))))
          t)
         (t
-         (vl-some-warning-fatalp (cdr x))))
+         (vl-some-warning-fatalp (cdr x) suppress-fatals)))
   ///
   (defthm vl-some-warning-fatalp-when-not-consp
     (implies (not (consp x))
-             (equal (vl-some-warning-fatalp x)
+             (equal (vl-some-warning-fatalp x suppress-fatals)
                     nil)))
 
   (defthm vl-some-warning-fatalp-of-cons
-    (equal (vl-some-warning-fatalp (cons a x))
-           (or (if (vl-warning->fatalp a) t nil)
-               (vl-some-warning-fatalp x))))
+    (equal (vl-some-warning-fatalp (cons a x) suppress-fatals)
+           (or (if (and (vl-warning->fatalp a)
+                        (not (member (vl-warning->type a)
+                                     (acl2::symbol-list-fix suppress-fatals))))
+                   t nil)
+               (vl-some-warning-fatalp x suppress-fatals))))
 
   (defthm vl-some-warning-fatalp-of-append
-    (equal (vl-some-warning-fatalp (append x y))
-           (or (vl-some-warning-fatalp x)
-               (vl-some-warning-fatalp y))))
+    (equal (vl-some-warning-fatalp (append x y) suppress-fatals)
+           (or (vl-some-warning-fatalp x suppress-fatals)
+               (vl-some-warning-fatalp y suppress-fatals))))
 
   (defthm vl-some-warning-fatalp-of-list-fix
-    (equal (vl-some-warning-fatalp (list-fix x))
-           (vl-some-warning-fatalp x)))
+    (equal (vl-some-warning-fatalp (list-fix x) suppress-fatals)
+           (vl-some-warning-fatalp x suppress-fatals)))
 
   (local (defthm l0
            (implies (and (vl-warning->fatalp a)
+                         (not (member (vl-warning->type a)
+                                      (acl2::symbol-list-fix suppress-fatals)))
                          (member-equal a x))
-                    (vl-some-warning-fatalp x))))
+                    (vl-some-warning-fatalp x suppress-fatals))))
 
   (local (defthm l1
            (implies (and (subsetp-equal x y)
-                         (vl-some-warning-fatalp x))
-                    (vl-some-warning-fatalp y))
+                         (vl-some-warning-fatalp x suppress-fatals))
+                    (vl-some-warning-fatalp y suppress-fatals))
            :hints(("Goal" :in-theory (enable subsetp-equal)))))
 
-  (defcong set-equiv equal (vl-some-warning-fatalp x) 1
+  (defcong set-equiv equal (vl-some-warning-fatalp x suppress-fatals) 1
     :event-name vl-some-warning-fatalp-preserves-set-equiv
     :hints(("Goal"
-            :cases ((vl-some-warning-fatalp x))
+            :cases ((vl-some-warning-fatalp x suppress-fatals))
             :in-theory (enable set-equiv)
             :do-not-induct t))))
 
@@ -365,7 +377,7 @@ particular interest.</p>"
   :returns (bool booleanp :rule-classes :type-prescription)
   :long "<p>Note: we just leave this function enabled.</p>"
   (mbe :logic
-       (intersectp-equal types (vl-warninglist->types x))
+       (intersectp-equal (acl2::symbol-list-fix types) (vl-warninglist->types x))
        :exec
        (cond ((atom x)
               nil)
@@ -373,4 +385,85 @@ particular interest.</p>"
               t)
              (t
               (vl-some-warning-of-type-p types (cdr x))))))
+
+
+;; this is just a product of msg (string) and args (true-list) but if there are
+;; no args we just use the string.  It's convenient for a bare string to be a
+;; vl-msg.
+(fty::defflexsum vl-msg
+  :short "Format string and args for small messages not constituting a whole warning"
+  :kind nil
+  (:msg :cond t
+   :type-name vl-msg
+   :shape (or (atom x)
+              (cdr x))
+   :fields ((msg :type stringp :acc-body (if (atom x) x (car x))
+                 :rule-classes :type-prescription)
+            (args :type true-listp :acc-body (and (consp x) (cdr x))
+                  :rule-classes :type-prescription))
+   :ctor-body (if args (cons msg args) msg)))
+
+(defsection vmsg
+  :parents (warnings)
+  :short "Similar to @(see acl2::msg); constructs a @(see vl-msg) that can be used
+          with @('~@') directives in VL's @(see formatted-printing) routines."
+  :long "@(def vmsg)"
+
+  (defmacro vmsg (msg &rest args)
+    `(make-vl-msg :msg ,msg :args (list . ,args))))
+
+(define vmsg-binary-concat ((x1 (or (not x1) (vl-msg-p x1)))
+                            (x2 (or (not x2) (vl-msg-p x2))))
+  :returns (msg (and (iff (vl-msg-p msg) (or x1 x2))
+                     (iff msg (or x1 x2))))
+  (if x1
+      (if x2
+          (vmsg "~@0~%~@1" x1 x2)
+        (vl-msg-fix x1))
+    (and x2 (vl-msg-fix x2))))
+
+(defmacro vmsg-concat (x y &rest rst)
+  (xxxjoin 'vmsg-binary-concat (cons x (cons y rst))))
+
+(add-macro-alias vmsg-concat vmsg-binary-concat)
+(add-binop vmsg-concat vmsg-binary-concat)
+
+
+
+(define vl-warning-add-ctx ((x vl-warning-p)
+                            (ctx))
+  :returns (new-x vl-warning-p)
+  (b* (((vl-warning x))
+       ((when x.context) (vl-warning-fix x)))
+    (change-vl-warning x :context ctx)))
+
+(defprojection vl-warninglist-add-ctx ((x vl-warninglist-p)
+                                       (ctx))
+  :returns (new-x vl-warninglist-p)
+  (vl-warning-add-ctx x ctx))
+
+#!acl2
+(def-b*-binder vl::wmv
+  :parents (warnings)
+  :short "B* binder to automatically append together returned warnings"
+  :body
+  (b* (((mv ctx args)
+        (b* ((mem (member :ctx args)))
+          (if mem
+              (mv (cadr mem)
+                  (append (take (- (len args) (len mem)) args)
+                          (cddr mem)))
+            (mv nil args)))))
+    `(b* (,(if (equal args '(vl::warnings))
+               `(vl::__tmp__warnings . ,forms)
+             `((mv . ,(subst 'vl::__tmp__warnings 'vl::warnings args)) . ,forms))
+          (vl::warnings (append-without-guard
+                         ,(if ctx
+                              `(vl::vl-warninglist-add-ctx vl::__tmp__warnings
+                                                       ,ctx)
+                            'vl::__tmp__warnings)
+                         vl::warnings)))
+       ,rest-expr)))
+
+
 

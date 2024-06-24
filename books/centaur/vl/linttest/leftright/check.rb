@@ -1,3 +1,5 @@
+#!/usr/bin/env ruby
+
 # VL Verilog Toolkit
 # Copyright (C) 2008-2015 Centaur Technology
 #
@@ -28,6 +30,7 @@
 #
 # Original author: Jared Davis <jared@centtech.com>
 
+require 'require_relative' if RUBY_VERSION =~ /1\.8/
 require_relative '../utils'
 
 outlaw_bad_warnings()
@@ -129,6 +132,17 @@ yes(:m0, "ashr_warn3")
 yes(:m0, "ashr_warn4")
 yes(:m0, "ashr_warn5")
 
+no(:m0, "times_no1")
+no(:m0, "times_no2")
+no(:m0, "times_no3")
+no(:m0, "times_no4")
+no(:m0, "times_no5")
+no(:m0, "times_no6")
+no(:m0, "times_no7")
+no(:m0, "times_no8")
+no(:m0, "times_no9")
+no(:m0, "times_no10")
+
 no(:m0, "plus_no1")
 no(:m0, "plus_no2")
 no(:m0, "plus_no3")
@@ -172,5 +186,9 @@ no(:m0, "wire_no1")
 no(:m0, "wire_no2")
 no(:m0, "wire_no3")
 no(:m0, "wire_no4")
+
+yes(:m0, "subinst1")
+no(:m0, "subinst2")
+no(:m0, "subinst3")
 
 test_passed()

@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -73,9 +61,9 @@
          (bits y (1- n) 0))
     0))
 
-;; We define a macro, CAT, that takes a list of a list X of alternating data values 
-;; and sizes.  CAT-SIZE returns the formal sum of the sizes.  X must contain at 
-;; least 1 data/size pair, but we do not need to specify this in the guard, and 
+;; We define a macro, CAT, that takes a list of a list X of alternating data values
+;; and sizes.  CAT-SIZE returns the formal sum of the sizes.  X must contain at
+;; least 1 data/size pair, but we do not need to specify this in the guard, and
 ;; leaving it out of the guard simplifies the guard proof.
 
 (defun formal-+ (x y)
@@ -98,9 +86,9 @@
         ((endp (cddddr x))
          `(binary-cat ,@x))
         (t
-         `(binary-cat ,(car x) 
-                      ,(cadr x) 
-                      (cat ,@(cddr x)) 
+         `(binary-cat ,(car x)
+                      ,(cadr x)
+                      (cat ,@(cddr x))
                       ,(cat-size (cddr x))))))
 
 ;; From float.lisp:
@@ -138,7 +126,7 @@
                 (bvecp v 1)
                 (bvecp w 1))
            (equal (+ u v w)
-                  (cat (logior (logand u v) (logior (logand u w) (logand v w))) 1 
+                  (cat (logior (logand u v) (logior (logand u w) (logand v w))) 1
                        (logxor u (logxor v w)) 1)))
   :rule-classes ())
 
@@ -307,7 +295,7 @@
 (defthm bits-sum-shift
     (implies (and (integerp x)
 		  (integerp y)
-		  (natp i) 
+		  (natp i)
 		  (natp j)
 		  (> j 0)
 		  (>= i j))
@@ -362,7 +350,7 @@
 	     (equal (bits (+ 1 x y) i j)
 		    (bits (+ (bits x i j)
 			     (bits y i j)
-			     (logior (prop x y (1- j) 0) 
+			     (logior (prop x y (1- j) 0)
 				     (gen x y (1- j) 0) ))
 			  (- i j) 0)))
   :rule-classes ())
@@ -404,7 +392,7 @@
 		  (natp x)
 		  (natp y)
 		  (bvecp z (1+ j))
-		  (= (logand y z) 0))		  
+		  (= (logand y z) 0))
 	     (equal (gen (+ x y) z i 0)
 		    (logand (prop x y i (1+ j))
 			    (gen (+ x y) z j 0)))))
@@ -463,7 +451,7 @@
   (bits (lognot (logior a (bits (lognot b) e 0))) e 0))
 
 (defun lam1 (a b e)
-  (logand (bits (lamt a b e) e 2) 
+  (logand (bits (lamt a b e) e 2)
 	  (logand (bits (lamg a b e) (1- e) 1)
 		  (bits (lognot (lamz a b e)) (- e 2) 0))))
 
@@ -473,7 +461,7 @@
 		  (bits (lognot (lamz a b e)) (- e 2) 0))))
 
 (defun lam3 (a b e)
-  (logand (bits (lamt a b e) e 2) 
+  (logand (bits (lamt a b e) e 2)
 	  (logand (bits (lamz a b e) (1- e) 1)
 		  (bits (lognot (lamg a b e)) (- e 2) 0))))
 
@@ -528,8 +516,8 @@
                 (< k n)
                 (or (equal c 0) (equal c 1)))
            (equal (equal (bits (+ a b c) k 0) 0)
-                  (equal (bits (logxor (logxor a b) 
+                  (equal (bits (logxor (logxor a b)
                                        (cat (logior a b) n c 1))
-                               k 0) 
+                               k 0)
                          0)))
   :rule-classes ())

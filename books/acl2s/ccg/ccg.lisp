@@ -9,7 +9,7 @@
 ; load in the expander book.
 
 (include-book "misc/expander" :dir :system)
-
+(include-book "acl2s/acl2s-size" :dir :system)
 
 ; load in Peter's hacker stuff.  we use at least three things from this:
 ; - add several keys to the acl2-defaults-table
@@ -22,8 +22,22 @@
  (include-book "hacking/all" :dir :system :ttags :all))
 (subsume-ttags-since-defttag)
 
+; From ACL2 source file defthm.lisp, utilities.lisp
+; Matt K. mod: now in logic mode, guard-verified.
+#|
+(defun fix-pkg (pkg)
+  (declare (xargs :guard (and (or (null pkg) (stringp pkg))
+                              (not (equal pkg "")))))
+  (if (and pkg (not (equal pkg *main-lisp-package-name*)))
+      pkg
+    "ACL2"))
+|#
+
+(defmacro fix-intern$ (name pkg)
+  `(intern$ ,name (fix-pkg ,pkg)))
+
 ;;; Legacy doc strings replaced Nov. 2014 by the corresponding
-;;; auto-generated defxdoc form in the last part of this file. 
+;;; auto-generated defxdoc form in the last part of this file.
 
 
 ; BEGIN public configuration interface
@@ -48,7 +62,7 @@
   ;; ~ev[]
 
   ;; This will return the termination-method as specified by the current world. ~/
-  
+
   ;; ~bv[]
   ;; General Form:
   ;; (get-termination-method wrld)
@@ -161,7 +175,7 @@
         (and (not (equal pt1 :built-in-clauses))
              (or (equal pt0 :built-in-clauses)
                  (< (cadr pt0) (cadr pt1))))
-        
+
 ; if hlevel1 has a more comprehensive CCM comparison scheme, then return t.
 
         (let ((ccm-cs-vals '((:EQUAL . 0)
@@ -189,7 +203,7 @@
                                                :HYBRID
                                                :HYBRID-CPN))))))
 
-  
+
 ; if hierarchy is a symbol designating one of the pre-defined hierarchies,
 ; return the hierarchy that it represents. Otherwise, return hierarchy.
 
@@ -241,7 +255,7 @@
   (declare (xargs :guard (and (plist-worldp wrld)
                               (alistp (table-alist 'acl2-defaults-table
                                                    wrld)))))
-  
+
 ; gets the default ccg hierarchy from the acl2-defaults-table. the default is
 ; :CCG-ONLY.
 
@@ -276,13 +290,13 @@
         ((and (not cpn)
               (not (equal (caar hierarchy) :MEASURE))
               (hlevel-ccmfs-per-nodep (car hierarchy)))
-         (er soft ctx 
+         (er soft ctx
              "It is not permitted that a level of a CCG-HIERARCHY have a ~
               CCCMFs-per-nodep of T when a previous level had a ~
               CCMFs-per-nodep of NIL. But this is the case with level ~x0."
              (car hierarchy)))
         (t
-         (chk-ccg-hierarchy1 (cdr hierarchy) 
+         (chk-ccg-hierarchy1 (cdr hierarchy)
                              (if (equal (caar hierarchy) :measure)
                                  cpn
                                (hlevel-ccmfs-per-nodep (car hierarchy)))
@@ -341,7 +355,7 @@
             (chk-hlevel<-all (car hierarchy) (cdr hierarchy)
                              ctx state)))
      (chk-hierarchy-strictly-increasing (cdr hierarchy) ctx state))))
-        
+
 (defun chk-ccg-hierarchy (hierarchy ctx state)
 
 ; checks a proposed CCG hierarchy.
@@ -363,10 +377,10 @@
               :HYBRID-CPN, or a non-empty true-list. ~x0 does not have ~
               this form."
              hierarchy))))
-         
+
 (defmacro set-ccg-hierarchy (v)
     ;; ":Doc-Section CCG
-   
+
     ;;  Set the default hierarchy of techniques for CCG-based termination
     ;;  analysis. ~/
     ;;  ~bv[]
@@ -441,11 +455,11 @@
 
     ;;  ~c[Ccm-cs] limits which CCMs are compared using the theorem
     ;;  prover. Consider again the ~c[ack] example in the documentation for
-    ;;  ~il[CCG]. All we needed was to compare the value of ~c[(acl2-count x)]
-    ;;  before and after the recursive call and the value of ~c[(acl2-count y)]
+    ;;  ~il[CCG]. All we needed was to compare the value of ~c[(acl2s-size x)]
+    ;;  before and after the recursive call and the value of ~c[(acl2s-size y)]
     ;;  before and after the recursive call. We would learn nothing, and waste
-    ;;  time with the theorem prover if we compared ~c[(acl2-count x)] to
-    ;;  ~c[(acl2-count y)]. However, other times, it is important to compare CCMs
+    ;;  time with the theorem prover if we compared ~c[(acl2s-size x)] to
+    ;;  ~c[(acl2s-size y)]. However, other times, it is important to compare CCMs
     ;;  with each other, for example, when arguments are permuted, or we are
     ;;  dealing with a mutual recursion.
 
@@ -464,9 +478,9 @@
     ;;      (1+ (f (cdr x)))))
     ;;  ~ev[]
     ;;  Now consider the case where ~c[m1] and ~c[m2] are both the measure
-    ;;  ~c[(acl2-count x)]. Then if we look at the recursive call ~c[(f (cdr x))]
+    ;;  ~c[(acl2s-size x)]. Then if we look at the recursive call ~c[(f (cdr x))]
     ;;  in the body of ~c[f], then ~c[m2'] is the result of replacing ~c[x] with
-    ;;  ~c[(cdr x)] in ~c[m2], i.e., ~c[(acl2-count (cdr x))].
+    ;;  ~c[(cdr x)] in ~c[m2], i.e., ~c[(acl2s-size (cdr x))].
 
     ;;  If ~c[ccm-cs] is ~c[:EQUAL] we will compare ~c[m1] to
     ;;  ~c[m2] if ~c[v1] and ~c[v2] are equal. If ~c[value] is ~c[:ALL] we will
@@ -479,7 +493,7 @@
     ;;  syntactically equal, then regardless of the value of ~c[ccm-cs] we will
     ;;  construct a CCMF that will indicate that ~c[(o>= m1 m2)].
 
-     
+
     ;;  ~c[Cpn] tells us how much ruler information we will use to compare CCMs.
     ;;  Unlike ACL2's measure-based termination analysis, CCG has the ability to
     ;;  use the rulers from both the current recursive call the next recursive
@@ -497,17 +511,17 @@
 
     ;;  Clearly this is terminating. If we choose a measure of ~c[(nfix x)] we
     ;;  know that if ~c[x] is a positive integer, ~c[(nfix (- x 2))] is less than
-    ;;  ~c[(nfix x)]. But consider the measure ~c[(acl2-count x)]. The strange
-    ;;  thing here is that if ~c[x] is 1, then ~c[(acl2-count (- x 2))] is
-    ;;  ~c[(acl2-count -1)], which is 1, i.e. the ~c[acl2-count] of ~c[x]. So, the
+    ;;  ~c[(nfix x)]. But consider the measure ~c[(acl2s-size x)]. The strange
+    ;;  thing here is that if ~c[x] is 1, then ~c[(acl2s-size (- x 2))] is
+    ;;  ~c[(acl2s-size -1)], which is 1, i.e. the ~c[acl2s-size] of ~c[x]. So, the
     ;;  fact that we know that ~c[x] is a positive integer is not enough to show
     ;;  that this measure decreases. But notice that if ~c[x] is 1, we will recur
     ;;  just one more time. So, if we consider what happens when we move from the
-    ;;  recursive call back to itself. In this case we know 
-    ;; ~c[(and (not (zp x)) (not (zp (- x 2))))]. 
+    ;;  recursive call back to itself. In this case we know
+    ;; ~c[(and (not (zp x)) (not (zp (- x 2))))].
     ;;  Under these conditions, it is trivial for ACL2 to prove that
-    ;;  ~c[(acl2-count (- x 2))] is always less than ~c[(acl2-count x)].
- 
+    ;;  ~c[(acl2s-size (- x 2))] is always less than ~c[(acl2s-size x)].
+
     ;;  However, this can make the CCG analysis much more expensive, since
     ;;  information about how values change from step to step are done on a
     ;;  per-edge, rather than a per-node basis in the CCG (where the nodes are the
@@ -610,7 +624,7 @@
   ;; ~ev[]
 
   ;; This will return the time-limit as specified by the current world. ~/
-  
+
   ;; ~bv[]
   ;; General Form:
   ;; (get-time-limit wrld)
@@ -651,7 +665,7 @@
 
 (defmacro get-ccg-print-proofs ()
   ;; ":Doc-Section CCG
-  
+
   ;; returns the setting that controls whether proof attempts are printed during
   ;; CCG analysis~/
 
@@ -726,7 +740,7 @@
  ;;  That is, by default only the basic CCG information and counter-example (in
  ;;  the case of a failed proof attempt) are printed. This should hopefully be
  ;;  adequate for most users."
-  
+
   `(let ((lst ,lst))
      (cond ((not (true-listp lst))
             (er soft 'set-ccg-inhibit-output-lst
@@ -923,12 +937,12 @@
 (defstruct-raw funct
 
   ;; The funct defstruct represents the relevant information about the function
-  ;; definitions provided by the user. 
+  ;; definitions provided by the user.
   ;;
   ;;  * fn: the function name
 
   (fn nil :type symbol)
-  
+
   ;;  * formals: the formals of the function
 
   (formals nil :type list)
@@ -956,7 +970,7 @@
   (parent-funct (make-funct) :type funct)
 
 ;; * call-funct: the funct representing the function called by the call of the
-;;   context. 
+;;   context.
 
   (call-funct (make-funct) :type funct)
 
@@ -1048,9 +1062,9 @@
   ;; The accg-edge struct represents edges in the annotated CCG (ACCG).
 
   ;; * tail: the index of the tail ACCG node of the edge.
-  
+
   (tail -1 :type fixnum)
-  
+
   ;; * head: the index of the head ACCG node of the edge.
 
   (head -1 :type fixnum)
@@ -1065,19 +1079,19 @@
 ;; array of these.
 
   ;; * context: the context associated with the node.
-  
+
   (context (make-context) :type context)
-  
+
   ;; * fwd-edges: edges for which the current node is the tail.
 
   (fwd-edges nil :type list)
-  
+
   ;; * bwd-edges: edges for which the current node is the head.
-  
+
   (bwd-edges nil :type list)
-  
+
   ;; * num: the index of the node in the array of nodes of the ACCG.
-  
+
   (num 0 :type fixnum))
 
 
@@ -1126,17 +1140,17 @@
   ;; The srg-edge represents an edge in an SRG.
 
   ;; * tail: the tail CCM of the edge.
-  
+
   (tail  0 :type fixnum)
-  
+
   ;; * head: the head CCM of the edge.
 
   (head  0 :type fixnum)
-  
+
   ;; * ccmf: the CCMF from which this edge was derived.
 
   (ccmf (make-ccmf) :type ccmf)
-  
+
 ;; * label: generally > or >=, indicating the label of the CCMF edge
 ;;   from which this edge is derived.
 
@@ -1188,7 +1202,8 @@
 (defun-raw ccg-simplify-hyps-no-split (hyps ctx ens wrld state)
   (declare (ignore ctx))
   (mv-let (nhyps ttree)
-          (normalize-lst hyps t nil ens wrld nil)
+          (normalize-lst hyps t nil ens wrld nil
+                         (backchain-limit wrld :ts))
           (er-progn
            (accumulate-ttree-and-step-limit-into-state ttree :skip state)
            (value (flatten-ands-in-lit-lst nhyps)))))
@@ -1219,19 +1234,19 @@
           state
           nil)
      (print-funct-ccms (cdr functs) wrld state))))
-      
+
 ;; The following definitions culminate in print-counter-example.
 
 (defun-raw prettify-ccms (ccm-array vars vals wrld)
   (let ((fn (if vars
                 #'(lambda (x)
-                    (untranslate (subcor-var vars vals 
+                    (untranslate (subcor-var vars vals
                                              (de-propagate x))
                                  nil wrld))
               #'(lambda (x)
                   (untranslate (de-propagate x)
                                nil wrld)))))
-    (map 'vector fn ccm-array)))             
+    (map 'vector fn ccm-array)))
 
 (defmacro-raw ce-defun-fn (defun)
   `(cadr ,defun))
@@ -1275,7 +1290,7 @@
                        ccms0
                        ccms1
                        (append (mapcar #'(lambda (x)
-                                           `(> ,ccm 
+                                           `(> ,ccm
                                                ,(de-propagate
                                                  (aref ccms1 x))))
                                        >-edges)
@@ -1366,7 +1381,7 @@
                    col
                    wrld
                    state)))
-          
+
 (defun-raw print-ccms (defuns functs col wrld state)
   ;; (format t "defuns: ~A functs: ~A col: ~A state: ~A~%" defuns functs col state)
   (if (endp defuns)
@@ -1395,18 +1410,18 @@
     (let* ((context (aref context-array (car (ccmf-fc-num (car ccmfs)))))
            (funct (context-parent-funct context))
            (fn (funct-fn funct)))
-      
+
       (mv-let
        (name i)
        (ccg-counter-example-fn-name fn (assoc-eq-value fn 0 alist) wrld)
        (mv-let
         (contexts functs names)
-        (produce-counter-example1 (cdr ccmfs) context-array 
+        (produce-counter-example1 (cdr ccmfs) context-array
                                   (assoc-set-eq fn (1+ i) alist) wrld)
         (mv (cons context contexts)
             (cons funct functs)
             (cons name names)))))))
- 
+
 (defun-raw produce-counter-example2 (contexts names name0 ctx ens wrld state)
   (if (endp contexts)
       (value nil)
@@ -1436,7 +1451,7 @@
                                        name0
                                        ctx ens wrld state)))
        (value (cons `(defun ,(car names) ,(funct-formals funct) ,body)
-                    rst))))))  
+                    rst))))))
 
 (defun-raw accg-find-ccmf (accg i j)
   (loop for edge in (accg-node-fwd-edges (aref accg i))
@@ -1449,7 +1464,7 @@
                         collect (accg-find-ccmf accg (car p) (cadr p)))))
     (pprogn
      (fms "Producing counter-example, including simplifying rulers in order to ~
-           maximize the reabability of the counter-example."
+           maximize the readability of the counter-example."
           nil
           *standard-co*
           state nil)
@@ -1704,7 +1719,7 @@
                                          :do-not '(eliminate-destructors
                                                    eliminate-irrelevance
                                                    generalize fertilize) ;; turn off all proof methods
-                                         ;; Pete: put a quote in front of (eliminate ...) above since that generated an error 
+                                         ;; Pete: put a quote in front of (eliminate ...) above since that generated an error
                                          :in-theory (theory 'minimal-theory))))) ;; and use minimal theory
 
 (defun translated-limit-induction-hint (i)
@@ -1839,13 +1854,13 @@
   ;; unsuccessful proving the exact same query.
   (and (consp unproved)
        (or (let ((cl-unproved (car unproved)))
-             (and (eq t (subsumes *init-subsumes-count* cl cl-unproved nil)) 
+             (and (eq t (subsumes *init-subsumes-count* cl cl-unproved nil))
                   (eq t (subsumes *init-subsumes-count* cl-unproved cl nil))))
            (equals-unproved-clause1 cl (cdr unproved)))))
 
 (defun-raw equals-unproved-clause (cl unproved i)
   ;; checks if we already failed to prove cl using an induction depth of i or
-  ;; higher. 
+  ;; higher.
   (and (< i (array-dimension unproved 0))
        (or (equals-unproved-clause1 cl (aref unproved i))
            (equals-unproved-clause cl unproved (1+ i)))))
@@ -1860,7 +1875,7 @@
          * Set the :don't-guess-ccms flag to t. Sometimes CCG analysis ~
            guesses too many CCMs which leads to excessive prover ~
            queries. This will eliminate *all* CCMs other than the ~
-           acl2-count of each formal.~|~%~
+           acl2s-size of each formal.~|~%~
          * Do you see a variable that you don't think is relevant to the ~
            termination proof? In that case, us the :ignore-formals flag ~
            to tell the CCG analysis to throw out CCMs that contain that ~
@@ -1874,8 +1889,9 @@
 (defun-raw time-left (stop-time ctx state)
   (let ((now (get-internal-run-time)))
     (if (< now stop-time)
-        (value (/ (- stop-time now)
-                  (coerce internal-time-units-per-second 'float)))
+        (value (rationalize
+                (/ (- stop-time now)
+                   (coerce internal-time-units-per-second 'float))))
       (time-er ctx))))
 
 (defun-raw time-check (stop-time ctx state)
@@ -1960,7 +1976,7 @@
                                      nil))
                        (value (cons t nil))))
                      ;; have we already failed to prove this query using the same proof techniques?
-                     ((equals-unproved-clause clause 
+                     ((equals-unproved-clause clause
                                               (memoization-unproved mem)
                                               ind-limit)
                       (pprogn
@@ -2011,12 +2027,21 @@
               (er-progn
                (time-check stop-time ctx state)
                (if (car pair)
-                   (accumulate-ttree-and-step-limit-into-state 
-                    (cdr pair) 
+                   (accumulate-ttree-and-step-limit-into-state
+                    (cdr pair)
                     :skip;(initial-step-limit wrld state)
                     state)
                  (pprogn
-                  (erase-gag-state state)
+
+; Matt K. mod, 12/27/2021:  Formerly the following line was here.
+;                 (erase-gag-state state)
+; That function no longer exists.  Here is the body of the former definition of
+; that function.
+                  (pprogn (f-put-global 'gag-state-saved
+                                        (f-get-global 'gag-state state)
+                                        state)
+                          (f-put-global 'gag-state nil state))
+
                   (value nil)))
                (value (car pair))))))))
 
@@ -2119,7 +2144,7 @@
   ;; attempting to prove that the ruler of node1 implies the negation of
   ;; the ruler of node2 after the formals of the fn of node2 have been
   ;; replaced by the actuals of the call of node1. if this can be
-  ;; proven, we return nil, otherwise, we return t.  
+  ;; proven, we return nil, otherwise, we return t.
   (if (hlevel-ccmfs-per-nodep hlevel)
       (value nil)
     (query (append (accg-node-ruler node1)
@@ -2141,7 +2166,7 @@
                        do (setf (accg-node-bwd-edges node2)
                                 (cons edge (accg-node-bwd-edges node2)))
                        collect edge))))
-                       
+
 (defun-raw context-to-accg-node-lst (contexts total)
   (if (endp contexts)
       (mv nil total)
@@ -2197,7 +2222,7 @@
       state
     (pprogn
      (simplify-contexts1 (car contexts) ens wrld ctx state)
-     (simplify-contexts (cdr contexts) ens wrld ctx state))))                           
+     (simplify-contexts (cdr contexts) ens wrld ctx state))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; annotating accgs (ccmfs)                                   ;;;
@@ -2215,9 +2240,9 @@
 
 (defun-raw ccg-formal-sizes (formals)
   ;; given a list of formals, this function returns a list of
-  ;; expressions to calculate the acl2-count of each formal.
+  ;; expressions to calculate the acl2s-size of each formal.
   (loop for x in formals
-        collect `(acl2-count ,x)))
+        collect `(acl2s-size ,x)))
 
 (defun-raw ccg-add-zp-ccm (r formals ccms)
   ;; if an expression, r -- which will generally correspond to one of
@@ -2245,7 +2270,7 @@ issue. If I define a function like this:
 
 (defun gen-int-range (x y)
   (cond ((and (integerp x) (integerp y))
-         (if (<= x y) 
+         (if (<= x y)
            (cons x (gen-int-range (1+ x) y))
            nil))
         (t nil)))
@@ -2258,7 +2283,7 @@ function like this:
 
 (defun gen-int-range ( y x)
   (cond ((and (integerp x) (integerp y))
-         (if (<= y x) 
+         (if (<= y x)
            (cons y (gen-int-range (1+ y) x))
            nil))
         (t nil)))
@@ -2268,8 +2293,8 @@ x-y+1, but instead it guessed y-x+1. Now, looking at the code
 below, notice the how p is defined in the let*. That definition
 essentially orders the args based on the term order, so we lose
 the information about how they were compared. This is not a good
-idea. In many cases, it might be fine because acl2-count is
-robust, eg, acl2-count -10 = 10, but in this case the ccm we
+idea. In many cases, it might be fine because acl2s-size is
+robust, eg, acl2s-size -10 = 10, but in this case the ccm we
 guess does not decrease and cgen finds a counterexample. So, I
 don't understand why the term order is used here at all. I
 rewrote just this case in my updated version of ccg, below.
@@ -2283,10 +2308,10 @@ e2-e1+1.
   ;; the expressions in a ruler -- is one of the following forms, we
   ;; add the corresponding expression to the ccms:
   ;;
-  ;; * (< 0 e2) --> (acl2-count e2)
-  ;; * (< e1 e2) --> (acl2-count (- e2 e1))
-  ;; * (not (< e1 0)) --> (1+ (acl2-count e1))
-  ;; * (not (< e1 e2)) --> (1+ (acl2-count (- e1 e2)))
+  ;; * (< 0 e2) --> (acl2s-size e2)
+  ;; * (< e1 e2) --> (acl2s-size (- e2 e1))
+  ;; * (not (< e1 0)) --> (1+ (acl2s-size e1))
+  ;; * (not (< e1 e2)) --> (1+ (acl2s-size (- e1 e2)))
   (declare (ignore formals))
   (cond ((atom r) ccms)
         ((or (eq (car r) '<)
@@ -2300,7 +2325,7 @@ e2-e1+1.
            (cond ((and (quotep arg1) (quotep arg2))
                   ccms)
                  ((not (or (quotep arg1) (quotep arg2)))
-                  (cons `(acl2-count (binary-+ '1
+                  (cons `(acl2s-size (binary-+ '1
                                                (binary-+ ,arg2
                                                          (unary-- ,arg1))))
                         ccms))
@@ -2309,14 +2334,14 @@ e2-e1+1.
                                (eql (unquote arg1) 1))
                            (variablep arg2))
                       ccms
-                    (cons `(acl2-count (binary-+ (quote ,(- 1 (unquote arg1))) ,arg2))
+                    (cons `(acl2s-size (binary-+ (quote ,(- 1 (unquote arg1))) ,arg2))
                           ccms)))
                  ((and (quotep arg2) (acl2-numberp (unquote arg2)))
-                  (if (and (or (eql (unquote arg2) 0) 
+                  (if (and (or (eql (unquote arg2) 0)
                                (eql (unquote arg2) 1))
                            (variablep arg1))
                       ccms
-                    (cons `(acl2-count (binary-+ (quote ,(- 1 (unquote arg2))) ,arg1))
+                    (cons `(acl2s-size (binary-+ (quote ,(- 1 (unquote arg2))) ,arg1))
                           ccms)))
                  (t
                   ccms))))
@@ -2329,10 +2354,10 @@ e2-e1+1.
   ;; the expressions in a ruler -- is one of the following forms, we
   ;; add the corresponding expression to the ccms:
   ;;
-  ;; * (< 0 e2) --> (acl2-count e2)
-  ;; * (< e1 e2) --> (acl2-count (- e2 e1))
-  ;; * (not (< e1 0)) --> (1+ (acl2-count e1))
-  ;; * (not (< e1 e2)) --> (1+ (acl2-count (- e1 e2)))
+  ;; * (< 0 e2) --> (acl2s-size e2)
+  ;; * (< e1 e2) --> (acl2s-size (- e2 e1))
+  ;; * (not (< e1 0)) --> (1+ (acl2s-size e1))
+  ;; * (not (< e1 e2)) --> (1+ (acl2s-size (- e1 e2)))
   (declare (ignore formals))
   (cond ((atom r) ccms)
         ((or (eq (car r) '<)
@@ -2350,11 +2375,11 @@ e2-e1+1.
                   ccms)
                  ((not (or (quotep arg1) (quotep arg2)))
                   (if not?
-                      (cons `(acl2-count (binary-+ '1
+                      (cons `(acl2s-size (binary-+ '1
                                                    (binary-+ ,rarg1
                                                              (unary-- ,rarg2))))
                             ccms)
-                    (cons `(acl2-count  (binary-+ '1
+                    (cons `(acl2s-size  (binary-+ '1
                                                   (binary-+ ,rarg2
                                                             (unary-- ,rarg1))))
                           ccms)))
@@ -2363,14 +2388,14 @@ e2-e1+1.
                                (eql (unquote arg1) 1))
                            (variablep arg2))
                       ccms
-                    (cons `(acl2-count (binary-+ (quote ,(- 1 (unquote arg1))) ,arg2))
+                    (cons `(acl2s-size (binary-+ (quote ,(- 1 (unquote arg1))) ,arg2))
                           ccms)))
                  ((and (quotep arg2) (acl2-numberp (unquote arg2)))
-                  (if (and (or (eql (unquote arg2) 0) 
+                  (if (and (or (eql (unquote arg2) 0)
                                (eql (unquote arg2) 1))
                            (variablep arg1))
                       ccms
-                    (cons `(acl2-count (binary-+ (quote ,(- 1 (unquote arg2))) ,arg1))
+                    (cons `(acl2s-size (binary-+ (quote ,(- 1 (unquote arg2))) ,arg1))
                           ccms)))
                  (t
                   ccms))))
@@ -2388,7 +2413,7 @@ e2-e1+1.
     ccms))
 
 (defun-raw accg-guess-ccms-for-node (node)
-  ;; given a node, guesses ccms beyond the basic acl2-count of the
+  ;; given a node, guesses ccms beyond the basic acl2s-size of the
   ;; formals.
   (let ((ccms nil)
         (rulers (accg-node-ruler node))
@@ -2416,12 +2441,12 @@ e2-e1+1.
                                              :test #'equal
                                              :key #'de-propagate)))))
 
-;; when we guess ccms beyond the basic acl2-count of the formals of a
+;; when we guess ccms beyond the basic acl2s-size of the formals of a
 ;; function, we need to propagate the ccms throughout the accg. for
 ;; example, suppose we have two functions, f and g, such that f
 ;; contains the call (g x y) when (not (zp (- y x))) and g always
 ;; calls (f (1+ x) y). then f will get assigned the ccm (- y x), but g
-;; will only have (acl2-count x) and (acl2-count y). in this
+;; will only have (acl2s-size x) and (acl2s-size y). in this
 ;; situation, there will be no way to tell that (- y x) decreases each
 ;; time through the loop. we need some sort of "place-holder" to keep
 ;; track of the value of (- y x) when we are in the function g. the
@@ -2430,7 +2455,7 @@ e2-e1+1.
 ;; substituting actuals for formals in the non-trivial ccms from the
 ;; next node. in our example, g would get the ccm (- y (1+ x)).
 
- 
+
 
 (defun-raw accg-propagate-ccm (ccm accg n consider-onlyp)
   ;; propagates a single ccm through the accg. here ccm is the ccm
@@ -2552,9 +2577,9 @@ e2-e1+1.
                              (aref ccms i))))
     ;; next, we propagate the ccms and then partition them by
     ;; function. finally, we set the ccm list of each node to be the
-    ;; non-trivial ccms for the function plus the acl2-count of each
+    ;; non-trivial ccms for the function plus the acl2s-size of each
     ;; formal of the parent function and the sum of all the formal
-    ;; acl2-counts (if there is more than one formal).
+    ;; acl2s-sizes (if there is more than one formal).
      (accg-propagate-ccms
       (ccg-remove-duplicate-ccms ccms)
       accg
@@ -2788,7 +2813,7 @@ e2-e1+1.
                                       and do (setf (ccmf-lastsite ccmf)
                                                    nhead)
                                       else do (setf changes
-                                                    (cons 
+                                                    (cons
                                                      (accg-edge-context-pair e accg)
                                                      changes))))))
         ;; finally, we collect all the non-trivial sccs into a list and return it.
@@ -2845,8 +2870,8 @@ e2-e1+1.
   ;; proof-techniques of the first are weaker than the proof-techniques of the
   ;; second, i.e. that it might be possible to prove something using the proof
   ;; techniques of h2 that would not be proven using the techniques in h1.
-  
-  
+
+
   (or ;; h1 is nil in our first round of refinement, when their is no
       ;; previous level to the hierarchy
    (null h1)
@@ -2882,7 +2907,7 @@ e2-e1+1.
         do (loop for j in (ccmf-node->=-edges node)
                  do (setf (aref matrix i j) '>=))
         finally (return matrix)))
-           
+
 ;; currently destructive
 
 (defun-raw accg-refine-ccmf2 (i j matrix node e1 hyps f1 c1 f2 ccms2 cformals args redop
@@ -2906,7 +2931,7 @@ e2-e1+1.
                  ((equal (de-propagate e1) (de-propagate e2)) (value '>=))
                  (t
                   (er-let*
-                   ((result 
+                   ((result
                      (pprogn
                       (increment-timer 'other-time state)
                       (ccg-io? build/refine nil state
@@ -2926,7 +2951,7 @@ e2-e1+1.
                          ((eq label '>=) (value '>=))
                          (t
                           (er-let*
-                           ((result 
+                           ((result
                              (pprogn
                               (increment-timer 'other-time state)
                               (ccg-io? build/refine nil state
@@ -2944,7 +2969,7 @@ e2-e1+1.
                               (increment-timer 'print-time state)
                               (ccmf->=-value? hyps e1 e2 pt qspv state))))
                            (value (if result '>= nil))))))))))
-         (progn 
+         (progn
            ;;(format t "~&e1: ~A e2: ~A label: ~A~%" e1 e2 nlabel)
            (case nlabel
              (> (setf (ccmf-node->-edges node)
@@ -2966,7 +2991,7 @@ e2-e1+1.
   ;; signature looks just like that of accg-construct-ccmf-graph,
   ;; except we have the added arguments redop and old-hlevel, which
   ;; help us to know when we need to redo proofs we have already done.
-  
+
   (if (< i 0)
       (value (cond ((endp changes) changes)
                    ((endp (cdr changes)) (car changes))
@@ -3032,7 +3057,7 @@ e2-e1+1.
                                      qspv state)))
         (accg-node-refine-ccmfs-per-edge
          (cdr edges) node1 accg ccms1 c1 ruler1
-         cformals args 
+         cformals args
          stronger-proofsp
          (if (null nchanges)
              changes
@@ -3108,7 +3133,7 @@ e2-e1+1.
                                             qspv state))))
        (accg-refine-ccmfs1 (1- i) accg stronger-proofsp changes0 old-hlevel hlevel
                            qspv state)))))
-      
+
 (defun-raw accg-refine-ccmfs (accg stronger-proofsp old-hlevel hlevel
                                    qspv state)
   (accg-refine-ccmfs1 (1- (array-dimension accg 0)) accg stronger-proofsp nil
@@ -3130,7 +3155,7 @@ e2-e1+1.
                              (if (consp nchanges)
                                  uaccgs
                                (cons accg uaccgs))
-                             (append nchanges changes) 
+                             (append nchanges changes)
                              stronger-proofsp
                              old-hlevel hlevel
                              qspv state))))
@@ -3147,14 +3172,14 @@ e2-e1+1.
 
   (accg-refine-ccmfs-lst1 accgs nil nil nil stronger-proofsp old-hlevel hlevel
                           qspv state))
-  
+
 (defun-raw prune-accg-node (node1 edges accg changes hlevel qspv state)
   (if (endp edges)
       (value changes)
     (let* ((edge (car edges))
            (node2 (aref accg (accg-edge-head edge))))
       (er-let*
-       ((result 
+       ((result
          (pprogn
           (increment-timer 'other-time state)
           (ccg-io? build/refine nil state
@@ -3174,7 +3199,7 @@ e2-e1+1.
                  (cons edge (accg-node-fwd-edges node1)))
            (setf (accg-node-bwd-edges node2)
                  (cons edge (accg-node-bwd-edges node2))))
-         (prune-accg-node node1 (cdr edges) accg 
+         (prune-accg-node node1 (cdr edges) accg
                           (if result
                               (acons (car (accg-node-context-num node1))
                                      (car (accg-node-context-num node2))
@@ -3208,7 +3233,7 @@ e2-e1+1.
                  nil))
    ;; prune!
    (prune-accg1 (1- (array-dimension accg 0)) accg nil hlevel qspv state)))
-               
+
 (defun-raw accg-refine-accg (accg stronger-proofsp old-hlevel hlevel
                                   qspv state)
   ;; this function refines an accg based on whether we have stronger
@@ -3328,7 +3353,7 @@ e2-e1+1.
   ;; edge labeled with a >. here scc is a list of indices of nodes in
   ;; the same scc, and scc-array maps srg indices to a unique scc
   ;; identifier (as in the second value returned by srg-scc).
-  (let ((scc-num (aref scc-array (car scc)))) 
+  (let ((scc-num (aref scc-array (car scc))))
     (dolist (p scc nil)
       (let ((x (aref srg p)))
         (when (dolist (e (srg-node-fwd-edges x) nil)
@@ -3414,7 +3439,7 @@ e2-e1+1.
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; the following code implements the SCP analysis.
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
- 
+
 (defun-raw srg-scc-for-node-aux (srg nn visited node-fwd-edges edge-head)
   ;; this is the helper function for srg-scc-for-node
   (setf (aref visited nn) t)
@@ -3513,7 +3538,7 @@ e2-e1+1.
         ;; for each edge from node i, we increment the counter
         ;; corresponding to the index of the context for which the
         ;; head of e is a ccm:
-        (dolist (e (funcall fwd-edges node)) 
+        (dolist (e (funcall fwd-edges node))
           (incf (aref count i (srg-node-node (aref srg (funcall edge-head e))))))
         ;; for every successor of the context of node that has count 0
         ;; gets added to the worklist and is marked.
@@ -3555,7 +3580,7 @@ e2-e1+1.
   (mtp srg ccmfs num-contexts
        #'srg-node-bwd-edges #'srg-node-fwd-edges
        #'srg-edge-tail #'srg-edge-head))
-    
+
 
 (defun-raw fan-free (srg edge-list other-node num-contexts)
   ;; generic function for determining if there is no fanning in the
@@ -3615,7 +3640,7 @@ e2-e1+1.
         (mtp-to-anchor srgp ahash)
       (let ((srgq (srg-restrict srg (mtp-bwd srg ccmfs num-contexts))))
         (if (fan-out-free srgq num-contexts)
-            (mtp-to-anchor srgq ahash)    
+            (mtp-to-anchor srgq ahash)
           nil)))))
 
 (defun-raw srg-restrict-edges (srg pred)
@@ -3664,7 +3689,7 @@ e2-e1+1.
         do (loop for e in (srg-node-fwd-edges (aref srg i))
                  do (setf (aref matrix i (srg-edge-head e)) t))
         finally (return matrix)))
-        
+
 ;;   (let* ((n (array-dimension srg 0))
 ;;          (matrix (make-array (list n n) :element-type 'boolean :initial-element nil)))
 ;;     (dotimes (i n matrix)
@@ -3687,7 +3712,7 @@ e2-e1+1.
                                   (aref ndgi-matrix (srg-edge-tail e) (srg-edge-head e)))))))
 
 (defun-raw anchor-find (srg ccmfs num-contexts)
-  ;; the anchor finding algorithm, as given in the scp paper. 
+  ;; the anchor finding algorithm, as given in the scp paper.
   (let ((ahash (make-hash-table :rehash-size 2 :rehash-threshold (float 3/4))))
     (multiple-value-bind
         (sccs scc-array)
@@ -3782,7 +3807,7 @@ e2-e1+1.
   ;; destructively removes edges corresponding to the list of ccmfs from the
   ;; accg. The ccmfs must be pointer-equal (eq) to the ones you want removed
   ;; from the accg.
-  
+
   ;; first, we set the firstsite field of the ccmfs we want to remove
   ;; to -1.
   (loop for ccmf in ccmfs do (setf (ccmf-firstsite ccmf) -1))
@@ -3950,7 +3975,7 @@ e2-e1+1.
   (cons (scg-path-start path)
         (flatten-scg-interior (scg-path-interior path)
                               (list (scg-path-end path)))))
-  
+
 
 ;; for the purposes of this algorithm, we only need to know the starts and ends
 ;; of paths. We only need the interior to construct the paths later. Therefore,
@@ -4181,7 +4206,7 @@ e2-e1+1.
                                     key
                                     combine
                                     test))))
-         
+
 
 (defun-raw list-to-sorted-set (lst predicate
                                    &key (key #'identity)
@@ -4212,7 +4237,7 @@ e2-e1+1.
   ;; i is our scg counter, used for giving each scg a unique numerical id.
   ;; graph-hash is an equalp hash-table (an equal hash-table in GCL)
   ;;
-  ;; OUTPUT: 4 values: 
+  ;; OUTPUT: 4 values:
   ;; 1. the new value of i.
   ;; 2. whether this is the first update to the new-newest-paths of the scg.
   ;; 3. the new paths added.
@@ -4409,7 +4434,7 @@ e2-e1+1.
 
 (defun-raw scg-successors (scg)
   (list-to-sorted-set (mapcar #'scg-path-end (scg-newest-paths scg))
-                      #'<))    
+                      #'<))
 
 (defun-raw organize-scgs-by-preds1 (scgs array)
   (if (endp scgs)
@@ -4431,7 +4456,7 @@ e2-e1+1.
   (loop for i in indices
         append (aref scg-array i) into union
         finally (return (list-to-sorted-set union #'< :key #'scg-num))))
-        
+
 (defun-raw copy-scgs (scgs)
   (loop for scg in scgs
         collect (make-scg :graph (scg-graph scg)
@@ -4495,7 +4520,7 @@ e2-e1+1.
   ;; ccmfs: a list of CCMFs to be analyzed
   ;; numsites: the number of contexts over which the CCMFs range.
   ;; state: the state
-  ;; 
+  ;;
   ;; OUTPUT: an error triple whose value is a counter-example of the form (cons
   ;; g p) where g is a ccmf-graph and p is the shortest self-looping path
   ;; associated with g.
@@ -4669,7 +4694,7 @@ e2-e1+1.
                             unproved))
             (t
              (accg-scp-list (cdr lst) proved (cons (car lst) unproved)))))))
- 
+
 (defun-raw accg-sct-list1 (lst i n proved unproved ces state)
   ;; given a list of accgs, lst, performs sct on a cleaned version of each
   ;; accg, putting the cleaned into proved if sct determines the accg is
@@ -4710,7 +4735,7 @@ e2-e1+1.
                      ()
                      (fms "A trivial analysis has revealed that this SCC is ~
                            potentially non-terminating. We will set it aside ~
-                           for further refinement.~|" 
+                           for further refinement.~|"
                           nil *standard-co* state nil))
             (increment-timer 'print-time state)
             (accg-sct-list1 (cdr lst) (1+ i) n proved (cons (car lst) unproved)
@@ -4757,11 +4782,12 @@ e2-e1+1.
                               (stringp pkg)
                               (natp i)
                               (plist-worldp wrld))))
-  (let ((name (intern$ (coerce (append char-lst
-                                       `(#\_)
-                                       (explode-nonnegative-integer i 10 nil))
-                               'string)
-                       pkg)))
+  (let ((name (fix-intern$
+               (coerce (append char-lst
+                               `(#\_)
+                               (explode-nonnegative-integer i 10 nil))
+                       'string)
+               pkg)))
     (cond ((new-namep name wrld) (mv name i))
           (t (ccg-counter-example-fn-name1 char-lst pkg (1+ i) wrld)))))
 
@@ -4899,7 +4925,7 @@ e2-e1+1.
         do (loop for i from 0 below n
                  for node = (aref accg i)
                  do (setf (aref naccg i)
-                          (make-accg-node 
+                          (make-accg-node
                            :context (accg-node-context node)
                            :num i)))
         ;; next, set the ccmfs for those nodes to be the restricted
@@ -4935,13 +4961,13 @@ e2-e1+1.
                       (sct (accg-ccmfs caccg) n state))))
                (unless (null ce) (return (value nil)))))
         finally (return (value t))))
-                 
+
 (defun-raw create-ccm-restrictions (contexts av-alist)
   ;; creates "ccm restrictions", which is an array of boolean arrays
   ;; such that element i j is t iff we want to keep ccm j from context
   ;; i. which ccms to keep is determined by av-alist, which tells us
   ;; which variables from each function we are using for the current
-  ;; restriction. 
+  ;; restriction.
   (loop with n = (array-dimension contexts 0)
         with ccmrs = (make-array n)
         for i from 0 below n
@@ -5041,7 +5067,7 @@ e2-e1+1.
   ;; controller-alist we need to include all the variables in the
   ;; context rulers if we could not prove termination using per-node
   ;; contexts.
-  
+
   ;; first, we construct an alist of the initially enabled formals
   ;; based on cpn, and use it to make an ordered list of name-formal
   ;; pairs.
@@ -5116,14 +5142,14 @@ e2-e1+1.
     (get-ccm-vars1 (1- len) ccms (make-array len
                                              :element-type 'list
                                              :initial-element nil))))
-                    
+
 (defun-raw fn-ccm-vars-alist (functs)
   (if (endp functs)
       nil
     (let ((funct (car functs)))
       (acons (funct-fn funct) (get-ccm-vars (funct-ccms funct))
              (fn-ccm-vars-alist (cdr functs))))))
-   
+
 (defun-raw gather-relevant-ccms1 (i var ccm-vars indices)
   ;; i: an integer such that 0 <= i < |ccm-vars|. Should initially be |ccm-vars|-1.
   ;; ccm-vars: an array of lists of integers.
@@ -5138,7 +5164,7 @@ e2-e1+1.
                            (if (member-eq var (aref ccm-vars i))
                                (cons i indices)
                              indices))))
-      
+
 (defun-raw gather-relevant-ccms (var ccm-vars)
   ;; ccm-vars: an array of lists of variables
   ;; var: a variable
@@ -5219,7 +5245,7 @@ e2-e1+1.
                                         ;; any) to the accumulator:
                                         (if (and (endp >-edges-i) (endp >=-edges-i))
                                             edges-alist
-                                          (acons i (cons >-edges-i >=-edges-i) 
+                                          (acons i (cons >-edges-i >=-edges-i)
                                                  edges-alist)))))
         ((consp relevant-ccms2)
          ;; if a non-nil relevant-ccms2 was supplied, we remove all
@@ -5318,8 +5344,8 @@ e2-e1+1.
   ;; contexts: an array of contexts.
   ;; fn: a function name.
   ;; relevant-ccms: the ccms to remove from all ccmfs corresponding to fn.
-  ;; acc: the accumulator. 
-  ;; 
+  ;; acc: the accumulator.
+  ;;
   ;; SIDE EFFECT: all edges to and from relevant ccms in the ccmfs of
   ;; the accg are removed.
   ;;
@@ -5345,7 +5371,7 @@ e2-e1+1.
                       ;; remove all edges from contexts of fn to avoid
                       ;; redundant work.
                       (mapcar #'accg-edge-ccmf
-                              (remove-if pred 
+                              (remove-if pred
                                          (accg-node-bwd-edges node))))
               contexts
               fn
@@ -5354,19 +5380,19 @@ e2-e1+1.
          acc)))))
 
 (defun-raw accg-remove-relevant-ccmf-edges (accg contexts fn relevant-ccms)
-  
+
   ;; accg: an array of structs of type accg-node.
   ;; contexts: an array of contexts.
   ;; fn: a function name.
   ;; relevant-ccms: the ccms to remove from all ccmfs corresponding to fn.
-  ;; 
+  ;;
   ;; SIDE EFFECT: all edges to and from relevant ccms in the ccmfs of
   ;; the accg are removed.
   ;;
   ;; OUTPUT: an alist mapping the ccmfs to an alist mapping the
   ;; indicices of the source ccms of the ccmf to a cons of the >-edges
   ;; and >=-edges that were removed.
-  
+
   (accg-remove-relevant-ccmf-edges1 (1- (array-dimension accg 0))
                                     accg
                                     contexts
@@ -5411,7 +5437,7 @@ e2-e1+1.
   ;; ccmf: a struct of type ccmf.
   ;; alist: maps indices of the ccmf to the cons of the >-edges and
   ;; >=-edges that should be added back to the ccmf.
-  ;; 
+  ;;
   ;; SIDE-EFFECT: the edges indicated by the alist are added back to the ccmf.
   ;;
   ;; OUTPUT: nil.
@@ -5438,7 +5464,7 @@ e2-e1+1.
   ;; alist: maps ccmfs to alists mapping indices of the ccmf to the
   ;; cons of the >-edges and >=-edges that should be added back to the
   ;; ccmf.
-  ;; 
+  ;;
   ;; SIDE-EFFECT: the edges indicated by the alist are added back to
   ;; their respective ccmfs.
   ;;
@@ -5449,7 +5475,7 @@ e2-e1+1.
     (progn
       (restore-edges1 (caar alist) (cdar alist))
       (restore-edges (cdr alist)))))
-  
+
 (defun-raw can-scp-lstp (accgs)
   ;; accgs: a list of accgs.
   ;;
@@ -5458,7 +5484,7 @@ e2-e1+1.
       (and (scp (cln-accg (copy-accg (car accgs))))
            (can-scp-lstp (cdr accgs)))))
 
-(defun-raw can-sct-lstp (accgs state) 
+(defun-raw can-sct-lstp (accgs state)
   ;; accgs: a list of accgs
   ;; state: the state
   ;;
@@ -5524,7 +5550,7 @@ e2-e1+1.
   ;;
   ;; OUTPUT: the result of consing avar to every element of subsets.
   (add-avar-to-subsets-tail avar subsets nil))
-         
+
 (defun-raw all-termination1 (proved-scp proved-sct contexts avars
                                         relevant-edges subsets state)
   ;; proved-scp: a list of accgs for which scp succeeds.
@@ -5557,11 +5583,11 @@ e2-e1+1.
         (t
          (let* ((avar (car avars)) ;; take the first avar.
                 (fn (car avar))   ;; the formal name
-                
+
                 ;; we begin by removing all the ccm edges that are
                 ;; relevant to var from all the accgs in both
                 ;; proved-sct and proved scp.
-                
+
                 (re-info (accg-remove-relevant-ccmf-edges-lst-tail
                           proved-sct
                           contexts
@@ -5606,7 +5632,7 @@ e2-e1+1.
                ;; var enabled.
                (value (append nsubsets
                               (add-avar-to-subsets avar nnsubsets))))))))))
-                
+
 (defun-raw funct-fns-lst (functs)
   ;; given a list of functs, returns a corresponding list of all their funct-fns.
   (if (endp functs)
@@ -5629,7 +5655,7 @@ e2-e1+1.
   ;;
   ;; OUTPUT: the minimal measured subsets of functs using the accgs
   ;; that were used to prove termination.
-  
+
   ;; we need this strange case in the beginning.
   (if (and (endp proved-scp)
            (endp proved-sct))
@@ -5663,7 +5689,7 @@ e2-e1+1.
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defun get-ccms1 (m edcls key ctx state)
-  
+
   ;; this function is based on get-measures1 in the ACL2 sources.
 
   ;; A typical edcls is given above, in the comment for get-guards.  Note
@@ -5673,7 +5699,7 @@ e2-e1+1.
   ;; one measure is specified by this edcls, we'll cause an error.  Otherwise,
   ;; we return the measure or the term *0*, which is taken as a signal that
   ;; no measure was specified.
-  
+
   ;; Our first argument, m, is the list of ccms term found so far, or
   ;; *0* if none has been found.  We map down edcls and ensure that
   ;; each XARGS either says nothing about :CCMs or specifies m.
@@ -5727,7 +5753,7 @@ e2-e1+1.
         (t (er-let* ((tccms (if (eq (car ccms-list) *0*)
                                 (value *0*)
                               (translate-measures (car ccms-list)
-                                                  ctx wrld state)))
+                                                  t ctx wrld state)))
                      (rst (translate-ccms-list (cdr ccms-list)
                                                ctx wrld state)))
                     (value (cons tccms rst))))))
@@ -5777,7 +5803,7 @@ e2-e1+1.
   '(:CONSIDER-CCMS :CONSIDER-ONLY-CCMS :TERMINATION-METHOD
                    :CCG-PRINT-PROOFS :TIME-LIMIT
                    :CCG-HIERARCHY))
-                            
+
 (defun get-unambiguous-xargs-val1/edcls (key v edcls ctx state)
 
 ; V is the value specified so far for key in the XARSGs of this or previous
@@ -5846,7 +5872,7 @@ e2-e1+1.
            (cond ((equal x '(unspecified)) (value default))
                  (t (value x)))))
 
-                
+
 (defun chk-acceptable-ccg-xargs (fives symbol-class ctx wrld state)
   (er-let* ((untranslated-consider (get-ccms symbol-class
                                              fives
@@ -5859,7 +5885,7 @@ e2-e1+1.
                                                   ctx state))
             (consider-only (translate-ccms-list untranslated-consider-only
                                                 ctx wrld state))
-            (ccms (combine-ccm-hints consider consider-only 
+            (ccms (combine-ccm-hints consider consider-only
                                      untranslated-consider
                                      untranslated-consider-only
                                      ctx state))
@@ -5873,7 +5899,7 @@ e2-e1+1.
                          fives
                          ;; the default time-limit is that specified in the
                          ;; world
-                         (get-ccg-time-limit wrld) 
+                         (get-ccg-time-limit wrld)
                          ctx state)))
            (cond ((not (booleanp verbose))
                   (er soft ctx
@@ -5886,7 +5912,7 @@ e2-e1+1.
                       "The :TIME-LIMIT specified by XARGS must either be NIL ~
                        or a rational number. ~x0 is neither."
                       time-limit))
-                 (t 
+                 (t
                   (value (list ccms
                                verbose
                                time-limit))))))
@@ -5898,17 +5924,17 @@ e2-e1+1.
              (eq (car ccm) :?)
              (arglistp (cdr ccm))
              (?-ccm-lstp (cdr lst))))))
-     
+
 (defun ccg-redundant-measure-for-defunp (def justification wrld)
-  (let ((name (car def))
-        (measure0 (if justification
-                      (access justification
-                              justification
-                              :measure)
-                    nil))
-        (measures (fetch-dcl-field :measure
-                                   (butlast (cddr def)
-                                            1))))
+  (let* ((name (car def))
+         (measure0 (if justification
+                       (access justification
+                               justification
+                               :measure)
+                     nil))
+         (dcls (butlast (cddr def) 1))
+         (measures (fetch-dcl-field :measure dcls)))
+
     (cond ((and (consp measure0)
                 (eq (car measure0) :?))
            (if (and (consp measures)
@@ -5953,11 +5979,21 @@ e2-e1+1.
            (let ((subset (access justification justification :subset))
                  (ccms-lst (fetch-dcl-field :consider-only-ccms
                                             (butlast (cddr def) 1))))
-             (if (and (consp ccms-lst)
-                      (null (cdr ccms-lst))
-                      (?-ccm-lstp (car ccms-lst))
-                      (set-equalp-eq (all-vars1-lst (car ccms-lst) nil)
-                                     subset))
+
+; Pete: Fri Aug 16 EDT 2019: Added the (null ccms-lst) case
+; below. This seems reasonable because we know that the existing
+; measured subset works, and this defun is not claiming some different
+; measured subset, so there's no difference between the case we're in
+; and the case where the user identified the exact justification in
+; the world. I need to come back to this later to make sure I'm not
+; missing something.
+
+             (if (or (null ccms-lst)
+                     (and (consp ccms-lst)
+                          (null (cdr ccms-lst))
+                          (?-ccm-lstp (car ccms-lst))
+                          (set-equalp-eq (all-vars1-lst (car ccms-lst) nil)
+                                         subset)))
                  'redundant
                (msg "A redundant definition using CCG termination must use ~
                      the xarg :consider-only-ccms to declare a list of CCMs ~
@@ -5988,7 +6024,7 @@ e2-e1+1.
                                                 wrld
                                                 ans))
             (t nil)))))
-         
+
 (defun ccg-redundant-subset-for-defunsp (chk-measurep chk-ccmsp def-lst wrld)
   (if (null def-lst)
       'redundant
@@ -6012,13 +6048,18 @@ e2-e1+1.
                                                ld-skip-proofsp
                                                def-lst
                                                wrld)
-  (let ((ans (redundant-or-reclassifying-defunsp0 defun-mode
-                                                  symbol-class
-                                                  ld-skip-proofsp
-                                                  nil
-                                                  def-lst
-                                                  wrld)))
-    (cond ((or (consp ans) ;; a message
+  (let* ((dcls (butlast (cddar def-lst) 1))
+         (termination-method (fetch-dcl-field :termination-method dcls))
+         (use-acl2p (and (consp termination-method)
+                         (eq (car termination-method) :measure)))
+         (ans (redundant-or-reclassifying-defunsp0 defun-mode
+                                                   symbol-class
+                                                   ld-skip-proofsp
+                                                   use-acl2p
+                                                   def-lst
+                                                   wrld)))
+    (cond ((or use-acl2p
+               (consp ans) ;; a message
                (not (eq ans 'redundant))
 
 ; the following 2 are a negation of the conditions for checking measures in
@@ -6029,7 +6070,7 @@ e2-e1+1.
 ; there would have been an error or the new definitions would be
 ; reclassifications). Keep this in sync with the conditions for checking
 ; measures in redundant-or-reclassifying-defunsp.
- 
+
                (not (eq defun-mode :logic))
                ld-skip-proofsp)
            ans)
@@ -6125,9 +6166,11 @@ e2-e1+1.
 ;              - list of translated terms, each corresponding to type
 ;                declarations made for a definition with XARGS keyword
 ;                :SPLIT-TYPES T
+;    new-lambda$-alist-pairs
+;              - list of pairs to add to the world global lambda$-alist
 
   (er-let*
-   ((fives (chk-defuns-tuples lst nil ctx wrld state))   
+   ((fives (chk-defuns-tuples lst nil ctx wrld state))
 
 ; Fives is a list in 1:1 correspondence with lst.  Each element of
 ; fives is a 5-tuple of the form (name args doc edcls body).  Consider the
@@ -6196,7 +6239,6 @@ e2-e1+1.
 ; Synced with latest version of chk-acceptable-defuns svn version 1020
 ; Added below cond clause for hons.
 ; june 16 2013 - harshrc
-           #+hons
            ((and (eq rc 'reclassifying)
               (conditionally-memoized-fns names
                                           (table-alist 'memoize-table wrld)))
@@ -6373,7 +6415,7 @@ e2-e1+1.
           rst
         (cons (car names)
               rst)))))
- 
+
 (defun-raw ccm-o-p-clauses2 (contexts term clauses)
   (if (endp contexts)
       clauses
@@ -6393,7 +6435,7 @@ e2-e1+1.
                        (ccm-o-p-clauses2 contexts
                                           (mcons-term* 'o-p (car ccm-list))
                                           clauses))))
-        
+
 (defun-raw ccm-o-p-clauses0 (contexts ccm-list clauses)
   (cond ((endp contexts)
          clauses)
@@ -6459,7 +6501,7 @@ e2-e1+1.
                                     bodies verbose qspv state)
   (if (consp measure-alist)
       (let ((ctx (access query-spec-var qspv :ctx))
-            (wrld (access query-spec-var qspv :wrld)) 
+            (wrld (access query-spec-var qspv :wrld))
             (ens (access query-spec-var qspv :ens))
             (stop-time (access query-spec-var qspv :stop-time))
             (otf-flg (access query-spec-var qspv :otf-flg))
@@ -6727,7 +6769,7 @@ e2-e1+1.
 
 (defun-raw prove-termination-with-ccg (names functs contexts
                                              ruler-extenders-lst ccm-hints
-                                             hierarchy verbose time-limit 
+                                             hierarchy verbose time-limit
                                              arglists measures t-machines mp
                                              rel otf-flg bodies
                                              ctx ens wrld state ttree)
@@ -6756,8 +6798,8 @@ e2-e1+1.
   ;; for the ttree. I believe the column value is correct, but the
   ;; ttree should eventually be the accumulation of all the ttrees
   ;; associated with all the proofs done in the termination analysis.
-  
- 
+
+
   ;; This function is specially coded so that if contexts is nil then
   ;; it is a signal that there is only one element of names and it is
   ;; a non-recursive function.  In that case, we short-circuit all of
@@ -6772,7 +6814,7 @@ e2-e1+1.
   (let* ((ccms (mapcar #'cdr ccm-hints))
          (entry (find-?-ccm names ccms))
          ;;(time-limit (get-ccg-time-limit wrld))
-         (stop-time (if time-limit (+ (get-internal-run-time) 
+         (stop-time (if time-limit (+ (get-internal-run-time)
                                       (* internal-time-units-per-second
                                          time-limit))
                       nil))
@@ -6946,7 +6988,7 @@ e2-e1+1.
                                col
                                measure-alist
                                (cons-tag-trees ttree-new ttree1))))))
-                               
+
               )))))))))))
 
 (defun-raw ccg-prove-termination-recursive
@@ -6954,10 +6996,10 @@ e2-e1+1.
          ruler-extenders-lst t-machines mp rel
          verbose time-limit hierarchy
          otf-flg bodies ctx ens wrld state)
-  
+
 ; Next we get the measures for each function.  That may cause an error
 ; if we couldn't guess one for some function.
-  
+
   (let ((functs (make-funct-structs names arglists)))
     (prove-termination-with-ccg
      names functs (t-machines-to-contexts t-machines functs)
@@ -6968,7 +7010,7 @@ e2-e1+1.
 (defun-raw ccg-put-induction-info
   (names arglists term-method measures ccms ruler-extenders-lst bodies
          mp rel verbose time-limit hierarchy
-         hints otf-flg big-mutrec measure-debug 
+         hints otf-flg big-mutrec measure-debug
          ctx ens wrld state)
 
 ; WARNING: This function installs a world.  That is safe at the time of this
@@ -6999,7 +7041,25 @@ e2-e1+1.
 ; use the standard state and error primitives and so it returns 3 and lists
 ; together the three "real" answers.
 
- (let ((wrld1 (putprop-recursivep-lst names bodies wrld)))
+  (prog2$
+
+; [Note: With the introduction of loop$-recursion into ACL2 we had to modify
+; this code to stop it from accepting defuns exhibiting loop$ recursion.  The
+; check is conservative but meant to be fast.  JSM 23 Jan, 2020.]
+
+   (choke-on-loop$-recursion nil
+                             names
+                             (car bodies) ; irrelevant if names not singleton
+                             'ccg-put-induction-info)
+   (let ((wrld1 (putprop-recursivep-lst nil nil names bodies wrld)))
+
+; Pete: Putprop-recursivep-lst now takes the new loop$-recursion-checkedp and
+; loop$-recursion arguments, which if nil will mean a hard error is signalled
+; if putprop-recursivep-lst detects recursion inside loop$ bodies.  See the
+; Essay on Choking on Loop$ Recursion.  Basically, the question is whether you
+; want to extend ccg to handle such recursion (and then change the two flags
+; appropriately) or leave them as is and suffer errors if ccg is called on
+; functions that use loop$ recursion.
 
 ; The put above stores a note on each function symbol as to whether it is
 ; recursive or not.  An important question arises: have we inadventently
@@ -7008,66 +7068,72 @@ e2-e1+1.
 ; care about properties such as 'recursivep.  However, we make use of this
 ; property below to decide if we need to prove termination.
 
-    (cond ((and (null (cdr names))
-                (null (getprop (car names) 'recursivep nil
-                               'current-acl2-world wrld1)))
+     (cond ((and (null (cdr names))
+                 (null (getprop (car names) 'recursivep nil
+                                'current-acl2-world wrld1)))
 
 ; If only one function is being defined and it is non-recursive, we can quit.
 ; But we have to store the symbol-class and we have to print out the admission
 ; message with prove-termination so the rest of our processing is uniform.
-           
-           (er-let*
-            ((tuple (prove-termination-non-recursive names bodies mp rel hints otf-flg big-mutrec
-                                                     ctx ens wrld1 state)))
-            (value (cons nil tuple))))
-          (t
-           (let ((t-machines (termination-machines names bodies ruler-extenders-lst)))
-             (er-let*
-              ((wrld1 (update-w
-                               
+
+            (er-let*
+                ((tuple (prove-termination-non-recursive names bodies mp rel hints otf-flg big-mutrec
+                                                         ctx ens wrld1 state)))
+              (value (cons nil tuple))))
+           (t
+            (let ((t-machines (termination-machines nil nil
+; loop$-recursion-checkedp and loop$-recursion declared value = nil
+                                                    names
+                                                    nil ; = arglists
+; when loop$-recursion-checkedp = nil, arglists is irrelevant
+                                                    bodies ruler-extenders-lst)))
+              (er-let*
+                  ((wrld1 (update-w
+
 ; Sol Swords sent an example in which a clause-processor failed during a
 ; termination proof.  That problem goes away if we install the world, which we
 ; do by making the following binding.
 
-                       t ; formerly big-mutrec
-                       wrld1))
-              (quadruple
-               (if (eq term-method :measure)
-                   (er-let* ((triple (prove-termination-recursive
-                                      names arglists
-                                      measures
-                                      t-machines
-                                      mp rel hints otf-flg bodies
-                                      measure-debug
-                                      ctx ens wrld1 state)))
-                     (value (cons :measure triple)))
-                 (ccg-prove-termination-recursive names arglists
-                                                  measures
-                                                  ccms
-                                                  ruler-extenders-lst
-                                                  t-machines
-                                                  mp rel 
-                                                  verbose
-                                                  time-limit
-                                                  hierarchy
-                                                  otf-flg bodies
-                                                  ctx ens wrld1 state))))
+                           t ; formerly big-mutrec
+                           wrld1))
+                   (quadruple
+                    (if (eq term-method :measure)
+                        (er-let* ((triple (prove-termination-recursive
+                                           names arglists
+                                           measures
+                                           t-machines
+                                           mp rel hints otf-flg bodies
+                                           measure-debug
+                                           ctx ens wrld1 state)))
+                          (value (cons :measure triple)))
+                        (ccg-prove-termination-recursive names arglists
+                                                         measures
+                                                         ccms
+                                                         ruler-extenders-lst
+                                                         t-machines
+                                                         mp rel
+                                                         verbose
+                                                         time-limit
+                                                         hierarchy
+                                                         otf-flg bodies
+                                                         ctx ens wrld1 state))))
                 ;;(progn
-                  ;;(print quadruple)
-               ;; (prog2$
-               ;;  (cw "~%DEBUG:: quadruple = ~x0~%~%" quadruple) 
-               (let* ((term-method (car quadruple))
-                      (col (cadr quadruple))
-                      (measure-alist (caddr quadruple))
-                      (ttree (cdddr quadruple)))
-                 (er-let*
-                     ((tuple (put-induction-info-recursive names arglists
-                                                           col ttree
-                                                           measure-alist t-machines
-                                                           ruler-extenders-lst
-                                                           bodies mp rel wrld1
-                                                           state)))
-                   (value (cons term-method tuple))))))))))
+                ;;(print quadruple)
+                ;; (prog2$
+                ;;  (cw "~%DEBUG:: quadruple = ~x0~%~%" quadruple)
+                (let* ((term-method (car quadruple))
+                       (col (cadr quadruple))
+                       (measure-alist (caddr quadruple))
+                       (ttree (cdddr quadruple)))
+                  (er-let*
+                      ((tuple (put-induction-info-recursive nil ; loop$-recursion
+                                                            names arglists
+                                                            col ttree
+                                                            measure-alist t-machines
+                                                            ruler-extenders-lst
+                                                            bodies mp rel wrld1
+                                                            state)))
+                    (value (cons term-method tuple)))))))))))
 
 (defun defun-redundant-get-ccms (fives wrld)
   ;; gets the CCMs installed into the world for a given set of function definitions.
@@ -7105,14 +7171,14 @@ e2-e1+1.
          (remove-keywords keys (cddr lst)))
         (t
          (list* (car lst) (cadr lst) (remove-keywords keys (cddr lst))))))
-    
+
 (defun remove-dcls0 (edcls keys)
   (cond ((endp edcls) nil) ;; if we don't have any xargs, we don't need to do anything.
         ((eq (caar edcls) 'xargs)
          (let ((newlst (remove-keywords keys (cdar edcls))))
            (if (endp newlst)
                (remove-dcls0 (cdr edcls) keys)
-             (acons 'xargs 
+             (acons 'xargs
                     newlst
                     (remove-dcls0 (cdr edcls) keys)))))
         (t (cons (car edcls)
@@ -7137,7 +7203,7 @@ e2-e1+1.
          (cons key (cons val (remove-keywords `(,key) (cddr lst)))))
         (t
          (cons (car lst)
-               (cons (cadr lst) 
+               (cons (cadr lst)
                      (update-keyword key val (cddr lst)))))))
 
 (defun unambiguously-fix-dcls0 (edcls key val)
@@ -7166,7 +7232,7 @@ e2-e1+1.
   (if (endp lst)
       nil
     (append (car lst) (app-lst (cdr lst)))))
-   
+
 (defun fives-to-defuns0 (fives)
   (if (endp fives)
       nil
@@ -7220,7 +7286,7 @@ e2-e1+1.
                               'current-acl2-world wrld))))
       (value (cond ((null (cdr names)) (car names))
                    (t names)))
-    (let* ((fives0 (remove-dcls fives 
+    (let* ((fives0 (remove-dcls fives
                                 (if (eq term-method :measure)
                                     *ccg-xargs-keywords*
                                   (list* :HINTS
@@ -7261,20 +7327,25 @@ e2-e1+1.
 ; writing because this function is only called by defuns-fn, where that call is
 ; protected by a revert-world-on-error.
 
-  (names arglists docs pairs guards term-method measures 
+  (names arglists docs pairs guards term-method measures
          ccms ;ccg
          ruler-extenders-lst mp rel
          verbose time-limit hierarchy ;ccg
-         hints guard-hints std-hints 
-         otf-flg guard-debug measure-debug bodies symbol-class 
-         normalizeps split-types-terms non-executablep 
-         #+:non-standard-analysis std-p 
+         hints guard-hints std-hints
+         otf-flg guard-debug guard-simplify measure-debug bodies symbol-class
+         normalizeps split-types-terms new-lambda$-alist-pairs
+         non-executablep
+         type-prescription-lst
+         #+:non-standard-analysis std-p
          ctx wrld state)
   (cond
    ((eq symbol-class :program)
-    (defuns-fn-short-cut names docs pairs guards split-types-terms bodies
+    (defuns-fn-short-cut
+      nil nil ; loop$-recursion-checkedp and loop$-recursion
+      names docs pairs guards measures split-types-terms
+      bodies
       non-executablep ; not sure about this, but seems plausible
-      wrld state))
+      ctx wrld state))
    (t
     (let ((ens (ens state))
           (big-mutrec (big-mutrec names)))
@@ -7307,11 +7378,14 @@ e2-e1+1.
          std-hints
          otf-flg
          guard-debug
+         guard-simplify
          bodies
          symbol-class
          normalizeps
          split-types-terms
+         new-lambda$-alist-pairs
          non-executablep
+         type-prescription-lst
          #+:non-standard-analysis std-p
          ctx
          state))))))
@@ -7326,7 +7400,7 @@ e2-e1+1.
 ; When a function symbol fn is defund the user supplies a guard, g, and a
 ; body b.  Logically speaking, the axiom introduced for fn is
 
-;    (fn x1...xn) = b.  
+;    (fn x1...xn) = b.
 
 ; After admitting fn, the guard-related properties are set as follows:
 
@@ -7382,7 +7456,7 @@ e2-e1+1.
   :raw
   (with-ctx-summarized
    (defun-ctx def-lst state event-form #+:non-standard-analysis std-p)
-   (let ((wrld (w state)) 
+   (let ((wrld (w state))
          (def-lst0
            #+:non-standard-analysis
            (if std-p
@@ -7430,10 +7504,13 @@ e2-e1+1.
                 (guard-debug (nth 21 tuple))
                 (measure-debug (nth 22 tuple))
                 (split-types-terms (nth 23 tuple))
-                (ccms (nth 24 tuple))
-                (verbose (nth 25 tuple))
-                (time-limit (nth 26 tuple))
-                (hierarchy (nth 27 tuple)))
+                (new-lambda$-alist-pairs (nth 24 tuple))
+                (guard-simplify (nth 25 tuple))
+                (type-prescription-lst (nth 26 tuple))
+                (ccms (nth 27 tuple))
+                (verbose (nth 28 tuple))
+                (time-limit (nth 29 tuple))
+                (hierarchy (nth 30 tuple)))
             (er-let*
              ((pair (ccg-defuns-fn0
                      names
@@ -7455,12 +7532,15 @@ e2-e1+1.
                      std-hints
                      otf-flg
                      guard-debug
+                     guard-simplify
                      measure-debug
                      bodies
                      symbol-class
                      normalizeps
                      split-types-terms
+                     new-lambda$-alist-pairs
                      non-executablep
+                     type-prescription-lst
                      #+:non-standard-analysis std-p
                      ctx
                      wrld
@@ -7480,7 +7560,7 @@ e2-e1+1.
               (install-event-defuns names event-form def-lst0 symbol-class
                                     reclassifyingp non-executablep pair ctx wrld
                                     state)
-              
+
               (if (or (eq symbol-class :program)
                       (ld-skip-proofsp state)
                       (and (null (cdr names))
@@ -7490,7 +7570,7 @@ e2-e1+1.
                                           'acl2::current-acl2-world
 ; harshrc [2014-12-29 Mon] BUGFIX wrld --> (w state)
 ; Using wrld is wrong, since we need to check this property in the latest world installed in state
-                                          (w state))))) 
+                                          (w state)))))
                   (value (cond ((null (cdr names)) (car names))
                                (t names)))
                 (defun-make-event
@@ -7500,6 +7580,20 @@ e2-e1+1.
 ; redefine defuns-fn to "be" (call) ccg-defuns-fn.
 ;
 ; redefun is provided by my hacker stuff. -Peter
+
+; Matt K. mod, 2/5/2020: Starting with recent changes to store translate
+; cert-data in a .cert file, we can get warnings
+;   ".Fast alist discipline violated in HONS-GET."
+; for the redefinitions of defuns-fn and defstobj-fn below.  I don't know why,
+; but I believe that these are the only such new warnings when running the
+; "everything" regression suite; and the fact that we're redefining defuns-fn
+; make it rather unsurprising to me that we see such warnings.  So I'll simply
+; turn them off!  Of course, anyone maintaining ACL2s who would like to get to
+; the bottom of this is welcome to do so!
+; Note that we must temporarily go into logic mode so that we don't skip the
+; local event below.  (We want it to be local so that we don't export its
+; effect.)
+(logic) (local (set-slow-alist-action nil)) (program)
 
 (redefun defuns-fn (def-lst state event-form #+:non-standard-analysis std-p)
          (ccg-defuns-fn def-lst state event-form #+:non-standard-analysis std-p))
@@ -7553,9 +7647,9 @@ e2-e1+1.
 
  <p>ACL2 cannot automatically prove the termination of @('ack') using its
   measure-based termination proof. In order to admit the function, the user
-  must supply a measure. An example measure is @('(make-ord 1 (1+ (acl2-count
-  y)) (acl2-count x))'), which is equivalent to the ordinal @('w * (1+
-  (acl2-count y)) + (acl2-count x)'), where @('w') is the first infinite
+  must supply a measure. An example measure is @('(make-ord 1 (1+ (acl2s-size
+  y)) (acl2s-size x))'), which is equivalent to the ordinal @('w * (1+
+  (acl2s-size y)) + (acl2s-size x)'), where @('w') is the first infinite
   ordinal.</p>
 
  <p>The CCG analysis, on the other hand, automatically proves termination as
@@ -7585,7 +7679,7 @@ e2-e1+1.
  heuristics for guessing appropriate measures. However, there is a mechanism
  for supplying measures to the CCG analysis if you need to see @(see
  CCG-XARGS). In our example, the CCG analysis will guess the measures
- @('(acl2-count x)'), @('(acl2-count y)'), and @('(+ (acl2-count x) (acl2-count
+ @('(acl2s-size x)'), @('(acl2s-size y)'), and @('(+ (acl2s-size x) (acl2s-size
  y))'). This last one turns out to be unimportant for the termination
  proof. However, note that the first two of these measures are components of
  the ordinal measure that we gave ACL2 to prove termination earlier. As one
@@ -7598,14 +7692,14 @@ e2-e1+1.
  measure compares to another across recursive calls.</p>
 
  <p>In our example, note that when the recursive call of the context 1 is made,
- the new value of @('(acl2-count x)') is less than the original value of
- @('(acl2-count x)'). More formally, we can prove the following:</p>
+ the new value of @('(acl2s-size x)') is less than the original value of
+ @('(acl2s-size x)'). More formally, we can prove the following:</p>
 
  @({
   (implies (and (not (zp x))
                 (not (zp y)))
-           (o< (acl2-count (1- x))
-               (acl2-count x)))
+           (o< (acl2s-size (1- x))
+               (acl2s-size x)))
  })
 
  <p>For those of you that are familiar with measure-based termination proofs in
@@ -7616,13 +7710,13 @@ e2-e1+1.
  @({
   (implies (and (not (zp x))
                 (not (zp y)))
-           (o<= (acl2-count y)
-                (acl2-count y)))
+           (o<= (acl2s-size y)
+                (acl2s-size y)))
  })
 
  <p>That is, @('y') stays the same across this recursive call. For the other
- context, we similarly note that @('(acl2-count y)') is decreasing. However, we
- can say nothing about the value of @('(acl2-count x)'). The CCG algorithm does
+ context, we similarly note that @('(acl2s-size y)') is decreasing. However, we
+ can say nothing about the value of @('(acl2s-size x)'). The CCG algorithm does
  this analysis using queries to the theorem prover that are carefully
  restricted to limit prover time.</p>
 
@@ -7643,15 +7737,15 @@ e2-e1+1.
 
  <p>For our example, consider two kinds of infinite paths through our CCG:
  those that visit context 2 infinitely often, and those that don't. In the
- first case, we know that @('(acl2-count y)') is never increasing, since a
+ first case, we know that @('(acl2s-size y)') is never increasing, since a
  visit to context 1 does not change the value of @('y'), and a visit to context
- 2 decreases the value of @('(acl2-count y)'). Furthermore, since we visit
- context 2 infinitely often, we know that @('(acl2-count y)') is infinitely
+ 2 decreases the value of @('(acl2s-size y)'). Furthermore, since we visit
+ context 2 infinitely often, we know that @('(acl2s-size y)') is infinitely
  decreasing along this path. Therefore, we have met the criteria for proving no
  such path is a valid computation. In the case in which we do not visit context
  2 infinitely often, there must be a value @('N') such that we do not visit
  context 2 any more after the @('N')th context in the path. After this, we must
- only visit context 1, which always decreases the value of @('(acl2-count
+ only visit context 1, which always decreases the value of @('(acl2s-size
  x)'). Therefore, no such path can be a valid computation. Since all infinite
  paths through our CCG either visit context 2 infinitely often or not, we have
  proven termination. This analysis of the local data in the global context is
@@ -7855,11 +7949,11 @@ analysis."
  to keep them from taking too long. Of course, the trade-off is that, the more
  we limit ACL2's prover, the less powerful it becomes.</p>
 
- <p>@('Pt') can be @(':built-in-clauses'), which tells ACL2 to use only <see
- topic='@(url acl2::broken-link)'>built-in-clauses</see> analysis. This is a
- very fast, and surprisingly powerful proof technique. For example, the
- definition of Ackermann's function given in the documentation for @(see CCG)
- is solved using only this proof technique.</p>
+ <p>@('Pt') can be @(':built-in-clauses'), which tells ACL2 to use only @(see
+ built-in-clause)s analysis. This is a very fast, and surprisingly powerful
+ proof technique. For example, the definition of Ackermann's function given in
+ the documentation for @(see CCG) is solved using only this proof
+ technique.</p>
 
  <p>@('Pt') can also be of the form @('(:induction-depth n)'), where @('n') is
  a natural number. This uses the full theorem prover, but limits it in two
@@ -7873,10 +7967,10 @@ analysis."
 
  <p>@('Ccm-cs') limits which CCMs are compared using the theorem
  prover. Consider again the @('ack') example in the documentation for @(see
- CCG). All we needed was to compare the value of @('(acl2-count x)') before and
- after the recursive call and the value of @('(acl2-count y)') before and after
+ CCG). All we needed was to compare the value of @('(acl2s-size x)') before and
+ after the recursive call and the value of @('(acl2s-size y)') before and after
  the recursive call. We would learn nothing, and waste time with the theorem
- prover if we compared @('(acl2-count x)') to @('(acl2-count y)'). However,
+ prover if we compared @('(acl2s-size x)') to @('(acl2s-size y)'). However,
  other times, it is important to compare CCMs with each other, for example,
  when arguments are permuted, or we are dealing with a mutual recursion.</p>
 
@@ -7897,9 +7991,9 @@ analysis."
  })
 
  <p>Now consider the case where @('m1') and @('m2') are both the measure
- @('(acl2-count x)'). Then if we look at the recursive call @('(f (cdr x))') in
+ @('(acl2s-size x)'). Then if we look at the recursive call @('(f (cdr x))') in
  the body of @('f'), then @('m2'') is the result of replacing @('x') with
- @('(cdr x)') in @('m2'), i.e., @('(acl2-count (cdr x))').</p>
+ @('(cdr x)') in @('m2'), i.e., @('(acl2s-size (cdr x))').</p>
 
  <p>If @('ccm-cs') is @(':EQUAL') we will compare @('m1') to @('m2') if @('v1')
  and @('v2') are equal. If @('value') is @(':ALL') we will compare @('m1') to
@@ -7930,15 +8024,15 @@ analysis."
 
  <p>Clearly this is terminating. If we choose a measure of @('(nfix x)') we
  know that if @('x') is a positive integer, @('(nfix (- x 2))') is less than
- @('(nfix x)'). But consider the measure @('(acl2-count x)'). The strange thing
- here is that if @('x') is 1, then @('(acl2-count (- x 2))') is @('(acl2-count
- -1)'), which is 1, i.e. the @('acl2-count') of @('x'). So, the fact that we
+ @('(nfix x)'). But consider the measure @('(acl2s-size x)'). The strange thing
+ here is that if @('x') is 1, then @('(acl2s-size (- x 2))') is @('(acl2s-size
+ -1)'), which is 1, i.e. the @('acl2s-size') of @('x'). So, the fact that we
  know that @('x') is a positive integer is not enough to show that this measure
  decreases. But notice that if @('x') is 1, we will recur just one more
  time. So, if we consider what happens when we move from the recursive call
  back to itself. In this case we know @('(and (not (zp x)) (not (zp (- x
  2))))').  Under these conditions, it is trivial for ACL2 to prove that
- @('(acl2-count (- x 2))') is always less than @('(acl2-count x)').
+ @('(acl2s-size (- x 2))') is always less than @('(acl2s-size x)').
 
  However, this can make the CCG analysis much more expensive, since information
  about how values change from step to step are done on a per-edge, rather than
@@ -8139,3 +8233,4 @@ analysis."
 
  <p>To see what the current termination method setting is, use @(tsee
  get-termination-method).</p>")
+

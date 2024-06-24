@@ -31,8 +31,9 @@
 (in-package "STD")
 (include-book "xdoc/top" :dir :system)
 (include-book "std/util/bstar" :dir :system)
-(local (include-book "std/strings/explode-atom" :dir :system))
-(local (include-book "../typed-lists/symbol-listp"))
+;; removed these because it made for a long critial path (~30 sec) for a very basic book.  Now ~3 sec.
+;; (local (include-book "std/strings/explode-atom" :dir :system))
+;; (local (include-book "../typed-lists/symbol-listp"))
 
 (defxdoc defconsts
   :parents (std/util defconst)
@@ -102,7 +103,7 @@ checking the primality of a large number) might best be done as @('defconsts')
 to avoid repeating the computation.</li>
 
 <li>Computations that are fast but produce \"large\" results (e.g.,
-@('(make-list 10000)'), might best be done as @('defconst'), to avoid storing
+@('(make-list 10000)')), might best be done as @('defconst'), to avoid storing
 this large list in the certificate.</li>
 
 </ul>")
@@ -164,7 +165,7 @@ this large list in the certificate.</li>
             (defconsts-strip-stars (cdr x)))))
 
   (local (in-theory (enable defconsts-strip-stars)))
-  
+
   (defthm symbol-listp-of-defconsts-strip-stars
     (symbol-listp (defconsts-strip-stars x)))
 
@@ -174,6 +175,11 @@ this large list in the certificate.</li>
 
 
 (defsection defconsts-make-n-fresh-symbols
+
+  (local (defthm character-listp-of-explode-nonneg
+           (implies (character-listp acc)
+                    (character-listp (explode-nonnegative-integer x base acc)))
+           :hints(("Goal" :in-theory (enable explode-nonnegative-integer)))))
 
   (defund defconsts-make-n-fresh-symbols (n)
     (declare (xargs :guard (natp n)))
@@ -196,7 +202,7 @@ this large list in the certificate.</li>
 
 
 (defsection defconsts-replace-amps
-  ;; (*foo* *bar* & & baz) --> (*foo* *bar* fresh-syms3 fresh-syms4 baz)  
+  ;; (*foo* *bar* & & baz) --> (*foo* *bar* fresh-syms3 fresh-syms4 baz)
 
   (defund defconsts-replace-amps (x fresh-syms)
     (declare (xargs :guard (and (symbol-listp x)
@@ -234,10 +240,43 @@ this large list in the certificate.</li>
         (t
          (defconsts-make-defconsts (cdr x)))))
 
+(defun check-stobjs (stobjs wrld acc)
+  (declare (xargs :guard (and (plist-worldp wrld)
+                              (true-listp acc))))
+  (cond ((atom stobjs)
+         (and acc
+              (er hard? 'defconsts
+                  "The symbol~#0~[ ~&0 is~/s ~&0 are~] illegal for defconsts. ~
+                   ~ See :DOC defconsts."
+                  (reverse acc))))
+        ((acl2::stobjp (car stobjs) t wrld)
+         (check-stobjs (cdr stobjs) wrld acc))
+        (t (check-stobjs (cdr stobjs) wrld (cons (car stobjs) acc)))))
+
+(local (defthm symbolp-car-when-symbol-listp
+         (implies (symbol-listp x)
+                  (symbolp (car x)))))
+
+(local (defthm symbol-listp-of-set-diff
+         (implies (symbol-listp x)
+                  (symbol-listp (set-difference-eq x y)))))
+
+(local (defthm symbol-listp-of-remove
+         (implies (symbol-listp x)
+                  (symbol-listp (remove-eq y x)))))
+
+(local (defthm len-revappend
+         (Equal (len (revappend x y))
+                (+ (len x) (len y)))))
+
+(local (defthm symbol-listp-revappend
+         (implies (and (symbol-listp x)
+                       (symbol-listp y))
+                  (symbol-listp (revappend x y)))))
 
 (defund defconsts-fn (consts body)
   (declare (xargs :guard t))
-  (b* (;; Goofy thing to allow (defconsts *foo* ...) instead of (defconsts (*foo*) ...)
+  (b* ( ;; Goofy thing to allow (defconsts *foo* ...) instead of (defconsts (*foo*) ...)
        (consts (if (atom consts)
                    (list consts)
                  consts))
@@ -311,20 +350,24 @@ this large list in the certificate.</li>
                     ,@idecl
                     ,ret)
                `(mv-let ,amp-free
-                        ,body
-                        ,@idecl
-                        ,ret))))
+                  ,body
+                  ,@idecl
+                  ,ret))))
 
-      `(make-event (time$
-                    (let ((__function__
-                           ;; Goofy: we bind __function__ to make it easy to
-                           ;; move code between functions based on
-                           ;; std::define and defconsts forms
-                           ',(intern summary "ACL2")))
-                      (declare (ignorable __function__))
-                      ,form)
-                    :msg "; ~s0: ~st seconds, ~sa bytes~%"
-                    :args (list ,summary)))))
+    `(make-event (prog2$
+                  (check-stobjs ',stobjs (w state) nil)
+                  (time$
+                   (let ((__function__
+                          ;; Goofy: we bind __function__ to make it easy to
+                          ;; move code between functions based on
+                          ;; std::define and defconsts forms
+                          ',(intern summary "ACL2")))
+                     (declare (ignorable __function__))
+                     ,form)
+                   :msg "; ~s0: ~st seconds, ~sa bytes~%"
+                   :args (list ,summary))))))
+                     
+                         
 
 (defmacro defconsts (consts body)
   (defconsts-fn consts body))
@@ -429,5 +472,3 @@ this large list in the certificate.</li>
     :rule-classes nil)
   (defthm f2 (equal *oops2* 'ACL2::|(DEFCONSTS (*OOPS2* ...) ...)|)
     :rule-classes nil)))
-
-

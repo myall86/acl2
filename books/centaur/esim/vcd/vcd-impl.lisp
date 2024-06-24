@@ -38,7 +38,7 @@
 (include-book "centaur/esim/vltoe/emodwire" :dir :system)
 (include-book "centaur/esim/vltoe/verilogify" :dir :system)
 (include-book "centaur/vl2014/util/prefix-hash" :dir :system)
-(local (include-book "misc/assert" :dir :system))
+(local (include-book "std/testing/assert-bang" :dir :system))
 (local (include-book "centaur/vl2014/util/arithmetic" :dir :system))
 (local (include-book "centaur/vl2014/util/osets" :dir :system))
 (set-state-ok t)
@@ -671,7 +671,7 @@
    idcode     ;; Identifier codes
    )
   :tag :vcd-net
-  :legiblep nil ;; Necessary for acl2-count hack
+  :layout :fulltree ;; Necessary for acl2-count hack
   :require
   ((string-listp-of-vcd-net->path
     (string-listp path)
@@ -1015,7 +1015,7 @@
         nil
       (b* ((path1       (caar x))
            (wires1      (cdar x))
-           (wires1-sort (vl-emodwire-sort (redundant-list-fix wires1)))
+           (wires1-sort (vl-emodwire-sort (list-fix wires1)))
            (nets1       (vcd-nets-from-emodwires path1 wires1-sort)))
         (append nets1
                 (vcd-nets-from-partitioned-names (cdr x))))))
@@ -1402,14 +1402,14 @@
 
   (local (defthm l1
            (implies (consp nets)
-                    (CONSP (MV-NTH 0 (VCD-NETLIST-FILTER-PATH1 
+                    (CONSP (MV-NTH 0 (VCD-NETLIST-FILTER-PATH1
                                       (first (VCD-NET->PATH (FIRST nets)))
                                       nets))))
            :hints(("Goal" :in-theory (enable vcd-netlist-filter-path1)))))
 
   (local (defthm l2
            (implies (consp nets)
-                    (equal (CAR (MV-NTH 0 (VCD-NETLIST-FILTER-PATH1 
+                    (equal (CAR (MV-NTH 0 (VCD-NETLIST-FILTER-PATH1
                                            (first (VCD-NET->PATH (FIRST nets)))
                                            nets)))
                            (CAR NETS)))

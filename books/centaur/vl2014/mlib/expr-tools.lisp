@@ -746,6 +746,7 @@ accumulator-style functions to do the collection.  Under the hood, we also use
     :returns (names string-listp)
     :measure (vl-expr-count x)
     :flag :expr
+    :short "Extract all the variable names from a VL expression."
     (mbe :logic (if (vl-fast-atom-p x)
                     (let ((guts (vl-atom->guts x)))
                       (if (vl-id-p guts)
@@ -968,14 +969,14 @@ as an operator.</p>"
   :enabled t
   :hooks nil ;; BOZO? intersectp-equal doesn't respect oplist equiv
   (mbe :logic (intersectp-equal ops (vl-expr-ops x))
-       :exec (vl-expr-has-ops-aux (redundant-list-fix ops) x)))
+       :exec (vl-expr-has-ops-aux (list-fix ops) x)))
 
 (define vl-exprlist-has-ops ((ops vl-oplist-p)
                              (x   vl-exprlist-p))
   :enabled t
   :hooks nil ;; BOZO? intersectp-equal doesn't respect oplist equiv
   (mbe :logic (intersectp-equal ops (vl-exprlist-ops x))
-       :exec (vl-exprlist-has-ops-aux (redundant-list-fix ops) x)))
+       :exec (vl-exprlist-has-ops-aux (list-fix ops) x)))
 
 
 (define vl-zbitlist-p ((x vl-bitlist-p))

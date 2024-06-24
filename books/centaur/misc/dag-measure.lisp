@@ -34,7 +34,7 @@
 (include-book "std/util/define" :dir :system)
 (include-book "std/basic/defs" :dir :system)
 (include-book "tools/flag" :dir :system)
-(include-book "std/misc/two-nats-measure" :dir :system)
+(include-book "std/basic/two-nats-measure" :dir :system)
 (include-book "misc/hons-help" :dir :system) ;; for alist-keys/vals
 (include-book "tools/templates" :dir :system)
 (local (include-book "std/lists/sets" :dir :system))
@@ -52,7 +52,7 @@
 ;; set of all nodes.  These don't have any constraints.
 
 (defxdoc def-dag-measure
-  :parents (proof-templates)
+  :parents (proof-automation)
   :short "Generic framework that allows simple traversals of DAGs."
   :long "<p>Suppose we have a representation of some finite DAG, but it is
 encoded in such a way that it isn't obvious that it's acyclic.  E.g., perhaps
@@ -65,7 +65,7 @@ termination is the count of nodes that we haven't yet traversed.  Writing
 functions in this style is doable, but passing around the record of nodes we've
 already seen complicates reasoning about the function.</p>
 
-<p>This framework helps to streamline a different approach.  In this approach, we define 
+<p>This framework helps to streamline a different approach.  In this approach, we define
 <ul>
 <li>a relatively fast, executable function that checks whether all paths from the current node through the graph are loop-free</li>
 <li>a measure function that takes a node in the graph, where if node A is loop-free and has successor node B, then measure(B) &lt; measure(A).</li>
@@ -201,7 +201,7 @@ the functions.</li>
                 (or (eq v :back)
                     (eq v :loop)
                     (natp v))))))
-     
+
 
 
 
