@@ -36,6 +36,7 @@
 
 (in-package "ACL2")
 (include-book "std/util/define" :dir :system)
+(include-book "std/basic/defs" :dir :system)
 (local (include-book "math-lemmas"))
 (local (include-book "quotient-remainder-lemmas"))
 
@@ -141,40 +142,6 @@ Motorola MC68020.</p>")
      :hints(("Goal" :induct (my-induct i size))))))
 
 
-(define bitp (b)
-  :short "Bit recognizer.  @('(bitp b)') recognizes 0 and 1."
-  :long "<p>This is a predicate form of the @(see type-spec) declaration
-@('(TYPE BIT b)').</p>"
-  :returns bool
-  :inline t
-  :enabled t
-  :no-function t ;; Sigh, switching to :abbreviation breaks various proofs
-  (or (eql b 0)
-      (eql b 1)))
-
-(define bfix (b)
-  :parents (logops-definitions bitp)
-  :short "Bit fix.  @('(bfix b)') is a fixing function for @(see bitp)s.  It
- coerces any object to a bit (0 or 1) by coercing non-1 objects to 0."
-  :long "<p>See also @(see lbfix).</p>"
-  :inline t
-  :returns bit
-  :enabled t
-  :no-function t ;; Sigh, switching to :abbreviation breaks various proofs
-  (if (eql b 1)
-      1
-    0))
-
-(defsection lbfix
-  :parents (logops-definitions bitp)
-  :short "Logical bit fix.  @('(lbfix b)') is logically identical to @('(bfix
-b)') but executes as the identity.  It requires @('(bitp b)') as a guard, and
-expands to just @('b')."
-  :long "@(def lbfix)"
-
-  (defmacro lbfix (x)
-    `(mbe :logic (bfix ,x) :exec ,x)))
-
 (define zbp
   :parents (logops-definitions bitp)
   :short "Zero bit recognizer.  @('(zbp x)') tests for zero bits.  Any object
@@ -185,17 +152,6 @@ other than @('1') is considered to be a zero bit."
   :inline t
   (mbe :logic (equal (bfix x) 0)
        :exec (/= (the (unsigned-byte 1) x) 1)))
-
-(defsection bitp-basics
-  :extension bitp
-
-  (defthm bitp-bfix
-    (bitp (bfix b)))
-
-  (defthm bfix-bitp
-    (implies (bitp b)
-             (equal (bfix b) b))))
-
 
 (define ifloor
   :short "@('(ifloor i j)') is the same as @(see floor), except that it coerces
@@ -238,11 +194,84 @@ other than @('1') is considered to be a zero bit."
        :exec (the unsigned-byte
                   (ash 1 (the unsigned-byte n)))))
 
+(define binary-minus-for-gl ((x acl2-numberp)
+                             (y acl2-numberp))
+  :parents (binary--)
+  :short "Hack for implementing @(see binary--).  Don't use this."
+  :long "<p>You should never need to use this, call @(see binary--) instead.</p>
+
+<p>This is the logical definition for @(see binary--).  It has a custom GL
+symbolic counterpart.  The only reason to make this a separate function,
+instead of directly putting a symbolic counterpart on @('binary--') itself, is
+to avoid infinite inlining problems when we define custom symbolic counterparts
+for inlined functions on Lisps like SBCL.</p>"
+  :enabled t
+  (- x y))
+
+(define binary--
+  :parents (logops-definitions)
+  :short "@('(binary-- x y)') is the same as @('(- x y)'), but may symbolically
+simulate more efficiently in @(see gl)."
+  ((x acl2-numberp)
+   (y acl2-numberp))
+  :enabled t
+  :inline t
+  :long "<p>This is an alias for @('(- x y)').  It should always be left
+enabled and you should never prove any theorems about it.</p>
+
+<p>In ACL2, @(see -) is a macro and @('(- x y)') expands to @('(+ x (unary--
+y))').  This form is often not particularly good for symbolic simulation with
+@(see gl): GL first has to negate @('y') and then carry out the addition.</p>
+
+<p>In contrast, @('binary--') has a custom symbolic counterpart that avoids
+this intermediate negation.  This may result in fewer BDD computations or AIG
+nodes.  In the context of @(see hardware-verification), it may also help your
+spec functions to better match the real implementation of subtraction circuits
+in the hardware being analyzed.</p>"
+
+  (mbe :logic (binary-minus-for-gl x y)
+       :exec (- x y)))
 
 (define logcar
   :short "Least significant bit of a number."
   ((i integerp))
-  :returns bit
+  :returns (bit bitp
+                ;; [Jared] 2016-04-08: Originally this rule had the following
+                ;; rule-classes:
+                ;;
+                ;; :rule-classes ((:rewrite)
+                ;;                (:type-prescription :corollary (natp (logcar i)))
+                ;;                 (:generalize :corollary (or (equal (logcar i) 0)
+                ;;                                             (equal (logcar i) 1)))))
+                ;;
+                ;; Now that bitp is a proper type-set, I think we don't need
+                ;; the natp corollary and may as well get rid of the :rewrite
+                ;; rule and just make it a type-prescription.
+                ;;
+                ;; I had hoped that we wouldn't need the generalize rule,
+                ;; because when we do destructor elimination, ACL2 should be
+                ;; smart enough to know that the new variable for the logcar is
+                ;; a bit, right?  But this generalize rule is actually more
+                ;; powerful than that, because it lets us case-split on whether
+                ;; logcar is 0 or 1, and when I remove it, many theorems in the
+                ;; logops-lemmas book fail because they are relying on this
+                ;; case splitting to allow calls of functions like b-ior,
+                ;; b-and, etc., to evaluate.
+                ;;
+                ;; Well, I don't think this is a very good way to do these
+                ;; proofs, and it would be better to just explicitly enable the
+                ;; bit functions instead of letting it case split when it does
+                ;; destructor elimination.  But, this is such an old and
+                ;; well-established book that, in this case, I think
+                ;; maintaining backward compatibility is probably worth it.
+                ;; So, I'll hold my nose and leave the generalize rule here.
+                :rule-classes
+                ((:type-prescription)
+                 (:generalize :corollary (or (equal (logcar i) 0)
+                                             (equal (logcar i) 1))))
+                ;; Explicit name for backward compatibility
+                :name logcar-type)
+
   :long "<p>@('(logcar i)') is the @(see car) of an integer conceptualized as a
 bit-vector, where the least significant bit is at the head of the list.</p>
 
@@ -250,15 +279,7 @@ bit-vector, where the least significant bit is at the head of the list.</p>
   :enabled t
   :inline t
   (mbe :logic (imod i 2)
-       :exec (the (unsigned-byte 1) (logand (the integer i) 1)))
-  ///
-  (defthm logcar-type
-    (bitp (logcar i))
-    :rule-classes ((:rewrite)
-                   (:type-prescription :corollary (natp (logcar i)))
-                   (:generalize :corollary
-                    (or (equal (logcar i) 0)
-                        (equal (logcar i) 1))))))
+       :exec (the (unsigned-byte 1) (logand (the integer i) 1))))
 
 (define logcdr
   :short "All but the least significant bit of a number."
@@ -302,7 +323,10 @@ of the list."
 as a @(see bitp), 0 or 1."
   ((pos natp)
    (i   integerp))
-  :returns bit
+  :returns (bit bitp
+                :rule-classes :type-prescription
+                :name logbit-type ;; for backward compatibility with the old name
+                )
   :long "<p>This is just like the Common Lisp function @('(logbitp pos i)'),
 except that we return 1 or 0 (instead of t or nil).</p>
 
@@ -313,14 +337,17 @@ except that we return 1 or 0 (instead of t or nil).</p>
   (if (logbitp pos i)
       1
     0)
-
   ///
-  (defthm logbit-type
-    (bitp (logbit pos i))
-    :rule-classes ((:rewrite)
-                   (:type-prescription :corollary (natp (logbit pos i))))
-    ;; BOZO want a generalize rule like in logcar?
-    ))
+  ;; [Jared] 2016-04-08: as with logcar, switch to just a type-prescription
+  ;; in the :returns, now that bitp is known to type-set.
+  ;;
+  ;; (defthm logbit-type
+  ;;   (bitp (logbit pos i))
+  ;;   :rule-classes ((:rewrite)
+  ;;                  (:type-prescription :corollary (natp (logbit pos i))))
+  ;; BOZO want a generalize rule like in logcar?
+  ;; )
+  )
 
 
 (define logmask
@@ -566,7 +593,7 @@ function @(see logrev1).</p>
   :long "<p>If @('i') can be represented as a @('size')-bit signed integer,
 then @('i') is returned unchanged.  Otherwise, @('(logsat size i)') returns
 the @('size')-bit signed integer closest to @('i').  For positive i, this
-will be @($2^{size-1} - 1$).  For negative @('i'), this will be 
+will be @($2^{size-1} - 1$).  For negative @('i'), this will be
 @($-(2^{size-1}$).</p>
 
 <p>This function returns a (possibly negative) integer.  For consistency with
@@ -656,6 +683,14 @@ unsigned integer.</p>
   :enabled t
   (loghead size (ash (loghead size i) cnt)))
 
+(define logite
+  :short "Bitwise if-then-else among integers."
+  ((test :type integer)
+   (then :type integer)
+   (else :type integer))
+  :returns (logite integerp :rule-classes :type-prescription
+                  :name logite-type)
+  (logior (logand test then) (logand (lognot test) else)))
 
 
 (defxdoc logops-bit-functions
@@ -675,7 +710,7 @@ explicitly in terms of 0 and 1 to simplify reasoning.</p>")
 (local (xdoc::set-default-parents logops-bit-functions))
 
 (define b-not ((i bitp))
-  :returns bit
+  :returns (bit bitp :rule-classes :type-prescription)
   :short "Negation for @(see bitp)s."
   :inline t
   :enabled t
@@ -684,7 +719,7 @@ explicitly in terms of 0 and 1 to simplify reasoning.</p>")
                (- 1 (the (unsigned-byte 1) i)))))
 
 (define b-and ((i bitp) (j bitp))
-  :returns bit
+  :returns (bit bitp :rule-classes :type-prescription)
   :short "Conjunction for @(see bitp)s."
   :inline t
   :enabled t
@@ -694,7 +729,7 @@ explicitly in terms of 0 and 1 to simplify reasoning.</p>")
                        (the (unsigned-byte 1) j)))))
 
 (define b-ior ((i bitp) (j bitp))
-  :returns bit
+  :returns (bit bitp :rule-classes :type-prescription)
   :short "Inclusive or for @(see bitp)s."
   :inline t
   :enabled t
@@ -704,7 +739,7 @@ explicitly in terms of 0 and 1 to simplify reasoning.</p>")
                        (the (unsigned-byte 1) j)))))
 
 (define b-xor ((i bitp) (j bitp))
-  :returns bit
+  :returns (bit bitp :rule-classes :type-prescription)
   :short "Exclusive or for @(see bitp)s."
   :enabled t
   :inline t
@@ -714,7 +749,7 @@ explicitly in terms of 0 and 1 to simplify reasoning.</p>")
                        (the (unsigned-byte 1) j)))))
 
 (define b-eqv ((i bitp) (j bitp))
-  :returns bit
+  :returns (bit bitp :rule-classes :type-prescription)
   :short "Equivalence (a.k.a. if and only if, xnor) for @(see bitp)s."
   :enabled t
   :inline t
@@ -729,7 +764,7 @@ explicitly in terms of 0 and 1 to simplify reasoning.</p>")
                        1))))
 
 (define b-nand ((i bitp) (j bitp))
-  :returns bit
+  :returns (bit bitp :rule-classes :type-prescription)
   :short "Negated and for @(see bitp)s."
   :enabled t
   :inline t
@@ -742,7 +777,7 @@ explicitly in terms of 0 and 1 to simplify reasoning.</p>")
                        1))))
 
 (define b-nor ((i bitp) (j bitp))
-  :returns bit
+  :returns (bit bitp :rule-classes :type-prescription)
   :short "Negated or for @(see bitp)s."
   :enabled t
   :inline t
@@ -754,7 +789,7 @@ explicitly in terms of 0 and 1 to simplify reasoning.</p>")
                        1))))
 
 (define b-andc1 ((i bitp) (j bitp))
-  :returns bit
+  :returns (bit bitp :rule-classes :type-prescription)
   :short "And of @(see bitp)s, complementing the first."
   :enabled t
   :inline t
@@ -764,7 +799,7 @@ explicitly in terms of 0 and 1 to simplify reasoning.</p>")
                          (the (unsigned-byte 1) j)))))
 
 (define b-andc2 ((i bitp) (j bitp))
-  :returns bit
+  :returns (bit bitp :rule-classes :type-prescription)
   :short "And of @(see bitp)s, complementing the second."
   :enabled t
   :inline t
@@ -774,7 +809,7 @@ explicitly in terms of 0 and 1 to simplify reasoning.</p>")
                          (the (unsigned-byte 1) j)))))
 
 (define b-orc1 ((i bitp) (j bitp))
-  :returns bit
+  :returns (bit bitp :rule-classes :type-prescription)
   :short "Inclusive or of @(see bitp)s, complementing the first."
   :enabled t
   :inline t
@@ -785,7 +820,7 @@ explicitly in terms of 0 and 1 to simplify reasoning.</p>")
                        (the (unsigned-byte 1) j)))))
 
 (define b-orc2 ((i bitp) (j bitp))
-  :returns bit
+  :returns (bit bitp :rule-classes :type-prescription)
   :short "Inclusive or of @(see bitp)s, complementing the second."
   :enabled t
   :inline t
@@ -795,33 +830,47 @@ explicitly in terms of 0 and 1 to simplify reasoning.</p>")
                        (the (unsigned-byte 1)
                          (logxor 1 (the (unsigned-byte 1) j)))))))
 
-(defsection bit-functions-type
-  :short "Basic type rules for the @(see logops-bit-functions)."
+(define b-ite ((test bitp) (then bitp) (else bitp))
+  :returns (bit bitp :rule-classes :type-prescription)
+  :short "If-then-else for @(see bitp)s."
+  :inline t
+  :enabled t
+  (if (zbp test) (bfix else) (bfix then)))
 
-  (defthm bit-functions-type
-    (and (bitp (b-not i))
-         (bitp (b-and i j))
-         (bitp (b-ior i j))
-         (bitp (b-xor i j))
-         (bitp (b-eqv i j))
-         (bitp (b-nand i j))
-         (bitp (b-nor i j))
-         (bitp (b-andc1 i j))
-         (bitp (b-andc2 i j))
-         (bitp (b-orc1 i j))
-         (bitp (b-orc2 i j)))
-    :rule-classes
-    ((:rewrite)
-     (:type-prescription :corollary (natp (b-not i)))
-     (:type-prescription :corollary (natp (b-and i j)))
-     (:type-prescription :corollary (natp (b-ior i j)))
-     (:type-prescription :corollary (natp (b-xor i j)))
-     (:type-prescription :corollary (natp (b-eqv i j)))
-     (:type-prescription :corollary (natp (b-nand i j)))
-     (:type-prescription :corollary (natp (b-nor i j)))
-     (:type-prescription :corollary (natp (b-andc1 i j)))
-     (:type-prescription :corollary (natp (b-andc2 i j)))
-     (:type-prescription :corollary (natp (b-orc1 i j)))
-     (:type-prescription :corollary (natp (b-orc2 i j))))))
+;; [Jared] this is subsumed by the bitp :returns specs above, now that
+;; bitp is a type-set type.
+
+;; (defsection bit-functions-type
+;;   :short "Basic type rules for the @(see logops-bit-functions)."
+;;
+;;   (defthm bit-functions-type
+;;     (and (bitp (b-not i))
+;;          (bitp (b-and i j))
+;;          (bitp (b-ior i j))
+;;          (bitp (b-xor i j))
+;;          (bitp (b-eqv i j))
+;;          (bitp (b-nand i j))
+;;          (bitp (b-nor i j))
+;;          (bitp (b-andc1 i j))
+;;          (bitp (b-andc2 i j))
+;;          (bitp (b-orc1 i j))
+;;          (bitp (b-orc2 i j))
+;;          (bitp (b-ite test then else)))
+;;     :rule-classes
+;;     ((:rewrite)
+;;      (:type-prescription :corollary (natp (b-not i)))
+;;      (:type-prescription :corollary (natp (b-and i j)))
+;;      (:type-prescription :corollary (natp (b-ior i j)))
+;;      (:type-prescription :corollary (natp (b-xor i j)))
+;;      (:type-prescription :corollary (natp (b-eqv i j)))
+;;      (:type-prescription :corollary (natp (b-nand i j)))
+;;      (:type-prescription :corollary (natp (b-nor i j)))
+;;      (:type-prescription :corollary (natp (b-andc1 i j)))
+;;      (:type-prescription :corollary (natp (b-andc2 i j)))
+;;      (:type-prescription :corollary (natp (b-orc1 i j)))
+;;      (:type-prescription :corollary (natp (b-orc2 i j)))
+;;      (:type-prescription :corollary (natp (b-ite test then else))))))
 
 
+(defmacro loglist* (&rest args)
+  (xxxjoin 'logcons args))

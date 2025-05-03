@@ -33,9 +33,12 @@
                   (er hard 'top-level
                       "Failed to evaluate (assert-test1 3) to 3.")))
 
-(include-book "eval-check")
+; We use the "no_port" annotation below because a test below, labeled "Specific
+; to this file", assumes that this book is certified in the boot-strap world.
+; See :doc build::pre-certify-book-commands for discussion of no_port.
+(include-book "eval-check") ; no_port
 
-(must-fail
+(must-fail!
  (assert!! (equal 3 4)
            (defun assert-test2 (x) x)))
 
@@ -48,7 +51,7 @@
                  '(a b c d e f)))
 
 ; Check failure of assertion when condition is false:
-(must-fail
+(must-fail!
  (assert!! (equal (append '(a b c) '(d e f))
                   '(a b))))
 

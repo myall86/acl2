@@ -1,6 +1,10 @@
+; The following comment line tells the build system that if *acl2-exports*
+; changes, then every book that uses this file should be recertified:
+; (depends-on "build/acl2-exports.certdep" :dir :system)
+
 (defpkg "S"
   (set-difference-equal
-   (union-eq '(PACK
+   (union-eq '(PACKN-POS
                ORDINARYP
                <<
                <<-IRREFLEXIVITY
@@ -13,8 +17,8 @@
                FAST-<<-RULES
                SLOW-<<-RULES
                <<-RULES)
-             (union-eq *acl2-exports*
-                       *common-lisp-symbols-from-main-lisp-package*))
+              (union-eq *acl2-exports*
+                        *common-lisp-symbols-from-main-lisp-package*))
    '(union intersection subsetp add-to-set functionp = apply)))
 
 (certify-book "set-theory" ? t)

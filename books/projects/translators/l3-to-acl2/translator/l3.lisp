@@ -251,19 +251,17 @@
                     (t (and (,type-name (car x))
                             (,type-list-name (cdr x)))))))))
 
-(defmacro true ()
-  t)
+; Matt K., 8/8/2015: Commenting out the definitions of TRUE and FALSE, which
+; are now defined as functions in std/basic/defs.lisp.
 
-(defmacro false ()
-  nil)
+; (defmacro true ()
+;   t)
+;
+; (defmacro false ()
+;   nil)
 
-(defmacro assert! (condition value)
-; Like assert$, but avoids runtime check when in :program mode.
-  `(assert$ (mbt ,condition)
-            ,value))
-
-(verify-termination doubleton-list-p)
-(verify-guards doubleton-list-p)
+(verify-termination doublet-listp)
+(verify-guards doublet-listp)
 
 #||
    [raise'exception_def]  Definition
@@ -552,9 +550,9 @@
         ((endp (cddddr x))
          `(binary-cat ,@x))
         (t
-         `(binary-cat ,(car x) 
-                      ,(cadr x) 
-                      (cat ,@(cddr x)) 
+         `(binary-cat ,(car x)
+                      ,(cadr x)
+                      (cat ,@(cddr x))
                       ,(cat-size (cddr x))))))
 
 (defthm unsigned-byte-p-cat
@@ -566,7 +564,7 @@
 
 (defun unit-value ()
 
-; Warning: If this is replaced with something other than nil, then 
+; Warning: If this is replaced with something other than nil, then
 
   (declare (xargs :guard t))
   nil)
@@ -601,7 +599,7 @@
 ; The following was needed in order to admit encode in tiny.lisp.
 (defthm equal-len-0
   (equal (equal (len x) 0)
-         (atom x)))
+         (not (consp x))))
 
 ; The following was useful for admitting dfn-loadconstant.
 (encapsulate

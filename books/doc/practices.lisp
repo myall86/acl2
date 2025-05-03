@@ -79,8 +79,9 @@ certifiable books should use @('.lsp')</li>
 
 <h4>Rationale</h4>
 
-<p>These conventions allow build systems like @(see cert.pl) to automatically
-distinguish between what should be certified and what should not.</p>
+<p>These conventions allow build systems like @(see build::cert.pl) to
+automatically distinguish between what should be certified and what should
+not.</p>
 
 <p>Once a user is familiar with these conventions, they act as a signal about
 what files are likely to be of interest.</p>")
@@ -130,6 +131,8 @@ of packages:</p>
 <dd>
 @({
     ;; load other packages needed to define our new packages...
+    ;; note that we only include portcullis files, that define
+    ;; the packages, not the libraries which those files support
     (include-book \"lib1/portcullis\" :dir :system)
     (include-book \"lib2/portcullis\" :dir :system)
 
@@ -152,7 +155,7 @@ of packages:</p>
 })
 </dd>
 
-<dt>@('(foo/portcullis.acl2') &mdash; certification instructions for the portcullis book</dt>
+<dt>@('foo/portcullis.acl2') &mdash; certification instructions for the portcullis book</dt>
 
 <dd>
 @({
@@ -189,7 +192,7 @@ convention that improves consistency and discoverability.</p>
 
 <ul>
 <li>The @('.lsp') extension helps Emacs realize the package file is a Lisp file</li>
-<li>It also helps @(see cert.pl) know it is not a certifiable book.</li>
+<li>It also helps @(see build::cert.pl) know it is not a certifiable book.</li>
 </ul>
 
 <p>The empty portcullis book is a useful trick.  Including this book, rather
@@ -361,6 +364,15 @@ readability when the function names involved have their own hyphens.  Examples:
  })
 </li>
 
+<li>For rules describing the return-type of a function, we use a similar naming
+convention, using @('of') as a separator.  Example:
+
+ @({
+    (defthm consp-of-cons
+      (consp (cons x y)))
+ })
+</li>
+
 <li>For rules with one simple hypothesis, we add @('-when-hyp') to the
 name.  Examples:
  @({
@@ -435,3 +447,19 @@ whose effect may be more easy to guess.</p>")
     language like Java</li>
     <li>Has good documentation that explains how to use it</li>
   </ul>")
+
+(defxdoc remove-whitespace
+  :short "How to find and remove whitespace from .lisp files"
+  :long "<p>Some of us are of the opinion that it's good hygiene to not allow
+  trailing whitespaces.  To see trailing-whitespaces in Emacs enable:</p>
+
+  @({(setq-default show-trailing-whitespace t)})
+
+  <p>To remove trailing-whitespaces from a file you have open in emacs do:</p>
+
+  @({M-x delete-trailing-whitespace})
+
+  <p>To find trailing whitespaces in @('.lisp') files within your current
+  directory, in your shell do:</p>
+
+  @({find . -name '*.lisp' -exec egrep -l \" +$\" {} \;})")

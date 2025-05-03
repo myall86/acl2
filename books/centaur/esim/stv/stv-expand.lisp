@@ -280,7 +280,8 @@ make sure that the name refers to valid input or output bits.</p>"
   :returns (pieces true-listp :rule-classes :type-prescription
                    "A flat, mixed list of strings and numbers, e.g.,
                    @('(\"foo\" 3 4 5)').")
-  :measure (vl-expr-count x)
+; Removed after v7-2 by Matt K. since the definition is non-recursive:
+; :measure (vl-expr-count x)
   (b* ((name    (vl-hidindex->name x))
        (indices (vl-hidindex->indices x)))
     (cons name (vl-exprlist-resolved->vals indices))))
@@ -574,9 +575,9 @@ paths."
             (raise "Path ~x0 does not exist" path))
       (raise "~x0 is not a valid wirename" wirename))
     (stv-check-noncanonical-paths (cdr paths) mod)))
-       
-       
-    
+
+
+
 
 (define stv-expand-hid
   :parents (stv-expand)
@@ -620,7 +621,7 @@ STV internal lines into lists of esim paths."
   :parents (symbolic-test-vectors)
   :short "Expand Verilog-style names throughout an STV into LSB-ordered ESIM
 style paths."
-  
+
 
   ((stv stvdata-p)
    mod)

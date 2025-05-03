@@ -48,7 +48,7 @@
         (local
          (progn
            (in-theory '((:definition hons-copy)))
-       
+
            (defun defined-const-memoize-fn1 ()
              (declare (xargs :verify-guards nil))
              ,term)
@@ -67,7 +67,6 @@
              :hints (("goal" :in-theory (disable (defined-const-memoize-fn))))
              :rule-classes nil)
 
-           #+hons
            (memoize 'defined-const-memoize-fn)))
 
 

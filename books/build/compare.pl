@@ -63,6 +63,18 @@ my @old_not_new = ();
 my @new_not_old = ();
 
 foreach my $key (keys %$old_costs) {
+    if ($old_costs->{$key} == -1.00) {
+	delete $old_costs->{$key};
+    }
+}
+
+foreach my $key (keys %$new_costs) {
+    if ($new_costs->{$key} == -1.00) {
+	delete $new_costs->{$key};
+    }
+}
+
+foreach my $key (keys %$old_costs) {
     if (exists $new_costs->{$key}) {
 	$keyhash{$key} = 1;
     } else {
@@ -127,7 +139,14 @@ sub speedup {
     my $oldtime = $old_costs->{$file};
     my $newtime = $new_costs->{$file};
 #    print "file $file: oldtime $oldtime newtime $newtime\n";
-    return log($oldtime/$newtime)/log(2);
+    my $linear = $oldtime/$newtime;
+    if ($linear < 0) {
+	# This is total nonsense but at least it's a clear error.
+	return 999999;
+    }
+    else {
+	return log($linear)/log(2);
+    }
 }
 
 sub speedup_compare {

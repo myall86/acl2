@@ -1,61 +1,49 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
 (in-package "ACL2")
 
-(include-book "../lib2/basic") ;; no change from rel8 
+(include-book "../lib2/basic") ;; no change from rel8
 
 (include-book "bits")
 
 (local (include-book "log-new"))
 
 
-(local 
+(local
  (defthm bits-is-bits_alt
    (equal (bits x i j)
           (bits_alt x i j))
    :hints (("Goal" :in-theory (e/d (bits_alt bits) ())))))
-              
-(local               
+
+(local
  (defthm bitn-is-bitn_alt
    (equal (bitn x n)
           (bitn_alt x n))
    :hints (("Goal" :in-theory (e/d (bitn_alt bitn) ())))))
-          
-(local               
+
+(local
  (defthm binary-cat_alt-is-binary-cat
    (equal (binary-cat x m y n)
           (binary-cat_alt x m y n))
    :hints (("Goal" :in-theory (e/d (binary-cat_alt binary-cat) ())))))
-          
-(local               
+
+(local
  (defthm mulcat_alt-is-mulcat
    (equal (mulcat l n x)
           (mulcat_alt l n x))
    :hints (("Goal" :in-theory (e/d (mulcat_alt mulcat) ())))))
-          
- 
+
+
 
 
 ;;;**********************************************************************
@@ -315,7 +303,7 @@
 		  (natp k))
 	     (equal (logior x (expt 2 k))
 		    (+ x
-		       (* (expt 2 k) 
+		       (* (expt 2 k)
 			  (- 1 (bitn x k))))))
     :hints (("Goal" :use ((:instance logior-expt-3-g)))))
 
@@ -518,8 +506,8 @@
                 (lognot (logxor i j)))
          (EQUAL (LOGXOR J (LOGNOT I))
                 (LOGNOT (LOGXOR I J)))))
-    
-	   
+
+
 
 (defthmd logior-logand
   (implies (and (integerp x)

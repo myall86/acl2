@@ -33,7 +33,7 @@
 (include-book "std/util/defval" :dir :system)
 (include-book "centaur/fty/fixequiv" :dir :system)
 (include-book "centaur/fty/basetypes" :dir :system)
-(local (include-book "misc/assert" :dir :system))
+(local (include-book "std/testing/assert-bang" :dir :system))
 (local (include-book "arithmetic"))
 (local (std::add-default-post-define-hook :fix))
 
@@ -174,7 +174,9 @@ character lists and strings.</p>")
   :guard (<= n xl)
   :long "<p>This has such a nice logical definition that we just leave it enabled.</p>"
   :enabled t
-  :measure (nfix (- (nfix xl) (nfix n)))
+; Removed after v7-2 by Matt K. since logically, the definition is
+; non-recursive:
+; :measure (nfix (- (nfix xl) (nfix n)))
   :verify-guards nil
   :hooks nil
   (mbe :logic
@@ -207,4 +209,3 @@ character lists and strings.</p>")
           (let ((x "foo123$%20 blah !==[]{}7&*^!@&*^&*)($"))
             (equal (vl-url-encode-string x)
                    (implode (vl-url-encode-chars (explode x))))))))
-

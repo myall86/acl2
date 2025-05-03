@@ -28,13 +28,13 @@
 ;
 ; Original author: Jared Davis <jared@centtech.com>
 
-(in-package "ACL2")
+(in-package "BUILD")
 (include-book "xdoc/top" :dir :system)
 
 (defxdoc cert.pl
   :parents (books)
   :short "@('cert.pl') is a mature, user-friendly, industrial-strength tool for
-certifying ACL2 @(see books)."
+certifying ACL2 @(see acl2::books)."
 
   :long "<h3>Introduction</h3>
 
@@ -56,7 +56,9 @@ find valuable.  For instance:</p>
 <ul>
 
 <li>ACL2 features like packages, ttags, @(see add-include-book-dir), and @(see
-save-exec) images are properly supported.</li>
+save-exec) images are properly supported.  In particular,
+(@('.port')) files (see @(see acl2::portcullis)) of included books are loaded
+automatically before certification; see @(see pre-certify-book-commands).</li>
 
 <li>Parallel builds (as in @('make -j')) are well-supported.  For the truly
 adventurous, you may even be able to distribute your build over a cluster.</li>
@@ -67,21 +69,29 @@ build time for multi-core environments.</li>
 <li>Dependency scanning is cached for better performance on NFS file
 systems.</li>
 
+<li>Ifdef/ifndef constructs are supported for conditional build features -- see
+@(see acl2::ifdef), @(see acl2::ifndef), @(see acl2::ifdef-define), and @(see
+acl2::ifdef-undefine).</li>
+
 </ul>
 
-<p>@('cert.pl') was originally developed in 2008 by Sol Swords at <a
-href='http://www.centtech.com/'>Centaur Technology</a>, and has been actively
-used and improved since then.  It is now distributed in the @('build')
-directory of the Community Books, and is today the main tool behind
-@('books/GNUmakefile').</p>
+<p>@('cert.pl') was originally developed in 2008 by Sol Swords at Centaur
+Technology, and has been actively used and improved since then.  It is now
+distributed in the @('build') directory of the Community Books, and is today
+the main tool behind @('books/GNUmakefile').</p>
 
 
 <h3>Using @('cert.pl')</h3>
 
 <p>This documentation is really a <b>tutorial</b>, not a reference.  We
 recommend that you read the topics in order.  Also see @(see
-books-certification) for additional information on how to automate the
-certification of the @(see community-books).</p>
+acl2::books-certification) for additional information on how to automate the
+certification of the @(see community-books), and for more details, execute the
+following command in the shell.</p>
+
+@({
+     <path_to_acl2>/books/build/cert.pl --help
+})
 
 <p>We assume basic familiarity with a Unix environment, e.g., we expect that
 you know how to edit your startup scripts to set up a @('PATH'), create
@@ -90,7 +100,7 @@ symbolic links, etc.</p>")
 
 
 (defxdoc cert-pl-on-windows
-  :parents (|0. Preliminaries|)
+  :parents (preliminaries)
   :short "Special notes about using @('cert.pl') on Windows."
 
   :long "<p>There are two main ways you can run @('cert.pl') (and for that
@@ -147,7 +157,7 @@ beta-testing and with making it more robust.</p>")
 
 
 
-(defxdoc |0. Preliminaries|
+(defxdoc preliminaries
   :parents (cert.pl)
   :short "Where to find @('cert.pl'), how to set up your environment before
 using it, and the supporting software you'll need."
@@ -167,7 +177,7 @@ Make 3.81.\"</p>
 that your @('perl') executable is in your @('$PATH').</p>
 
 <p>We assume you have <a href='http://www.cs.utexas.edu/~moore/acl2/'>ACL2</a>
-or one of its variants like ACL2(h), ACL2(p), or ACL2(r) installed, and that
+or one of its variants like ACL2(p) or ACL2(r) installed, and that
 you know how to launch ACL2&mdash;usually with a script named @('saved_acl2')
 or similar.</p>
 
@@ -208,7 +218,7 @@ print a usage message, e.g.,:</p>
 })
 
 
-<h3>Helping @('cert.pl') find ACL2</h3>
+<h3>Helping @('cert.pl') find ACL2 and the community books</h3>
 
 <p>It is convenient for @('cert.pl') to \"just know\" where your copy of ACL2
 is located.</p>
@@ -216,7 +226,7 @@ is located.</p>
 <ul>
 
 <li>We recommend that you configure your @('$PATH') so that running @('acl2')
-will invoke @('acl2').  You could do this by adding a symlink to your
+will invoke ACL2.  You could do this by adding a symlink to your
 @('saved_acl2') script, named @('acl2'), to a directory like @('~/bin').</li>
 
 <li>Alternately, you may set the environment variable @('$ACL2') to point to
@@ -225,9 +235,22 @@ to your @('.bashrc') or similar:
 
 @({
       export ACL2=/path/to/acl2/saved_acl2
-})</li>
+})
+
+This takes precedence over an executable named @('acl2') in your @('$PATH'), if
+one exists.</li>
 
 </ul>
+
+<p>A third option is to tell @('cert.pl') explicitly which ACL2 you would like
+it to use, by using the @('--acl2') or @('-a') flag:</p>
+
+@({
+      $ cert.pl -a /path/to/acl2/saved_acl2 [...]
+})
+
+<p>This takes precedence over both the environment variable and any @('acl2')
+in your @('$PATH').</p>
 
 <p>To ensure that @('cert.pl') is properly detecting your copy of ACL2, you can
 run @('cert.pl') with no arguments.  The output should look something like
@@ -249,12 +272,29 @@ e.g.,</p>
     export ACL2_SYSTEM_BOOKS=/home/jared/acl2/books
 })
 
+<p>Alternatively, you can tell @('cert.pl') explicitly which books directory
+you would like it to use, by using the @('--acl2-books') or @('-b') flag:</p>
+
+@({
+      $ cert.pl -b /home/jared/acl2/books [...]
+})
+
+<p>This takes precedence over the environment variable.</p>
+
 <p>At this point, @('cert.pl') should be configured properly and ready to
-use.</p>")
+use.</p>
+
+<p>Incidentally, if @('cert.pl') cannot determine the location of the books
+directory from one of the above two directives, it will first try to find a
+@('books') directory alongside the ACL2 executable.  If this fails, it will run
+the ACL2 executable and ask it for the value of the global variable
+@('system-books-dir').  If the response it receives does not point to a
+directory that exists on the filesystem, @('cert.pl') finally chooses the
+parent directory of its own location.</p>")
 
 
 
-(defxdoc |1. Certifying Simple Books|
+(defxdoc certifying-simple-books ; Step 1
   :parents (cert.pl)
   :short "How to use certify simple ACL2 books, take advantage of parallel
 builds, and manage the dependency scanner."
@@ -290,7 +330,7 @@ Successfully built /home/jared/acl2/books/tmp/inc.cert
 
 <ul>
 
-<li>@('inc.cert'), the ACL2 @(see certificate) for @('inc.lisp')</li>
+<li>@('inc.cert'), the ACL2 @(see acl2::certificate) for @('inc.lisp')</li>
 
 <li>@('inc.cert.out'), the log for certifying @('inc'); this shows the
 instructions that were submitted to ACL2, and the output from the @(see
@@ -460,10 +500,10 @@ that @('mybook.lisp') includes.</p>
 <h3>Dependency Scanning Limitations</h3>
 
 <p>Keep in mind that @('cert.pl') is a dumb Perl script.  It's quite easy to
-fool it using @(see macros) or other tricks.  But you don't even need to get
-that fancy&mdash;a newline will do the trick.  For instance, if @('foo.lisp')
-contains the following, then @('cert.pl') will not think it depends on
-@('bar'):</p>
+fool it using @(see acl2::macros) or other tricks.  But you don't even need to
+get that fancy&mdash;a newline will do the trick.  For instance, if
+@('foo.lisp') contains the following, then @('cert.pl') will not think it
+depends on @('bar'):</p>
 
 @({
    (include-book     ;; newline to fool dependency scanner
@@ -515,7 +555,7 @@ this:</p>
 
 
 
-(defxdoc |2. Pre Certify-Book Commands|
+(defxdoc pre-certify-book-commands ; Step 2
   :parents (cert.pl)
   :short "How to add commands to be executed before calling @(see
 certify-book).  You'll need this to use ACL2 features like @(see defpkg) and
@@ -526,7 +566,7 @@ certify-book).  You'll need this to use ACL2 features like @(see defpkg) and
 <p>ACL2 commands like @(see defpkg) can't be embedded within books.  Instead,
 when using raw ACL2 to certify books, you typically define the package before
 issuing the @(see certify-book) command.  The @(see defpkg) command then
-becomes part of the book's @(see portcullis).</p>
+becomes part of the book's @(see acl2::portcullis).</p>
 
 <p>For example, here is how to successfully certify a book with its own
 package, using raw ACL2:</p>
@@ -544,8 +584,8 @@ package, using raw ACL2:</p>
 })
 
 <p>If this doesn't make sense, please see the documentation for @(see books),
-especially see @(see book-example) which explains something like the above in
-far greater detail.</p>
+especially see @(see acl2::book-example) which explains something like the
+above in far greater detail.</p>
 
 
 <h3>Individual @('.acl2') Files</h3>
@@ -554,9 +594,11 @@ far greater detail.</p>
 these extra @('defpkg') commands that can't go directly into the book.</p>
 
 <p>If you are using only packages from existing libraries, these should be
-dealt with automatically by the build system, which loads the portculli of all
-included books before certifying a book.  However, if you are defining a new
-package, you need to know how to put it in your book's portcullis.</p>
+dealt with automatically by the build system, which loads the portcullis
+ (@('.port') file) of each included book before certifying a book.  (To defeat
+this mechanism, add a comment containing \"no_port\" at the end of the line of
+each include-book whose portculli you don't want.) However, if you are defining
+a new package, you need to know how to put it in your book's portcullis.</p>
 
 <p>The most basic way to tell @('cert.pl') how to certify a file like
 @('mybook.lisp') is to put the @('defpkg') form into a corresponding file,
@@ -599,12 +641,12 @@ that these instructions that were picked up from the @('.acl2') file:</p>
 
 <p>Furthermore, if you inspect @('mybook.cert'), you'll see that defpkg form
 replicated in the portcullis section of the certificate.  In fact, all the
-books that includes your book (transitively) or that also load the same package
+books that include your book (transitively) or that also load the same package
 will also replicate this form in their portculli.  This can be a problem
 because including multiple books depending on this package requires checking
 many times that this defpkg form is redundant, which can actually add up to a
 significant performance problem.  We suggest using the discipline described in
-@(see working-with-packages) instead.</p>
+@(see acl2::working-with-packages) instead.</p>
 
 <h3>Directory-Wide @('cert.acl2') Files</h3>
 
@@ -628,12 +670,12 @@ are all supposed to be in some package, you just need a single @('cert.acl2')
 file that gets that @(see defpkg) form loaded.</p>")
 
 
-(defxdoc |3. Custom Certify-Book Commands|
+(defxdoc custom-certify-book-commands ; Step 3
   :parents (cert.pl)
-  :short "How to control the options that will be passed to the @(see
-certify-book) command.  You'll need this to allow the use of <see topic='@(url
-defttag)'>trust tags</see>, @(see skip-proofs), @(see defaxiom)s, and so
-forth."
+  :short "How to use @('cert-flags') to control the options that will be passed
+to the @(see certify-book) command.  You'll need this to allow the use of <see
+topic='@(url defttag)'>trust tags</see>, @(see skip-proofs), @(see defaxiom)s,
+and so forth."
 
   :long "<p>By default, ACL2's @(see certify-book) command does not allow your
 books to use unsafe features that can easily lead to unsoundness.  For
@@ -658,7 +700,7 @@ you'll need to tell @('cert.pl') that you want to give different arguments to
 
 <p>You can do this on a per-book or per-directory basis by adding a special
 comment into the corresponding @('.acl2') file.  If you don't know what an
-@('.acl2') file is, see @(see |2. Pre Certify-Book Commands|).</p>
+@('.acl2') file is, see @(see pre-certify-book-commands).</p>
 
 <p>Example: to allow all trust tags, you could use a comment like this:</p>
 
@@ -687,7 +729,7 @@ dumb perl script is reading this, after all.</li>
 </ul>")
 
 
-(defxdoc |4. Optimizing Build Time|
+(defxdoc optimizing-build-time ; Step 4
   :parents (cert.pl)
   :short "How to use @('critpath.pl') to profile your build, so that you can
 focus your efforts on speeding up the most critical parts."
@@ -756,7 +798,7 @@ books it depends on.</li>
 useful.  See @('critpath.pl --help') for details.</p>")
 
 
-(defxdoc |5. Raw Lisp and Other Dependencies|
+(defxdoc raw-lisp-and-other-dependencies ; Step 5
   :parents (cert.pl)
   :short "How to use @('depends-on') to tell @('cert.pl') about additional,
 non-Lisp files that your books depend on."
@@ -766,11 +808,11 @@ instance,</p>
 
 <ul>
 
-<li>An ACL2 book for verifying a Java program might use @(see io) routines to
-load @('encrypt.java'), or</li>
+<li>An ACL2 book for verifying a Java program might use @(see acl2::io)
+routines to load @('encrypt.java'), or</li>
 
-<li>An ACL2 book with trust tags might use @(see include-raw) to load in some
-extra raw Lisp file named @('server-raw.lsp').</li>
+<li>An ACL2 book with trust tags might use @(see acl2::include-raw) to load in
+some extra raw Lisp file named @('server-raw.lsp').</li>
 
 </ul>
 
@@ -831,7 +873,7 @@ to help you write a Makefile for your whole project.</p>")
 
 
 
-(defxdoc |6. Static Makefiles|
+(defxdoc static-makefiles ; Step 6
   :parents (cert.pl)
   :short "How to use @('cert.pl') within a larger Makefile that needs to know
 how to build non-ACL2 files (e.g., C libraries) or dynamically generated ACL2
@@ -935,9 +977,75 @@ which may in some ways be simpler to understand.</li>
 section, to rename variables like @('CERT_PL_CERTS'), etc.  See @('cert.pl
 --help') for a summary.</p>")
 
-
-(defxdoc |7. Using Extended ACL2 Images|
+(defxdoc acl2-system-feature-dependencies
   :parents (cert.pl)
+  :short "Automatically forcing recertification when changes in the ACL2 sources
+          would invalidate a certificate."
+  :long "<p>In principle, every time the ACL2 system changes, all books should
+be recertified.  However, in practice many users don't do this because the ACL2
+system is updated frequently and it is time-consuming to rebuild all the
+community books.  But sometimes a change to the ACL2 system makes certain books
+no longer work correctly until they are recertified.  For example, the book
+@('system/apply/apply-prim') uses the value of
+@('*first-order-like-terms-and-out-arities*'), a constant defined by the ACL2
+system, in a make-event form in order to define @('apply$-prim-meta-fn-ev').
+If the value of that constant changes, that book should be recertified;
+otherwise, books that depend on it might fail to certify.</p>
+
+<p>The @('GNUMakefile') provided with the ACL2 community books provides a
+mechanism to force certain books to be recertified when the values of constants
+built into the ACL2 system change.  To fix @('apply-prim') using this
+mechanism, we add a comment to the book:</p>
+@({
+ ; (depends-on \"build/first-order-like-terms-and-out-arities.certdep\" :dir :system)
+ })
+
+<p>This forces @('apply-prim') to be recertified if that file changes. We
+arrange for this file to change by running ACL2 at the start of each invocation
+of the community books' @('GNUMakefile') and comparing the value of
+@('*first-order-like-terms-and-out-arities*') to the object read from
+@('build/first-order-like-terms-and-out-arities.certdep').  If those objects
+differ, then the current @('*first-order-like-terms-and-out-arities*') is
+written to that file, which then forces @('apply-prim') to be recertified.</p>
+
+<p>It is fairly easy to add dependencies on other ACL2 features: simply add a
+new invocation of @('write-file-if-obj-differs') to
+@('build/cert_features.lsp'), similar to the ones that already exist there.
+For example, the one used in the example above is:</p>
+@({
+ (write-file-if-obj-differs \"first-order-like-terms-and-out-arities.certdep\"
+                            *first-order-like-terms-and-out-arities*
+                            state)
+ })
+<p>Then add dependencies using @('depends-on') comments in the books that
+depend on the current value of that constant.</p>
+
+<p>The cert.pl build system by itself does not update these files, which means
+that Makefiles that use cert.pl will not support this feature unless they run
+the @('cert_features.lsp') script on startup, like @('books/GNUMakefile') does.
+A workaround is to invoke @('books/GNUMakefile') after any rebuild of ACL2,
+before using cert.pl alone or using a separate Makefile:</p>
+@({
+ cd acl2/books
+ make build/Makefile-features
+ })
+<p>Cert.pl and cert.pl-generated Makefiles will arrange for files
+@('build/%.certdep') to be created if they do not exist, so that books that
+depend on them can still be certified using cert.pl alone.</p>
+
+<p>Cert.pl also makes every certificate depend on two special certdep files:
+@('build/acl2-version.certdep') and @('build/universal-dependency.certdep').
+The former is updated by @('cert_features.lsp') like the others, containing the
+current ACL2 version string; this forces all books to be recertified when the
+ACL2 version number changes.  The latter, unlike the others, is stored in the
+ACL2 git repository.  It may be updated by ACL2 maintainers to force all books
+to be recertified when they make other changes that require this, or by
+community members who notice that such a change has been made without a
+corresponding update.</p>")
+
+
+(defxdoc using-extended-acl2-images ; Step 7
+  :parents (cert.pl ACL2::building-acl2 ACL2::books-certification)
   :short "(Advanced) how to get @(see cert.pl) to use @(see save-exec) images
 to certify parts of your project."
 
@@ -949,7 +1057,7 @@ simple.</p>
 <p>By default, @('cert.pl') will simply try to certify all books using whatever
 ACL2 image is invoked with @('acl2'), or else whatever image it is told to use
 via the @('$ACL2') environment variable or the @('--acl2') option; see
-<i>Helping @('cert.pl') find ACL2</i> of @(see |0. Preliminaries|) for
+<i>Helping @('cert.pl') find ACL2</i> of @(see preliminaries) for
 details.</p>
 
 <p>Unfortunately, this usual approach means that widely included books must be
@@ -977,6 +1085,7 @@ using the following script:</p>
      ;; make-extended-acl2.lsp
      (in-package \"ACL2\")
      (include-book \"support\")
+     :q
      (save-exec \"extended-acl2\" \"Supporting libraries pre-loaded.\")
 })
 
@@ -984,7 +1093,7 @@ using the following script:</p>
 certify particular books, there is currently no way to directly tell
 @('cert.pl') that it needs to run this script to create the @('extended-acl2')
 image.  Instead, if you want to use extended ACL2 images, you will probably
-need to put together a @('Makefile').  See @(see |6. Static Makefiles|) for
+need to put together a @('Makefile').  See @(see static-makefiles) for
 information about how to use @('cert.pl') to do the dependency scanning for
 your @('Makefile').</p>
 
@@ -1024,10 +1133,10 @@ should simply contain:</p>
 
 <p>You can also write a @('cert.image') file to indicate a directory-wide
 default image to use.  (This is exactly analogous to how @('cert.pl') looks for
-@('.acl2') files for @(see |2. Pre Certify-Book Commands|).)</p>")
+@('.acl2') files for @(see pre-certify-book-commands).)</p>")
 
 
-(defxdoc |8. Distributed Builds|
+(defxdoc distributed-builds ; Step 8
   :parents (cert.pl)
   :short "(Advanced) how to distribute ACL2 book building over a cluster
 of machines."
@@ -1127,16 +1236,30 @@ exit codes instead of files to determine success.  In cases where the exit code
 says the job completed successfully, we wait until @('A.cert') becomes visible
 to the head node before returning control to the Makefile.</p>")
 
-; added by Matt K., 8/14/2014
+(xdoc::order-subtopics cert.pl
+  (preliminaries certifying-simple-books pre-certify-book-commands
+                 custom-certify-book-commands optimizing-build-time
+                 raw-lisp-and-other-dependencies static-makefiles
+                 acl2-system-feature-dependencies
+                 using-extended-acl2-images ; rename to remove "using"
+                 distributed-builds cert_param acl2::ifdef acl2::ifndef))
+
+
+; added by Matt K., 8/14/2014 (revised 7/14/2021)
 (defxdoc cert_param
+
+; The list of legal cert_param values listed below comes from
+; books/build/cert.pl, from the definition of my %reqparams as well as calls of
+; cert_get_param.
+
   :parents (cert.pl)
-  :short "restricting and modifying @(see community-books)
-certification using @('make')"
+  :short "Restricting and modifying @(see community-books)
+certification using @('make')."
   :long (concatenate 'string
  "<p>You can restrict the @(see books) to be certified using @('make')
   by adding a stylized ``@('cert_param:')'' comment.  For example, suppose that
   you include the following comment in your book or in a corresponding
-  @('.acl2') file (see @(see |2. Pre Certify-Book Commands|)).</p>
+  @('.acl2') file (see @(see pre-certify-book-commands)).</p>
 
  @({
  ; cert_"
@@ -1162,12 +1285,11 @@ certification using @('make')"
 
  <p>The meaning of an activated @('cert_param') is generally clear from its
  name, as follows.  Additional @('cert_param') values might be supported in the
- future; you can browse @(see community-books) files @('build/cert.pl') and
- @('build/certlib.pl') for additional supported values.  The @('acl2x'),
- @('acl2xskip'), and @('reloc_stub') values affect only the book itself, not
- books that include it.  However, the other values affect not only the
- certification of the indicated book but also apply to all books that include
- it (and recursively).</p>
+ future; you can browse @(see community-books) file @('build/cert.pl') for
+ additional supported values.  The @('acl2x'), @('acl2xskip'), and
+ @('reloc_stub') values affect only the book itself, not books that include it.
+ However, the other values affect not only the certification of the indicated
+ book but also apply to all books that include it (and recursively).</p>
 
  <ul>
 
@@ -1180,20 +1302,163 @@ certification using @('make')"
 
  <li>@('ccl-only'): only certify when the host Lisp is CCL</li>
 
- <li>@('hons-only'): only certify when special @(tsee hons) support is
- available, i.e., in ACL2(h)</li>
-
- <li>@('non-acl2r'): only certify when the (@see real) numbers are NOT
+ <li>@('non-acl2r'): only certify when the @(see real) numbers are NOT
  supported, i.e., when NOT using ACL2(r)</li>
 
- <li>@('reloc_stub'): print a suitable ``relocation stub'' warning</li>
+ <li>@('non-allegro'): only certify when the host Lisp is NOT Allegro CL</li>
 
- <li>@('uses-acl2r'): only certify when the (@see real) numbers are supported,
+ <li>@('non-cmucl'): only certify when the host Lisp is NOT cmucl</li>
+
+ <li>@('non-gcl'): only certify when the host Lisp is NOT gcl</li>
+
+ <li>@('non-lispworks'): only certify when the host Lisp is NOT LispWorks</li>
+
+ <li>@('non-sbcl'): only certify when the host Lisp is NOT sbcl</li>
+
+ <li>@('pcert'): use provisional certification (see @(see
+ acl2::provisional-certification))</li>
+
+ <li>@('reloc-stub'): print a suitable ``relocation stub'' warning</li>
+
+ <li>@('uses-abc'): only certify when the external equivalence/model-checking
+ tool ABC is available</li>
+
+ <li>@('uses-acl2r'): only certify when the @(see real) numbers are supported,
  i.e., with ACL2(r)</li>
 
  <li>@('uses-glucose'): only certify when Glucose (a SAT solver) is
  available</li>
 
+ <li>@('uses-ipasir'): only certify when Ipasir (a simple C interface to
+ incremental SAT solvers) is available</li>
+
+ <li>@('uses-smtlink'): only certify when Smtlink (see @(see smt::smtlink)) is
+ available</li>
+
+ <li>@('uses-stp'): only certify when STP (an SMT solver available <a href=
+ 'https://github.com/stp/stp'>here</a>) is available (to suppress the use
+ of STP, even when an executable for it seems to be available, set environment
+ variable @('ACL2_DONT_USE_STP') to any non-empty value)</li>
+
  <li>@('uses-quicklisp'): only certify when quicklisp is available</li>
 
  </ul>"))
+
+; The following defpointer forms were added by Matt K., 7/14/2021.
+(acl2::defpointer acl2x cert_param)
+(acl2::defpointer acl2xskip cert_param)
+(acl2::defpointer ansi-only cert_param)
+(acl2::defpointer ccl-only cert_param)
+(acl2::defpointer non-acl2r cert_param)
+(acl2::defpointer non-allegro cert_param)
+(acl2::defpointer non-cmucl cert_param)
+(acl2::defpointer non-gcl cert_param)
+(acl2::defpointer non-lispworks cert_param)
+(acl2::defpointer non-sbcl cert_param)
+(acl2::defpointer pcert cert_param)
+(acl2::defpointer reloc-stub cert_param)
+(acl2::defpointer uses-abc cert_param)
+(acl2::defpointer uses-acl2r cert_param)
+(acl2::defpointer uses-glucose cert_param)
+(acl2::defpointer uses-ipasir cert_param)
+(acl2::defpointer uses-smtlink cert_param)
+(acl2::defpointer uses-stp cert_param)
+(acl2::defpointer uses-quicklisp cert_param)
+
+(defxdoc acl2::ifdef
+  :parents (cert.pl)
+  :short "Run some events only if an environment variable is defined and nonempty,
+          with build system support."
+  :long "<p>Ifdef and @(see ifndef), defined in \"books/build/ifdef.lisp\",
+support conditionally running some events depending on the build environment.
+This works as follows:</p>
+
+@({
+ (ifdef \"MY_ENV_VAR\"
+    (defun foo (x) x)
+    (include-book \"bar\")
+    :endif)
+ })
+<p>produces the given defun and include-book events only if \"MY_ENV_VAR\" is
+defined in the environment and is not the empty string.  @(see Ifndef) has the
+opposite behavior.</p>
+
+<p>There is special support in the @(see build::cert.pl) build system for these
+constructs, so that if the environment in which the cert.pl scan is run matches
+the environment in which the ACL2 job is run, the build system will know the
+true dependencies of the file, taking ifdefs into account.</p>
+
+<p>For this to work correctly, it is important to write the ifdef forms in a
+standard manner, as shown above: the @('(ifdef \"VARNAME\"') must be on a
+single line with nothing preceding it, and the @(':endif)') should be on a line
+without any other dependency-relevant items.  E.g., the following will not work
+as expected:</p>
+@({
+ (ifdef \"USE_FOO\" (include-book \"foo\") :endif)
+ })
+"
+  :pkg "ACL2")
+
+(defxdoc acl2::ifndef
+  :parents (cert.pl)
+  :short "Run some events only if an environment variable is undefined or empty,
+          with build system support."
+  :long "<p>See @(see ifdef).</p>"
+  :pkg "ACL2")
+
+(defxdoc acl2::ifdef-define
+  :parents (cert.pl)
+  :short "Define an environment variable for use with @(see ifdef) and @(see ifndef)."
+  :long "<p>This is simply a macro defined as follows:</p>
+@(def ifdef-define)
+
+<p>When this form is loaded, it will set the given environment variable to
+@('\"1\"'), affecting subsequent uses of @(see ifdef) and @(see ifndef).  The
+cert.pl build system tracks uses of this macro in order to determine which
+forms in the file are really used, so as to correctly compute the dependencies
+between files.  In order to be correctly scannable by the build system, the
+@('ifdef-define') form must occur all on one line:</p>
+@({
+  (ifdef-define \"FOO\")
+ })
+<p>or</p>
+@({
+  (acl2::ifdef-define \"FOO\")
+ })
+
+<p>Note that the effects of this form are local to the current book; see @(see
+ifdef-define!) for a version that persists across include-books.  Also see
+@(see ifdef-undefine) and @(see ifdef-undefine!). </p>"
+  :pkg "ACL2")
+
+(defxdoc acl2::ifdef-undefine
+  :parents (cert.pl)
+  :short "Undefine an environment variable for use with @(see ifdef) and @(see ifndef)."
+  :long "<p>Analogous to @(see ifdef-define), but sets the environment variable
+to the empty string instead of to @('\"1\"'), so that it will be unset for the
+purposes of @(see ifdef) and @(see ifndef).</p>
+
+<p>Similarly to @(see ifdef-define), the effects of @('ifdef-undefine') are
+book-local.  See @(see ifdef-undefine!) for a version that persists across
+include-books.</p>"
+  :pkg "ACL2")
+
+(defxdoc acl2::ifdef-define!
+  :parents (cert.pl)
+  :short "Define an environment variable for use with @(see ifdef) and @(see
+ifndef), whose effect persists across include-books."
+  :long "<p>This does the same as @(see ifdef-define), but the environment
+setting also happens when the book in which this form occurs is included
+elsewhere.  The build system attempts to accurately track which variables are
+defined where, for use by @(see ifdef) and @(see ifndef).</p>"
+  :pkg "ACL2")
+
+(defxdoc acl2::ifdef-undefine!
+  :parents (cert.pl)
+  :short "Undefine an environment variable for use with @(see ifdef) and @(see
+ifndef), persistent across include-book."
+  :long "<p>This does the same as @(see ifdef-undefine), but the environment
+setting also happens when the book in which this form occurs is included in
+another book.  The build system attempts to accurately track which variables
+are defined where, for use by @(see ifdef) and @(see ifndef).</p>"
+  :pkg "ACL2")

@@ -31,72 +31,114 @@
 (in-package "VL")
 (include-book "defs")
 (include-book "printedlist")
-(include-book "print-urlencode")
-(include-book "print-htmlencode")
 (include-book "cw-unformatted")
+(include-book "std/strings/url-encode" :dir :system)
 (include-book "std/strings/pretty" :dir :system)
 (local (include-book "arithmetic"))
-(local (include-book "misc/assert" :dir :system))
+(local (include-book "std/testing/assert-bang" :dir :system))
 (local (include-book "std/io/base" :dir :system))
-(local (include-book "centaur/misc/arith-equivs" :dir :system))
+(local (include-book "std/basic/arith-equivs" :dir :system))
 (local (std::add-default-post-define-hook :fix))
 (local (in-theory (enable acl2::arith-equiv-forwarding)))
 
-(define character-list-fix ((x character-listp))
-  ;; BOZO find me a home
-  :inline t
-  :enabled t
-  :hooks nil
-  (mbe :logic (make-character-list x)
-       :exec x))
+
+(defxdoc vl-printedlist
+  :parents (printer)
+  :short "Backward-compatibility aliases for @(see str::printtree)."
+  :long "<p>Formerly, VL defined its own type @('vl-printedlist') which was
+basically a tree structure containing characters and strings.  A similar one is
+now defined in @('std/strings/printtree.lisp') and @('vl-printedlist')
+functions are now aliases for @('str::printtree') functions.</p>")
+
+(defxdoc vl-printedlist-p
+  :parents (vl-printedlist)
+  :short "Backward-compatibility alias for str::printtree-p (see @(see str::printtree)).")
 
 (defxdoc printer
   :parents (vl)
-  :short "Applicative \"printer\" for building strings."
+  :short "The VL printer is a tool for building strings.  It is generally used
+to pretty-print our internal Verilog @(see syntax) back out into text or HTML.
+This is very useful in @(see warnings), the @(see vl-server), and other
+contexts."
 
-  :long "<p>We implement a printer as a stobj name @(see ps), and use it as the
-back-end for formatting our source code and for other output tasks.  Our
-printer is applicative and the act of printing only accumulates characters or
-strings into a list.  These printed elements are kept in reverse order, which
-makes the sequential printing of small chunks of text reasonably
-efficient.</p>")
+  :long "<p>We implement an applicative ``printer'' for building strings.
+Building strings incrementally is difficult in an applicative setting.  Our
+printer is implemented using a @(see acl2::stobj) named @(see ps).  The act of
+``printing'' to this stobj essentially just accumulates characters (or strings)
+onto a @(see vl-printedlist).  The printed elements are kept in reverse order,
+which makes it reasonably efficient to successively print small chunks of
+text.</p>
+
+<p>Our printer has a variety of configurable features that are useful for
+pretty-printing source code, including:</p>
+
+<ul>
+<li>Support for both text and HTML output</li>
+<li>Automatic column tracking (for, e.g., tab support and line wrapping)</li>
+<li>Automatic word-wrapping of long lines</li>
+<li>A print base for controlling numeric output (e.g., print numbers in hex)</li>
+<li>Other miscellaneous settings</li>
+</ul>
+
+<p>Supporting HTML is subtle because, depending on the context, you may wish to
+write:</p>
+
+<ul>
+
+<li><b>HTML markup</b> (e.g., @('<b>'), @('<code>'), ...), where special
+characters like @('<') are not to be changed, and where all of the characters
+in these tags will be ``invisible'' to the user and should not affect the
+current column number.</li>
+
+<li><b>Parts of URLs</b> (e.g., filenames), which must be \"percent encoded\"
+per <a href='https://www.ietf.org/rfc/rfc3986.txt'>RFC 3986</a>, e.g., space
+characters become @('%20').  These, too, do not affect the column number
+because they take part only in tags such as @('<a href=\"...\">').</li>
+
+<li><b>Ordinary text</b>, where special characters like @('&') and @('<')
+become @('&amp;') and @('&lt;').  Here we also print tabs as a sequence of
+@('&nbsp;') characters, and we advance the column number as characters are
+printed.</li>
+
+</ul>")
 
 (defsection vl-printedlist-p-util
-  :extension vl-printedlist-p
 
   (local (in-theory (enable vl-printedlist-p)))
 
-  (local (in-theory (e/d (repeated-revappend)
-                         ((:executable-counterpart force)))))
+  (local (in-theory (e/d (str::repeated-revappend)
+                         ((:executable-counterpart force)
+                          acl2::revappend-removal))))
 
   (defthm vl-printedlist-p-of-repeated-revappend
     (implies (and (vl-printedlist-p x)
                   (force (vl-printedlist-p y)))
-             (vl-printedlist-p (repeated-revappend n x y))))
+             (vl-printedlist-p (str::repeated-revappend n x y))))
 
-  (defthm vl-printedlist-p-of-vl-html-encode-push
+  (defthm vl-printedlist-p-of-html-encode-push
     (implies (vl-printedlist-p acc)
-             (vl-printedlist-p (vl-html-encode-push char1 col tabsize acc)))
-    :hints(("Goal" :in-theory (enable vl-html-encode-push))))
+             (vl-printedlist-p (str::html-encode-push char1 col tabsize acc)))
+    :hints(("Goal" :in-theory (enable str::html-encode-push))))
 
-  (defthm vl-printedlist-p-of-vl-html-encode-chars-aux
+  (defthm vl-printedlist-p-of-html-encode-chars-aux
     (implies (vl-printedlist-p acc)
-             (vl-printedlist-p (mv-nth 1 (vl-html-encode-chars-aux x col tabsize acc))))
-    :hints(("Goal" :in-theory (enable vl-html-encode-chars-aux))))
+             (vl-printedlist-p (mv-nth 1 (str::html-encode-chars-aux x col tabsize acc))))
+    :hints(("Goal" :in-theory (enable str::html-encode-chars-aux))))
 
-  (defthm vl-printedlist-p-of-vl-html-encode-string-aux
+  (defthm vl-printedlist-p-of-html-encode-string-aux
     (implies (vl-printedlist-p acc)
-             (vl-printedlist-p (mv-nth 1 (vl-html-encode-string-aux x n xl col tabsize acc)))))
+             (vl-printedlist-p (mv-nth 1 (str::html-encode-string-aux x n xl col tabsize acc))))
+    :hints(("Goal" :in-theory (enable str::html-encode-string-aux))))
 
-  (defthm vl-printedlist-p-of-vl-url-encode-chars-aux
+  (defthm vl-printedlist-p-of-url-encode-chars-aux
     (implies (vl-printedlist-p acc)
-             (vl-printedlist-p (vl-url-encode-chars-aux x acc)))
-    :hints(("Goal" :in-theory (enable vl-url-encode-chars-aux))))
+             (vl-printedlist-p (str::url-encode-chars-aux x acc)))
+    :hints(("Goal" :in-theory (enable str::url-encode-chars-aux))))
 
-  (defthm vl-printedlist-p-of-vl-url-encode-string-aux
+  (defthm vl-printedlist-p-of-url-encode-string-aux
     (implies (vl-printedlist-p acc)
-             (vl-printedlist-p (vl-url-encode-string-aux x n xl acc)))
-    :hints(("Goal" :in-theory (enable vl-url-encode-string-aux)))))
+             (vl-printedlist-p (str::url-encode-string-aux x n xl acc)))
+    :hints(("Goal" :in-theory (enable str::url-encode-string-aux)))))
 
 
 
@@ -145,6 +187,8 @@ symbols (e.g., @('ACL2::foo') vs. @('VL::foo').</li>
 
 <li>@('base'), a @(see print-base-p) for base 10, 16, etc.</li>
 
+<li>@('eviscconfig'), an @(see str::eviscconfig) for @('~x') directives.</li>
+
 </ul>
 
 <p>Finally, the printer includes a @('misc') field which must be an alist, and
@@ -163,10 +207,17 @@ particularly nice in that it makes @(see with-local-ps) very cheap, etc.</p>
 wrapper @(see ps-macros).  We ask that you not use the primitive stobj
 functions directly, but instead use these wrappers.</p>")
 
-(defstobj ps
+(defconst *vl-default-eviscconfig*
+  ;; This should be pretty generous.  The goal is to not hide
+  ;; too much, but to hide things when they do get excessive.
+  (str::make-eviscconfig :print-level 5
+                         :print-length 15))
+
+(make-event
+ `(defstobj ps
 
   ;; The accumulated characters
-  (rchars       :type (satisfies vl-printedlist-p))
+  (rchars       :type (satisfies str::printtree-p))
 
   ;; The current column number.
   (col          :initially 0 :type unsigned-byte)
@@ -189,6 +240,9 @@ functions directly, but instead use these wrappers.</p>")
 
   (misc         :initially nil :type (satisfies alistp))
 
+  (eviscconfig  :type (satisfies str::eviscconfig-p)
+                :initially ,*vl-default-eviscconfig*)
+
   :inline t
 
   :renaming ((psp                 vl-ps-p)
@@ -201,6 +255,7 @@ functions directly, but instead use these wrappers.</p>")
              (pkg                 vl-ps->package-raw)
              (base                vl-ps->base-raw)
              (misc                vl-ps->misc-raw)
+             (eviscconfig         vl-ps->eviscconfig-raw)
              (update-rchars       vl-ps-update-rchars-fn)
              (update-col          vl-ps-update-col-fn)
              (update-autowrap-col vl-ps-update-autowrap-col-fn)
@@ -210,9 +265,10 @@ functions directly, but instead use these wrappers.</p>")
              (update-pkg          vl-ps-update-package-fn)
              (update-base         vl-ps-update-base-fn)
              (update-misc         vl-ps-update-misc-fn)
+             (update-eviscconfig  vl-ps-update-eviscconfig-fn)
              )
 
-  :non-memoizable t)
+  :non-memoizable t))
 
 (defsection ps-macros
   :parents (ps)
@@ -415,6 +471,28 @@ also in reverse order.</p>
   (add-macro-alias vl-ps->misc vl-ps->misc-fn$inline))
 
 
+(defsection vl-ps->eviscconfig
+  :parents (ps-macros)
+  :short "@('(vl-ps->eviscconfig) --> eviscconfig')"
+  :long "@(def vl-ps->eviscconfig)"
+
+  (define vl-ps->eviscconfig-fn (ps)
+    :returns (eviscconfig str::eviscconfig-p :rule-classes :type-prescription)
+    :inline t
+    (mbe :logic (str::eviscconfig-fix (vl-ps->eviscconfig-raw ps))
+         :exec (vl-ps->eviscconfig-raw ps))
+    ///
+    (defthm str::eviscconfig-p-of-vl-ps->eviscconfig-fn
+      (str::eviscconfig-p (vl-ps->eviscconfig-fn ps))))
+
+  (remove-macro-alias vl-ps->eviscconfig-fn)
+
+  (defmacro vl-ps->eviscconfig ()
+    `(vl-ps->eviscconfig-fn ps))
+
+  (add-macro-alias vl-ps->eviscconfig vl-ps->eviscconfig-fn$inline))
+
+
 (defsection vl-ps-update-rchars
   :parents (ps-macros)
   :short "@('(vl-ps-update-rchars rchars)')"
@@ -514,6 +592,17 @@ also in reverse order.</p>
   (add-macro-alias vl-ps-update-misc vl-ps-update-misc-fn))
 
 
+(defsection vl-ps-update-eviscconfig
+  :parents (ps-macros)
+  :short "@('(vl-ps-update-eviscconfig eviscconfig)')"
+  :long "@(def vl-ps-update-eviscconfig)"
+
+  (defmacro vl-ps-update-eviscconfig (eviscconfig)
+    `(vl-ps-update-eviscconfig-fn ,eviscconfig ps))
+
+  (add-macro-alias vl-ps-update-eviscconfig vl-ps-update-eviscconfig-fn))
+
+
 (in-theory (disable vl-ps-p
 
                     vl-ps->rchars-raw
@@ -525,6 +614,7 @@ also in reverse order.</p>
                     vl-ps->package-raw
                     vl-ps->base-raw
                     vl-ps->misc-raw
+                    vl-ps->eviscconfig-raw
 
                     vl-ps->rchars
                     vl-ps->col
@@ -535,6 +625,7 @@ also in reverse order.</p>
                     vl-ps->package
                     vl-ps->base
                     vl-ps->misc
+                    vl-ps->eviscconfig
 
                     vl-ps-update-rchars
                     vl-ps-update-col
@@ -544,7 +635,9 @@ also in reverse order.</p>
                     vl-ps-update-tabsize
                     vl-ps-update-package
                     vl-ps-update-base
-                    vl-ps-update-misc))
+                    vl-ps-update-misc
+                    vl-ps-update-eviscconfig
+                    ))
 
 
 (defsection vl-ps-seq
@@ -662,6 +755,35 @@ the indicated file.</p>"
        (state (princ$ (vl-ps->string) channel state)))
     (close-output-channel channel state)))
 
+(define vl-print-to-file-and-clear ((filename stringp) &key (ps 'ps) (state 'state))
+  :parents (vl-print-to-file)
+  :returns (mv (ps)
+               (state state-p1 :hyp (force (state-p1 state))))
+  :short "Write the printed characters to a file and clear out the @('ps')."
+  :long "<p>This is similar to @(see vl-print-to-file) except that it also
+clears out the characters in @('ps').  This allows us to optimize this function
+under the hood in various ways that wouldn't be sound for
+@('vl-print-to-file').</p>"
+  (b* ((filename (string-fix filename))
+       ((mv channel state)
+        (open-output-channel! filename :character state))
+       ((unless channel)
+        (raise "Error opening file ~s0 for writing." filename)
+        (mv ps state))
+       (rchars (vl-ps->rchars))
+       (ps     (vl-ps-update-rchars nil))
+       (ps     (vl-ps-update-col 0))
+       ;; Under-the-hood version optimizes this to nreverse and uses raw
+       ;; printing routines to speed up file output
+       (state  (princ$ (str::printtree->str rchars) channel state))
+       (state  (close-output-channel channel state)))
+    (mv ps state))
+  ///
+  (defttag vl-optimize)
+; (depends-on "print-fast.lsp")
+  (acl2::include-raw "print-fast.lsp")
+  (defttag nil))
+
 
 (defsection with-ps-file
   :parents (accessing-printed-output)
@@ -669,9 +791,9 @@ the indicated file.</p>"
   :long "<p>The basic idea of this is that you can do, e.g.,</p>
 
 @({
- (with-ps-file \"my-file.txt\"
-    (vl-print \"Hello,\")
-    (vl-println \"World!\"))
+    (with-ps-file \"my-file.txt\"
+      (vl-print \"Hello,\")
+      (vl-println \"World!\"))
 })
 
 <p>And end up with a file called @('my-file.txt') that says @('Hello, World!').
@@ -689,12 +811,10 @@ with-local-stobj), so previously printed content isn't included.</p>
     `(acl2::with-local-stobj
       ps
       (mv-let (ps state)
-        (let* ((ps     (vl-ps-seq ,@forms))
-               (state  (vl-print-to-file ,filename)))
+        (b* ((ps            (vl-ps-seq ,@forms))
+             ((mv ps state) (vl-print-to-file-and-clear ,filename)))
           (mv ps state))
         state))))
-
-
 
 (defsection printing-locally
   :parents (printer)
@@ -747,8 +867,9 @@ top-level) for a workaround.</p>"
               (test '("foo" #\a #\b) "bafoo")
               (test '("foo" "bar") "barfoo")
               (test '(#\a "foo" #\b "bar" #\c) "cbarbfooa")
-              (test 5 "")
-              (test '(#\a . 5) "a")))))
+              ;; (test 5 "") ;; note: printedlist is a truelist now
+              ;; (test '(#\a . 5) "a")
+              ))))
 
   (local (assert! (test-ps-writing))))
 
@@ -784,7 +905,8 @@ configuration.</p>"
    (vl-ps-update-htmlp nil)
    (vl-ps-update-tabsize 8)
    (vl-ps-update-package 'VL::a-symbol-that-is-not-imported)
-   (vl-ps-update-base 10)))
+   (vl-ps-update-base 10)
+   (vl-ps-update-eviscconfig *vl-default-eviscconfig*)))
 
 
 (define vl-ps-text-reset (&key (ps 'ps))
@@ -808,7 +930,8 @@ default state.</p>"
    (htmlp        booleanp :rule-classes :type-prescription)
    (tabsize      posp     :rule-classes :type-prescription)
    (package      symbolp  :rule-classes :type-prescription)
-   (base         print-base-p))
+   (base         print-base-p)
+   (eviscconfig  str::eviscconfig-p))
   :tag :vl-psconfig)
 
 
@@ -824,7 +947,8 @@ the column number; it only changes the configuration settings.</p>"
                (vl-ps-update-htmlp config.htmlp)
                (vl-ps-update-tabsize config.tabsize)
                (vl-ps-update-package config.package)
-               (vl-ps-update-base config.base))))
+               (vl-ps-update-base config.base)
+               (vl-ps-update-eviscconfig config.eviscconfig))))
 
 
 (define vl-ps-save-config (&key (ps 'ps))
@@ -839,34 +963,15 @@ number; only the configuration settings are saved.</p>"
                     :htmlp        (if (vl-ps->htmlp) t nil)
                     :tabsize      (vl-ps->tabsize)
                     :package      (vl-ps->package)
-                    :base         (vl-ps->base)))
+                    :base         (vl-ps->base)
+                    :eviscconfig  (vl-ps->eviscconfig)))
 
 
 
 
 (defsection basic-printing
   :parents (printer)
-  :short "Primitive routines for printing objects."
-  :long "<p>Our printer is intended to support both text and html output.
-Printing HTML is subtle because one may wish to write:</p>
-
-<ul>
-
-<li><b>HTML markup</b> (e.g., &lt;b&gt;, &lt;code&gt;, ...), wherein the
-special characters like &lt; are not to be changed, are going to be invisible
-to the user, and should not affect the column number,</li>
-
-<li><b>Parts of URLs</b> (e.g., filenames), which must be \"percent encoded\"
-per RFC 3986, e.g., spaces become %20.  These, too, do not affect the column
-number because they take part only in tags such as &lt;a href=\"...\"&gt;,
-and</li>
-
-<li><b>Encoded HTML text</b>, where special characters like &amp; and &lt;
-become &amp;amp; and &amp;lt;, and where tabs become a litany of &amp;nbsp;
-characters, and where the column should be advanced as the text is
-printed.</li>
-
-</ul>")
+  :short "Primitive routines for printing objects.")
 
 (define vl-col-after-printing-chars
   ((col   natp            "Current column we're at.")
@@ -1027,12 +1132,13 @@ lists.</p>"
 (define vl-print-str-main ((x stringp :type string) &key (ps 'ps))
   :parents (vl-print)
   :split-types t
+  :prepwork ((local (in-theory (enable str::html-encode-string-aux))))
   (let ((rchars  (vl-ps->rchars))
         (col     (vl-ps->col)))
     (if (vl-ps->htmlp)
         ;; Need to do HTML encoding.
         (mv-let (col rchars)
-          (vl-html-encode-string-aux x 0 (length x) col (vl-ps->tabsize) rchars)
+          (str::html-encode-string-aux x 0 (length x) col (vl-ps->tabsize) rchars)
           (vl-ps-seq (vl-ps-update-rchars rchars)
                      (vl-ps-update-col col)))
       ;; Else, nothing to encode
@@ -1041,11 +1147,12 @@ lists.</p>"
 
 (define vl-print-charlist-main ((x character-listp) &key (ps 'ps))
   :parents (vl-print)
+  :verbosep t
   (let ((rchars  (vl-ps->rchars))
         (col     (vl-ps->col)))
     (if (vl-ps->htmlp)
         (mv-let (col rchars)
-          (vl-html-encode-chars-aux x col (vl-ps->tabsize) rchars)
+          (str::html-encode-chars-aux x col (vl-ps->tabsize) rchars)
           (vl-ps-seq (vl-ps-update-rchars rchars)
                      (vl-ps-update-col col)))
       (vl-ps-seq (vl-ps-update-rchars (revappend (character-list-fix x) rchars))
@@ -1089,15 +1196,21 @@ lists.</p>"
   ///
   (defthm acc-of-vl-print-natchars-aux
     (equal (mv-nth 0 (vl-print-natchars-aux n acc col))
-           (str::revappend-natchars-aux n acc))
-    :hints(("Goal" :in-theory (enable str::basic-natchars))))
+           (str::revappend-nat-to-dec-chars-aux n acc))
+    :hints(("Goal" :in-theory (enable str::basic-nat-to-dec-chars))))
   (verify-guards vl-print-natchars-aux))
 
-(define vl-print-nat-main ((n natp) &key (ps 'ps))
+(define vl-print-int-main ((n integerp) &key (ps 'ps))
   :parents (vl-print-nat)
   :split-types t
-  (declare (type unsigned-byte n))
-  (b* (((when (zp n))
+  (declare (type signed-byte n))
+  (b* ((n (lifix n))
+       (ps (if (< n 0)
+               (vl-ps-seq (vl-ps-update-rchars (cons #\- (vl-ps->rchars)))
+                          (vl-ps-update-col (the unsigned-byte (+ 1 (vl-ps->col)))))
+             ps))
+       (n (abs n))
+       ((when (eql n 0))
         (vl-ps-seq (vl-ps-update-rchars (cons #\0 (vl-ps->rchars)))
                    (vl-ps-update-col (the unsigned-byte (+ 1 (vl-ps->col))))))
        ((mv rchars col)
@@ -1122,11 +1235,11 @@ strings, so they can be printed at runtime without any coercion.</li>
 <li>Numbers don't have to be encoded, so there's no need to consider whether
 we're in HTML mode.</li>
 
-<li>We essentially use str::revappend-natchars instead of calling natstr or
+<li>We essentially use str::revappend-nat-to-dec-chars instead of calling natstr or
 similar.  This does the minimum amount of consing and doesn't build a
 string.</li>
 
-<li>We manually inline the executable definition of str::revappend-natchars to
+<li>We manually inline the executable definition of str::revappend-nat-to-dec-chars to
 avoid doing the loop.</li>
 
 </ul>"
@@ -1136,7 +1249,7 @@ avoid doing the loop.</li>
            (let ((str (natstr x)))
              `(vl-print-raw-fast ,str ,(length str))))
           (t
-           `(vl-print-nat-main ,x)))))
+           `(vl-print-int-main ,x)))))
 
 (define vl-print-non-string ((x (and (vl-printable-p x)
                                      (not (stringp x))))
@@ -1149,8 +1262,8 @@ avoid doing the loop.</li>
         ((characterp x)
          ;; Fast to check.
          (vl-print-charlist-main (list x)))
-        ((natp x)
-         (vl-print-nat-main x))
+        ((integerp x)
+         (vl-print-int-main x))
         (t
          ;; Else some other kind of number
          (vl-print-charlist-main
@@ -1215,7 +1328,7 @@ vl-print-url) for alternatives that perform different kinds of encoding.</p>
            (if (vl-string-needs-html-encoding-p x 0 (length x))
                `(vl-print-str ,x)
              `(vl-print-raw-fast ,x ,(length x))))
-          ((natp x)
+          ((integerp x)
            `(vl-print-nat ,x))
           (t
            `(vl-print-main ,x)))))
@@ -1248,16 +1361,16 @@ vl-print-url) for alternatives that perform different kinds of encoding.</p>
          ;; Coerce X into either a string or character list.
          (x      (vl-printable-fix x))
          (x      (cond ((stringp x) x)
-                       ((atom x)    (explode-atom x 10))
+                       ((and (atom x) x)    (explode-atom x 10))
                        (t           x))))
     (declare (type (integer 0 *) col))
     (if htmlp
         ;; Need to do HTML encoding.
         (b* ((tabsize       (vl-ps->tabsize))
              ((mv & rchars) (if (stringp x)
-                                (vl-html-encode-string-aux x 0 (length x) col tabsize rchars)
-                              (vl-html-encode-chars-aux x col tabsize rchars))))
-          (vl-ps-seq (vl-ps-update-rchars (revappend *vl-html-newline* rchars))
+                                (str::html-encode-string-aux x 0 (length x) col tabsize rchars)
+                              (str::html-encode-chars-aux x col tabsize rchars))))
+          (vl-ps-seq (vl-ps-update-rchars (revappend (str::html-newline) rchars))
                      (vl-ps-update-col 0)))
       ;; Plain-text, no encoding necessary.
       ;; We used to remove any trailing whitespace before printing the newline,
@@ -1336,22 +1449,22 @@ split up at reasonably good places.</p>"
          ;; Coerce X into either a string or character list
          (x            (vl-printable-fix x))
          (x            (cond ((stringp x) x)
-                             ((atom x)    (explode-atom x 10))
+                             ((and (atom x) x)    (explode-atom x 10))
                              (t           x))))
     (if htmlp
         ;; Need to do HTML encoding.
         (b* ((tabsize         (vl-ps->tabsize))
              ((mv col rchars) (if (stringp x)
-                                  (vl-html-encode-string-aux x 0 (length x) col tabsize rchars)
-                                (vl-html-encode-chars-aux x col tabsize rchars)))
+                                  (str::html-encode-string-aux x 0 (length x) col tabsize rchars)
+                                (str::html-encode-chars-aux x col tabsize rchars)))
              ((when (< col autowrap-col))
               ;; No autowrapping.
               (vl-ps-seq (vl-ps-update-rchars rchars)
                          (vl-ps-update-col col)))
              ;; Otherwise, autowrap.
              (indent (vl-ps->autowrap-ind))
-             (rchars (revappend *vl-html-newline* rchars))
-             (rchars (repeated-revappend indent *vl-html-&nbsp* rchars)))
+             (rchars (revappend (str::html-newline) rchars))
+             (rchars (str::repeated-revappend indent (str::html-space) rchars)))
           (vl-ps-seq (vl-ps-update-rchars rchars)
                      (vl-ps-update-col indent)))
 
@@ -1384,7 +1497,7 @@ split up at reasonably good places.</p>"
          (x       (vl-printable-fix x)))
     (cond ((stringp x)
            (vl-ps-update-rchars (cons x rchars)))
-          ((atom x)
+          ((and (atom x) x)
            (vl-ps-update-rchars (revappend (explode-atom x 10) rchars)))
           (t
            (vl-ps-update-rchars (revappend x rchars))))))
@@ -1427,7 +1540,7 @@ lot of markup.</p>"
            (vl-ps-seq
             (vl-ps-update-rchars (cons #\Newline (cons x rchars)))
             (vl-ps-update-col 0)))
-          ((atom x)
+          ((and (atom x) x)
            (vl-ps-seq
             (vl-ps-update-rchars (cons #\Newline (revappend (explode-atom x 10) rchars)))
             (vl-ps-update-col 0)))
@@ -1446,11 +1559,11 @@ with the proper encoding.</p>"
   (let* ((rchars (vl-ps->rchars))
          (x      (vl-printable-fix x)))
     (cond ((stringp x)
-           (vl-ps-update-rchars (vl-url-encode-string-aux x 0 (length x) rchars)))
-          ((atom x)
-           (vl-ps-update-rchars (vl-url-encode-chars-aux (explode-atom x 10) rchars)))
+           (vl-ps-update-rchars (str::url-encode-string-aux x 0 (length x) rchars)))
+          ((and (atom x) x)
+           (vl-ps-update-rchars (str::url-encode-chars-aux (explode-atom x 10) rchars)))
           (t
-           (vl-ps-update-rchars (vl-url-encode-chars-aux x rchars))))))
+           (vl-ps-update-rchars (str::url-encode-chars-aux x rchars))))))
 
 (define vl-print-strings-with-commas-aux ((x string-listp) &key (ps 'ps))
   :parents (vl-print-strings-with-commas)
@@ -1519,229 +1632,9 @@ preceeding the final element.</li>
 
 </ul>
 
-<p>Note: our pretty-printer is currently very lousy.  Its output is not nearly
-as nice as ACL2's ordinary @('~x') directives.</p>
-
 <p>Note: although other ACL2-style directives are not yet supported, we may
 eventually extend the printer to allow them.</p>")
 
-
-
-
-
-;; (define vl-ppr-escape-slashes
-;;   :parents (vl-basic-fmt)
-;;   :short "This is basically like acl2::prin1-with-slashes, but we put the
-;; characters into the accumulator in reverse order instead of printing them."
-;;   ((x          stringp)
-;;    (n          natp)
-;;    (xl         (eql xl (length x)))
-;;    (slash-char characterp)
-;;    (col        natp)
-;;    acc)
-;;   :guard (<= n xl)
-;;   :returns (mv (col-prime natp :rule-classes :type-prescription)
-;;                (acc-prime character-listp :hyp (character-listp acc)))
-;;   :measure (nfix (- (nfix xl) (nfix n)))
-;;   :verbosep t
-;;   (b* ((n   (lnfix n))
-;;        (col (lnfix col))
-;;        ((when (mbe :logic (zp (- (nfix xl) (nfix n)))
-;;                    :exec (eql n xl)))
-;;         (mv col acc))
-;;        ((the character char)
-;;         (mbe :logic (char-fix (char x n))
-;;              :exec (char x n)))
-;;        ((the character slash-char)
-;;         (mbe :logic (char-fix slash-char)
-;;              :exec slash-char)))
-;;     (vl-ppr-escape-slashes x
-;;                            (the unsigned-byte (+ 1 n))
-;;                            xl
-;;                            slash-char
-;;                            (if (eql char #\Newline)
-;;                                0
-;;                              (the unsigned-byte (+ 1 col)))
-;;                            (if (or (eql char #\\)
-;;                                    (eql char slash-char))
-;;                                (list* char #\\ acc)
-;;                              (cons char acc))))
-;;   :hooks ((:fix :hints(("Goal"
-;;                         ;; The expansion heuristics stupidly don't want to open
-;;                         ;; up calls that have fixes in them.
-;;                         :expand ((:free (x n xl slash-char col)
-;;                                   (vl-ppr-escape-slashes x n xl slash-char col acc)))))))
-;;   ///
-;;   (defthm vl-printedlist-p-of-vl-ppr-escape-slashes
-;;     (implies (vl-printedlist-p acc)
-;;              (vl-printedlist-p
-;;               (mv-nth 1 (vl-ppr-escape-slashes x n xl slash-char col acc))))))
-
-;; (define vl-ppr-explode-symbol-aux
-;;   :parents (vl-ppr-explode-symbol)
-;;   :short "Write the characters for a symbol name, adding bars if necessary."
-;;   ((name stringp   "Name of a symbol or package.")
-;;    (col  natp)
-;;    acc)
-;;   :returns (mv (new-col natp :rule-classes :type-prescription)
-;;                (acc     character-listp :hyp (character-listp acc)))
-;;   (b* ((name (string-fix name))
-;;        (col  (lnfix col))
-;;        (len  (length name))
-;;        ((when (acl2::may-need-slashes-fn name 10))
-;;         (b* (((mv col acc)
-;;               (vl-ppr-escape-slashes name 0 len #\| (+ 1 col) (cons #\| acc))))
-;;           (mv (+ 1 col) (cons #\| acc)))))
-;;     (mv (+ (lnfix col) len)
-;;         (str::revappend-chars name acc)))
-;;   :verbosep t
-;;   :prepwork
-;;   ((local (in-theory (disable acl2::may-need-slashes-fn))))
-;;   ///
-;;   (defthm vl-printedlist-p-of-vl-ppr-explode-symbol-aux
-;;     (implies (vl-printedlist-p acc)
-;;              (vl-printedlist-p (mv-nth 1 (vl-ppr-explode-symbol-aux name col acc))))))
-
-
-;; (define vl-ppr-explode-symbol
-;;   :parents (vl-basic-fmt)
-;;   :short "Print a symbol."
-;;   ((x   symbolp "The symbol we want to explode.")
-;;    (pkg symbolp "A symbol in the current package we are printing from.")
-;;    (col natp    "Current column we're at.")
-;;    (acc))
-;;   :returns (mv (new-col natp :rule-classes :type-prescription)
-;;                (acc     character-listp :hyp (character-listp acc)))
-;;   (b* ((x     (mbe :logic (acl2::symbol-fix x) :exec x))
-;;        (pkg   (mbe :logic (acl2::symbol-fix pkg) :exec pkg))
-;;        (col   (lnfix col))
-;;        (xname (symbol-name x))
-;;        (xpkg  (symbol-package-name x))
-;;        ((when (or (equal xpkg xname)
-;;                   (equal (intern-in-package-of-symbol xname pkg) x)))
-;;         (vl-ppr-explode-symbol-aux xname col acc))
-;;        ((when (equal xpkg "KEYWORD"))
-;;         (vl-ppr-explode-symbol-aux xname (+ 1 col) (cons #\: acc)))
-;;        ((mv col acc) (vl-ppr-explode-symbol-aux xpkg col acc))
-;;        (col          (+ 2 col))
-;;        (acc          (list* #\: #\: acc)))
-;;     (vl-ppr-explode-symbol-aux xname col acc))
-;;   ///
-;;   (defthm vl-printedlist-p-of-vl-ppr-explode-symbol
-;;     (implies (vl-printedlist-p acc)
-;;              (vl-printedlist-p (mv-nth 1 (vl-ppr-explode-symbol x pkg col acc))))))
-
-;; (define vl-ppr-explode-string
-;;   :parents (vl-basic-fmt)
-;;   :short "Print a string."
-;;   ((x stringp)
-;;    (col natp)
-;;    acc)
-;;   :returns (mv (new-col natp :rule-classes :type-prescription)
-;;                (acc character-listp :hyp (character-listp acc)))
-;;   (b* ((x   (string-fix x))
-;;        (col (lnfix col))
-;;        ((mv col acc)
-;;         (vl-ppr-escape-slashes x 0 (length x) #\" (+ 1 col) (cons #\" acc))))
-;;     (mv (+ 1 col) (cons #\" acc)))
-;;   ///
-;;   (defthm vl-printedlist-p-of-vl-ppr-explode-string
-;;     (implies (vl-printedlist-p acc)
-;;              (vl-printedlist-p (mv-nth 1 (vl-ppr-explode-string x col acc))))))
-
-;; (define vl-ppr-explode-atom
-;;   :parents (vl-basic-fmt)
-;;   ((x atom)
-;;    (pkg symbolp)
-;;    (base print-base-p)
-;;    (col natp)
-;;    acc)
-;;   :hooks ((:fix :args ((pkg symbolp) (col natp))))
-;;   :returns (mv (new-col natp :rule-classes :type-prescription)
-;;                (acc character-listp :hyp (character-listp acc)))
-;;   (b* ((col (lnfix col))
-;;        ((when (symbolp x))
-;;         (vl-ppr-explode-symbol x pkg col acc))
-;;        ((when (stringp x))
-;;         (vl-ppr-explode-string x col acc))
-;;        ((when (acl2-numberp x))
-;;         (let* ((explode (explode-atom x base))
-;;                (len     (len explode)))
-;;           (mv (+ col len) (revappend explode acc))))
-;;        ((when (characterp x))
-;;         (case x
-;;           (#\Space   (mv (+ col 7) (str::revappend-chars "#\\Space" acc)))
-;;           (#\Newline (mv (+ col 9) (str::revappend-chars "#\\Newline" acc)))
-;;           (#\Tab     (mv (+ col 5) (str::revappend-chars "#\\Tab" acc)))
-;;           (#\Rubout  (mv (+ col 8) (str::revappend-chars "#\\Rubout" acc)))
-;;           (#\Page    (mv (+ col 6) (str::revappend-chars "#\\Page" acc)))
-;;           (otherwise (mv (+ col 3) (list* x #\\ #\# acc))))))
-;;     (raise "Bad atom: ~x0." x)
-;;     (mv (+ col 10) (str::revappend-chars "<bad atom>" acc)))
-;;   ///
-;;   (defthm vl-printedlist-p-of-vl-ppr-explode-atom
-;;     (implies (vl-printedlist-p acc)
-;;              (vl-printedlist-p (mv-nth 1 (vl-ppr-explode-atom x pkg base col acc))))))
-
-
-;; (define vl-stupid-ppr1
-;;   :parents (vl-basic-fmt)
-;;   :short "Barbaric pretty-printer."
-;;   ((x                      "Any ACL2 object.")
-;;    (pkg      symbolp       "Home package we're printing from.")
-;;    (base     print-base-p  "Numeric base for printing numbers.")
-;;    (rmargin  natp          "Right margin for line wrapping.")
-;;    (in-listp booleanp      "Are we currently in a list?")
-;;    (col      natp          "Current column number.")
-;;    (acc))
-;;   :hooks ((:fix :args ((pkg symbolp)
-;;                        (rmargin natp)
-;;                        (in-listp booleanp)
-;;                        (col natp))))
-;;   :returns (mv (new-col natp :rule-classes :type-prescription)
-;;                (new-acc character-listp :hyp (character-listp acc)))
-;;   :verify-guards nil
-;;   (b* ((col     (lnfix col))
-;;        (rmargin (lnfix rmargin))
-;;        ((when (atom x))
-;;         (vl-ppr-explode-atom x pkg base col acc))
-;;        ((mv col acc)
-;;         (if in-listp
-;;             (vl-stupid-ppr1 (car x) pkg base rmargin nil col acc)
-;;           (vl-stupid-ppr1 (car x) pkg base rmargin nil (+ 1 col) (cons #\( acc))))
-;;        ((when (not (cdr x)))
-;;         (mv (+ 1 (lnfix col)) (if in-listp acc (cons #\) acc))))
-;;        ;; "Maybe break"
-;;        ((mv col acc) (if (< col rmargin)
-;;                          (mv col acc)
-;;                        (mv 0 (cons #\Newline acc))))
-;;        ((when (consp (cdr x)))
-;;         ;; Successive elements of a list, no dots.
-;;         (b* (((mv col acc)
-;;               (vl-stupid-ppr1 (cdr x) pkg base rmargin t (+ 1 col) (cons #\Space acc))))
-;;           (mv (+ 1 (lnfix col))
-;;               (if in-listp acc (cons #\) acc)))))
-
-;;        ;; End element, need a dot.
-;;        (col (+ 3 col))
-;;        (acc (list* #\Space #\. #\Space acc))
-
-;;        ;; "Maybe break"
-;;        ((mv col acc) (if (< col rmargin)
-;;                          (mv col acc)
-;;                        (mv 0 (cons #\Newline acc))))
-
-;;        ((mv col acc)
-;;         (vl-stupid-ppr1 (cdr x) pkg base rmargin t col acc)))
-
-;;     (mv (+ 1 (lnfix col))
-;;         (if in-listp acc (cons #\) acc))))
-;;   ///
-;;   (defthm vl-printedlist-p-of-vl-stupid-ppr1
-;;     (implies (vl-printedlist-p acc)
-;;              (vl-printedlist-p (mv-nth 1 (vl-stupid-ppr1 x pkg base rmargin in-listp col acc)))))
-
-;;   (verify-guards vl-stupid-ppr1))
 
 (define vl-skip-ws
   :parents (vl-basic-fmt)
@@ -1892,6 +1785,7 @@ eventually extend the printer to allow them.</p>")
        (tabsize (vl-ps->tabsize))
        (rmargin (vl-ps->autowrap-col))
 
+       (xevisc (str::eviscerate x (vl-ps->eviscconfig)))
        (config (str::make-printconfig :flat-right-margin   (max 40 (floor rmargin 2))
                                       :hard-right-margin   (max 77 rmargin)
                                       :print-base          base
@@ -1899,7 +1793,10 @@ eventually extend the printer to allow them.</p>")
                                       :home-package        pkg
                                       :print-lowercase     nil))
 
-       (x-rchars (str::revappend-pretty x nil :config config :col col))
+       (x-rchars (str::revappend-pretty xevisc nil
+                                        :config config
+                                        :col col
+                                        :eviscp t))
        ((unless htmlp)
         (vl-ps-seq
          ;; One option would be to append the new-rchars onto rchars.  Cost: N
@@ -1912,7 +1809,7 @@ eventually extend the printer to allow them.</p>")
 
        ;; HTML mode.  We're going to html encode the new-rchars.
        ((mv col rchars)
-        (vl-html-encode-chars-aux (reverse x-rchars) col tabsize rchars)))
+        (str::html-encode-chars-aux (reverse x-rchars) col tabsize rchars)))
     (vl-ps-seq
      (vl-ps-update-col col)
      (vl-ps-update-rchars rchars))))
@@ -2106,8 +2003,7 @@ it right away.</p>"
   (cond ((<= (len args) 10)
          (vl-basic-fmt msg (pairlis$
                             '(#\0 #\1 #\2 #\3 #\4 #\5 #\6 #\7 #\8 #\9)
-                            (redundant-list-fix args))))
+                            (list-fix args))))
         (t
          (progn$ (raise "vl-basic-cw-obj is limited to 10 arguments.")
                  ps))))
-

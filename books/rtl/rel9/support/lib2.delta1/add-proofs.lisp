@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -28,25 +16,25 @@
 (local (include-book "add-new"))
 
 
-(local 
+(local
  (defthm bits-is-bits_alt
    (equal (bits x i j)
           (bits_alt x i j))
    :hints (("Goal" :in-theory (e/d (bits_alt bits) ())))))
-              
-(local               
+
+(local
  (defthm bitn-is-bitn_alt
    (equal (bitn x n)
           (bitn_alt x n))
    :hints (("Goal" :in-theory (e/d (bitn_alt bitn) ())))))
-          
-(local               
+
+(local
  (defthm binary-cat_alt-is-binary-cat
    (equal (binary-cat x m y n)
           (binary-cat_alt x m y n))
    :hints (("Goal" :in-theory (e/d (binary-cat_alt binary-cat) ())))))
-          
-(local               
+
+(local
  (defthm mulcat_alt-is-mulcat
    (equal (mulcat l n x)
           (mulcat_alt l n x))
@@ -81,7 +69,7 @@
                 (bvecp v 1)
                 (bvecp w 1))
            (equal (+ u v w)
-                  (cat (logior (logand u v) (logior (logand u w) (logand v w))) 1 
+                  (cat (logior (logand u v) (logior (logand u w) (logand v w))) 1
                        (logxor u (logxor v w)) 1)))
   :rule-classes ()
   :hints (("Goal" :use ((:instance full-adder_alt)))))
@@ -108,7 +96,7 @@
 
 
 
-(local 
+(local
  (defthm rc-carry-is-rc-carry_alt
    (equal (rc-carry x y k)
           (rc-carry_alt x y k))
@@ -124,12 +112,12 @@
 	 (1- k))))
 
 
-(local 
+(local
  (defthm rc-sum-is-rc-sum_alt
    (equal (rc-sum x y k)
           (rc-sum_alt x y k))
    :hints (("Goal" :induct (rc-sum x y k)))))
-                                 
+
 
 (defthm ripple-carry
   (implies (and (natp x)
@@ -150,7 +138,7 @@
     0))
 
 
-(local 
+(local
  (defthm gen-is-gen_alt
    (equal (gen x y i j)
           (gen_alt x y i j))))
@@ -167,7 +155,7 @@
     1))
 
 
-(local 
+(local
  (defthm prop-is-prop_alt
    (equal (prop x y i j)
           (prop_alt x y i j))))
@@ -352,7 +340,7 @@
 	     (equal (bits (+ 1 x y) i j)
 		    (bits (+ (bits x i j)
 			     (bits y i j)
-			     (logior (prop x y (1- j) 0) 
+			     (logior (prop x y (1- j) 0)
 				     (gen x y (1- j) 0) ))
 			  (- i j) 0)))
   :rule-classes ()
@@ -392,8 +380,8 @@
 		(= (gen x y k 0) 1))
 	   (equal (gen (+ x y) z k 0) 0))
   :hints (("Goal" :use ((:instance gen_alt-plus)))))
-                                   
-           
+
+
 
 (defthmd gen-extend-3
     (implies (and (natp i)
@@ -402,7 +390,7 @@
 		  (natp x)
 		  (natp y)
 		  (bvecp z (1+ j))
-		  (= (logand y z) 0))		  
+		  (= (logand y z) 0))
 	     (equal (gen (+ x y) z i 0)
 		    (logand (prop x y i (1+ j))
 			    (gen (+ x y) z j 0))))
@@ -425,7 +413,7 @@
 	      k)))
       0)))
 
-(local 
+(local
  (defthm lop-is-lop
    (equal (lop a b d k)
           (lop_alt a b d k))
@@ -463,20 +451,20 @@
 		 (= (expo (- a b)) (1- (expo lambda)))))
   :rule-classes ()
   :hints (("Goal" :use ((:instance lop_alt-thm-1)))))
-                        
+
 
 ;;;
 ;;;
 ;;; We need set of theorem about how lxor is equal logxor
 ;;;
-;;;                                  land is logand 
-;;; 
+;;;                                  land is logand
+;;;
 ;;
 
 (defun lamt (a b e)
   (logxor a (bits (lognot b) e 0)))
 
-(local 
+(local
  (defthm lamt-is-lamt_alt
    (equal (lamt a b e)
           (lamt_alt a b e))
@@ -486,7 +474,7 @@
   (logand a (bits (lognot b) e 0)))
 
 
-(local 
+(local
  (defthm lamg-is-lamg_alt
    (equal (lamg a b e)
           (lamg_alt a b e))
@@ -497,7 +485,7 @@
   (bits (lognot (logior a (bits (lognot b) e 0))) e 0))
 
 
-(local 
+(local
  (defthm lamz-is-lamz_alt
    (implies (and (natp e)
                  (integerp a)
@@ -508,11 +496,11 @@
 
 
 (defun lam1 (a b e)
-  (logand (bits (lamt a b e) e 2) 
+  (logand (bits (lamt a b e) e 2)
 	  (logand (bits (lamg a b e) (1- e) 1)
 		  (bits (lognot (lamz a b e)) (- e 2) 0))))
 
-(local 
+(local
  (defthm lam1-is-lam1_alt
    (implies (and (integerp a)
                  (integerp b)
@@ -521,7 +509,7 @@
                    (lam1_alt a b e)))
    :hints (("Goal" :in-theory (e/d (lam1 lam1_alt) ())))))
 
-                                    
+
 
 (defun lam2 (a b e)
   (logand (bits (lognot (lamt a b e)) e 2)
@@ -530,7 +518,7 @@
 
 
 
-(local 
+(local
  (defthm lam2-is-lam2_alt
    (implies (and (integerp a)
                  (integerp b)
@@ -541,12 +529,12 @@
 
 
 (defun lam3 (a b e)
-  (logand (bits (lamt a b e) e 2) 
+  (logand (bits (lamt a b e) e 2)
 	  (logand (bits (lamz a b e) (1- e) 1)
 		  (bits (lognot (lamg a b e)) (- e 2) 0))))
 
 
-(local 
+(local
  (defthm lam3-is-lam3_alt
    (implies (and (integerp a)
                  (integerp b)
@@ -565,7 +553,7 @@
 
 
 
-(local 
+(local
  (defthm lam4-is-lam4_alt
    (implies (and (integerp a)
                  (integerp b)
@@ -582,17 +570,17 @@
 			  (lam4 a b e)))))
 
 
-(local 
+(local
  (defthm lam0-is-lam0_alt
    (implies (and (integerp a)
                  (integerp b)
                  (natp e)
                  (> e 1))
             (equal (lam0 a b e)
-                   (lam0_alt a b e)))                   
+                   (lam0_alt a b e)))
    :hints (("Goal" :in-theory (e/d (lam0 lam0_alt)
                                    ())))))
-                                         
+
 
 
 
@@ -604,7 +592,7 @@
 
 
 
-(local 
+(local
  (defthm lamb-is-lamb
    (implies (and (integerp a)
                  (integerp b)
@@ -631,7 +619,7 @@
 		      (= (expo (- a b)) (1- (expo (lamb a b e)))))))
   :rule-classes ()
   :hints (("Goal" :use ((:instance lop_alt-thm-2))
-           :in-theory (e/d () 
+           :in-theory (e/d ()
                            (lamb
                             lamb_alt)))))
 
@@ -650,7 +638,7 @@
 		  (equal (bits (lognot (logxor a b)) k 0) 0)))
   :rule-classes ()
   :hints (("Goal" :use ((:instance top-thm-1-alt)))))
-                                                      
+
 
 
 (defthm top-thm-2
@@ -661,9 +649,9 @@
                 (< k n)
                 (or (equal c 0) (equal c 1)))
            (equal (equal (bits (+ a b c) k 0) 0)
-                  (equal (bits (logxor (logxor a b) 
+                  (equal (bits (logxor (logxor a b)
                                        (cat (logior a b) n c 1))
-                               k 0) 
+                               k 0)
                          0)))
   :rule-classes ()
   :hints (("Goal" :use ((:instance top-thm-2-alt)))))

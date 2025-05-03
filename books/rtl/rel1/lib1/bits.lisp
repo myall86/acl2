@@ -27,7 +27,16 @@
 (defun bitn (x n)
   (if (logbitp n x) 1 0))
 
-(in-theory (disable bitn))
+(progn
+
+; See the comment about April 2016 in books/rtl/rel1/support/logdefs.lisp.
+
+  (defthm natp-bitn
+    (natp (bitn x n))
+    :rule-classes :type-prescription)
+
+  (in-theory (disable bitn (:t bitn)))
+  )
 
 (defthm bitn-def
     (implies (and (integerp x)
@@ -731,7 +740,7 @@
 		  (integerp k) (>= k 0))
 	     (= (logior x (expt 2 k))
 		(+ x
-		   (* (expt 2 k) 
+		   (* (expt 2 k)
 		      (- 1 (bitn x k))))))
   :rule-classes ())
 

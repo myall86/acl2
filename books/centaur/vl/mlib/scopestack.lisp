@@ -36,6 +36,13 @@
 (local (std::add-default-post-define-hook :fix))
 (local (in-theory (disable acl2::consp-under-iff-when-true-listp)))
 
+; Matt K.: Avoid ACL2(p) error (the job died after vl-maybe-scopeitem-p).
+(set-waterfall-parallelism nil)
+
+; Matt K. addition: Important for speed, given the change after v8-0 to keep
+; LET expressions in right-hand sides of rewrite rules.
+(add-default-hints '('(:do-not '(preprocess))) :at-end t)
+
 (defxdoc scopestack
   :parents (mlib)
   :short "Scopestacks deal with namespaces in SystemVerilog by tracking the
@@ -165,6 +172,43 @@ doesn't make much sense.</li>
 </ul>")
 
 
+; Notes about scoping and generate statements.  BOZO NONE OF THIS IS IMPLEMENTED YET.
+;
+; You can basically ignore generate/endgenerate.  They don't introduce scopes
+; or matter at all really.  SystemVerilog-2012, Section 27.3: "The keywords
+; 'generate' and 'endgenerate' may be used to define a generate region.  A
+; generate region is a textual span in the module description where generate
+; constructs may appear.  Use of generate regions is optional.  There is no
+; semantic difference in the module when a generate region is used..."
+;
+; Unnamed begin/end blocks DO NOT introduce scopes.  We try to get rid of them
+; during make-implicit-wires (BOZO not yet implemented).
+;
+; A named "begin : foo .... end" style generate block DOES introduce a scope;
+; wires declared inside it do not become visible to the rest of the module
+; without hierarchical references.
+;
+; The conditional "if ... else ..." style generate construct DOES introduce new
+; scopes for the separate branches.  Wires declared in these branches do not
+; become visible to the rest of the module that follows the generate.  Except
+; that there's allegedly a special case, see 27.5 (page 755), where if you nest
+; if/else/if things inside of each other, then they don't count as extra scope
+; levels.  This is actually apparently quite complicated.  See especially the
+; comments after Example 1.
+;
+; The conditional "case ... " style generate construct DOES introduce new
+; scopes for each separate branch.  Wires declared in these branches do not
+; become visible to the rest of the module that follows the generate.
+;
+; A for-loop introduces several blocks, each of which has its own scope.
+; Within each such scope, the genvar is to be defined as a parameter, but it
+; only exists during elaboration and does not exist any more after elaboration.
+; If the for loop's body has the form "begin : foo .... end", then you can
+; refer into it with indexed hierarchical references, i.e., foo[0].wirename.
+
+
+
+
 (defsection scopestack-constants
   :parents (scopestack)
   :short "Meta-information about the kinds of scopes and the kinds of elements
@@ -217,32 +261,60 @@ other kinds of scopes (e.g., compilation units?) we could add them here.</p>"
     :short "Information about the kinds of items in each scope."
     :long "<p>Note that this is only for items, i.e., it's not for definitions,
   ports, packages, etc.</p>"
-    '((interface    (:import)
-                    paramdecl vardecl modport)
-      (module       (:import)
-                    paramdecl vardecl fundecl taskdecl
-                    (modinst :name instname :maybe-stringp t)
-                    (gateinst :maybe-stringp t)
-                    (genelement :name blockname :maybe-stringp t :sum-type t :acc generates)
-                    (interfaceport :acc ifports))
-      (genblob      (:import)
-                    vardecl paramdecl fundecl taskdecl typedef
-                    (modinst :name instname :maybe-stringp t)
-                    (gateinst :maybe-stringp t)
-                    (genelement :name blockname :maybe-stringp t :sum-type t :acc generates)
-                    (interfaceport :acc ifports))
+    '((interface (:import)
+                 ;; NOTE: if you add more things here, you also need to extend genblob!
+                 paramdecl vardecl fundecl taskdecl typedef dpiimport
+                 (modinst :name instname :maybe-stringp t)
+                 ;; no gateinsts in interfaces
+                 genvar
+                 ;; BOZO our handling of genelements as scope items is probably
+                 ;; not very sensible yet.  We *do* at least look up things like
+                 ;; begin/end blocks and named loops, which is good.  But we should
+                 ;; probably also support things like if/case statements whose blocks
+                 ;; may be named.  But that's really hard -- how are we to collect
+                 ;; those names?  And conflicts are OK, e.g.,
+                 ;;    case (version) 1 : foo ... 2 : foo ... endcase
+                 ;; is fine and has two sub generate blocks both named foo.  So
+                 ;; what does it mean to look up one of these and how do we want
+                 ;; to handle that?
+                 (genelement :name blockname :maybe-stringp t :sum-type t :acc generates)
+                 (interfaceport :acc ifports)
+                 modport
+                 ;; We don't include the dpi exports here because, unlike
+                 ;; imports which are "defined" by the C code, exports are just
+                 ;; things we're making available to the C code, which isn't
+                 ;; relevant to much of anything else.
+                 )
+      (module (:import)
+              ;; NOTE: if you add more things here, you also need to extend genblob!
+              paramdecl vardecl fundecl taskdecl typedef dpiimport
+              (modinst :name instname :maybe-stringp t)
+              (gateinst :maybe-stringp t)
+              genvar
+              (genelement :name blockname :maybe-stringp t :sum-type t :acc generates)
+              (interfaceport :acc ifports))
+      (class (:import)
+             paramdecl vardecl fundecl taskdecl typedef)
+      (genblob (:import)
+               vardecl paramdecl fundecl taskdecl typedef dpiimport
+               (modinst :name instname :maybe-stringp t)
+               (gateinst :maybe-stringp t)
+               genvar
+               (genelement :name blockname :maybe-stringp t :sum-type t :acc generates)
+               (interfaceport :acc ifports)
+               modport
+               )
 
       ;; fwdtypedefs could be included here, but we hope to have resolved them all
       ;;             to proper typedefs by the end of loading, so we omit them.
 
       ;; Functions, Tasks, and Statements are all grouped together into Blockscopes.
       (blockscope   (:import)
-                    vardecl paramdecl)
-
+                    vardecl paramdecl typedef)
       (design       (:import)
-                    paramdecl vardecl fundecl taskdecl typedef)
+                    paramdecl vardecl fundecl taskdecl typedef dpiimport)
       (package      (:import)
-                    paramdecl vardecl fundecl taskdecl typedef)))
+                    paramdecl vardecl fundecl taskdecl typedef dpiimport)))
 
   (defval *vl-scopes->defs*
     :short "Information about the kinds of definitions in each scope."
@@ -250,7 +322,15 @@ other kinds of scopes (e.g., compilation units?) we could add them here.</p>"
 at the top level.  However, if we ever want to allow, e.g., nested modules,
 then we will need to extend this.</p>"
     '((design ()
-              (module :acc mods) udp interface program)))
+              (module :acc mods) udp interface program
+              (class :acc classes))))
+
+  (defval *vl-scopes->classes*
+    :short "Information about which scopes can contain classes."
+    :long "<p>If we ever want to allow classes to be nested in
+other kinds of scopes (e.g., compilation units?) we could add them here.</p>"
+    '((design ()
+              (class :acc classes))))
 
   (defval *vl-scopes->portdecls*
     :parents (scopestack-constants)
@@ -268,52 +348,138 @@ in it, such as a function, task, or block statement."
   :parents (scopestack)
   :tag :vl-blockscope
   :layout :tree
-  ((imports  vl-importlist-p
-             "Package imports in this scope.")
-   (paramdecls vl-paramdecllist-p
-               "Parameter declarations in this scope.")
-   (vardecls vl-vardecllist-p
-             "Variable declarations in this scope.")
+  ((imports    vl-importlist-p    "Package imports in this scope.")
+   (paramdecls vl-paramdecllist-p "Parameter declarations in this scope.")
+   (vardecls   vl-vardecllist-p   "Variable declarations in this scope.")
+   (typedefs   vl-typedeflist-p   "Type declarations in this scope.")
+   (scopetype  vl-scopetype-p     "Kind of block responsible for this")
 
    (name  maybe-stringp :rule-classes :type-prescription
           "Just a debugging aide.  This lets us see the name of this scope when
            we want to print scopes, etc.")))
 
 (define vl-fundecl->blockscope ((x vl-fundecl-p))
+  ;; The One True Way to process a Function:
+  ;;
+  ;;  1. Process the return type (in the outer scope).
+  ;;  2. Push the function onto the scopestack.
+  ;;  3. Process the rest of the function (including the ports) in the inner scope.
+  ;;
+  ;; You might worry that this isn't correct in general, and you would be
+  ;; right.  Consider something like:
+  ;;
+  ;;    typedef logic [1:0] mytype_t;
+  ;;
+  ;;    function foo (input mytype_t A);
+  ;;      typedef logic [3:0] mytype_t;
+  ;;      ...
+  ;;    endfunction
+  ;;
+  ;; Here, the type of input A should be the [1:0] version of mytype_t from the
+  ;; outer scope.  But according to the One True Way, we'll push the inner
+  ;; scope before processing the ports, so we'd find the [3:0] version instead!
+  ;;
+  ;; But stop worrying.  Shadowcheck is responsible for making sure that this
+  ;; can't happen.  If someone writes the above, then Shadowcheck will flag it
+  ;; with a fatal warning saying that the scoping is too tricky for us to get
+  ;; right.  So throughout the rest of VL, our official position is that the
+  ;; ports are to be processed in the inner scope.  This allows us to support
+  ;; reasonable functions like:
+  ;;
+  ;;     function bar;
+  ;;       typedef logic mytype_t;
+  ;;       input mytype_t a;
+  ;;       ...
+  ;;    endfunction
   :returns (scope vl-blockscope-p)
   :parents (vl-blockscope vl-scopestack-push)
   (b* (((vl-fundecl x)))
     (make-vl-blockscope :vardecls x.vardecls
                         :imports x.imports
                         :paramdecls x.paramdecls
+                        :typedefs x.typedefs
+                        :scopetype :vl-fundecl
                         :name  x.name)))
 
 (define vl-taskdecl->blockscope ((x vl-taskdecl-p))
+  ;; The One True Way to process a Task:
+  ;;
+  ;;   1. Push the task onto the scopestack.
+  ;;   2. Process it.
+  ;;
+  ;; See the comments in vl-fundecl->blockscope.  Again, Shadowcheck is
+  ;; responsible for rejecting any tasks whose scoping is so tricky that the
+  ;; above is not correct.
   :returns (scope vl-blockscope-p)
   :parents (vl-blockscope vl-scopestack-push)
   (b* (((vl-taskdecl x)))
     (make-vl-blockscope :vardecls x.vardecls
                         :imports x.imports
                         :paramdecls x.paramdecls
+                        :typedefs x.typedefs
+                        :scopetype :vl-taskdecl
                         :name  x.name)))
 
 (define vl-blockstmt->blockscope ((x vl-stmt-p))
-  :guard (eq (vl-stmt-kind x) :vl-blockstmt)
+  ;; The One True Way to process a Block Statement:
+  ;;
+  ;;   1. Push the block statement onto the scopestack.
+  ;;   2. Process it.
+  ;;
+  ;; See the comments in vl-fundecl->blockscope for more information.
+  :guard (vl-stmt-case x :vl-blockstmt)
   :returns (scope vl-blockscope-p)
   :parents (vl-blockscope vl-scopestack-push)
   (b* (((vl-blockstmt x)))
     (make-vl-blockscope :vardecls x.vardecls
                         :imports x.imports
                         :paramdecls x.paramdecls
+                        :typedefs x.typedefs
+                        :scopetype :vl-blockstmt
                         :name  x.name)))
 
 (define vl-forstmt->blockscope ((x vl-stmt-p))
-  :guard (eq (vl-stmt-kind x) :vl-forstmt)
+  ;; The One True Way to process a For Statement:
+  ;;
+  ;;   1. Push it onto the scopestack.
+  ;;   2. Process it.
+  ;;
+  ;; Note that this means that something like this involves 2 scopes; an outer
+  ;; scope for I and an inner scope for J.
+  ;;
+  ;;    for(int i = 0; i < 10; ++i)
+  ;;      begin
+  ;;       int j = i;
+  ;;       ...
+  ;;      end
+  ;;
+  ;; So we need to push a scope when we enter the for loop, and then later push
+  ;; another scope when we enter the begin/end block.
+  ;;
+  ;; Note that VCS and NCVerilog agree that:
+  ;;
+  ;; for (int i=0; i<10; i++)
+  ;;   begin
+  ;;     int i = 15;
+  ;;     $display("i: %d", i);
+  ;;   end
+  ;;
+  ;; Should print i: 15 ten times.  That seems like it can only happen if there
+  ;; are indeed two separate scopes in play here.
+  :guard (vl-stmt-case x :vl-forstmt)
   :returns (scope vl-blockscope-p)
   :parents (vl-blockscope vl-scopestack-push)
   (b* (((vl-forstmt x)))
-    (make-vl-blockscope :vardecls x.initdecls)))
+    (make-vl-blockscope :vardecls x.initdecls
+                        :scopetype :vl-forstmt)))
 
+(define vl-foreachstmt->blockscope ((x vl-stmt-p))
+  :guard (vl-stmt-case x :vl-foreachstmt)
+  :returns (scope vl-blockscope-p)
+  :parents (vl-blockscope vl-scopestack-push)
+  (b* (((vl-foreachstmt x)))
+    (make-vl-blockscope :vardecls x.vardecls
+                        :scopetype :vl-foreachstmt)))
 
 
 ;; Notes on name spaces -- from SV spec 3.13
@@ -393,17 +559,17 @@ in it, such as a function, task, or block statement."
 ;; Notes on scope rules, from SV spec 23.9.
 
 ;; Elements that define new scopes:
-;;     — Modules
-;;     — Interfaces
-;;     — Programs
-;;     — Checkers
-;;     — Packages
-;;     — Classes
-;;     — Tasks
-;;     — Functions
-;;     — begin-end blocks (named or unnamed)
-;;     — fork-join blocks (named or unnamed)
-;;     — Generate blocks
+;;       Modules
+;;       Interfaces
+;;       Programs
+;;       Checkers
+;;       Packages
+;;       Classes
+;;       Tasks
+;;       Functions
+;;       begin-end blocks (named or unnamed)
+;;       fork-join blocks (named or unnamed)
+;;       Generate blocks
 
 ;; An identifier shall be used to declare only one item within a scope.
 ;; However, perhaps this doesn't apply to global/compilation-unit scope, since
@@ -518,7 +684,7 @@ in it, such as a function, task, or block statement."
     :val-type vl-scopeitem-p
     :count vl-scopeitem-alist-count)
 
-  (defoption vl-maybe-scopeitem-p vl-scopeitem-p))
+  (defoption vl-maybe-scopeitem vl-scopeitem-p))
 
 
 (defsection import-results
@@ -530,9 +696,14 @@ in it, such as a function, task, or block statement."
     :tag :vl-importresult
     :layout :tree
     :short "Information about an item that was imported from another package."
-    ((item     vl-maybe-scopeitem-p "The item we imported, if any.")
-     (pkg-name stringp :rule-classes :type-prescription
-               "The package we imported it from.")))
+    ((item     vl-maybe-scopeitem-p
+               "The item we imported, if any.")
+     (pkg-name stringp
+               :rule-classes :type-prescription
+               "The package we imported it from.")
+     (loc      vl-location-p
+               "Location of the import statement.  Useful for name clash
+                reporting.")))
 
   (fty::defalist vl-importresult-alist
     :key-type stringp
@@ -718,6 +889,16 @@ in it, such as a function, task, or block statement."
                    '__items__ 'package 'vl-package-p 'package))
                substs))))
 
+(make-event ;; Definition of vl-design-scope-find-class vl-design-scope-class-alist
+ (b* ((substs (scopes->tmplsubsts *vl-scopes->classes*)))
+   `(progn . ,(template-proj
+               '(make-event
+                 (def-scopetype-find
+                   '__type__
+                   (:@ :import t) (:@ (not :import) nil)
+                   '__items__ 'class 'vl-class-p 'class))
+               substs))))
+
 
 (make-event ;; Definitions of e.g. vl-module-scope-find-item and vl-module-scope-item-alist
  (b* ((substs (scopes->tmplsubsts *vl-scopes->items*)))
@@ -732,7 +913,7 @@ in it, such as a function, task, or block statement."
  (b* ((substs (scopes->tmplsubsts *vl-scopes->defs*)))
    `(progn . ,(template-proj
                '(make-event
-                 (def-scopetype-find '__type__ 
+                 (def-scopetype-find '__type__
                    (:@ :import t) (:@ (not :import) nil)
                    '__items__ 'definition 'vl-scopedef-p 'scopedef))
                substs))))
@@ -760,7 +941,7 @@ in it, such as a function, task, or block statement."
   :enabled t
   :long "<p>The @('-aux') function is memoized.  In a single-threaded context,
 there would be no need to call @(see make-fast-alist) again.  But for
-multi-threaded code, e.g., the VL @(see server), the alist may only be fast in
+multi-threaded code, e.g., the @(see vl-server), the alist may only be fast in
 some threads.  Calling @('make-fast-alist') again corrects for this and should
 be very cheap in the single-threaded case.</p>"
   (mbe :logic (vl-package-scope-item-alist x nil)
@@ -782,11 +963,14 @@ be very cheap in the single-threaded case.</p>"
        :exec (make-fast-alist (vl-design-scope-package-alist-aux x))))
 
 
+
 (defprod vl-scopeinfo
   ((locals  vl-scopeitem-alist-p "Locally defined names bound to their declarations")
    (imports vl-importresult-alist-p
             "Explicitly imported names bound to import result, i.e. package-name and declaration)")
-   (star-packages string-listp "Names of packages imported with *"))
+   (star-packages string-listp "Names of packages imported with *")
+   (id            vl-maybe-scopeid)
+   (scopetype vl-scopetype-p :default ':vl-anonymous-scope))
   :layout :tree
   :tag :vl-scopeinfo)
 
@@ -806,6 +990,46 @@ be very cheap in the single-threaded case.</p>"
                  (or ,@(template-proj '(equal (tag x) :vl-__type__) subst)
                      (equal (tag x) :vl-scopeinfo)))
         :rule-classes :forward-chaining))))
+
+; Matt K. addition: Undo the added add-default-hints above to avoid failure in
+; next event.
+(remove-default-hints '('(:do-not '(preprocess))))
+
+(define vl-scope->scopetype ((x vl-scope-p))
+  :returns (type vl-scopetype-p
+                 :hints(("Goal" :in-theory (enable vl-scopetype-p))))
+  :prepwork ((local (defthm vl-scope-fix-forward
+                      (vl-scope-p (vl-scope-fix x))
+                      :rule-classes
+                      ((:forward-chaining :trigger-terms ((vl-scope-fix x)))))))
+  (b* ((x (vl-scope-fix x))
+       (tag (tag x)))
+    (case tag
+      (:vl-genblob (vl-genblob->scopetype x))
+      (:vl-blockscope (vl-blockscope->scopetype x))
+      (:vl-scopeinfo (vl-scopeinfo->scopetype x))
+      (otherwise
+       ;; (:vl-interface :vl-module :vl-design :vl-package :vl-class)
+       tag))))
+
+(define vl-scope->id ((x vl-scope-p))
+  :returns (name vl-maybe-scopeid-p :rule-classes :type-prescription)
+  (b* ((x (vl-scope-fix x)))
+    (case (tag x)
+      (:vl-interface  (vl-interface->name x))
+      (:vl-module     (vl-module->name x))
+      (:vl-genblob    (vl-genblob->id x))
+      (:vl-blockscope (vl-blockscope->name x))
+      (:vl-package    (vl-package->name x))
+      (:vl-class      (vl-class->name x))
+      (:vl-scopeinfo  (vl-scopeinfo->id x))
+      ;; bozo does this make sense?
+      (:vl-design     "Design Root")
+      ;; Don't know a name for a scopeinfo
+      (otherwise      (impossible)))))
+
+
+
 
 (define vl-scopeinfo-make-fast ((x vl-scopeinfo-p))
   :parents (vl-scopeinfo-p)
@@ -836,12 +1060,17 @@ be very cheap in the single-threaded case.</p>"
 ;; contain that name?  This should be an error, but practially speaking I think
 ;; we want to check for these in one place and not disrupt other code with
 ;; error handling.  So in this case we just don't find the item.
-(define vl-importlist-find-explicit-item ((name stringp) (x vl-importlist-p) (design vl-maybe-design-p))
+(define vl-importlist-find-explicit-item ((name stringp)
+                                          (x vl-importlist-p)
+                                          (design vl-maybe-design-p))
   :returns (mv (package (iff (stringp package) package)
                         :hints nil)
                (item (iff (vl-scopeitem-p item) item)
-                     :hints nil))
-  (b* (((when (atom x)) (mv nil nil))
+                     :hints nil)
+               (loc "Location of the actual import statement."
+                    (iff (vl-location-p loc) loc)
+                    :hints nil))
+  (b* (((when (atom x)) (mv nil nil nil))
        ((vl-import x1) (car x))
        ((when (and (stringp x1.part)
                    (equal x1.part (string-fix name))))
@@ -849,7 +1078,7 @@ be very cheap in the single-threaded case.</p>"
         ;; item, just not what it is.
         (b* ((package (and design (vl-design-scope-find-package x1.pkg design))))
           ;; regardless of whether the package exists or has the item, return found
-          (mv x1.pkg (and package (vl-package-scope-find-item name package))))))
+          (mv x1.pkg (and package (vl-package-scope-find-item name package)) x1.loc))))
     (vl-importlist-find-explicit-item name (cdr x) design))
   ///
   (more-returns
@@ -859,7 +1088,14 @@ be very cheap in the single-threaded case.</p>"
 
   (more-returns
    (package :name package-when-item-of-vl-importlist-find-explicit-item-package
-            (implies item package))))
+            (implies item package)))
+
+  (more-returns
+   (loc :name loc-when-item-of-vl-importlist-find-explicit-item-package
+        (implies package loc))))
+
+
+
 
 ;; (local
 ;;  (defthm equal-of-vl-importlist-find-explicit-item
@@ -875,8 +1111,8 @@ be very cheap in the single-threaded case.</p>"
 ;;                                      equal-of-cons
 ;;                                      vl-importlist-find-explicit-item)))))
 
-
-(define vl-importlist->explicit-item-alist ((x vl-importlist-p) (design vl-maybe-design-p)
+(define vl-importlist->explicit-item-alist ((x      vl-importlist-p)
+                                            (design vl-maybe-design-p)
                                             acc)
   :returns (alist (implies (vl-importresult-alist-p acc)
                            (vl-importresult-alist-p alist)))
@@ -888,8 +1124,10 @@ be very cheap in the single-threaded case.</p>"
         ;; not the item is the best way to go here, since we might have
         ;; imported the name from the package but can't find out.
        (package (and design (cdr (hons-get x1.pkg (vl-design-scope-package-alist-top design)))))
-       (item (and package (cdr (hons-get x1.part (vl-package-scope-item-alist-top package))))))
-    (hons-acons x1.part (make-vl-importresult :item item :pkg-name x1.pkg)
+       (item    (and package (cdr (hons-get x1.part (vl-package-scope-item-alist-top package))))))
+    (hons-acons x1.part (make-vl-importresult :item item
+                                              :pkg-name x1.pkg
+                                              :loc x1.loc)
                 (vl-importlist->explicit-item-alist (cdr x) design acc)))
   ///
   (defthm vl-importlist->explicit-item-alist-lookup-acc-elim
@@ -900,9 +1138,11 @@ be very cheap in the single-threaded case.</p>"
   (defthm vl-importlist->explicit-item-alist-correct
     (implies (stringp name)
              (equal (hons-assoc-equal name (vl-importlist->explicit-item-alist x design nil))
-                    (b* (((mv pkg item) (vl-importlist-find-explicit-item name x design)))
-                      (and (or pkg item)
-                           (cons name (make-vl-importresult :item item :pkg-name pkg))))))
+                    (b* (((mv pkg item loc) (vl-importlist-find-explicit-item name x design)))
+                      (and pkg
+                           (cons name (make-vl-importresult :item item
+                                                            :pkg-name pkg
+                                                            :loc loc))))))
     :hints(("Goal" :in-theory (enable vl-importlist-find-explicit-item)))))
 
 (define vl-importlist-find-implicit-item ((name stringp) (x vl-importlist-p) (design vl-maybe-design-p))
@@ -954,6 +1194,89 @@ be very cheap in the single-threaded case.</p>"
                                       vl-importlist->star-packages)))))
 
 
+(local (defthm alist-keys-of-vl-scopeitem-alist
+         (implies (vl-scopeitem-alist-p x)
+                  (string-listp (alist-keys x)))
+         :hints(("Goal" :in-theory (enable vl-scopeitem-alist-p
+                                           alist-keys)))))
+
+(local (defthm alist-keys-of-vl-importresult-alist
+         (implies (vl-importresult-alist-p x)
+                  (string-listp (alist-keys x)))
+         :hints(("Goal" :in-theory (enable vl-importresult-alist-p
+                                           alist-keys)))))
+
+(local (defthm alist-keys-of-vl-scopedef-alist
+         (implies (vl-scopedef-alist-p x)
+                  (string-listp (alist-keys x)))
+         :hints(("Goal" :in-theory (enable vl-scopedef-alist-p
+                                           alist-keys)))))
+
+(local (defthm alist-keys-of-vl-package-alist
+         (implies (vl-package-alist-p x)
+                  (string-listp (alist-keys x)))
+         :hints(("Goal" :in-theory (enable vl-package-alist-p
+                                           alist-keys)))))
+
+(local (defthm alist-keys-of-vl-portdecl-alist
+         (implies (vl-portdecl-alist-p x)
+                  (string-listp (alist-keys x)))
+         :hints(("Goal" :in-theory (enable vl-portdecl-alist-p
+                                           alist-keys)))))
+
+(local (defthm string-listp-of-append
+         (implies (and (string-listp a)
+                       (string-listp b))
+                  (string-listp (append a b)))))
+
+
+
+(local (defthm cdr-of-lookup-in-scopeitem-alist
+         (implies (vl-scopeitem-alist-p x)
+                  (iff (cdr (hons-assoc-equal k x))
+                       (hons-assoc-equal k x)))
+         :hints(("Goal" :in-theory (enable vl-scopeitem-alist-p)))))
+
+(local (defthm cdr-of-lookup-in-importresult-alist
+         (implies (vl-importresult-alist-p x)
+                  (iff (cdr (hons-assoc-equal k x))
+                       (hons-assoc-equal k x)))
+         :hints(("Goal" :in-theory (enable vl-importresult-alist-p)))))
+
+(define vl-import-stars-itemnames ((packages string-listp)
+                                   (design vl-maybe-design-p))
+  :returns (names string-listp)
+  (b* (((when (atom packages)) nil)
+       (pkg (string-fix (Car packages)))
+       (package (and design (cdr (hons-get pkg (vl-design-scope-package-alist-top design)))))
+       ((unless package) nil))
+    (append (alist-keys (vl-package-scope-item-alist-top package))
+            (vl-import-stars-itemnames (cdr packages) design)))
+
+  :prepwork
+  ((local (defthm lookup-of-non-string-in-scopeitem-alist
+            (implies (and (not (stringp name))
+                          (string-listp (alist-keys x)))
+                     (not (hons-assoc-equal name x)))
+            :hints(("Goal" :in-theory (enable alist-keys))))))
+
+  ///
+
+  (local (defthm stringp-when-member
+           (implies (member name (vl-import-stars-itemnames packages design))
+                    (stringp name))
+           :hints (("goal" :use ((:instance string-listp-of-vl-import-stars-itemnames))))
+           :rule-classes :forward-chaining))
+
+  (defthm vl-import-stars-itemname-present-when-lookup
+    (iff (member name (vl-import-stars-itemnames packages design))
+         (and (stringp name)
+              (mv-nth 1 (vl-import-stars-find-item name packages design))))
+    :hints(("Goal" :in-theory (e/d (vl-import-stars-find-item)
+                                   (vl-package-scope-item-alist-correct))))))
+
+
+
 
 
 
@@ -969,6 +1292,21 @@ be very cheap in the single-threaded case.</p>"
        ((when import-item) (mv (vl-importresult->pkg-name import-item)
                                (vl-importresult->item import-item))))
     (vl-import-stars-find-item name x.star-packages design)))
+
+
+(define vl-scopeinfo->itemnames ((x vl-scopeinfo-p) (design vl-maybe-design-p))
+  :returns (names string-listp)
+  (b* (((vl-scopeinfo x)))
+    (append (alist-keys x.locals)
+            (alist-keys x.imports)
+            (vl-import-stars-itemnames x.star-packages design)))
+  ///
+
+  (defthm vl-scopeinfo->itemnames-present-when-lookup
+    (implies (and (mv-nth 1 (vl-scopeinfo-find-item name x design))
+                  (stringp name))
+             (member name (vl-scopeinfo->itemnames x design)))
+    :hints(("Goal" :in-theory (enable vl-scopeinfo-find-item)))))
 
 
 
@@ -1013,7 +1351,26 @@ be very cheap in the single-threaded case.</p>"
    (design :name vl-maybe-design-p-of-vl-scopestack->design
            (vl-maybe-design-p design))))
 
+(define vl-scopestack->toplevel ((x vl-scopestack-p))
+  :returns (top vl-scopestack-p)
+  :measure (vl-scopestack-count x)
+  (vl-scopestack-case x
+    :local (vl-scopestack->toplevel x.super)
+    :otherwise (vl-scopestack-fix x)))
+
 (define vl-scopestack-push ((scope vl-scope-p) (x vl-scopestack-p))
+  ;; The One True Way to process a Module.
+  ;;
+  ;;   1. Push the module onto the scopestack.
+  ;;   2. Process it.
+  ;;
+  ;; That is, you should NOT try to process anything (e.g., the ports or
+  ;; parameters) outside of the module's scope.
+  ;;
+  ;; This may seem wrong to you, but see the comments in vl-fundecl->blockscope
+  ;; and note that Shadowcheck is responsible for making sure that any module
+  ;; for which this wouldn't work correctly gets flagged with fatal warnings
+  ;; that say the scoping is too tricky.
   :returns (x1 vl-scopestack-p)
   (progn$
    ;; [Jared] I'm curious about whether we ever do this.  If so it might screw
@@ -1075,8 +1432,8 @@ be very cheap in the single-threaded case.</p>"
                            (b* (((vl-__type__ scope :quietp t))
                                 (item (vl-__type__-scope-find-__result__ name scope))
                                 ((when item) (mv nil item))
-                                ((mv pkg item) (vl-importlist-find-explicit-item
-                                                name scope.imports design))
+                                ((mv pkg item ?loc)
+                                 (vl-importlist-find-explicit-item name scope.imports design))
                                 ((when (or pkg item)) (mv pkg item)))
                              (vl-importlist-find-implicit-item name scope.imports design))))))
                       substs)
@@ -1103,6 +1460,8 @@ be very cheap in the single-threaded case.</p>"
                          (:vl-__type__
                           (b* (((vl-__type__ scope :quietp t)))
                             (make-vl-scopeinfo
+                             :scopetype (vl-scope->scopetype scope)
+                             :id (vl-scope->id scope)
                              :locals (make-fast-alist
                                       (vl-__type__-scope-__result__-alist scope nil))
                              (:@ :import
@@ -1200,7 +1559,34 @@ be very cheap in the single-threaded case.</p>"
                              ((unless pkg) ;; this should mean item is already nil
                               (mv item nil))
                              (pkg-ss (vl-scopestack-push pkg (vl-scopestack-init design))))
-                          (mv item pkg-ss))))))))
+                          (mv item pkg-ss)))
+
+                      (define vl-scopestack-find-item/ss/package
+                        :short "Look up a plain identifier in the current scope stack."
+                        ((name stringp)
+                         (ss   vl-scopestack-p))
+                        :returns (mv (item (iff (__resulttype__ item) item)
+                                           "The item declaration, if found.")
+                                     (item-ss vl-scopestack-p
+                                              "The scopestack for the context
+                                               in which the item was declared.")
+                                     (context-ss vl-scopestack-p
+                                                 "The scopestack for the context
+                                                  in which the item was found (possibly
+                                                  imported).")
+                                     (pkg-name (iff (stringp pkg-name) pkg-name)
+                                               "If the item was imported, the name
+                                                of the package it was imported
+                                                from."))
+                        (b* (((mv item context-ss pkg-name)
+                              (vl-scopestack-find-item/context name ss))
+                             ((unless pkg-name) (mv item context-ss context-ss nil))
+                             (design (vl-scopestack->design context-ss))
+                             (pkg (and design (cdr (hons-get pkg-name (vl-design-scope-package-alist-top design)))))
+                             ((unless pkg) ;; this should mean item is already nil
+                              (mv item nil context-ss pkg-name))
+                             (pkg-ss (vl-scopestack-push pkg (vl-scopestack-init design))))
+                          (mv item pkg-ss context-ss pkg-name))))))))
      (template-subst-top template
                          (make-tmplsubst
                           :features (and importsp '(:import))
@@ -1227,21 +1613,23 @@ be very cheap in the single-threaded case.</p>"
 (defthm tag-of-vl-scopestack-find-item/ss-forward
   (b* (((mv item ?item-ss) (vl-scopestack-find-item/ss name ss)))
     (implies item
-             (or (equal (tag item) :vl-modport)
-                 (equal (tag item) :vl-modinst)
+             (or (equal (tag item) :vl-modinst)
                  (equal (tag item) :vl-gateinst)
                  (equal (tag item) :vl-genloop)
                  (equal (tag item) :vl-genif)
                  (equal (tag item) :vl-gencase)
-                 (equal (tag item) :vl-genblock)
+                 (equal (tag item) :vl-genbegin)
                  (equal (tag item) :vl-genarray)
                  (equal (tag item) :vl-genbase)
+                 (equal (tag item) :vl-genvar)
                  (equal (tag item) :vl-interfaceport)
                  (equal (tag item) :vl-paramdecl)
                  (equal (tag item) :vl-vardecl)
                  (equal (tag item) :vl-fundecl)
                  (equal (tag item) :vl-taskdecl)
-                 (equal (tag item) :vl-typedef))))
+                 (equal (tag item) :vl-typedef)
+                 (equal (tag item) :vl-dpiimport)
+                 (equal (tag item) :vl-modport))))
   :rule-classes ((:forward-chaining))
   :hints(("Goal"
           :use ((:instance tag-when-vl-scopeitem-p-forward
@@ -1375,7 +1763,8 @@ be very cheap in the single-threaded case.</p>"
              (or (equal (tag def) :vl-module)
                  (equal (tag def) :vl-udp)
                  (equal (tag def) :vl-interface)
-                 (equal (tag def) :vl-program))))
+                 (equal (tag def) :vl-program)
+                 (equal (tag def) :vl-class))))
   :rule-classes ((:forward-chaining))
   :hints(("Goal"
           :use ((:instance tag-when-vl-scopedef-p-forward
@@ -1401,6 +1790,14 @@ be very cheap in the single-threaded case.</p>"
 ||#
  (def-vl-scope-find *vl-scopes->portdecls* 'portdecl 'portdecl nil))
 
+(make-event
+#||
+  (define vl-scope-find-class ...)
+  (define vl-scope-class-alist ...)
+  (define vl-scope-find-class-fast ...)
+||#
+ (def-vl-scope-find *vl-scopes->classes* 'class 'class t))
+
 
 
 
@@ -1415,25 +1812,12 @@ transform that has used scopestacks.</p>"
           (clear-memoize-table 'vl-scope-portdecl-alist-aux)
           (clear-memoize-table 'vl-design-scope-package-alist-aux)
           (clear-memoize-table 'vl-package-scope-item-alist-aux)
-          (clear-memoize-table 'vl-modulelist-toplevel)
+          (clear-memoize-table 'vl-design-toplevel)
           ))
 
 
 
 ; Scopestack debugging
-
-(define vl-scope->name ((x vl-scope-p))
-  :returns (name maybe-stringp :rule-classes :type-prescription)
-  (b* ((x (vl-scope-fix x)))
-    (case (tag x)
-      (:vl-interface  (vl-interface->name x))
-      (:vl-module     (vl-module->name x))
-      (:vl-genblob    (vl-genblob->name x))
-      (:vl-blockscope (vl-blockscope->name x))
-      (:vl-package    (vl-package->name x))
-      ;; Don't know a name for a scopeinfo
-      (otherwise      nil))))
-
 (define vl-scopeitem->name ((x vl-scopeitem-p))
   :returns (name maybe-stringp :rule-classes :type-prescription)
   :prepwork
@@ -1446,18 +1830,44 @@ transform that has used scopestacks.</p>"
   :guard-hints(("Goal" :in-theory (enable vl-scopeitem-p)))
   (b* ((x (vl-scopeitem-fix x)))
     (case (tag x)
-      (:vl-modport    (vl-modport->name x))
       (:vl-modinst    (vl-modinst->instname x))
       (:vl-gateinst   (vl-gateinst->name x))
-      (:vl-genblock   (vl-genblock->name x))
+      (:vl-genbegin   (b* ((name (vl-genblock->name (vl-genbegin->block x))))
+                        (and (stringp name) name)))
       (:vl-genarray   (vl-genarray->name x))
-      ((:vl-genloop :vl-genif :vl-gencase  :vl-genbase) nil)
+      (:vl-genvar     (vl-genvar->name x))
+      ((:vl-genloop :vl-genif :vl-gencase :vl-genbase) nil)
       (:vl-interfaceport (vl-interfaceport->name x))
       (:vl-paramdecl     (vl-paramdecl->name x))
       (:vl-vardecl       (vl-vardecl->name x))
       (:vl-fundecl       (vl-fundecl->name x))
       (:vl-taskdecl      (vl-taskdecl->name x))
+      (:vl-dpiimport     (vl-dpiimport->name x))
+      (:vl-modport       (vl-modport->name x))
       (otherwise         (vl-typedef->name x)))))
+
+
+(define vl-scopestack->hashkey ((x vl-scopestack-p))
+  :short "Produce a honsed, hopefully-unique hash key for this scope."
+  :long "<p>Uses the names of the scopes, so: if any scope is not named, it
+causes a hard error; and if the name of each scope isn't unique within its
+parent scope, then the hash key won't be unique.</p>
+
+<p>Running @(see addnames) before using this should ensure that scopes are
+named, and the names generated should be unique.</p>"
+  :returns (key)
+  :measure (vl-scopestack-count x)
+  (vl-scopestack-case x
+    :null nil
+    :global (hons :root nil)
+    :local (b* ((super (vl-scopestack->hashkey x.super)))
+             (hons (or (vl-scope->id x.top)
+                       (raise "Unnamed scope under ~x0: ~x1~%"
+                              (rev super)
+                              x.top))
+                   super))))
+
+
 
 (define vl-scopestack->path-aux ((x vl-scopestack-p) rchars)
   :measure (vl-scopestack-count x)
@@ -1466,11 +1876,20 @@ transform that has used scopestacks.</p>"
     :null   (str::revappend-chars ":null" rchars)
     :global (str::revappend-chars "$root" rchars)
     :local  (b* ((rchars (vl-scopestack->path-aux x.super rchars))
-                 (rchars (cons #\. rchars))
-                 (name1 (or (vl-scope->name x.top)
-                            "<unnamed " (symbol-name (tag x.top)) ">"))
-                 (rchars (str::revappend-chars name1 rchars)))
-              rchars)))
+                 (id (vl-scope->id x.top)))
+              (cond ((stringp id)
+                     (b* ((rchars (cons #\. rchars)))
+                       (str::revappend-chars id rchars)))
+                    ((integerp id)
+                     (b* ((rchars (cons #\[ rchars))
+                          (rchars (if (< id 0) (cons #\- rchars) rchars))
+                          (rchars (str::revappend-nat-to-dec-chars (abs id) rchars))
+                          (rchars (cons #\] rchars)))
+                       rchars))
+                    (t ;; (not id)
+                     (str::revappend-chars
+                      (cat "<unnamed-" (symbol-name (vl-scope->scopetype x.top)) ">")
+                      rchars))))))
 
 (define vl-scopestack->path
   :short "Debugging aide: get the current path indicated by a scopestack."
@@ -1483,16 +1902,23 @@ useful or meant for debugging purposes.</p>"
 
 
 
-
-; Definition of vl-modulelist-toplevel
+; Definition of vl-design-toplevel
 ;
 ; For resolving top-level hierarchical identifiers like topmod.foo.bar, we need
 ; to be able to know the top-level module names.  After developing the HID
 ; lookup code, we decided that the scopestack code seemed like an appropriate
-; place for vl-modulelist-toplevel, and decided to memoize it and free it
-; alongside of the other scopestack memo tables in vl-scopestacks-free.
+; place for vl-design-toplevel, and decided to memoize it and free it alongside
+; of the other scopestack memo tables in vl-scopestacks-free.
+
+(define vl-bindlist->modinsts ((x vl-bindlist-p))
+  :returns (modinsts vl-modinstlist-p)
+  (if (atom x)
+      nil
+    (append-without-guard (vl-bind->modinsts (car x))
+                          (vl-bindlist->modinsts (cdr x)))))
 
 (def-genblob-transform vl-genblob->flatten-modinsts ((acc vl-modinstlist-p))
+  ;; Warning: rarely sensible -- returns modinsts from many scopes!
   :no-new-x t
   :returns ((acc vl-modinstlist-p))
   :apply-to-generates vl-generates->flatten-modinsts
@@ -1503,19 +1929,31 @@ useful or meant for debugging purposes.</p>"
                                         vl-modinstlist-p-when-subsetp-equal))))
   (vl-generates->flatten-modinsts (vl-genblob->generates x)
                                   (append-without-guard
+                                   (vl-bindlist->modinsts (vl-genblob->binds x))
                                    (vl-genblob->modinsts x)
                                    (vl-modinstlist-fix acc))))
 
+
 (define vl-module->flatten-modinsts ((x vl-module-p))
   :parents (vl-modulelist-everinstanced)
-  :short "Gather modinsts from the module, including its generate blocks."
+  :short "Gather modinsts from the module, including its generate blocks and bind
+          constructs (which don't even belong to it) -- rarely sensible!"
   :returns (modinsts vl-modinstlist-p)
   (b* ((genblob (vl-module->genblob x)))
+    (vl-genblob->flatten-modinsts genblob nil)))
+
+(define vl-interface->flatten-modinsts ((x vl-interface-p))
+  :parents (vl-interfacelist-everinstanced)
+  :short "Gather modinsts from the module, including its generate blocks and bind
+          constructs (which don't even belong to it) -- rarely sensible!"
+  :returns (modinsts vl-modinstlist-p)
+  (b* ((genblob (vl-interface->genblob x)))
     (vl-genblob->flatten-modinsts genblob nil)))
 
 (defprojection vl-interfaceportlist->ifnames ((x vl-interfaceportlist-p))
   :returns (names string-listp)
   (vl-interfaceport->ifname x))
+
 
 (define vl-modulelist-everinstanced-nrev ((x vl-modulelist-p)
                                           (nrev))
@@ -1531,7 +1969,7 @@ useful or meant for debugging purposes.</p>"
 (define vl-modulelist-everinstanced ((x vl-modulelist-p))
   :parents (hierarchy)
   :short "Gather the names of every module and interface ever instanced in a
-  module list or used in an interface port."
+module list or used in an interface port."
 
   :long "<p>The returned list typically will contain a lot of duplicates.  This
 is fairly expensive, requiring a cons for every single module instance.  We
@@ -1549,7 +1987,9 @@ nrev).</p>"
                  (vl-interfaceportlist->ifnames ifports1)
                  (vl-modulelist-everinstanced (cdr x))))
        :exec
-       (with-local-nrev (vl-modulelist-everinstanced-nrev x nrev)))
+       (if (atom x)
+           nil
+         (with-local-nrev (vl-modulelist-everinstanced-nrev x nrev))))
   :verify-guards nil
   ///
   (defthm vl-modulelist-everinstanced-nrev-removal
@@ -1559,39 +1999,130 @@ nrev).</p>"
 
   (verify-guards vl-modulelist-everinstanced))
 
-(define vl-modulelist-toplevel
+(define vl-interfacelist-everinstanced-nrev ((x vl-interfacelist-p)
+                                             (nrev))
+  :parents (vl-interfacelist-everinstanced)
+  (b* (((when (atom x))
+        (nrev-fix nrev))
+       (modinsts1 (vl-interface->flatten-modinsts (car x)))
+       (ifports1  (vl-interface->ifports (car x)))
+       (nrev      (vl-modinstlist->modnames-nrev modinsts1 nrev))
+       (nrev      (vl-interfaceportlist->ifnames-nrev ifports1 nrev)))
+    (vl-interfacelist-everinstanced-nrev (cdr x) nrev)))
+
+
+(define vl-interfacelist-everinstanced ((x vl-interfacelist-p))
   :parents (hierarchy)
-  :short "@(call vl-modulelist-toplevel) gathers the names of any modules that
-are defined in the module list @('x') but are never instantiated in @('x'), and
-returns them as an ordered set."
-  :long "<p>Memoized. Cleared in @(see vl-scopestacks-free).</p>"
+  :short "Gather the names of every module and interface ever instanced in a
+interface list or used in an interface port."
 
-  ((x vl-modulelist-p))
+  :long "<p>The returned list typically will contain a lot of duplicates.  This
+is fairly expensive, requiring a cons for every single interface instance.  We
+optimize it to avoid the construction of intermediate lists and to use @(see
+nrev).</p>"
+
   :returns (names string-listp)
-
+  :enabled t
   (mbe :logic
-       (let ((mentioned (mergesort (vl-modulelist-everinstanced x)))
-             (defined   (mergesort (vl-modulelist->names x))))
-         (difference defined mentioned))
+       (b* (((when (atom x))
+             nil)
+            (modinsts1 (vl-interface->flatten-modinsts (car x)))
+            (ifports1  (vl-interface->ifports (car x))))
+         (append (vl-modinstlist->modnames modinsts1)
+                 (vl-interfaceportlist->ifnames ifports1)
+                 (vl-interfacelist-everinstanced (cdr x))))
        :exec
-       ;; Optimizations as in vl-modulelist-missing
-       (let* ((mentioned (mergesort (vl-modulelist-everinstanced x)))
-              (names     (vl-modulelist->names x))
-              (defined   (if (setp names) names (mergesort names))))
-         (difference defined mentioned)))
+       (if (atom x)
+           nil
+         (with-local-nrev (vl-interfacelist-everinstanced-nrev x nrev))))
+  :verify-guards nil
   ///
-  (defthm true-listp-of-vl-modulelist-toplevel
-    (true-listp (vl-modulelist-toplevel x))
+  (defthm vl-interfacelist-everinstanced-nrev-removal
+    (equal (vl-interfacelist-everinstanced-nrev x nrev)
+           (append nrev (vl-interfacelist-everinstanced x)))
+    :hints(("Goal" :in-theory (enable vl-interfacelist-everinstanced-nrev))))
+
+  (verify-guards vl-interfacelist-everinstanced))
+
+
+
+(define vl-design-toplevel
+  :parents (hierarchy)
+  :short "@(call vl-design-toplevel) gathers the names of any modules or
+interfaces that are defined but are never instantiated in a design, and returns
+them as an ordered set."
+  ((x vl-design-p))
+  :returns (names string-listp)
+  :long "<p>Memoized. Cleared in @(see vl-scopestacks-free).</p>
+
+<p>Identifying whether a module/interface is a top-level design element is
+important for resolving certain hierarchical identifiers and as a starting
+point for elaboration.  See in particular @(see vl-follow-hidexpr) and @(see
+vl-design-elaborate).</p>
+
+<p>Historically we only looked at top level modules and ignored interfaces.  We
+now gather both modules <b>and</b> interfaces that are never used.  One nice
+consequence of this is that it means elaboration won't throw away any unused
+interfaces, which means we can get their @(see warnings) during @(see vl-lint)
+checking.</p>
+
+<p>Note that keeping interfaces here seems to match the behavior of NCVerilog
+but not VCS.  When given code such as:</p>
+
+@({
+    interface foo ;
+
+      wire ww;
+
+      function bar (input in);
+        assign bar = in;
+      endfunction
+
+    endinterface
+
+    module mymod ;
+
+      reg r;
+      assign foo.ww = r;
+      wire w = foo.bar(r);
+
+      initial begin
+        r = 0;
+        #10;
+        $display(\"W is %d\", w);
+        $display(\"FOO.WW is %d\", foo.ww);
+      end
+
+    endmodule
+})
+
+<p>we find that NCV seems to work fine but VCS reports that interface @('foo')
+is not instantiated and will be ignored, and then causes ``cross-module
+reference errors'' that complain about our uses of @('foo.bar') and
+@('foo.ww').  We haven't tried to deeply look at the SystemVerilog standard to
+figure out which tool is correct, but it probably doesn't matter much either
+way.</p>"
+
+  (b* (((vl-design x))
+       (mentioned (union (mergesort (vl-modulelist-everinstanced x.mods))
+                         (mergesort (vl-interfacelist-everinstanced x.interfaces))))
+       (defined   (union (mergesort (vl-modulelist->names x.mods))
+                         (mergesort (vl-interfacelist->names x.interfaces)))))
+    (difference defined mentioned))
+
+  ///
+  (defthm true-listp-of-vl-design-toplevel
+    (true-listp (vl-design-toplevel x))
     :rule-classes :type-prescription)
 
-  (defthm setp-of-vl-modulelist-toplevel
-    (setp (vl-modulelist-toplevel x)))
+  (defthm setp-of-vl-design-toplevel
+    (setp (vl-design-toplevel x)))
 
-  (memoize 'vl-modulelist-toplevel)
+  (memoize 'vl-design-toplevel)
 
-  (defthm vl-find-module-when-member-of-vl-modulelist-toplevel
-    (implies (member name (vl-modulelist-toplevel x))
-             (vl-find-module name x)))
+  ;; (defthm vl-find-module-when-member-of-vl-modulelist-toplevel
+  ;;   (implies (member name (vl-modulelist-toplevel x))
+  ;;            (vl-find-module name x)))
 
   ;; (defthm vl-has-modules-of-vl-modulelist-toplevel
   ;;   (implies (vl-modulelist-complete-p mods mods)
@@ -1599,3 +2130,65 @@ returns them as an ordered set."
   ;;                           (vl-modulelist->names mods)))
   ;;   :hints((set-reasoning)))
   )
+
+
+(define vl-scope-namespace ((x vl-scope-p) (design vl-maybe-design-p))
+  :returns (names string-listp)
+  (append (alist-keys (vl-scope-portdecl-alist x))
+          (alist-keys (vl-scope-package-alist x))
+          (alist-keys (vl-scope-definition-alist x))
+          (vl-scopeinfo->itemnames (vl-scope->scopeinfo x design) design))
+  ///
+  (defthm vl-scope-namespace-present-when-item-lookup
+    (implies (and (mv-nth 1 (vl-scope-find-item name x design))
+                  (stringp name))
+             (member name (vl-scope-namespace x design))))
+
+  (local (defthm lookup-in-definition-alist
+           (implies (vl-scopedef-alist-p x)
+                    (iff (hons-assoc-equal name x)
+                         (cdr (hons-assoc-equal name x))))
+           :hints(("Goal" :in-theory (enable vl-scopedef-alist-p)))))
+
+  (local (defthm lookup-in-package-alist
+           (implies (vl-package-alist-p x)
+                    (iff (hons-assoc-equal name x)
+                         (cdr (hons-assoc-equal name x))))
+           :hints(("Goal" :in-theory (enable vl-package-alist-p)))))
+
+  (local (defthm lookup-in-portdecl-alist
+           (implies (vl-portdecl-alist-p x)
+                    (iff (hons-assoc-equal name x)
+                         (cdr (hons-assoc-equal name x))))
+           :hints(("Goal" :in-theory (enable vl-portdecl-alist-p)))))
+
+  (defthm vl-scope-namespace-present-when-definition-lookup
+    (implies (and (vl-scope-find-definition name x)
+                  (stringp name))
+             (member name (vl-scope-namespace x design))))
+
+  (defthm vl-scope-namespace-present-when-package-lookup
+    (implies (and (vl-scope-find-package name x)
+                  (stringp name))
+             (member name (vl-scope-namespace x design))))
+
+  (defthm vl-scope-namespace-present-when-portdecl-lookup
+    (implies (and (vl-scope-find-portdecl name x)
+                  (stringp name))
+             (member name (vl-scope-namespace x design)))))
+
+(defoption vl-maybe-scope vl-scope)
+
+#||
+
+(trace$ #!vl (vl-scopestack-find-item/context
+              :entry (list 'vl-scopestack-find-item/context
+                           name (vl-scopestack->hashkey name))
+              :exit (b* (((list ?item ?ss ?pkg) values))
+                      (list 'vl-scopestack-find-item/context
+                            (with-local-ps (vl-cw "~a0" item))
+                            (vl-scopestack->hashkey ss)
+                            pkg))))
+
+
+||#

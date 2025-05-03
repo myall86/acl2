@@ -1,19 +1,34 @@
 (in-package "RTL")
 
+; Includes tweaks made by Mihir Mehta 4/2019 for a change to the
+; definition of take.
+
 (include-book "newton")
-
 (include-book "rcp")
+(local (include-book "bits"))
+(local (include-book "float"))
+(local (include-book "round"))
+(local (include-book "reps"))
 
-(defun rcp24 (b)
-  (ndecode (frcp (nencode b 24 8)) 24 8))
+(local (include-book "arithmetic-5/top" :dir :system))
+
+;; The following lemmas from arithmetic-5 have given me trouble:
+#|
+(local (in-theory #!acl2(disable |(mod (+ x y) z) where (<= 0 z)| |(mod (+ x (- (mod a b))) y)| |(mod (mod x y) z)| |(mod (+ x (mod a b)) y)|
+                    simplify-products-gather-exponents-equal mod-cancel-*-const cancel-mod-+ reduce-additive-constant-<
+                    |(floor x 2)| |(equal x (if a b c))| |(equal (if a b c) x)|)))
+|#
+
+(local-defthm formatp-sp
+  (formatp (sp))
+  :hints (("Goal" :in-theory (enable sp))))
 
 (defun check-mant (m)
-  (let* ((enc (cat #x7F 9 m 23))
-         (b (ndecode enc 24 8))
-         (y (ndecode (frcp enc) 24 8)))
-    (and (<= y 1)
-         (> y 1/2)
-         (exactp y 24)
+  (let* ((b (1+ (/ m (expt 2 23))))
+         (y (rcp24 b)))
+    (and (<= 1/2 y)
+         (<= y 1)
+	 (exactp y 24)
          (< (abs (- 1 (* b y))) (expt 2 -23)))))
 
 (defun check-mants (m)
@@ -27,7 +42,7 @@
 (defthm check-mants-lemma
   (check-mants #x800000))
 
-(local-in-theory (disable check-mant (check-mant) frcp (frcp)))
+(local-in-theory (disable check-mant (check-mant) rcp24 (rcp24)))
 
 (local-defthm cf-1
   (implies (and (natp n)
@@ -58,26 +73,10 @@
   :rule-classes ()
   :hints (("Goal" :in-theory (enable exactp2))))
 
-(local-defthmd me-3
-  (implies (and (rationalp b)
-                (exactp b 24)
-                (<= 1 b)
-                (< b 2))
-           (equal (nencode b 24 8)
-                  (cat #x7F 9 (mant b) 23)))
-  :hints (("Goal" :in-theory (enable sig sgn nencode)
-                  :use ((:instance expo<= (x b) (n 0))
-                        (:instance expo>= (x b) (n 0))))))
-
 (local-defthm me-4
-  (implies (and (rationalp b)
-                (exactp b 24)
-                (<= 1 b)
-                (< b 2))
-           (nrepp b 24 8))
-  :hints (("Goal" :in-theory (enable nrepp)
-                  :use ((:instance expo<= (x b) (n 0))
-                        (:instance expo>= (x b) (n 0))))))
+  (implies (rationalp b)
+           (equal (1+ (/ (mant b) (expt 2 23)))
+                  b)))
 
 (local-defthmd me-5
   (implies (and (rationalp b)
@@ -89,8 +88,7 @@
                 (<= 1/2 (rcp24 b))
                 (<= (rcp24 b) 1)
                 (< (abs (- 1 (* b (rcp24 b)))) (expt 2 -23))))
-  :hints (("Goal" :in-theory (e/d (me-3 check-mant) (mant ndecode-nencode))
-                  :use ((:instance ndecode-nencode (x b) (p 24) (q 8))))))
+  :hints (("Goal" :use (me-4) :in-theory '(check-mant))))
 
 (local-in-theory (disable mant (mant) rcp24 (rcp24)))
 
@@ -109,12 +107,12 @@
 (encapsulate ()
 
 (local-defund y0 (b) (rcp24 b))
-(local-defund q0 (a b) (near (* a (y0 b)) 24))
-(local-defund e0 (b) (near (- 1 (* b (y0 b))) 24))
-(local-defund r0 (a b) (near (- a (* b (q0 a b))) 24))
-(local-defund y1 (b) (near (+ (y0 b) (* (e0 b) (y0 b))) 24))
-(local-defund q1 (a b) (near (+ (q0 a b) (* (r0 a b) (y1 b))) 24))
-(local-defund r1 (a b) (near (- a (* b (q1 a b))) 24))
+(local-defund q0 (a b) (rne (* a (y0 b)) 24))
+(local-defund e0 (b) (rne (- 1 (* b (y0 b))) 24))
+(local-defund r0 (a b) (rne (- a (* b (q0 a b))) 24))
+(local-defund y1 (b) (rne (+ (y0 b) (* (e0 b) (y0 b))) 24))
+(local-defund q1 (a b) (rne (+ (q0 a b) (* (r0 a b) (y1 b))) 24))
+(local-defund r1 (a b) (rne (- a (* b (q1 a b))) 24))
 (local-defund quot (a b mode) (rnd (+ (q1 a b) (* (r1 a b) (y1 b))) mode 24))
 
 (local-defun phi (e) (+ e (/ (1+ e) (expt 2 24))))
@@ -150,7 +148,7 @@
            (<= (abs (- 1 (* b (y1p b)))) (eps1p)))
   :rule-classes ()
   :hints (("Goal" :use (sp-1
-                        (:instance recip-refine-1 (y1 (y0 b))(p 24)  (y2 (y0 b)) (ep1 (eps0)) (ep2 (eps0))))
+                        (:instance recip-refinement-1 (y1 (y0 b))(p 24)  (y2 (y0 b)) (ep1 (eps0)) (ep2 (eps0))))
                   :in-theory (enable y1 y1p e0))))
 
 (local-defthm sp-3
@@ -161,7 +159,7 @@
            (<= (abs (- 1 (* b (y1 b)))) (eps1)))
   :rule-classes ()
   :hints (("Goal" :use (sp-1
-                        (:instance recip-refine-2 (y1 (y0 b))(p 24)  (y2 (y0 b)) (ep1 (eps0)) (ep2 (eps0))))
+                        (:instance recip-refinement-2 (y1 (y0 b))(p 24)  (y2 (y0 b)) (ep1 (eps0)) (ep2 (eps0))))
                   :in-theory (enable y1 y1p e0))))
 
 (local-defthm excp-cases
@@ -180,7 +178,7 @@
            (< (abs (- 1 (* b (y1 b)))) (expt 2 -24)))
   :rule-classes ()
   :hints (("Goal" :use (sp-2 excp-cases
-                        (:instance harrison (yp (y1p b)) (ep (eps1p)) (p 24)))
+                        (:instance harrison-lemma (yp (y1p b)) (ep (eps1p)) (p 24)))
                   :in-theory (enable y1 y1p e0))))
 
 (local-defun del0 () (phi (eps0)))
@@ -197,7 +195,7 @@
            (<= (abs (- 1 (* (/ b a) (q0 a b)))) (del0)))
   :rule-classes ()
   :hints (("Goal" :use (sp-1
-                        (:instance initial-approximation (y (y0 b)) (ep (eps0)) (p 24)))
+                        (:instance init-approx (y (y0 b)) (ep (eps0)) (p 24)))
                   :in-theory (enable q0))))
 
 (local-defthm sp-6
@@ -213,7 +211,7 @@
               (expt 2 (if (> a b) -23 -24))))
   :rule-classes ()
   :hints (("Goal" :use (sp-3 sp-5
-                        (:instance refine-quotient-2 (p 24) (y (y1 b)) (q0 (q0 a b)) (ep (eps1)) (de (del0))))
+                        (:instance quotient-refinement-2 (p 24) (y (y1 b)) (q0 (q0 a b)) (ep (eps1)) (de (del0))))
                   :in-theory (enable q1 r0))))
 
 (local-defthm sp-7
@@ -228,7 +226,7 @@
            (exactp (- a (* b (q1 a b))) 24))
   :rule-classes ()
   :hints (("Goal" :use (sp-4 sp-6
-                        (:instance r-exactp (p 24) (q (q1 a b)))) 
+                        (:instance r-exactp (p 24) (q (q1 a b))))
                   :in-theory (enable q1 r0))))
 
 (local-defthm sp-8
@@ -242,7 +240,7 @@
                 (exactp b 24))
            (equal (r1 a b) (- a (* b (q1 a b)))))
   :hints (("Goal" :use (sp-7
-                        (:instance near-exactp-b (x (- a (* b (q1 a b)))) (n 24)))
+                        (:instance rne-exactp-b (x (- a (* b (q1 a b)))) (n 24)))
                   :in-theory (enable r1))))
 
 (local-defthm sp-9
@@ -266,30 +264,30 @@
                 (< b 2)
                 (exactp a 24)
                 (exactp b 24)
-                (ieee-mode-p mode))
+                (ieee-rounding-mode-p mode))
            (= (quot a b mode) (rnd (/ a b) mode 24)))
   :rule-classes ()
   :hints (("Goal" :use (sp-4 sp-6 sp-7
-                        (:instance markstein  (p 24) (q (q1 a b)) (y (y1 b))))
+                        (:instance markstein-lemma  (p 24) (q (q1 a b)) (y (y1 b))))
                   :in-theory (enable quot))))
 
-(defund sp-divide (a b mode)
+(defund divsp (a b mode)
   (let* ((y0 (rcp24 b))
-         (q0 (near (* a y0) 24))
-         (e0 (near (- 1 (* b y0)) 24))
-         (r0 (near (- a (* b q0)) 24))
-         (y1 (near (+ y0 (* e0 y0)) 24))
-         (q1 (near (+ q0 (* r0 y1)) 24))
-         (r1 (near (- a (* b q1)) 24)))
+         (q0 (rne (* a y0) 24))
+         (e0 (rne (- 1 (* b y0)) 24))
+         (r0 (rne (- a (* b q0)) 24))
+         (y1 (rne (+ y0 (* e0 y0)) 24))
+         (q1 (rne (+ q0 (* r0 y1)) 24))
+         (r1 (rne (- a (* b q1)) 24)))
     (rnd (+ q1 (* r1 y1)) mode 24)))
 
 (local-defthm sp-11
-  (= (sp-divide a b mode)
+  (= (divsp a b mode)
      (quot a b mode))
   :rule-classes ()
-  :hints (("Goal" :in-theory (enable sp-divide y0 q0 e0 r0 y1 q1 r1 quot))))
+  :hints (("Goal" :in-theory (enable divsp y0 q0 e0 r0 y1 q1 r1 quot))))
 
-(defthm sp-divide-correct
+(defthm divsp-correct
   (implies (and (rationalp a)
                 (rationalp b)
                 (<= 1 a)
@@ -298,8 +296,8 @@
                 (< b 2)
                 (exactp a 24)
                 (exactp b 24)
-                (ieee-mode-p mode))
-           (= (sp-divide a b mode) (rnd (/ a b) mode 24)))
+                (ieee-rounding-mode-p mode))
+           (= (divsp a b mode) (rnd (/ a b) mode 24)))
   :rule-classes ()
   :hints (("Goal" :use (sp-10 sp-11))))
 
@@ -310,49 +308,49 @@
                 (rationalp x)
                 (<= 1 b)
                 (< b 2))
-           (<= (abs (* x (rcp24 (trunc b 24))))
+           (<= (abs (* x (rcp24 (rtz b 24))))
                (abs x)))
   :rule-classes ()
-  :hints (("Goal" :use ((:instance rcp24-spec (b (trunc b 24)))
-                        (:instance trunc-upper-pos (x b) (n 24))
-                        (:instance trunc-exactp-c (a 1) (x b) (n 24))))))
+  :hints (("Goal" :use ((:instance rcp24-spec (b (rtz b 24)))
+                        (:instance rtz-upper-pos (x b) (n 24))
+                        (:instance rtz-exactp-c (a 1) (x b) (n 24))))))
 
 (local-defthm rcp-8
   (implies (and (rationalp b)
                 (<= 1 b)
                 (< b 2))
-           (and (<= 1 (trunc b 24))
-                (< (trunc b 24) 2)
-                (<= (abs (- 1 (* (trunc b 24) (rcp24 (trunc b 24))))) (expt 2 -23))))
+           (and (<= 1 (rtz b 24))
+                (< (rtz b 24) 2)
+                (<= (abs (- 1 (* (rtz b 24) (rcp24 (rtz b 24))))) (expt 2 -23))))
   :rule-classes ()
-  :hints (("Goal" :use ((:instance rcp24-spec (b (trunc b 24)))
-                        (:instance trunc-upper-pos (x b) (n 24))
-                        (:instance trunc-exactp-c (a 1) (x b) (n 24))))))
+  :hints (("Goal" :use ((:instance rcp24-spec (b (rtz b 24)))
+                        (:instance rtz-upper-pos (x b) (n 24))
+                        (:instance rtz-exactp-c (a 1) (x b) (n 24))))))
 
 (local-defthm rcp-9
   (implies (and (rationalp b)
                 (<= 1 b)
                 (< b 2))
-           (<= (abs (- (* (trunc b 24) (rcp24 (trunc b 24)))
-                       (* b (rcp24 (trunc b 24)))))
-               (abs (- (trunc b 24) b))))
+           (<= (abs (- (* (rtz b 24) (rcp24 (rtz b 24)))
+                       (* b (rcp24 (rtz b 24)))))
+               (abs (- (rtz b 24) b))))
   :rule-classes ()
-  :hints (("Goal" :use ((:instance rcp24-spec (b (trunc b 24)))
-                        (:instance rcp-6 (x (- (trunc b 24) b)))))))
+  :hints (("Goal" :use ((:instance rcp24-spec (b (rtz b 24)))
+                        (:instance rcp-6 (x (- (rtz b 24) b)))))))
 
 (local-defthm rcp-10
   (implies (and (rationalp b)
                 (<= 1 b)
                 (< b 2))
-           (<= (abs (- (* (trunc b 24) (rcp24 (trunc b 24)))
-                       (* b (rcp24 (trunc b 24)))))
+           (<= (abs (- (* (rtz b 24) (rcp24 (rtz b 24)))
+                       (* b (rcp24 (rtz b 24)))))
                (expt 2 -23)))
   :rule-classes ()
   :hints (("Goal" :use (rcp-9
-                        (:instance trunc-diff (x b) (n 24))
+                        (:instance rtz-diff (x b) (n 24))
                         (:instance expo<= (x b) (n 0))
                         (:instance expo>= (x b) (n 0))))))
-                        
+
 (local-defthm rcp-11
   (implies (and (rationalp x)
                 (rationalp y)
@@ -365,37 +363,37 @@
 (local-defthm rcp-12
   (implies (and (rationalp b)
                 (rationalp (expt 2 -23))
-                (rationalp (trunc b 24))
-                (exactp (trunc b 24) 24)
-                (rationalp (* (trunc b 24) (rcp24 (trunc b 24))))
-                (rationalp (* b (rcp24 (trunc b 24))))
+                (rationalp (rtz b 24))
+                (exactp (rtz b 24) 24)
+                (rationalp (* (rtz b 24) (rcp24 (rtz b 24))))
+                (rationalp (* b (rcp24 (rtz b 24))))
                 (<= 1 b)
                 (< b 2))
-           (<= (abs (- 1 (* b (rcp24 (trunc b 24))))) (+ (expt 2 -23) (expt 2 -23))))
+           (<= (abs (- 1 (* b (rcp24 (rtz b 24))))) (+ (expt 2 -23) (expt 2 -23))))
   :rule-classes ()
   :hints (("Goal" :in-theory (theory 'minimal-theory)
                   :use (rcp-8 rcp-10
-                        (:instance rcp-11 (a (expt 2 -23)) (x (* (trunc b 24) (rcp24 (trunc b 24)))) (y (* b (rcp24 (trunc b 24)))))
-                        (:instance rcp24-spec (b (trunc b 24)))))))
+                        (:instance rcp-11 (a (expt 2 -23)) (x (* (rtz b 24) (rcp24 (rtz b 24)))) (y (* b (rcp24 (rtz b 24)))))
+                        (:instance rcp24-spec (b (rtz b 24)))))))
 
-(defthm rcp24-trunc-error
+(defthm rcp24-rtz-error
   (implies (and (rationalp b)
                 (<= 1 b)
                 (< b 2))
-           (<= (abs (- 1 (* b (rcp24 (trunc b 24))))) (expt 2 -22)))
+           (<= (abs (- 1 (* b (rcp24 (rtz b 24))))) (expt 2 -22)))
   :rule-classes ()
   :hints (("Goal" :use (rcp-12))))
 
-(local-defund y0 (b) (rcp24 (trunc b 24)))
-(local-defund q0 (a b) (near (* a (y0 b)) 53))
-(local-defund e0 (b) (near (- 1 (* b (y0 b))) 53))
-(local-defund r0 (a b) (near (- a (* b (q0 a b))) 53))
-(local-defund y1 (b) (near (+ (y0 b) (* (e0 b) (y0 b))) 53))
-(local-defund e1 (b) (near (- 1 (* b (y1 b))) 53))
-(local-defund y2 (b) (near (+ (y0 b) (* (e0 b) (y1 b))) 53))
-(local-defund q1 (a b) (near (+ (q0 a b) (* (r0 a b) (y1 b))) 53))
-(local-defund y3 (b) (near (+ (y1 b) (* (e1 b) (y2 b))) 53))
-(local-defund r1 (a b) (near (- a (* b (q1 a b))) 53))
+(local-defund y0 (b) (rcp24 (rtz b 24)))
+(local-defund q0 (a b) (rne (* a (y0 b)) 53))
+(local-defund e0 (b) (rne (- 1 (* b (y0 b))) 53))
+(local-defund r0 (a b) (rne (- a (* b (q0 a b))) 53))
+(local-defund y1 (b) (rne (+ (y0 b) (* (e0 b) (y0 b))) 53))
+(local-defund e1 (b) (rne (- 1 (* b (y1 b))) 53))
+(local-defund y2 (b) (rne (+ (y0 b) (* (e0 b) (y1 b))) 53))
+(local-defund q1 (a b) (rne (+ (q0 a b) (* (r0 a b) (y1 b))) 53))
+(local-defund y3 (b) (rne (+ (y1 b) (* (e1 b) (y2 b))) 53))
+(local-defund r1 (a b) (rne (- a (* b (q1 a b))) 53))
 (local-defund quot (a b mode) (rnd (+ (q1 a b) (* (r1 a b) (y3 b))) mode 53))
 
 (local-defun eps0 () (expt 2 -22))
@@ -426,7 +424,7 @@
                 (< b 2))
            (<= (abs (- 1 (* b (y0 b)))) (eps0)))
   :rule-classes ()
-  :hints (("Goal" :use (rcp24-trunc-error)
+  :hints (("Goal" :use (rcp24-rtz-error)
                   :in-theory (enable y0))))
 
 (local-defthm dp-2
@@ -437,7 +435,7 @@
            (<= (abs (- 1 (* b (y1 b)))) (eps1)))
   :rule-classes ()
   :hints (("Goal" :use (dp-1
-                        (:instance recip-refine-2 (y1 (y0 b)) (p 53) (y2 (y0 b)) (ep1 (eps0)) (ep2 (eps0))))
+                        (:instance recip-refinement-2 (y1 (y0 b)) (p 53) (y2 (y0 b)) (ep1 (eps0)) (ep2 (eps0))))
                   :in-theory (enable y1 e0))))
 
 (local-defthm dp-3
@@ -448,7 +446,7 @@
            (<= (abs (- 1 (* b (y2 b)))) (eps2)))
   :rule-classes ()
   :hints (("Goal" :use (dp-1 dp-2
-                        (:instance recip-refine-2 (y1 (y0 b)) (p 53) (y2 (y1 b)) (ep1 (eps0)) (ep2 (eps1))))
+                        (:instance recip-refinement-2 (y1 (y0 b)) (p 53) (y2 (y1 b)) (ep1 (eps0)) (ep2 (eps1))))
                   :in-theory (enable y2 e0))))
 
 (local-defthm dp-4
@@ -459,7 +457,7 @@
            (<= (abs (- 1 (* b (y3p b)))) (eps3p)))
   :rule-classes ()
   :hints (("Goal" :use (dp-2 dp-3
-                        (:instance recip-refine-1 (y1 (y1 b)) (p 53) (y2 (y2 b)) (ep1 (eps1)) (ep2 (eps2))))
+                        (:instance recip-refinement-1 (y1 (y1 b)) (p 53) (y2 (y2 b)) (ep1 (eps1)) (ep2 (eps2))))
                   :in-theory (enable y3p e1))))
 
 ; Added by Matt K., 2/23/2015:
@@ -485,11 +483,10 @@
   (local-defthm member-open-1-lemma
     (implies (and (natp n)
                   (<= n (len lst)))
-             (iff (or (member-equal a lst)
-                      (member-equal a acc))
-                  (or (member-equal a (first-n-ac n lst acc))
+             (iff (member-equal a lst)
+                  (or (member-equal a (take n lst))
                       (member-equal a (nthcdr n lst)))))
-    :hints (("Goal" :induct (first-n-ac n lst acc)))
+    :hints (("Goal" :induct (take n lst)))
     :rule-classes nil)
 
   (defthm member-open-1
@@ -501,8 +498,8 @@
                       (member-equal a (nthcdr *mem-open-len* lst)))))
     :hints (("Goal" :use ((:instance member-open-1-lemma
                                      (n *mem-open-len*)
-                                     (lst lst)
-                                     (acc nil))))))))
+                                     (lst lst))))))
+))
 
 (local-defthm member-open-2
   (implies (syntaxp (and (quotep lst)
@@ -521,7 +518,33 @@
   :rule-classes ()
   :hints (("Goal" :in-theory (enable h-excps))))
 
+(local-defthm divdp-small-cases-1
+  (implies (and (not (zp k))
+                (<= k 1027))
+           (let ((b (- 2 (* (expt 2 -52) k))))
+             (member b (h-excps (d) 53))))
+  :rule-classes ()
+  :hints (("Goal" :in-theory (enable bvecp h-excps d)
+                  :use ((:instance bvecp-member (x k) (n 11))))))
+
 (local-in-theory (disable (h-excps)))
+
+(defthm divdp-small-cases
+  (implies (and (not (zp k))
+                (<= k 1027))
+           (let* ((b (- 2 (* (expt 2 -52) k)))
+                  (y0 (rcp24 (rtz b 24)))
+                  (e0 (rne (- 1 (* b y0)) 53))
+                  (y1 (rne (+ y0 (* e0 y0)) 53))
+                  (e1 (rne (- 1 (* b y1)) 53))
+                  (y2 (rne (+ y0 (* e0 y1)) 53))
+                  (y3 (rne (+ y1 (* e1 y2)) 53)))
+             (< (abs (- 1 (* b y3)))
+                (expt 2 -53))))
+  :rule-classes ()
+  :hints (("Goal" :in-theory (enable y0 e0 y1 e1 y2 y3)
+           :use (divdp-small-cases-1
+                 (:instance excp-cases (b (- 2 (* (expt 2 -52) k))))))))
 
 (local-defthm dp-5
   (implies (and (rationalp b)
@@ -531,7 +554,7 @@
            (< (abs (- 1 (* b (y3 b)))) (expt 2 -53)))
   :rule-classes ()
   :hints (("Goal" :use (dp-4 excp-cases
-                        (:instance harrison (yp (y3p b)) (ep (eps3p)) (p 53)))
+                        (:instance harrison-lemma (yp (y3p b)) (ep (eps3p)) (p 53)))
                   :in-theory (enable y3 y3p e1))))
 
 (local-defun del0 () (phi (eps0)))
@@ -548,7 +571,7 @@
            (<= (abs (- 1 (* (/ b a) (q0 a b)))) (del0)))
   :rule-classes ()
   :hints (("Goal" :use (dp-1
-                        (:instance initial-approximation (y (y0 b)) (ep (eps0)) (p 53)))
+                        (:instance init-approx (y (y0 b)) (ep (eps0)) (p 53)))
                   :in-theory (enable q0))))
 
 (local-defthm dp-7
@@ -564,7 +587,7 @@
               (expt 2 (if (> a b) -52 -53))))
   :rule-classes ()
   :hints (("Goal" :use (dp-6 dp-2
-                        (:instance refine-quotient-2 (p 53) (y (y1 b)) (q0 (q0 a b)) (ep (eps1)) (de (del0))))
+                        (:instance quotient-refinement-2 (p 53) (y (y1 b)) (q0 (q0 a b)) (ep (eps1)) (de (del0))))
                   :in-theory (enable q1 r0))))
 
 (local-defthm dp-8
@@ -579,7 +602,7 @@
            (exactp (- a (* b (q1 a b))) 53))
   :rule-classes ()
   :hints (("Goal" :use (dp-7
-                        (:instance r-exactp (p 53) (q (q1 a b)))) 
+                        (:instance r-exactp (p 53) (q (q1 a b))))
                   :in-theory (enable q1 r0))))
 
 (local-defthm dp-9
@@ -593,7 +616,7 @@
                 (exactp b 53))
            (equal (r1 a b) (- a (* b (q1 a b)))))
   :hints (("Goal" :use (dp-8
-                        (:instance near-exactp-b (x (- a (* b (q1 a b)))) (n 53)))
+                        (:instance rne-exactp-b (x (- a (* b (q1 a b)))) (n 53)))
                   :in-theory (enable r1))))
 
 (local-defthm dp-10
@@ -617,33 +640,33 @@
                 (< b 2)
                 (exactp a 53)
                 (exactp b 53)
-                (ieee-mode-p mode))
+                (ieee-rounding-mode-p mode))
            (= (quot a b mode) (rnd (/ a b) mode 53)))
   :rule-classes ()
   :hints (("Goal" :use (dp-5 dp-7 dp-8
-                        (:instance markstein  (p 53) (q (q1 a b)) (y (y3 b))))
+                        (:instance markstein-lemma  (p 53) (q (q1 a b)) (y (y3 b))))
                   :in-theory (enable quot))))
 
-(defund dp-divide (a b mode)
-  (let* ((y0 (rcp24 (trunc b 24)))
-         (q0 (near (* a y0) 53))
-         (e0 (near (- 1 (* b y0)) 53))
-         (r0 (near (- a (* b q0)) 53))
-         (y1 (near (+ y0 (* e0 y0)) 53))
-         (e1 (near (- 1 (* b y1)) 53))
-         (y2 (near (+ y0 (* e0 y1)) 53))
-         (q1 (near (+ q0 (* r0 y1)) 53))
-         (y3 (near (+ y1 (* e1 y2)) 53))
-         (r1 (near (- a (* b q1)) 53)))
+(defund divdp (a b mode)
+  (let* ((y0 (rcp24 (rtz b 24)))
+         (q0 (rne (* a y0) 53))
+         (e0 (rne (- 1 (* b y0)) 53))
+         (r0 (rne (- a (* b q0)) 53))
+         (y1 (rne (+ y0 (* e0 y0)) 53))
+         (e1 (rne (- 1 (* b y1)) 53))
+         (y2 (rne (+ y0 (* e0 y1)) 53))
+         (q1 (rne (+ q0 (* r0 y1)) 53))
+         (y3 (rne (+ y1 (* e1 y2)) 53))
+         (r1 (rne (- a (* b q1)) 53)))
     (rnd (+ q1 (* r1 y3)) mode 53)))
 
 (local-defthm dp-12
-  (= (dp-divide a b mode)
+  (= (divdp a b mode)
      (quot a b mode))
   :rule-classes ()
-  :hints (("Goal" :in-theory (enable dp-divide y0 q0 e0 r0 y1 e1 y2 q1 y3 r1 quot))))
+  :hints (("Goal" :in-theory (enable divdp y0 q0 e0 r0 y1 e1 y2 q1 y3 r1 quot))))
 
-(defthm dp-divide-correct
+(defthm divdp-correct
   (implies (and (rationalp a)
                 (rationalp b)
                 (<= 1 a)
@@ -652,7 +675,7 @@
                 (< b 2)
                 (exactp a 53)
                 (exactp b 53)
-                (ieee-mode-p mode))
-           (= (dp-divide a b mode) (rnd (/ a b) mode 53)))
+                (ieee-rounding-mode-p mode))
+           (= (divdp a b mode) (rnd (/ a b) mode 53)))
   :rule-classes ()
   :hints (("Goal" :use (dp-12 dp-11))))

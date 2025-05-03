@@ -34,82 +34,152 @@
 (include-book "../lint/check-case")
 (include-book "../lint/check-namespace")
 (include-book "../mlib/hierarchy")
-
-(include-book "../lint/drop-missing-submodules")
+(include-book "../lint/alwaysstyle")
 (include-book "../lint/drop-user-submodules")
-(include-book "../lint/lint-stmt-rewrite")
-(include-book "../lint/remove-toohard")
 (include-book "../lint/suppress-warnings")
+(include-book "../lint/suppress-files")
 (include-book "../lint/condcheck")
 (include-book "../lint/duplicate-detect")
 (include-book "../lint/dupeinst-check")
 (include-book "../lint/duperhs")
 (include-book "../lint/leftright")
 (include-book "../lint/oddexpr")
-(include-book "../lint/portcheck")
 (include-book "../lint/qmarksize-check")
+(include-book "../lint/arith-compare")
 (include-book "../lint/selfassigns")
 (include-book "../lint/skip-detect")
-
+(include-book "../lint/logicassign")
+(include-book "../lint/check-globalparams")
+(include-book "../lint/ifdef-report")
+(include-book "../lint/unpacked-range")
 (include-book "../transforms/cn-hooks")
 (include-book "../transforms/unparam/top")
-(include-book "../transforms/annotate/argresolve")
-(include-book "../transforms/annotate/resolve-indexing")
-(include-book "../transforms/annotate/origexprs")
-(include-book "../transforms/annotate/make-implicit-wires")
-(include-book "../transforms/annotate/portdecl-sign")
-(include-book "../transforms/annotate/udp-elim")
-
-(include-book "../transforms/assign-trunc")
-(include-book "../transforms/blankargs")
-(include-book "../transforms/clean-params")
+(include-book "../transforms/annotate/top")
+(include-book "../transforms/addnames")
 (include-book "../transforms/clean-warnings")
-(include-book "../transforms/drop-blankports")
-(include-book "../transforms/expr-split")
-(include-book "../transforms/expand-functions")
-(include-book "../transforms/oprewrite")
-(include-book "../transforms/resolve-ranges")
-(include-book "../transforms/replicate-insts")
-(include-book "../transforms/selresolve")
-(include-book "../transforms/sizing")
-(include-book "../transforms/unused-vars")
-
+(include-book "../transforms/lintstub")
+(include-book "centaur/sv/vl/moddb" :dir :system)
+(include-book "centaur/sv/vl/use-set" :dir :system)
 (include-book "../../misc/sneaky-load")
-
 (include-book "../mlib/json")
-
 (include-book "centaur/getopt/top" :dir :system)
 (include-book "std/io/read-file-characters" :dir :system)
 (include-book "progutils")
-
+(include-book "shell")
+(local (include-book "xdoc/display" :dir :system))
 (local (include-book "../mlib/modname-sets"))
 (local (include-book "../util/arithmetic"))
 (local (include-book "../util/osets"))
 (local (non-parallel-book))
+(local (in-theory (disable (:e tau-system))))
 
-(defsection lint
-  :parents (vl)
+(defsection vl-lint
+  :parents (kit)
   :short "A linting tool for Verilog and SystemVerilog."
 
-  :long "<p>A <a
-href='http://en.wikipedia.org/wiki/Lint_%28software%29'>linter</a> is a tool
-that looks for possible bugs in a program.  We have used @(see VL) to implement
-a linter for Verilog and SystemVerilog designs.  It can scan your Verilog
-designs for potential bugs like size mismatches, unused wires, etc.</p>
+  :long "<h3>Introduction</h3>
 
-<p>Note: Most of the documentation here is about the implementation of various
-linter checks.  If you just want to run the linter on your own Verilog designs,
-you should see the VL @(see kit).  After building the kit, you should be able
-to run, e.g., @('vl lint --help') to see the @(see *vl-lint-help*)
-message.</p>")
+<p>A <a href='http://en.wikipedia.org/wiki/Lint_%28software%29'>linter</a> is a
+tool that looks for possible bugs in a program.  We have used @(see VL) to
+implement a linter for Verilog and SystemVerilog designs.  It can warn you
+about things such as:</p>
+
+<ul>
+<li>Wires driven by multiple sources</li>
+<li>Width mismatches in assignments and subexpressions</li>
+<li>Strange expressions like @('a & a')</li>
+<li>Duplicated module elements</li>
+<li>Unused and unset wires and parts of wires</li>
+<li>Possible confusion about operator precedence</li>
+<li>Strange statements that sometimes indicate copy/paste errors</li>
+</ul>
+
+<h3>Running the Linter</h3>
+
+<p>For detailed usage run @('vl lint --help') or see @(see *vl-lint-help*).</p>
+
+<p>A typical invocation might look like this:</p>
+
+@({
+      vl lint my_mod1.v my_mod2.v \     <-- starting files to load
+               -s libs/my_lib1 \        <-- search paths for finding
+               -s libs/my_lib2               additional modules
+})
+
+<p>The linter will print some progress messages as it runs, then writes its
+report in both <b>text</b> and <b>json</b> formats.</p>
+
+<h5>Output Text Files</h5>
+
+<p>The linter generally produces many warnings.  To try to filter this out and
+make it easy to focus on the most important warnings, we split the output into
+several files.  Here is a summary;</p>
+
+<dl>
+<dt>Generic warnings: (probably the most interesting)</dt>
+<dd>vl-basic.txt - basic warnings</dd>
+
+<dt>Size warnings: (often interesting)</dt>
+<dd>vl-trunc.txt - truncations and extensions in assignments</dd>
+<dd>vl-fussy.txt - size mismatches inside of expressions like @('a & b')</dd>
+<dd>vl-trunc-minor.txt - unlikely to be problems</dd>
+<dd>vl-fussy-minor.txt - unlikely to be problems</dd>
+
+<dt>Code cleanup: (helpful when refactoring)</dt>
+<dd>vl-lucid.txt - unused/undriven and multiply driven wires</dd>
+<dd>vl-same-ports.txt - redundant submodule instances</dd>
+<dd>vl-same-ports-minor.txt - unlikely to be problems</dd>
+
+<dt>Code smells (sometimes interesting)</dt>
+<dd>vl-smells.txt - weird expressions, duplicate rhs expressions</dd>
+
+<dt>Skipped wire detection (only occasionally useful)</dt>
+<dd>vl-skipdet.txt - high-scoring expressions, more likely to be problems</dd>
+<dd>vl-skipdet-minor.txt - low-scoring expressions, unlikely to be problems</dd>
+
+<dt>Other unclassified warnings</dt>
+<dd>vl-other.txt - tool errors, misc garble</dd>
+</dl>
+
+<h5>Output JSON files</h5>
+
+<p>All warnings produced by the linter are also put into @('vl-warnings.json').
+This file is intended for use in scripts that process the linter's output, such
+as lint warning emailers or similar.</p>
+
+
+<h3>Suppressing False Positives</h3>
+
+<p>You can tell the linter to ignore certain things by adding comments to your
+Verilog source files.  For instance:</p>
+
+@({
+    //@VL LINT_IGNORE_TRUNCATION     // to suppress the truncation warning
+    assign foo[3:0] = bar[5:0];
+
+    //@VL LINT_IGNORE                // to suppress all warnings
+    assign foo[3:0] = bar[5:0];
+})
+
+<p>This feature is probably fancier than anyone needs; see @(see
+lint-warning-suppression) for details.</p>
+
+<p>Note that there are also some command-line options to suppress all warnings
+for particular modules, or all warnings of particular types, etc.  See @(see
+*vl-lint-help*) for details.</p>")
+
+(local (xdoc::set-default-parents vl-lint))
 
 (defoptions vl-lintconfig
-  :parents (lint)
   :short "Command-line options for running @('vl lint')."
   :tag :vl-lint-opts
 
   ((start-files string-listp
                 "The list of files to process."
+                :hide t)
+
+   (plusargs    string-listp
+                "The list of +args, with plusses removed."
                 :hide t)
 
    (help        booleanp
@@ -202,6 +272,32 @@ message.</p>")
                 :parser getopt::parse-string
                 :merge cons)
 
+   (ignore-files string-listp
+                 :longname "ignore-file"
+                 :argname "FILENAME"
+                 "Ignore warnings from modules in filename.  For instance,
+                  \"--ignore-file foo.v\" will suppress all warnings from
+                  modules in foo.v (from any directory).  You can also give
+                  absolute paths, in which case only exact matches will be
+                  suppressed.  Note that there are much finer-grained ways
+                  to suppress warnings; see \"vl lint --readme\" for more
+                  information."
+                 :parser getopt::parse-string
+                 :merge cons)
+
+   (defines    string-listp
+               :longname "define"
+               :alias #\D
+               :argname "VAR"
+               "Set up definitions to use before parsing begins.  For instance,
+                \"--define foo\" is similar to \"`define foo\" and \"--define
+                foo=3\" is similar to \"`define foo 3\".  Note: these defines
+                are \"sticky\" and will override subsequent `defines in your
+                Verilog files unless your Verilog explicitly uses `undef.  You
+                can give this option multiple times."
+               :parser getopt::parse-string
+               :merge cons)
+
    (cclimit     natp
                 :argname "N"
                 "Limit for the const check.  This is a beta feature that is not
@@ -209,6 +305,50 @@ message.</p>")
                  check.  Otherwise, limit the scope of the check to at most N
                  sub-expressions."
                 :default 0)
+
+   (global-packages string-listp
+                    :longname "global-package"
+                    :argname "PACKAGE"
+                    "Consider the given package to be global for purposes of the
+                     globalparams check; i.e., parameters defined in this package
+                     should not be defined anywhere else."
+                    :merge cons
+                    :parser getopt::parse-string)
+   (elab-limit  natp
+                :argname "N"
+                "Default 10000.  Recursion limit for elaboration.  This usually
+                 shouldn't matter or need tinkering.  It's a safety valve
+                 against possible loops in elaboration, e.g., to resolve
+                 parameter P you need to evaluate parameter Q, which might
+                 require you to resolve R, which might depend hierarchically on
+                 P, and so on.  So if you hit this there's probably something
+                 wrong with your design."
+                :rule-classes :type-prescription
+                :default 10000)
+
+   (stmt-limit natp
+               :argname "N"
+               "Default 80.  Recursion limit for compiling statements, e.g.,
+                unrolling loops and figuring out when they terminate.  For
+                linting we use a low default limit that is meant to avoid
+                wasting an inordinate amount of time compiling troublesome
+                loops.  Increasing this may avoid svex translation warnings,
+                but may result in bad performance in some cases."
+               :rule-classes :type-prescription
+               :default 80)
+
+   (no-typo     booleanp
+                "Disable typo detection (it is sometimes slow)."
+                :rule-classes :type-prescription)
+
+   (no-html     booleanp
+                "Reduce the file size of vl-warnings.json by printing the
+                 warnings there in text-only mode."
+                :rule-classes :type-prescription)
+
+   (no-sv-use-set booleanp
+                  "Disable sv-use-set check."
+                  :rule-classes :type-prescription)
 
    (edition     vl-edition-p
                 :argname "EDITION"
@@ -233,10 +373,22 @@ message.</p>")
 
    (debug       booleanp
                 "Print extra information for debugging."
-                :rule-classes :type-prescription)))
+                :rule-classes :type-prescription)
+
+   (shell        booleanp
+                "Instead of running the linter, enter an ACL2 shell where the linter
+                 configuration has been saved as constant
+                 @('vl::*vl-user-lintconfig*').")
+
+   (post-shell  booleanp
+                "After running the linter, enter an ACL2 shell where the linter
+                 configuration has been saved as constant
+                 @('vl::*vl-user-lintconfig*')."))
+  ;; Note: would be nice to use the default alist layout here but it's ~14x
+  ;; faster to admit this with :fulltree (23 sec vs 320 sec.)
+  :layout :fulltree)
 
 (defval *vl-lint-help*
-  :parents (lint)
   :short "Usage message for vl lint."
   :showdef nil
   :showval t
@@ -249,10 +401,14 @@ Example:  vl lint engine.v wrapper.v core.v \\
             --search ./simlibs \\
             --search ./baselibs
 
-Usage:    vl lint [OPTIONS] file.v [file2.v ...]
+Usage:    vl lint [OPTIONS] file.v [file2.v ...] [+mymode ...]
 
 Options:" *nls* *nls* *vl-lintconfig-usage* *nls*))
 
+(defconsts (*vl-lint-readme* state)
+  (b* ((topic (xdoc::find-topic 'vl::vl-lint (xdoc::get-xdoc-table (w state))))
+       ((mv text state) (xdoc::topic-to-text topic nil state)))
+    (mv text state)))
 
 ;; (define vl-filter-mods-with-good-paramdecls
 ;;   ((x    vl-modulelist-p "List of modules to filter.")
@@ -292,7 +448,6 @@ Options:" *nls* *nls* *vl-lintconfig-usage* *nls*))
   ((mods vl-modulelist-p "Modules to print warnings for.")
    (show symbol-listp    "Types of warnings to show.")
    (hide symbol-listp    "Types of warnings to hide."))
-  :parents (lint)
   :short "Print warnings of interest to standard output, while hiding other
 warnings."
 
@@ -324,13 +479,12 @@ shown.</p>"
         (vl-println ""))))))
 
 
-(defaggregate vl-lintresult
-  :parents (lint)
+(defprod vl-lintresult
   :short "Results from running the linter."
   :tag :vl-lintresult
   ((design    vl-design-p
-              "Final, transformed list of modules.  Typically this isn't very
-               interesting or relevant to anything.")
+              "Final, transformed list of modules.  Useful to know whether a module
+               is unexpectedly included or not included.")
 
    (design0   vl-design-p
               "Almost: the initial, pre-transformed modules.  The only twist is
@@ -338,6 +492,12 @@ shown.</p>"
                that we wanted to drop; see, e.g., the @('topmods') and
                @('ignore') options of @(see vl-lintconfig-p).  This is used for
                @(see skip-detection), for instance.")
+
+   (design-orig   vl-design-p
+              "Really the initial, pre-transformed modules.")
+
+   (sv-modalist sv::modalist-p
+                "The result of converting the elaborated design into SV modules.")
 
    (reportcard vl-reportcard-p
                "The main result: binds \"original\" (pre-unparameterization)
@@ -385,21 +545,35 @@ shown.</p>"
                    NO-DUPLICATESP-EQUAL-WHEN-SAME-LENGTH-MERGESORT
                    SUBSETP-OF-VL-MODINSTLIST->MODNAMES-WHEN-SUBSETP
                    CDR-OF-VL-MODULELIST-DUPERHS-CHECK
-                   CDR-OF-VL-MODULELIST-ORIGEXPRS
+                   ;; CDR-OF-VL-MODULELIST-ORIGEXPRS
                    vl-modulelist-p-of-append
                    NO-DUPLICATESP-EQUAL-OF-APPEND
                    acl2::no-duplicatesp-equal-append-iff
                    mergesort)))
 
+(define vl-collect-new-names-from-orignames ((keep-orignames string-listp)
+                                             (mods vl-modulelist-p))
+  :returns (keep-newnames string-listp)
+  (b* (((when (atom mods))
+        nil)
+       ((vl-module x1) (car mods))
+       ((when (member-equal x1.origname (string-list-fix keep-orignames)))
+        (cons x1.name (vl-collect-new-names-from-orignames keep-orignames (cdr mods)))))
+    (vl-collect-new-names-from-orignames keep-orignames (cdr mods))))
+
 (define vl-design-remove-unnecessary-modules ((keep string-listp)
                                               (design vl-design-p))
   :returns (new-design vl-design-p)
   (b* ((design (vl-design-fix design))
-       (keep   (mergesort (string-list-fix keep)))
        ((unless keep)
-        ;; Special feature: if the user didn't specify any top modules,
-        ;; then we want to keep everything.
-        design))
+        ;; Special feature: if the user didn't specify any top modules, then we
+        ;; want to keep everything.
+        design)
+       (keep1 (mergesort (string-list-fix keep)))
+       ;; If the user wants to keep a parameterized module, we need to go
+       ;; through and find all of its new names.
+       (keep2 (mergesort (vl-collect-new-names-from-orignames keep1 (vl-design->mods design))))
+       (keep  (union keep1 keep2)))
     (vl-remove-unnecessary-elements keep design)))
 
 ;; (define vl-lint-unparam ((good vl-design-p))
@@ -445,13 +619,127 @@ shown.</p>"
        (mods   (vl-delete-modules quiet mods)))
     (change-vl-design design :mods mods)))
 
+
+(encapsulate
+  ()
+  (defund vl-lint-suppress-large-integer-problems (suppressp)
+    (declare (xargs :guard t)
+             (ignorable suppressp))
+    t)
+
+  (defttag :vl-lint-suppress-large-integer-problems)
+  (acl2::include-raw "lint-raw.lsp"))
+
+
+(defconst *vl-svbad-limit* (expt 2 20))
+
+(define vl-datatype-svbad-p ((x vl-datatype-p))
+  (b* (((unless (vl-datatype-resolved-p x))
+        t)
+       ((mv err size)
+        (vl-datatype-size x)))
+    (or err
+        (and size (> size *vl-svbad-limit*)))))
+
+(define vl-vardecl-svbad-warnings ((x        vl-vardecl-p)
+                                   (warnings vl-warninglist-p))
+  :returns (warnings vl-warninglist-p)
+  (b* (((vl-vardecl x))
+       ((unless (vl-datatype-svbad-p x.type))
+        (ok)))
+    (fatal :type :vl-warn-svbad-p
+           :msg "~a0: type ~a1 looks like it will cause problems for SV."
+           :args (list x x.type))))
+
+(define vl-vardecllist-svbad-warnings ((x        vl-vardecllist-p)
+                                       (warnings vl-warninglist-p))
+  :returns (warnings vl-warninglist-p)
+  (b* (((when (atom x))
+        (ok))
+       (warnings (vl-vardecl-svbad-warnings (car x) warnings)))
+    (vl-vardecllist-svbad-warnings (cdr x) warnings)))
+
+(define vl-module-add-svbad-warnings ((x    vl-module-p)
+                                      (good vl-modulelist-p)
+                                      (bad  vl-modulelist-p))
+  :returns (mv (good vl-modulelist-p)
+               (bad  vl-modulelist-p))
+  (b* (((vl-module x) (vl-module-fix x))
+       (good (vl-modulelist-fix good))
+       (bad  (vl-modulelist-fix bad))
+       (warnings (vl-vardecllist-svbad-warnings x.vardecls nil))
+       ((unless warnings)
+        ;; no obvious problems, so keep this module
+        (mv (cons x good) bad))
+       ;; some wire looks really big and is probably going to cause
+       ;; problems for SV, so drop this module
+       (new-x (change-vl-module x :warnings (append-without-guard warnings x.warnings))))
+    (mv good (cons new-x bad))))
+
+(define vl-modulelist-add-svbad-warnings ((x    vl-modulelist-p)
+                                          (good vl-modulelist-p)
+                                          (bad  vl-modulelist-p))
+  :returns (mv (good vl-modulelist-p)
+               (bad  vl-modulelist-p))
+  (b* (((when (atom x))
+        (mv (vl-modulelist-fix good) (vl-modulelist-fix bad)))
+       ((mv good bad) (vl-module-add-svbad-warnings (first x) good bad)))
+    (vl-modulelist-add-svbad-warnings (rest x) good bad)))
+
+(define vl-lint-design->svex-modalist-wrapper ((x      vl-design-p)
+                                               (config vl-simpconfig-p))
+  :returns (new-x vl-design-p)
+  (b* (((vl-design x))
+       (- (sneaky-save :vl-lint-svconfig config))
+       (- (sneaky-save :vl-lint-pre-sv-design x))
+
+       ((mv good bad) (vl-modulelist-add-svbad-warnings x.mods nil nil))
+
+       ;; Strip out the bad mods so that we don't try to build SV
+       ;; modules for them.
+       (good-x (change-vl-design x :mods good))
+       ((mv reportcard ?modalist)
+        (xf-cwtime (vl-design->svex-modalist good-x :config config)))
+
+       ;; Reattach the bad mods so that we get their warning.
+       (merged-x (change-vl-design x :mods (append-without-guard good bad)))
+
+       ;; Finally get the warnings from SV translation from the reportcard.
+       (final-x (xf-cwtime (vl-apply-reportcard merged-x reportcard))))
+    final-x))
+
 (define run-vl-lint-main ((design vl-design-p)
                           (config vl-lintconfig-p))
   :guard-debug t
-  :returns (result vl-lintresult-p :hyp :fguard)
+  :returns (result vl-lintresult-p :hints(("Goal" :in-theory (disable (force)))))
 
   (b* (((vl-lintconfig config) config)
-       (design (cwtime (vl-design-drop-user-submodules design config.dropmods)))
+       (design-orig design)
+       (- (vl-lint-suppress-large-integer-problems t))
+
+       (simpconfig
+        (change-vl-simpconfig *vl-default-simpconfig*
+                              :sv-simplify nil
+                              :elab-limit config.elab-limit
+                              :sc-limit config.stmt-limit))
+
+       (design (vl-annotate-design design simpconfig))
+       ;; We originally did this before annotate, but that doesn't work in the
+       ;; new world of loaditems.  we need to annotate first.
+       (design (xf-cwtime (vl-design-drop-user-submodules design config.dropmods)))
+
+       ;; BOZO where did lvaluecheck go??
+
+       ;; Taken care of by annotate
+       ;; (design (cwtime (vl-design-resolve-ansi-portdecls design)))
+       ;; (design (cwtime (vl-design-resolve-nonansi-interfaceports design)))
+       ;; (design (cwtime (vl-design-add-enumname-declarations design)))
+       ;; (design (cwtime (vl-design-make-implicit-wires design)))
+       ;; (design (cwtime (vl-design-portdecl-sign design)))
+       ;; (design (cwtime (vl-design-udp-elim design)))
+
+       ;; BOZO I have no idea why we're doing this.
+       ;; Old comments:
 
        ;; You might expect that we'd immediately throw out modules that we
        ;; don't need for topmods.  Historically we did that.  But then we found
@@ -462,33 +750,41 @@ shown.</p>"
        ;; mods0, so do that now:
        (design0 (vl-design-remove-unnecessary-modules config.topmods design))
 
-       (- (cw "~%vl-lint: initial processing...~%"))
-       (design (cwtime (vl-design-make-implicit-wires design)))
-       (design (cwtime (vl-design-portdecl-sign design)))
-       (design (cwtime (vl-design-udp-elim design)))
-       (design (cwtime (vl-design-portcheck design)))
-       (design (cwtime (vl-design-argresolve design)))
-       (design (cwtime (vl-design-resolve-indexing design)))
+
+       (design (xf-cwtime (vl-design-check-globalparams design config.global-packages)))
+       (design (xf-cwtime (vl-design-duplicate-detect design)))
+       (design (xf-cwtime (vl-design-alwaysstyle design)))
+
+       ;; Note: don't want to addnames before duplicate-detect, because it
+       ;; would name unnamed duplicated blocks in different ways.
+       (design (xf-cwtime (vl-design-addnames design)))
+
+       ;; all done in annotate now:
+       ;; (design (cwtime (vl-design-portcheck design)))
+       ;; (design (cwtime (vl-design-argresolve design)))
+       ;; (design (cwtime (vl-design-type-disambiguate design)))
+
+       (design (xf-cwtime (vl-design-oddexpr-check design)))
+
+       ;; this goes away (design (cwtime (vl-design-resolve-indexing design)))
 
        ;; Pre-unparameterization Lucidity Check.
-       (design (cwtime (vl-design-lucid design
-                                        ;; This is a good time to check parameter uses
-                                        :paramsp t
-                                        ;; This is a bad time to check generates
-                                        :generatesp nil)))
+       (typosp (not config.no-typo))
+       (design (xf-cwtime (vl-design-lucid design
+                                           :modportsp t    ;; Good time to check modports
+                                           :paramsp t      ;; Good time to check params
+                                           :typosp typosp  ;; Good time to check for typos
+                                           :generatesp nil ;; Bad time to check generates
+                                           )))
 
-       (- (cw "~%vl-lint: starting general checks...~%"))
-       (design (cwtime (vl-design-check-namespace design)))
-       (design (cwtime (vl-design-check-case design)))
-       (design (cwtime (vl-design-duperhs-check design)))
-       (design (cwtime (vl-design-duplicate-detect design)))
-       (design (cwtime (vl-design-condcheck design)))
-       (design (cwtime (vl-design-leftright-check design)))
-       (design (cwtime (vl-design-origexprs design)))
-       (design (cwtime (vl-design-dupeinst-check design)))
-       (design (cwtime (vl-centaur-seqcheck-hook design)))
-
-       (- (cw "~%vl-lint: elaborating the design...~%"))
+       (design (xf-cwtime (vl-design-check-namespace design)))
+       (design (xf-cwtime (vl-design-check-case design)))
+       (design (xf-cwtime (vl-design-duperhs-check design)))
+       (design (xf-cwtime (vl-design-condcheck design)))
+       (design (xf-cwtime (vl-design-leftright-check design)))
+       (design (xf-cwtime (vl-design-dupeinst-check design)))
+       (design (xf-cwtime (vl-centaur-seqcheck-hook design)))
+       (design (xf-cwtime (vl-design-logicassign design)))
 
        ;; BOZO we need to do something to throw away instances with unresolved
        ;; arguments to avoid programming-errors in drop-blankports... and actually
@@ -497,32 +793,40 @@ shown.</p>"
        ;;(design (cwtime (vl-design-follow-hids design)))
        ;; (design (cwtime (vl-design-clean-params design)))
        ;; (design (cwtime (vl-design-check-good-paramdecls design)))
-       (design (cwtime (vl-design-unparameterize design)))
-       (design (cwtime (vl-design-rangeresolve design)))
-       (design (cwtime (vl-design-selresolve design)))
+       (design (xf-cwtime (vl-design-elaborate design simpconfig)))
+
+       ((mv design stubnames) (vl-design-lint-stubs design))
+
+       ;; these are part of elaboration now
+       ;;(design (cwtime (vl-design-rangeresolve design)))
+       ;;(design (cwtime (vl-design-selresolve design)))
 
        (design
         ;; Running another dupeinst check here, after unparameterization, may
         ;; create redundant warnings, but it may also help to catch things that
         ;; become duplicates after unparameterization.
-        (cwtime (vl-design-dupeinst-check design)))
+        (xf-cwtime (vl-design-dupeinst-check design)))
 
        ;; Post-unparameterization Lucidity Check -- this is a bad time for
-       ;; checking parameters (because they've been eliminated) but it's a
-       ;; much better time to do bit-level analysis, because things like
-       ;; foo[width-1:0] should hopefully be resolved now.  Also we can
-       ;; sensibly check generates now.
-       (design (cwtime (vl-design-lucid design
-                                        :paramsp nil
-                                        :generatesp t)))
+       ;; checking parameters (because they've been eliminated) and modports
+       ;; (because the interface names have changed and we won't be able to
+       ;; find them correctly).  But it's a much better time to do bit-level
+       ;; analysis, because things like foo[width-1:0] should hopefully be
+       ;; resolved now.  Also we can sensibly check generates now.
+       (design (xf-cwtime (vl-design-lucid design
+                                           :modportsp nil
+                                           :paramsp nil
+                                           :typosp nil
+                                           :generatesp t)))
 
-       (design
-        ;; Best not to do this until after lucid checking.
-        (cwtime (vl-design-drop-missing-submodules design)))
+;;*** do we want to do thsi???  I can't think of why
+       ;; (design
+       ;;  ;; Best not to do this until after lucid checking.
+       ;;  (cwtime (vl-design-drop-missing-submodules design)))
 
        ;; BOZO do we even need to do this?
        ;; BOZO not exactly sure where this should go, maybe this will work.
-       
+
 
        ;; (design
        ;;  ;; Bug fixed 2014-12-19: don't do this until after argresolve, because
@@ -532,26 +836,38 @@ shown.</p>"
        ;;  ;; are we even doing this?
        ;;  (cwtime (vl-design-elim-unused-vars design)))
 
-       (design (cwtime (vl-design-check-selfassigns design)))
-       (design (cwtime (vl-design-lint-stmt-rewrite design)))
-       (design (cwtime (vl-design-stmtrewrite design 1000)))
+       (design (xf-cwtime (vl-design-check-selfassigns design)))
+       (design (xf-cwtime (vl-design-qmarksize-check design)))
+       (design (xf-cwtime (vl-design-arith-compare-check design)))
+       (design (xf-cwtime (vl-design-unpacked-range-check design)))
+       (sd-probs (xf-cwtime (sd-analyze-design design0)))
+
+;; Not sure we care abotu this for anything
+       ;; (design (cwtime (vl-design-lint-stmt-rewrite design)))
+       ;; (design (cwtime (vl-design-stmtrewrite design 1000)))
        ;;(design (cwtime (vl-design-hid-elim design)))
 
-       ;; Now that HIDs are gone, we can throw away any modules we don't care
-       ;; about, if we have been given any topmods.
-       (design (b* ((names1 (vl-modulelist->names (vl-design->mods design)))
-                    (design (vl-design-drop-missing-submodules design))
-                    (names2 (vl-modulelist->names (vl-design->mods design)))
-                    (lost   (difference (mergesort names1) (mergesort names2))))
-                 (or (not lost)
-                     (cw "BOZO lost ~x0 modules somewhere (probably unparameterizing): ~x1~%"
-                         (len lost) lost))
+;; maaaaybe we don't watn this?
+       ;; ;; Now that HIDs are gone, we can throw away any modules we don't care
+       ;; ;; about, if we have been given any topmods.
+       ;; (design (b* ((names1 (vl-modulelist->names (vl-design->mods design)))
+       ;;              (design (vl-design-drop-missing-submodules design))
+       ;;              (names2 (vl-modulelist->names (vl-design->mods design)))
+       ;;              (lost   (difference (mergesort names1) (mergesort names2))))
+       ;;           (or (not lost)
+       ;;               (cw "BOZO lost ~x0 modules somewhere (probably unparameterizing): ~x1~%"
+       ;;                   (len lost) lost))
+       ;;           design))
+
+       ((mv reportcard modalist) (xf-cwtime (vl-design->svex-modalist
+                                              design :config simpconfig)))
+       (design (xf-cwtime (vl-apply-reportcard design reportcard)))
+       (design (if (not config.no-sv-use-set)
+                   (xf-cwtime (vl-design-sv-use-set design modalist))
                  design))
 
-       (design (cwtime (vl-design-remove-unnecessary-modules config.topmods design)))
+       (design (xf-cwtime (vl-design-remove-unnecessary-modules config.topmods design)))
 
-       (- (cw "~%vl-lint: processing expressions...~%"))
-       (design (cwtime (vl-design-oddexpr-check design)))
 
        ;; [Jared] -- Trying to NOT do oprewrite anymore.  Our sizing warnings
        ;; do better if we can tell the difference between == and ~^ operators,
@@ -560,60 +876,142 @@ shown.</p>"
 
 
        ;; Sizing doesn't do well unless we expand functions
-       (design (cwtime (vl-design-expand-functions design)))
-       (design (cwtime (vl-design-exprsize design)))
-       (design (cwtime (vl-design-constcheck-hook design config.cclimit)))
-       (design (cwtime (vl-design-qmarksize-check design)))
+;       (design (cwtime (vl-design-expand-functions design)))
+;       (design (cwtime (vl-design-exprsize design)))
+;       (design (cwtime (vl-design-constcheck-hook design config.cclimit)))
 
-       (- (cw "~%vl-lint: processing assignments...~%"))
-       (design (cwtime (vl-design-split design)))
-       (design (cwtime (vl-design-replicate design)))
-       (design (cwtime (vl-design-blankargs design)))
-       (design (cwtime (vl-design-trunc design)))
 
-       (- (cw "~%vl-lint: finding skipped and multiply driven wires...~%"))
+;       (- (cw "~%vl-lint: processing assignments...~%"))
+;       (design (cwtime (vl-design-split design)))
+
+; BOZO argument width checking?
+;       (design (cwtime (vl-design-replicate design)))
+
+;; BOZO are we checking for connecting blanks to interface ports
+;;        (design (cwtime (vl-design-blankargs design)))
+;;       (design (cwtime (vl-design-trunc design)))
+
+;       (- (cw "~%vl-lint: finding skipped and multiply driven wires...~%"))
        ;; NOTE: use design0, not design, if you ever want this to finish. :)
-       (sd-probs (cwtime (sd-analyze-design design0)))
 
-       (- (cw "~%vl-lint: cleaning up...~%"))
-       (design   (cwtime (vl-design-clean-warnings design)))
-       (design   (cwtime (vl-design-suppress-lint-warnings design)))
-       (design   (cwtime (vl-design-lint-ignoreall design config.ignore)))
-       (design   (cwtime (vl-lint-apply-quiet config.quiet design)))
-       (sd-probs (cwtime (vl-delete-sd-problems-for-modnames config.quiet sd-probs)))
-       (reportcard  (cwtime (vl-design-origname-reportcard design))))
 
+       (design   (xf-cwtime (vl-design-clean-warnings design)))
+       (design   (xf-cwtime (vl-design-suppress-file-warnings design config.ignore-files)))
+       (design   (xf-cwtime (vl-design-suppress-lint-warnings design)))
+       (design   (xf-cwtime (vl-design-lint-ignoreall design config.ignore)))
+       (design   (xf-cwtime (vl-lint-apply-quiet (append stubnames config.quiet) design)))
+       (sd-probs (xf-cwtime (vl-delete-sd-problems-for-modnames (append stubnames config.quiet) sd-probs)))
+       (reportcard  (xf-cwtime (vl-design-origname-reportcard design))))
+    (vl-lint-suppress-large-integer-problems nil)
     (make-vl-lintresult :design design
                         :design0 design0
+                        :design-orig design-orig
+                        :sv-modalist modalist
                         :reportcard reportcard
                         :sd-probs sd-probs
                         )))
 
+(defsection vl-lint-extra-actions
+  :parents (vl-lint)
+  :short "Customizable hook to run at the end of VL Lint."
+  :long "<p>This is an attachment that allows you to extend VL Lint with
+  support additional, customized (e.g., methodology-specific) checks and custom
+  reports.</p>
+
+  <p>It gets called as the last step of @(see run-vl-lint) and has access to
+  the entire @(see vl-lintconfig) and the corresponding @(see vl-loadconfig),
+  the full @(see vl-loadresult), and also the full @(see vl-lintresult) which
+  contains all the warnings and the final, fully processed design.</p>"
+
+  (encapsulate
+    (((vl-lint-extra-actions * * * * state) => state
+      :formals (lintconfig loadconfig loadresult lintresult state)
+      :guard (and (vl-lintconfig-p lintconfig)
+                  (vl-loadconfig-p loadconfig)
+                  (vl-loadresult-p loadresult)
+                  (vl-lintresult-p lintresult))))
+
+    (local (defun vl-lint-extra-actions
+             (lintconfig loadconfig loadresult lintresult state)
+             (declare (ignore lintconfig loadconfig loadresult lintresult)
+                      (xargs :stobjs state))
+             state))
+
+    (defthm state-p1-of-vl-lint-extra-actions
+      (implies (state-p1 state)
+               (state-p1 (vl-lint-extra-actions lintconfig loadconfig
+                                                loadresult lintresult
+                                                state))))))
+
+(define vl-lint-extra-actions-default ((lintconfig vl-lintconfig-p)
+                                       (loadconfig vl-loadconfig-p)
+                                       (loadresult vl-loadresult-p)
+                                       (lintresult vl-lintresult-p)
+                                       state)
+  :parents (vl-lint-extra-actions)
+  :short "Does nothing -- this is the default implementation for
+          @('vl-lint-extra-actions')."
+  (declare (ignore lintconfig loadconfig loadresult lintresult))
+  state
+  ///
+  (defattach vl-lint-extra-actions vl-lint-extra-actions-default))
+
+(define vl-lintconfig-loadconfig ((config vl-lintconfig-p)
+                                  (defines vl-defines-p))
+  :returns (loadconfig vl-loadconfig-p)
+  (b* (((vl-lintconfig config)))
+    (make-vl-loadconfig
+     :edition       config.edition
+     :strictp       config.strict
+     :start-files   config.start-files
+     :search-path   config.search-path
+     :search-exts   config.search-exts
+     :include-dirs  config.include-dirs
+     :plusargs      config.plusargs
+     :defines       defines
+     :mintime       1/100
+     :debugp        config.debug)))
+
 (define run-vl-lint ((config vl-lintconfig-p) &key (state 'state))
-  :returns (mv (res vl-lintresult-p :hyp :fguard)
+  :returns (mv (res vl-lintresult-p)
+               (loadres vl-loadresult-p)
+               (loadconfig vl-loadconfig-p)
                (state state-p1 :hyp (state-p1 state)))
   (b* ((- (cw "Starting VL-Lint~%"))
        ((vl-lintconfig config) config)
        (- (or (not config.debug)
               (cw "Lint configuration: ~x0~%" config)))
 
-       (loadconfig (make-vl-loadconfig
-                    :edition       config.edition
-                    :strictp       config.strict
-                    :start-files   config.start-files
-                    :search-path   config.search-path
-                    :search-exts   config.search-exts
-                    :include-dirs  config.include-dirs))
+       ((mv cmdline-warnings defines)
+        (vl-parse-cmdline-defines config.defines
+                                  (make-vl-location :filename "vl cmdline"
+                                                    :line 1
+                                                    :col 0)
+                                  ;; Command line defines are sticky
+                                  t))
+
+       (- (or (not cmdline-warnings)
+              (vl-cw-ps-seq (vl-print-warnings cmdline-warnings))))
+
+       (loadconfig (vl-lintconfig-loadconfig config defines))
+
        (- (or (not config.debug)
               (cw "Load configuration: ~x0~%" loadconfig)))
 
        (- (cw "~%vl-lint: loading modules...~%"))
        ((mv loadres state) (cwtime (vl-load loadconfig)))
 
-       (lintres
-        (cwtime (run-vl-lint-main (vl-loadresult->design loadres)
-                                  config))))
-    (mv lintres state)))
+       (design (vl-loadresult->design loadres))
+       (design (change-vl-design design
+                :warnings
+                (append-without-guard cmdline-warnings
+                                      (vl-design->warnings design))))
+
+       (lintres (cwtime (run-vl-lint-main design config)))
+       (state (cwtime (vl-lint-extra-actions
+                       config loadconfig loadres lintres state))))
+
+    (mv lintres loadres loadconfig state)))
 
 
 (define sd-problem-major-p ((x sd-problem-p))
@@ -664,7 +1062,28 @@ shown.</p>"
             (vl-cw "~x0 ~s1 Warnings:~%~%" count label)))
      (vl-print-reportcard reportcard :elide nil))))
 
-(define vl-jp-reportcard-aux ((x vl-reportcard-p) &key (ps 'ps))
+(define vl-lint-print-all-warnings ((filename stringp)
+                                    (label    stringp)
+                                    (reportcard   vl-reportcard-p)
+                                    &key (ps 'ps))
+  (b* ((reportcard (vl-clean-reportcard reportcard))
+       (count  (length (append-alist-vals reportcard)))
+       (-      (cond ((eql count 0)
+                      (cw "~s0: No ~s1 Warnings.~%" filename label))
+                     ((eql count 1)
+                      (cw "~s0: One ~s1 Warning.~%" filename label))
+                     (t
+                      (cw "~s0: ~x1 ~s2 Warnings.~%" filename count label)))))
+    (vl-ps-seq
+     (cond ((eql count 0)
+            (vl-cw "No ~s0 Warnings.~%~%" label))
+           ((eql count 1)
+            (vl-cw "One ~s0 Warning:~%~%" label))
+           (t
+            (vl-cw "~x0 ~s1 Warnings:~%~%" count label)))
+     (vl-print-reportcard reportcard :elide nil))))
+
+(define vl-jp-reportcard-aux ((x vl-reportcard-p) &key (no-html booleanp) (ps 'ps))
   (b* (((when (atom x))
         ps)
        ((cons modname warnings) (car x))
@@ -674,11 +1093,11 @@ shown.</p>"
     (vl-ps-seq (vl-indent 1)
                (jp-str modname)
                (vl-print ":")
-               (vl-jp-warninglist warnings)
+               (vl-jp-warninglist warnings :no-html no-html)
                (if (atom (cdr x))
                    ps
                  (vl-println ","))
-               (vl-jp-reportcard-aux (cdr x))))
+               (vl-jp-reportcard-aux (cdr x) :no-html no-html)))
   :prepwork
   ((local (defthm l0
             (implies (and (vl-reportcardkey-p x)
@@ -686,16 +1105,16 @@ shown.</p>"
                      (stringp x))
             :hints(("Goal" :in-theory (enable vl-reportcardkey-p)))))))
 
-(define vl-jp-reportcard ((x vl-reportcard-p) &key (ps 'ps))
+(define vl-jp-reportcard ((x vl-reportcard-p) &key (no-html booleanp) (ps 'ps))
   (vl-ps-seq (vl-print "{")
-             (vl-jp-reportcard-aux x)
+             (vl-jp-reportcard-aux x :no-html no-html)
              (vl-println "}")))
 
 (define vl-remove-nameless-descriptions ((x vl-descriptionlist-p))
   :returns (new-x vl-descriptionlist-p)
   (cond ((atom x)
          nil)
-        ((not (vl-description->name (car x)))
+        ((not (vl-description->origname (car x)))
          (vl-remove-nameless-descriptions (cdr x)))
         (t
          (cons (vl-description-fix (car x))
@@ -704,7 +1123,7 @@ shown.</p>"
 (define vl-jp-description-locations ((x vl-descriptionlist-p) &key (ps 'ps))
   (b* (((when (atom x))
         ps)
-       (name (or (vl-description->name (car x))
+       (name (or (vl-description->origname (car x))
                  (raise "Shouldn't have nameless descriptions here but got ~x0" (car x))
                  ""))
        (loc  (vl-description->minloc (car x))))
@@ -717,7 +1136,7 @@ shown.</p>"
                  (vl-println ", "))
                (vl-jp-description-locations (cdr x)))))
 
-(define vl-jp-locations ((x vl-design-p) &key (ps 'ps))
+(define vl-jp-design-locations ((x vl-design-p) &key (ps 'ps))
   (vl-ps-seq (vl-print "{")
              (vl-jp-description-locations
               (vl-remove-nameless-descriptions
@@ -733,7 +1152,18 @@ shown.</p>"
         :vl-warn-unused-var
         :vl-warn-blank
         :vl-undefined-names
-        :vl-port-mismatch))
+        :vl-port-mismatch
+        :vl-warn-scary-translate-comment
+        :vl-preprocessor-error
+        :vl-preprocess-failed
+        :vl-parse-error
+        :vl-parse-failed
+        :vl-search-failed
+        :vl-unreachable-module
+        :vl-warn-define-smashed
+        :vl-warn-undef
+        :vl-warn-define-ignored
+        :vl-bindelim-fail))
 
 (defconst *trunc-warnings*
   (list :vl-warn-extension
@@ -749,17 +1179,27 @@ shown.</p>"
 (defconst *smell-warnings*
   (list :vl-warn-qmark-width
         :vl-warn-qmark-const
+        :vl-warn-qmark-always-true
         :vl-warn-leftright
         :vl-warn-selfassign
         :vl-warn-instances-same
         :vl-warn-case-sensitive-names
         :vl-warn-same-rhs
-        :vl-const-expr))
+        :vl-const-expr
+        :vl-warn-vardecl-assign
+        :vl-warn-oddexpr
+        :vl-warn-possible-typo
+        :vl-warn-include-guard
+        :vl-warn-plain-always
+        :vl-warn-always-latch
+        :vl-warn-arithmetic-comparison
+        ))
 
 (defconst *smell-minor-warnings*
   (list :vl-warn-partselect-same
         :vl-warn-instances-same-minor
-        :vl-const-expr-minor))
+        :vl-const-expr-minor
+        :vl-warn-empty-dotstar))
 
 (defconst *fussy-size-warnings*
   (list :vl-fussy-size-warning-1
@@ -784,7 +1224,11 @@ shown.</p>"
 (defconst *fussy-size-minor-warnings*
   (list :vl-fussy-size-warning-1-minor
         :vl-fussy-size-warning-2-minor
-        :vl-fussy-size-warning-3-minor))
+        :vl-fussy-size-warning-3-minor
+        :vl-fussy-size-warning-1-minor-intsize
+        :vl-fussy-size-warning-2-minor-intsize
+        :vl-fussy-size-warning-3-minor-intsize
+        ))
 
 (defconst *lucid-warnings*
   (list :vl-lucid-error
@@ -793,6 +1237,24 @@ shown.</p>"
         :vl-lucid-unset
         :vl-lucid-multidrive))
 
+(defconst *lucid-variable-warnings*
+  (list :vl-lucid-unused-variable
+        :vl-lucid-spurious-variable
+        :vl-lucid-unset-variable))
+
+(defconst *sv-use-set-warnings*
+  (list 
+   :sv-use-set-spurious
+   :sv-use-set-spurious-inout
+   :sv-use-set-unused-input
+   :sv-use-set-unset-output
+   :sv-use-set-partly-unset-output
+   :sv-use-set-unused
+   :sv-use-set-unset
+   :sv-use-set-partly-unset
+   :sv-use-set-partly-unused
+   :sv-use-set-partly-spurious))
+   
 
 
 (defconst *warnings-covered*
@@ -810,6 +1272,8 @@ shown.</p>"
           *same-ports-warnings*
           *same-ports-minor-warnings*
           *lucid-warnings*
+          *lucid-variable-warnings*
+          *sv-use-set-warnings*
           ))
 
 (defconst *warnings-ignored*
@@ -826,12 +1290,84 @@ shown.</p>"
 (local (in-theory (disable set::in set::in-tail
                            set::difference set::mergesort)))
 
-(defun vl-lint-report (lintresult state)
-  (declare (xargs :guard (vl-lintresult-p lintresult)
-                  :stobjs state))
+(define vl-warninglist-remove-suppressed ((x vl-warninglist-p))
+  :returns (new-x vl-warninglist-p)
+  (if (atom x)
+      nil
+    (if (vl-warning->suppressedp (car x))
+        (vl-warninglist-remove-suppressed (cdr x))
+      (cons (vl-warning-fix (car x))
+            (vl-warninglist-remove-suppressed (cdr x))))))
 
-  (b* (((vl-lintresult lintresult) lintresult)
+(define vl-reportcard-remove-suppressed ((x vl-reportcard-p))
+  :returns (new-reportcard vl-reportcard-p)
+  :measure (len (vl-reportcard-fix x))
+  (b* ((x (vl-reportcard-fix x))
+       ((when (atom x)) nil)
+       ((cons key warnings) (car x))
+       (warnings (vl-warninglist-remove-suppressed warnings)))
+    (if warnings
+        (cons (cons (vl-reportcardkey-fix key)
+                    warnings)
+              (vl-reportcard-remove-suppressed (cdr x)))
+      (vl-reportcard-remove-suppressed (cdr x)))))
+
+(define vl-warninglist-keep-suppressed ((x vl-warninglist-p))
+  :returns (new-x vl-warninglist-p)
+  (if (atom x)
+      nil
+    (if (vl-warning->suppressedp (car x))
+        (cons (vl-warning-fix (car x))
+              (vl-warninglist-keep-suppressed (cdr x)))
+      (vl-warninglist-keep-suppressed (cdr x)))))
+
+(define vl-reportcard-keep-suppressed ((x vl-reportcard-p))
+  :returns (new-reportcard vl-reportcard-p)
+  :measure (len (vl-reportcard-fix x))
+  (b* ((x (vl-reportcard-fix x))
+       ((when (atom x)) nil)
+       ((cons key warnings) (car x))
+       (warnings (vl-warninglist-keep-suppressed warnings)))
+    (if warnings
+        (cons (cons (vl-reportcardkey-fix key)
+                    warnings)
+              (vl-reportcard-keep-suppressed (cdr x)))
+      (vl-reportcard-keep-suppressed (cdr x)))))
+
+
+(define vl-pp-stringlist-lines ((x string-listp)
+                          &key (ps 'ps))
+  (if (atom x)
+      ps
+    (vl-ps-seq (vl-println (string-fix (car x)))
+               (vl-pp-stringlist-lines (cdr x)))))
+
+(define vl-print-eliminated-descs ((final vl-design-p "final design")
+                                   (orig vl-design-p "original design")
+                                   &key (ps 'ps))
+  (b* ((final-descs (mergesort
+                     (vl-descriptionlist->orignames
+                      (vl-remove-nameless-descriptions
+                       (vl-design-descriptions final)))))
+       (orig-descs (mergesort
+                    (vl-descriptionlist->orignames
+                     (vl-remove-nameless-descriptions
+                      (vl-design-descriptions orig)))))
+       (missing (difference orig-descs final-descs)))
+    (vl-pp-stringlist-lines missing)))
+
+
+(define vl-lint-report ((config vl-lintconfig-p)
+                        (loadresult vl-loadresult-p)
+                        (lintresult vl-lintresult-p)
+                        state)
+  :returns (state state-p1 :hyp (state-p1 state))
+  (b* (((vl-lintresult lintresult))
+       ((vl-loadresult loadresult))
+       ((vl-lintconfig config))
        (reportcard   lintresult.reportcard)
+       (suppressed (vl-reportcard-keep-suppressed reportcard))
+       (reportcard (vl-reportcard-remove-suppressed reportcard))
        (sd-probs lintresult.sd-probs)
 
        ((mv major minor)
@@ -847,23 +1383,23 @@ shown.</p>"
 
        (state
         (with-ps-file
-         "vl-basic.txt"
-         (vl-ps-update-autowrap-col 68)
-         (vl-lint-print-warnings "vl-basic.txt" "Basic" *basic-warnings* reportcard)))
+          "vl-basic.txt"
+          (vl-ps-update-autowrap-col 68)
+          (vl-lint-print-warnings "vl-basic.txt" "Basic" *basic-warnings* reportcard)))
 
        (state
         (with-ps-file
-         "vl-trunc.txt"
-         (vl-ps-update-autowrap-col 68)
-         (vl-print "
+          "vl-trunc.txt"
+          (vl-ps-update-autowrap-col 68)
+          (vl-print "
 NOTE: see the bottom of this file for an explanation of what these warnings
 mean and how to avoid them.
 
 ")
 
-         (vl-lint-print-warnings "vl-trunc.txt" "Truncation/Extension" *trunc-warnings* reportcard)
+          (vl-lint-print-warnings "vl-trunc.txt" "Truncation/Extension" *trunc-warnings* reportcard)
 
-         (vl-print "
+          (vl-print "
 
 UNDERSTANDING THESE WARNINGS.
 
@@ -904,21 +1440,42 @@ you can see \"vl-trunc-minor.txt\" to review them.")))
 
        (state
         (with-ps-file
-         "vl-fussy.txt"
-         (vl-ps-update-autowrap-col 68)
-         (vl-lint-print-warnings "vl-fussy.txt" "Fussy Size Warnings" *fussy-size-warnings* reportcard)))
+          "vl-fussy.txt"
+          (vl-ps-update-autowrap-col 68)
+          (vl-lint-print-warnings "vl-fussy.txt" "Fussy Size Warnings" *fussy-size-warnings* reportcard)))
 
        (state
         (with-ps-file
-         "vl-fussy-minor.txt"
-         (vl-ps-update-autowrap-col 68)
-         (vl-lint-print-warnings "vl-fussy-minor.txt" "Minor Fussy Size Warnings" *fussy-size-minor-warnings* reportcard)))
+          "vl-fussy-minor.txt"
+          (vl-ps-update-autowrap-col 68)
+          (vl-lint-print-warnings "vl-fussy-minor.txt" "Minor Fussy Size Warnings" *fussy-size-minor-warnings* reportcard)))
 
        (state
         (with-ps-file
-         "vl-lucid.txt"
-         (vl-ps-update-autowrap-col 68)
-         (vl-lint-print-warnings "vl-lucid.txt" "Lucidity Checking" *lucid-warnings* reportcard)))
+          "vl-lucid.txt"
+          (vl-ps-update-autowrap-col 68)
+          (vl-lint-print-warnings "vl-lucid.txt" "Lucidity Checking" *lucid-warnings* reportcard)))
+
+       (state
+        (with-ps-file
+          "vl-lucid-vars.txt"
+          (vl-ps-update-autowrap-col 68)
+          (vl-lint-print-warnings "vl-lucid-vars.txt" "Lucidity Checking" *lucid-variable-warnings* reportcard)))
+
+       (state
+        (with-ps-file
+          "vl-sv-use-set.txt"
+          (vl-ps-update-autowrap-col 68)
+          (vl-lint-print-warnings "vl-sv-use-set.txt" "SV Use/Set Checking" *sv-use-set-warnings* reportcard)))
+
+       (state
+        (with-ps-file
+          "vl-eliminated-mods.txt"
+          (vl-ps-update-autowrap-col 68)
+          (vl-print "
+Note: These modules were eliminated because they were never instantiated anywhere in the top module's hierarchy.
+")
+          (vl-print-eliminated-descs lintresult.design lintresult.design-orig)))
 
        (state
         (if (not major)
@@ -928,21 +1485,21 @@ you can see \"vl-trunc-minor.txt\" to review them.")))
           (progn$
            (cw "vl-skipdet.txt: ~x0 Skip-Detect Warnings.~%" (len major))
            (with-ps-file "vl-skipdet.txt"
-                         (vl-ps-update-autowrap-col 68)
-                         (vl-cw "Skip-Detect Warnings.~%~%")
-                         (sd-pp-problemlist-long major)))))
+             (vl-ps-update-autowrap-col 68)
+             (vl-cw "Skip-Detect Warnings.~%~%")
+             (sd-pp-problemlist-long major)))))
 
        (state
         (with-ps-file
-         "vl-trunc-minor.txt"
-         (vl-ps-update-autowrap-col 68)
-         (vl-print "
+          "vl-trunc-minor.txt"
+          (vl-ps-update-autowrap-col 68)
+          (vl-print "
 NOTE: see the bottom of this file for an explanation of what these warnings
 mean and how to avoid them.
 
 ")
-         (vl-lint-print-warnings "vl-trunc-minor.txt" "Minor Truncation/Extension" *trunc-minor-warnings* reportcard)
-         (vl-print "
+          (vl-lint-print-warnings "vl-trunc-minor.txt" "Minor Truncation/Extension" *trunc-minor-warnings* reportcard)
+          (vl-print "
 
 UNDERSTANDING THESE WARNINGS.
 
@@ -997,82 +1554,119 @@ wide addition instead of a 10-bit wide addition.")))
           (prog2$
            (cw "vl-skipdet-minor.txt: ~x0 Minor Skip-Detect Warnings.~%" (len minor))
            (with-ps-file "vl-skipdet-minor.txt"
-                         (vl-ps-update-autowrap-col 68)
-                         (vl-cw "Minor Skip-Detect Warnings.~%~%")
-                         (sd-pp-problemlist-long minor)))))
+             (vl-ps-update-autowrap-col 68)
+             (vl-cw "Minor Skip-Detect Warnings.~%~%")
+             (sd-pp-problemlist-long minor)))))
 
        (state
         (with-ps-file
-         "vl-smells.txt"
-         (vl-ps-update-autowrap-col 68)
-         (vl-lint-print-warnings "vl-smells.txt" "Code-Smell Warnings" *smell-warnings* reportcard)))
+          "vl-smells.txt"
+          (vl-ps-update-autowrap-col 68)
+          (vl-lint-print-warnings "vl-smells.txt" "Code-Smell Warnings" *smell-warnings* reportcard)))
 
        (state
         (with-ps-file
-         "vl-smells-minor.txt"
-         (vl-ps-update-autowrap-col 68)
-         (vl-lint-print-warnings "vl-smells-minor.txt" "Minor Code-Smell Warnings" *smell-minor-warnings* reportcard)))
+          "vl-smells-minor.txt"
+          (vl-ps-update-autowrap-col 68)
+          (vl-lint-print-warnings "vl-smells-minor.txt" "Minor Code-Smell Warnings" *smell-minor-warnings* reportcard)))
 
 
-      (state
-       (with-ps-file "vl-same-ports.txt"
-                     (vl-ps-update-autowrap-col 68)
-                     (vl-lint-print-warnings "vl-same-ports.txt"
-                                             "Same-ports Warnings"
-                                             *same-ports-warnings*
-                                             reportcard)))
-      (state
-       (with-ps-file "vl-same-ports-minor.txt"
-                     (vl-ps-update-autowrap-col 68)
-                     (vl-lint-print-warnings "vl-same-ports-minor.txt"
-                                             "Minor same-ports Warnings"
-                                             *same-ports-minor-warnings*
-                                             reportcard)))
+       (state
+        (with-ps-file "vl-same-ports.txt"
+          (vl-ps-update-autowrap-col 68)
+          (vl-lint-print-warnings "vl-same-ports.txt"
+                                  "Same-ports Warnings"
+                                  *same-ports-warnings*
+                                  reportcard)))
+       (state
+        (with-ps-file "vl-same-ports-minor.txt"
+          (vl-ps-update-autowrap-col 68)
+          (vl-lint-print-warnings "vl-same-ports-minor.txt"
+                                  "Minor same-ports Warnings"
+                                  *same-ports-minor-warnings*
+                                  reportcard)))
 
-      (state
-       (with-ps-file
-        "vl-other.txt"
-        (vl-ps-update-autowrap-col 68)
-        (vl-lint-print-warnings "vl-other.txt" "Other/Unclassified" othertypes reportcard)))
+       (state
+        (with-ps-file
+          "vl-other.txt"
+          (vl-ps-update-autowrap-col 68)
+          (vl-lint-print-warnings "vl-other.txt" "Other/Unclassified" othertypes reportcard)))
 
-      (- (cw "~%"))
+       (state
+        (with-ps-file
+          "vl-suppressed.txt"
+          (vl-ps-update-autowrap-col 58)
+          (vl-lint-print-all-warnings "vl-suppressed.txt" "suppressed" suppressed)))
 
-      (state
-       (cwtime
-        (with-ps-file "vl-warnings.json"
-                      (vl-print "{\"warnings\":")
-                      (vl-jp-reportcard reportcard)
-                      (vl-print ",\"locations\":")
-                      (vl-jp-locations lintresult.design0)
-                      (vl-println "}"))
-        :name write-warnings-json)))
+       (- (cw "~%"))
+
+       (state
+        (cwtime
+         (with-ps-file "vl-warnings.json"
+           (vl-print "{\"warnings\":")
+           (vl-jp-reportcard reportcard :no-html config.no-html)
+           (vl-print ",\"locations\":")
+           (vl-jp-design-locations lintresult.design)
+           (vl-println "}"))
+         :name write-warnings-json))
+
+       (state
+        ;; This has historically been part of vl-warnings.json, which is fine
+        ;; and we will leave it there, but since the warnings files can get
+        ;; large, it's nice to emit this separately as well.
+        (cwtime
+         (with-ps-file "vl-locations.json"
+           (vl-print "{\"locations\":")
+           (vl-jp-design-locations lintresult.design)
+           (vl-println "}"))
+         :name write-locations-json))
+
+       (state
+        (cwtime
+         (with-ps-file "vl-ifdefs.txt"
+           (vl-print-ifdef-report-main loadresult.ifdefmap))
+         :name write-ifdef-report))
+
+       (state
+        (cwtime
+         (with-ps-file "vl-ifdef-usage.json"
+           (vl-jp-definfo loadresult.defines loadresult.ifdefmap loadresult.defmap))
+         :name write-ifdef-usage.json))
+
+       (state
+        (cwtime
+         (with-ps-file "vl-warnings-suppressed.json"
+           (vl-print "{\"warnings\":")
+           (vl-jp-reportcard suppressed)
+           (vl-print ",\"locations\":")
+           (vl-jp-design-locations lintresult.design)
+           (vl-println "}"))
+         :name write-warnings-json)))
 
     state))
 
+(define vl-lint-top ((args string-listp) &key (state 'state))
+  :short "Top-level @('vl lint') command."
 
-(defconsts (*vl-lint-readme* state)
-  (b* (((mv contents state) (acl2::read-file-characters "lint.readme" state))
-       ((when (stringp contents))
-        (raise contents)
-        (mv "" state)))
-    (mv (implode contents) state)))
-
-(define vl-lint ((args string-listp) &key (state 'state))
-  :parents (kit lint)
-  :short "The @('vl lint') command."
-
-  (b* (((mv errmsg config start-files)
+  (b* (((mv errmsg config start-files-and-plusargs)
         (parse-vl-lintconfig args))
        ((when errmsg)
         (die "~@0~%" errmsg)
         state)
+       ((mv start-files plusargs) (split-plusargs start-files-and-plusargs))
        (config
         (change-vl-lintconfig config
+                              :plusargs plusargs
                               :start-files start-files))
        ((vl-lintconfig config) config)
 
        (- (acl2::set-max-mem ;; newline to appease cert.pl
            (* (expt 2 30) config.mem)))
+
+       ;; Arrange to eagerly GC when we expect it to be beneficial when
+       ;; we're past 60% of the desired memory ceiling.
+       (- (set-vl-gc-threshold (floor (* 6 (expt 2 30) config.mem) 10)))
+       (- (set-vl-gc-baseline))
 
        ((when config.help)
         (vl-cw-ps-seq (vl-print *vl-lint-help*))
@@ -1097,11 +1691,26 @@ wide addition instead of a 10-bit wide addition.")))
        (state (must-be-directories! config.search-path))
        (state (must-be-directories! config.include-dirs))
 
-       ((mv result state)
+       ((when config.shell)
+        (vl-shell-entry `((defconst *vl-user-lintconfig* ',config))))
+
+       ((mv result loadres loadconfig state)
         (cwtime (run-vl-lint config)
                 :name vl-lint))
        (state
-        (cwtime (vl-lint-report result state))))
+        (cwtime (vl-lint-report config loadres result state)))
+
+       ((when config.post-shell)
+        (b* ((print (and (boundp-global 'acl2::ld-pre-eval-print state) ;; for guard
+                         (f-get-global 'acl2::ld-pre-eval-print state))))
+          (vl-shell-entry `((acl2::set-ld-pre-eval-print nil state)
+                            (defconst *vl-user-lintconfig* ',config)
+                            (defconst *vl-user-loadconfig* ',loadconfig)
+                            (defconst *vl-user-loadres* ',loadres)
+                            (defconst *vl-user-design* (vl-loadresult->design *vl-user-loadres*))
+                            (defconst *vl-user-lintresult* ',result)
+                            (acl2::set-ld-pre-eval-print ',print state))))))
+
     (exit-ok)
     state))
 

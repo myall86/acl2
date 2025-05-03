@@ -1,5 +1,5 @@
 ; XDOC Documentation System for ACL2
-; Copyright (C) 2009-2014 Centaur Technology
+; Copyright (C) 2009-2015 Centaur Technology
 ;
 ; Contact:
 ;   Centaur Technology Formal Verification Group
@@ -33,53 +33,154 @@
 (include-book "std/osets/top" :dir :system)
 (include-book "preprocess")
 (include-book "parse-xml")
+(include-book "xdoc-error")
 (program)
 (set-state-ok t)
 
-(defun find-children-aux (par x)
+(defun find-children-aux (par topics acc)
 
-; Gather names of all xdoc topics in x which have parent par.  I.e., this finds
-; the immediate children.
+; At the top level, gather names of all xdoc topics in topics which have parent
+; par.  I.e., this finds the immediate children.  In general, we accumulate
+; those child names into acc; so at the top level, the child names will appear
+; in the result in the reverse order from how they appear as names in topics.
 
-  (b* (((when (atom x))
-        nil)
-       ((when (member par (cdr (assoc :parents (car x)))))
-        (cons (cdr (assoc :name (car x)))
-              (find-children-aux par (cdr x)))))
-    (find-children-aux par (cdr x))))
+  (cond ((atom topics)
+         acc)
+        ((member-eq par (cdr (assoc-eq :parents (car topics))))
+         (find-children-aux par
+                            (cdr topics)
+                            (cons (cdr (assoc-eq :name (car topics)))
+                                  acc)))
+        (t
+         (find-children-aux par (cdr topics) acc))))
 
-(defun find-children (par x)
+(defun suborder-indicates-chronological-p (suborder)
 
-; Gather names of immediate children topics and sort them.
+; Returns true if and only if we are to list children in the order in which
+; they were defined, rather than alphabetically.
 
-  (mergesort (find-children-aux par x)))
+  (if (consp suborder)
+      (cdr (last suborder))
+    suborder))
 
+(defun find-children (par all-topics suborder)
+
+; Gather names of immediate children topics and sort them.  Suborder is used
+; for deciding whether to sort alphabetically or by order of appearance in
+; all-topics (last ones first, where if a name is duplicated then its most
+; recent appearance in all-topics (i.e., closest to the front of the list) is
+; the significant one).
+
+; Note that defxdoc (actually defxdoc-fn) pushes a new entry on the front of
+; the xdoc table fetched by get-xdoc-table, which is called by all-xdoc-topics
+; (in xdoc/defxdoc-raw-impl.lsp), which is called by the xdoc macro in
+; xdoc/top.lisp.  Presumably other utilities, not just defxdoc, also push new
+; topics on the front of the xdoc table.  So we assume that all-topics has the
+; most recent entries at the front.
+
+  (let ((children-names ; ordered as per comment above on "name is duplicated"
+         (find-children-aux par all-topics nil)))
+    (cond ((suborder-indicates-chronological-p suborder)
+           (remove-duplicates-eq children-names))
+          (t (mergesort children-names)))))
 
 (defconst *xml-entity-stuff*
+
+; Warning: Keep this in sync with *entity-strings* and
+; *entitytok-as-plaintext-fal* in parse-xml.lisp, wrapXdocFragment in
+; fancy/xslt.js, and (defxdoc entities ...) in topics.lisp.
+
+; The decimal values below for Greek letters were obtained from
+; https://www.htmlhelp.com/reference/html40/entities/symbols.html.
+
+; The additional symbols below are from
+; https://www.w3schools.com/html/html_symbols.asp.
+
   "<!DOCTYPE xdoc [
+  <!ENTITY ndash \"&#8211;\">
   <!ENTITY mdash \"&#8212;\">
+  <!ENTITY larr \"&#8592;\">
   <!ENTITY rarr \"&#8594;\">
+  <!ENTITY harr \"&#8596;\">
+  <!ENTITY lang \"&#9001;\">
+  <!ENTITY rang \"&#9002;\">
+  <!ENTITY hellip \"&#8230;\">
   <!ENTITY nbsp \"&#160;\">
   <!ENTITY lsquo \"&#8216;\">
   <!ENTITY rsquo \"&#8217;\">
   <!ENTITY ldquo \"&#8220;\">
   <!ENTITY rdquo \"&#8221;\">
+  <!ENTITY and   \"&#8743;\">
+  <!ENTITY or    \"&#8744;\">
+  <!ENTITY not   \"&#172;\">
+  <!ENTITY ne    \"&#8800;\">
+  <!ENTITY le    \"&#8804;\">
+  <!ENTITY ge    \"&#8805;\">
+  <!ENTITY mid   \"&#8739;\">
+  <!ENTITY times \"&#215;\">
+
+  <!ENTITY Alpha   \"&#913;\">
+  <!ENTITY Beta    \"&#914;\">
+  <!ENTITY Gamma   \"&#915;\">
+  <!ENTITY Delta   \"&#916;\">
+  <!ENTITY Epsilon \"&#917;\">
+  <!ENTITY Zeta    \"&#918;\">
+  <!ENTITY Eta     \"&#919;\">
+  <!ENTITY Theta   \"&#920;\">
+  <!ENTITY Iota    \"&#921;\">
+  <!ENTITY Kappa   \"&#922;\">
+  <!ENTITY Lambda  \"&#923;\">
+  <!ENTITY Mu      \"&#924;\">
+  <!ENTITY Nu      \"&#925;\">
+  <!ENTITY Xi      \"&#926;\">
+  <!ENTITY Omicron \"&#927;\">
+  <!ENTITY Pi      \"&#928;\">
+  <!ENTITY Rho     \"&#929;\">
+  <!ENTITY Sigma   \"&#931;\">
+  <!ENTITY Tau     \"&#932;\">
+  <!ENTITY Upsilon \"&#933;\">
+  <!ENTITY Phi     \"&#934;\">
+  <!ENTITY Chi     \"&#935;\">
+  <!ENTITY Psi     \"&#936;\">
+  <!ENTITY Omega   \"&#937;\">
+  <!ENTITY alpha   \"&#945;\">
+  <!ENTITY beta    \"&#946;\">
+  <!ENTITY gamma   \"&#947;\">
+  <!ENTITY delta   \"&#948;\">
+  <!ENTITY epsilon \"&#949;\">
+  <!ENTITY zeta    \"&#950;\">
+  <!ENTITY eta     \"&#951;\">
+  <!ENTITY theta   \"&#952;\">
+  <!ENTITY iota    \"&#953;\">
+  <!ENTITY kappa   \"&#954;\">
+  <!ENTITY lambda  \"&#955;\">
+  <!ENTITY mu      \"&#956;\">
+  <!ENTITY nu      \"&#957;\">
+  <!ENTITY xi      \"&#958;\">
+  <!ENTITY omicron \"&#959;\">
+  <!ENTITY pi      \"&#960;\">
+  <!ENTITY rho     \"&#961;\">
+  <!ENTITY sigma   \"&#963;\">
+  <!ENTITY tau     \"&#964;\">
+  <!ENTITY upsilon \"&#965;\">
+  <!ENTITY phi     \"&#966;\">
+  <!ENTITY chi     \"&#967;\">
+  <!ENTITY psi     \"&#968;\">
+  <!ENTITY omega   \"&#969;\">
+  <!ENTITY forall  \"&#8704;\">
+  <!ENTITY exist   \"&#8707;\">
+  <!ENTITY empty   \"&#8709;\">
+  <!ENTITY isin    \"&#8712;\">
+  <!ENTITY notin   \"&#8713;\">
+  <!ENTITY prod    \"&#8719;\">
+  <!ENTITY sum     \"&#8721;\">
 ]>
 ")
-
-(defun gather-topic-names (x)
-  (if (atom x)
-      nil
-    (cons (cdr (assoc :name (car x)))
-          (gather-topic-names (cdr x)))))
-
-(defun topics-fal (x)
-  (make-fast-alist (pairlis$ (gather-topic-names x) x)))
 
 
 ; ------------------ Making Flat Indexes ------------------------
 
-(defun index-add-topic (x topics-fal index-pkg state acc)
+(defun index-add-topic (x topics-fal disable-autolinking-p index-pkg state acc)
 
 ; X is a single topic entry in the xdoc table.  Index-pkg says the base package
 ; for symbols seen from the index.
@@ -87,57 +188,64 @@
   (b* ((name     (cdr (assoc :name x)))
        (short    (cdr (assoc :short x)))
        (base-pkg (cdr (assoc :base-pkg x)))
-       (acc   (str::revappend-chars "<index_entry>" acc))
+       (acc   (str::printtree-rconcat "<index_entry>" acc))
        (acc   (cons #\Newline acc))
-       (acc   (str::revappend-chars "<index_head><see topic=\"" acc))
+       (acc   (str::printtree-rconcat "<index_head><see topic=\"" acc))
        (acc   (file-name-mangle name acc))
-       (acc   (str::revappend-chars "\">" acc))
-       (acc   (sym-mangle-cap name index-pkg acc))
-       (acc   (str::revappend-chars "</see>" acc))
-       (acc   (str::revappend-chars "</index_head>" acc))
+       (acc   (str::printtree-rconcat "\">" acc))
+       (acc   (sym-mangle-cap name index-pkg nil acc))
+       (acc   (str::printtree-rconcat "</see>" acc))
+       (acc   (str::printtree-rconcat "</index_head>" acc))
        (acc   (cons #\Newline acc))
-       (acc   (str::revappend-chars "<index_body>" acc))
+       (acc   (str::printtree-rconcat "<index_body>" acc))
        (acc   (cons #\Newline acc))
-       ((mv acc state) (preprocess-main short name topics-fal base-pkg state acc))
+       ((mv acc state)
+        (preprocess-main short name topics-fal disable-autolinking-p base-pkg
+                         state acc))
        (acc   (cons #\Newline acc))
-       (acc   (str::revappend-chars "</index_body>" acc))
+       (acc   (str::printtree-rconcat "</index_body>" acc))
        (acc   (cons #\Newline acc))
-       (acc   (str::revappend-chars "</index_entry>" acc))
+       (acc   (str::printtree-rconcat "</index_entry>" acc))
        (acc   (cons #\Newline acc)))
       (mv acc state)))
 
-(defun index-add-topics (x topics-fal index-pkg state acc)
+(defun index-add-topics (x topics-fal disable-autolinking-p index-pkg state
+                           acc)
 
 ; X is a list of topics.  Index-pkg says the base package for these symbols.
 
   (b* (((when (atom x))
         (mv acc state))
        ((mv acc state)
-        (index-add-topic (car x) topics-fal index-pkg state acc)))
-    (index-add-topics (cdr x) topics-fal index-pkg state acc)))
+        (index-add-topic (car x) topics-fal disable-autolinking-p index-pkg
+                         state acc)))
+    (index-add-topics (cdr x) topics-fal disable-autolinking-p index-pkg state
+                      acc)))
 
-(defun index-topics (x title topics-fal index-pkg state acc)
+(defun index-topics (x title topics-fal disable-autolinking-p index-pkg state
+                       acc)
 
 ; X is a list of topics.  Generate <index>...</index> for these topics and
 ; add to acc.
 
-  (b* ((acc (str::revappend-chars "<index title=\"" acc))
-       (acc (str::revappend-chars title acc))
-       (acc (str::revappend-chars "\">" acc))
+  (b* ((acc (str::printtree-rconcat "<index title=\"" acc))
+       (acc (str::printtree-rconcat title acc))
+       (acc (str::printtree-rconcat "\">" acc))
        (acc (cons #\Newline acc))
-       ((mv acc state) (index-add-topics x topics-fal index-pkg state acc))
-       (acc (str::revappend-chars "</index>" acc))
+       ((mv acc state) (index-add-topics x topics-fal disable-autolinking-p
+                                         index-pkg state acc))
+       (acc (str::printtree-rconcat "</index>" acc))
        (acc (cons #\Newline acc)))
       (mv acc state)))
 
 (defun add-parents (parents base-pkg acc)
   (b* (((when (atom parents))
         acc)
-       (acc (str::revappend-chars "<parent topic=\"" acc))
+       (acc (str::printtree-rconcat "<parent topic=\"" acc))
        (acc (file-name-mangle (car parents) acc))
-       (acc (str::revappend-chars "\">" acc))
-       (acc (sym-mangle-cap (car parents) base-pkg acc))
-       (acc (str::revappend-chars "</parent>" acc))
+       (acc (str::printtree-rconcat "\">" acc))
+       (acc (sym-mangle-cap (car parents) base-pkg nil acc))
+       (acc (str::printtree-rconcat "</parent>" acc))
        (acc (cons #\Newline acc)))
     (add-parents (cdr parents) base-pkg acc)))
 
@@ -161,18 +269,19 @@
        (long     (or (cdr (assoc :long x)) ""))
        (parents  (cdr (assoc :parents x)))
        (suborder (cdr (assoc :suborder x)))
+       (ctx 'check-topic-syntax)
        ((unless (symbolp name))
-        (er hard? 'check-topic-wellformed "Name is not a symbol: ~x0" x))
+        (er hard? ctx "Name is not a symbol: ~x0" x))
        ((unless (symbolp base-pkg))
-        (er hard? 'check-topic-wellformed "Base-pkg is not a symbol: ~x0" x))
+        (er hard? ctx "Base-pkg is not a symbol: ~x0" x))
        ((unless (symbol-listp parents))
-        (er hard? 'check-topic-wellformed "Parents are not a symbol-listp: ~x0" x))
+        (er hard? ctx "Parents are not a symbol-listp: ~x0" x))
        ((unless (stringp short))
-        (er hard? 'check-topic-wellformed "Short is not a string or nil: ~x0" x))
+        (er hard? ctx "Short is not a string or nil: ~x0" x))
        ((unless (stringp long))
-        (er hard? 'check-topic-wellformed "Long is not a string or nil: ~x0" x))
-       ((unless (symbol-listp suborder))
-        (er hard? 'check-topic-wellformed "Suborder is not a symbol-listp: ~x0" x)))
+        (er hard? ctx "Long is not a string or nil: ~x0" x))
+       ((unless (symbol-listp (fix-true-list suborder)))
+        (er hard? ctx "Suborder list contains a non-symbol: ~x0" x)))
     t))
 
 (defun apply-suborder (suborder children-names)
@@ -186,6 +295,15 @@
         (t
          (apply-suborder (cdr suborder) children-names))))
 
+(defun gentle-subsetp-eq (x y)
+
+; This is just subsetp-eq, except that x need not be a true-list.
+
+  (cond ((atom x) t)
+        ((member-eq (car x) y)
+         (gentle-subsetp-eq (cdr x) y))
+        (t nil)))
+
 (defun preprocess-topic (x all-topics topics-fal disable-autolinking-p state)
   (b* ((- (check-topic-syntax x))
        (name     (cdr (assoc :name x)))
@@ -196,89 +314,96 @@
        (suborder (cdr (assoc :suborder x)))
 
        (acc    nil)
-       (acc    (str::revappend-chars "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" acc))
+       (acc    (str::printtree-rconcat "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" acc))
        (acc    (cons #\Newline acc))
-       (acc    (str::revappend-chars "<?xml-stylesheet type=\"text/xsl\" href=\"xml-topic.xsl\"?>" acc))
+       (acc    (str::printtree-rconcat "<?xml-stylesheet type=\"text/xsl\" href=\"xml-topic.xsl\"?>" acc))
        (acc    (cons #\Newline acc))
-       (acc    (str::revappend-chars *xml-entity-stuff* acc))
-       (acc    (str::revappend-chars "<page>" acc))
-       (acc    (str::revappend-chars "<topic name=\"" acc))
-       (acc    (sym-mangle-cap name base-pkg acc))
-       (acc    (str::revappend-chars "\">" acc))
+       (acc    (str::printtree-rconcat *xml-entity-stuff* acc))
+       (acc    (str::printtree-rconcat "<page>" acc))
+       (acc    (str::printtree-rconcat "<topic name=\"" acc))
+       (acc    (sym-mangle-cap name base-pkg nil acc))
+       (acc    (str::printtree-rconcat "\">" acc))
        (acc    (cons #\Newline acc))
        (acc    (add-parents parents base-pkg acc))
        (acc    (cons #\Newline acc))
-       (acc    (str::revappend-chars "<short>" acc))
+       (acc    (str::printtree-rconcat "<short>" acc))
 
        ((mv short-acc state)
         (preprocess-main short name
-                         (if disable-autolinking-p
-                             nil
-                           topics-fal)
+                         topics-fal disable-autolinking-p
                          base-pkg state nil))
-       (short-str  (str::rchars-to-string short-acc))
+       (short-str  (str::printtree->str short-acc))
 
        ((mv err &) (parse-xml short-str))
        (state
         (if (and err (xdoc-verbose-p))
             (pprogn
-               (fms "~|~%WARNING: problem with :short in topic ~x0:~%"
-                    (list (cons #\0 name))
-                    *standard-co* state nil)
-               (princ$ err *standard-co* state)
-               (fms "~%~%" nil *standard-co* state nil))
+
+; The following message formerly started with "WARNING" instead of "; xdoc
+; error".  But we want to be consistent with the macro xdoc-error, to make it
+; easy for users to search for a single string in the error log, namely, "xdoc
+; error".  For the user, the difference between parsing errors and preprocessor
+; errors seems small, not worth requiring searching for two different things.
+
+             (prog2$ (note-xdoc-error) state)
+             (fms "~|~%; xdoc error: problem with :short in topic ~x0:~%"
+                  (list (cons #\0 name))
+                  *standard-co* state nil) 
+             (princ$ err *standard-co* state)
+             (fms "~%~%" nil *standard-co* state nil))
           state))
 
        (acc (b* (((unless err)
-                  (append short-acc acc))
-                 (acc (str::revappend-chars "<b>Markup error in :short: </b><code>" acc))
+                  (str::printtree-rconcat short-acc acc))
+                 (acc (str::printtree-rconcat "<b>Markup error in :short: </b><code>" acc))
                  (acc (simple-html-encode-str err 0 (length err) acc))
-                 (acc (str::revappend-chars "</code>" acc)))
+                 (acc (str::printtree-rconcat "</code>" acc)))
               acc))
 
-       (acc    (str::revappend-chars "</short>" acc))
+       (acc    (str::printtree-rconcat "</short>" acc))
        (acc    (cons #\Newline acc))
-       (acc    (str::revappend-chars "<long>" acc))
+       (acc    (str::printtree-rconcat "<long>" acc))
 
        ((mv long-acc state)
         (preprocess-main long name
-                         (if disable-autolinking-p
-                             nil
-                           topics-fal)
+                         topics-fal disable-autolinking-p
                          base-pkg state nil))
-       (long-str (str::rchars-to-string long-acc))
+       (long-str (str::printtree->str long-acc))
        ((mv err &) (parse-xml long-str))
 
        (state
         (if (and err (xdoc-verbose-p))
             (pprogn
-               (fms "~|~%WARNING: problem with :long in topic ~x0:~%"
-                    (list (cons #\0 name))
-                    *standard-co* state nil)
-               (princ$ err *standard-co* state)
-               (fms "~%~%" nil *standard-co* state nil))
+             (prog2$ (note-xdoc-error) state)
+; See comment above regarding the use of "; xdoc error" instead of "WARNING"
+; just below.
+             (fms "~|~%; xdoc error: problem with :long in topic ~x0:~%"
+                  (list (cons #\0 name))
+                  *standard-co* state nil)
+             (princ$ err *standard-co* state)
+             (fms "~%~%" nil *standard-co* state nil))
           state))
 
        (acc (b* (((unless err)
-                  (append long-acc acc))
-                 (acc (str::revappend-chars "<h3>Markup error in :long</h3><code>" acc))
+                  (str::printtree-rconcat long-acc acc))
+                 (acc (str::printtree-rconcat "<h3>Markup error in :long</h3><code>" acc))
                  (acc (simple-html-encode-str err 0 (length err) acc))
-                 (acc (str::revappend-chars "</code>" acc)))
+                 (acc (str::printtree-rconcat "</code>" acc)))
               acc))
 
-       (acc    (str::revappend-chars "</long>" acc))
+       (acc    (str::printtree-rconcat "</long>" acc))
        (acc    (cons #\Newline acc))
 
        (children-names
         ;; note: all children-names are known to be existing topics, since
         ;; otherwise we wouldn't have found them.  topics mentioned in
         ;; suborder, however, may not exist
-        (find-children name all-topics))
+        (find-children name all-topics suborder))
        (- (and (xdoc-verbose-p)
-               (not (subsetp suborder children-names))
+               (not (gentle-subsetp-eq suborder children-names))
                (cw "~|~%WARNING: in topic ~x0, subtopic order mentions topics that ~
                     are not children: ~&1.~%"
-                   name (set-difference$ suborder children-names))))
+                   name (set-difference$ (fix-true-list suborder) children-names))))
        (children-names
         ;; this returns a permutation of the original children-names, so they
         ;; must all exist
@@ -289,10 +414,11 @@
        ((mv acc state)
         (if (not children-topics)
             (mv acc state)
-          (index-topics children-topics "Subtopics" topics-fal base-pkg state acc)))
-
-       (acc    (str::revappend-chars "</topic>" acc))
+          (index-topics children-topics "Subtopics"
+                        topics-fal disable-autolinking-p
+                        base-pkg state acc)))
+       (acc    (str::printtree-rconcat "</topic>" acc))
        (acc    (cons #\Newline acc))
-       (acc    (str::revappend-chars "</page>" acc))
+       (acc    (str::printtree-rconcat "</page>" acc))
        (acc    (cons #\Newline acc)))
-      (mv (str::rchars-to-string acc) state)))
+      (mv (str::printtree->str acc) state)))

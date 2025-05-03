@@ -44,12 +44,8 @@
   :short "DIMACS format is a standard interface to SAT solvers."
 
   :long "<p>Many SAT solvers accept a common format for input and output that
-is used in SAT solving competititons.  The most canoncial description of this
-format <b>might</b> be the following:</p>
-
-<p><a
-href='ftp://dimacs.rutgers.edu/pub/challenge/satisfiability/doc/satformat.dvi'>satformat.dvi</a>
--- Suggested Satisfiability Format, last revision May 8, 1993.</p>
+is used in SAT solving competititons; <a href=\"http://www.satcompetition.org/2009/format-benchmarks2009.html\">
+this page</a> gives the competitions' official description.</p>
 
 <p>The basic input format is as follows.  At the top you can have <i>comment
 lines</i> that start with a @('c'), like this:</p>
@@ -128,9 +124,9 @@ about this basic approach.</p>"
     :inline t
     (b* ((negatedp (int= (lit->neg lit) 1))
          ;; Increment all IDs to account for 0 not being a valid DIMACS variable.
-         (id+1     (+ 1 (var->index (lit->var lit))))
+         (id+1     (+ 1 (lit->var lit)))
          (acc      (if negatedp (cons #\- acc) acc)))
-      (str::revappend-natchars id+1 acc)))
+      (str::revappend-nat-to-dec-chars id+1 acc)))
 
   (define dimacs-write-clause ((clause lit-listp) (acc character-listp))
     :returns (acc character-listp :hyp :guard)
@@ -155,15 +151,18 @@ about this basic approach.</p>"
          ;; Increment all IDs to account for 0 not being a valid DIMACS variable
          (dimacs-num-vars (+ 1 max-index))
          (acc nil)
-         (acc (str::revappend-chars
-               "c CNF problem in DIMACS format, exported from ACL2."
-               acc))
-         (acc (cons #\Newline acc))
+
+         ;; sswords: removed this comment because not supported yet by lrat proof checker
+         ;; (acc (str::revappend-chars
+         ;;       "c CNF problem in DIMACS format, exported from ACL2."
+         ;;       acc))
+         ;; (acc (cons #\Newline acc))
+
          ;; P CNF NUM-VARS NUM-CLAUSES
          (acc (str::revappend-chars "p cnf " acc))
-         (acc (str::revappend-natchars dimacs-num-vars acc))
+         (acc (str::revappend-nat-to-dec-chars dimacs-num-vars acc))
          (acc (cons #\Space acc))
-         (acc (str::revappend-natchars (len formula) acc))
+         (acc (str::revappend-nat-to-dec-chars (len formula) acc))
          (acc (cons #\Newline acc))
          (acc (dimacs-write-clauses formula acc)))
       (mv (str::rchars-to-string acc) max-index)))

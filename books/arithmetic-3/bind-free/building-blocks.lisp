@@ -1,19 +1,5 @@
-; Arithmetic-3 Library
-; Copyright (C) 2004 Robert Krug <rkrug@cs.utexas.edu>
-;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT
-; ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-; FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
-; details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; if not, write to the Free Software Foundation, Inc., 51
-; Franklin Street, Suite 500, Boston, MA 02110-1335, USA.
+; See the top-level arithmetic-3 LICENSE file for authorship,
+; copyright, and license information.
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
@@ -94,7 +80,7 @@
 
   ;; X is an ACL2 term.  We return t if x is a negative addend, or a
   ;; sum of negative addends.  Here, an addend is considered to be
-  ;; negative if it is a negative rational constant, or prints as 
+  ;; negative if it is a negative rational constant, or prints as
   ;; (- ...) or (* c ...) where c is a negative rational.
 
   (cond ((variablep x)
@@ -119,7 +105,7 @@
 
   ;; X is an ACL2 term.  We return t if x is a negative addend, or a
   ;; sum of negative addends.  Here, an addend is considered to be
-  ;; negative if it is a rational constant, or prints as 
+  ;; negative if it is a rational constant, or prints as
   ;; (- ...) or (* c ...) where c is a negative rational.
 
   (cond ((variablep x)
@@ -185,7 +171,7 @@
 	 *t*))
 
 (defun proveably-non-zero (x mfc state)
-  
+
   ;; If x is not an IF expression, can rewriting determine that it
   ;; is numeric and not equal to zero?
 
@@ -207,7 +193,7 @@
 	 *t*))
 
 (defun proveably-non-zero-rational (x mfc state)
-  
+
   ;; If x is not an IF expression, can rewriting determine that it
   ;; is rational and not equal to zero?
 

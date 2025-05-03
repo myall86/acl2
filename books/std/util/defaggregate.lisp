@@ -27,6 +27,7 @@
 ;   DEALINGS IN THE SOFTWARE.
 ;
 ; Original author: Jared Davis <jared@centtech.com>
+; Contributing author: Alessandro Coglio <coglio@kestrel.edu>
 ;
 ; Additional Copyright Notice.
 ;
@@ -42,8 +43,6 @@
 (set-state-ok t)
 
 (program)
-
-(def-ruleset! tag-reasoning nil)
 
 (defxdoc defaggregate
   :parents (std/util)
@@ -158,9 +157,9 @@ theorems:</p>
 
 <p>These theorems seem to perform well and settle most questions regarding the
 disjointness of different kinds of aggregates.  In case the latter rules become
-expensive, we always add them to the @('tag-ruleset'), so you can disable this
-<see topic='@(url acl2::rulesets)'>ruleset</see> to turn off almost all
-tag-related reasoning.</p>
+expensive, we always add them to the @('tag-reasoning') ruleset, so you can
+disable this <see topic='@(url acl2::rulesets)'>ruleset</see> to turn off
+almost all tag-related reasoning.</p>
 
 
 <h3>Syntax of Fields</h3>
@@ -205,45 +204,39 @@ appropriate, e.g., for @('name') above, you may wish to use a different
 @(':rule-classes') option.</p>
 
 <p>The embedded @(see xdoc) documentation gets incorporated into the
-documentation for the aggregate in a sensible way.</p>
+automatically-created documentation for the aggregate in a sensible way.
+This is overridden by the @(':suppress-xdoc t') option.</p>
 
 <p>The @(':default') value only affects the Make macro (see below).</p>
 
 <h3>Options</h3>
 
-<h4>Legibility</h4>
+<h4>Layout</h4>
 
-<p>By default, an aggregate is represented in a <i>legible</i> way, which means
-the fields of each instance are laid out in an alist.  When such an object is
-printed, it is easy to see what the value of each field is.</p>
+<p>By default, aggregates are represented with @(':layout :alist'), but you can
+also choose other layouts.</p>
 
-<p>However, the structure can be made <i>illegible</i>, which means it will be
-packed into a cons tree of minimum depth.  For instance, a structure whose
-fields are @('(foo bar baz)') might be laid out as @('((tag . foo) . (bar
-. baz))').  This can be more efficient because the structure has fewer
-conses.</p>
+<p>The @(':alist') format provides the best readability/debuggability but is
+the worst layout for execution/memory efficiency.  This layout represents
+instances of your structure using an alist-like format where the name of each
+field is next to its value.  When printing such an object you can easily see
+the fields and their values, but creating these objects requires additional
+consing to put the field names on, etc.</p>
 
-<p>We prefer to use legible structures because they can be easier to understand
-when they arise in debugging and proofs.  For instance, compare:</p>
+<p>The @(':tree') or @(':fulltree') layouts provides the best efficiency and
+worst readability.  They pack the fields into a compact tree structure, without
+their names.  In @(':tree') mode, any @('(nil . nil)') pairs are compressed
+into just @('nil').  In @(':fulltree') mode this compression doesn't happen,
+which might marginally save time if you know your fields will never be in pairs
+of @('nil')s.  Tree-based structures require minimal consing, and each accessor
+simply follows some minimal, fixed car/cdr path into the object.  The objects
+print as horrible blobs of conses that can be hard to inspect.</p>
 
-<ul>
- <li>Legible: @('(:point3d (x . 5) (y . 6) (z . 7))')</li>
- <li>Illegible: @('(:point3d 5 6 . 7)')</li>
-</ul>
+<p>The @(':list') layout strikes a middle ground, with the fields of the object
+laid out as a plain list.  Accessing the fields of such a structure may require
+more @('cdr') operations than for a @(':tree') layout, but at least when you
+print them it is still pretty easy to tell what the fields are.</p>
 
-<p>On the other hand, illegible structures have a more consistent structure,
-which can occasionally be useful.  It's usually best to avoid reasoning about
-the underlying structure of an aggregate.  But, sometimes there are exceptions
-to this rule.  With illegible structures, you know exactly how each object will
-be laid out, and for instance you can prove that two @('point3d') structures
-will be equal exactly when their components are equal (which is not a theorem
-for legible structures.)</p>
-
-<p>A middle ground between legibility and illegibility is to use @(':legiblep
-:ordered'), which still uses an alist representation for readability, but
-requires a strict ordering and that no other keys be present.  Such structures
-provide the same regularity benefits as illegible structures, and performance
-between that of ordinary legible and illegible structures.</p>
 
 <h4>Honsed Aggregates</h4>
 
@@ -253,14 +246,19 @@ build the object using ordinary conses.  However, when @(':hons') is set to
 
 <p>Honsing is only appropriate for some structures.  It is a bit slower than
 consing, and should typically not be used for aggregates that will be
-constructed and used in an ephemeral manner.</p>
+constructed and used in an ephemeral manner.  If you are going to hons your
+structures, you should probably use a @(':tree') or @(':fulltree') layout.</p>
 
-<p>Because honsing is somewhat at odds with the memory-inefficiency of legible
-structures, @(':hons t') implies @(':legiblep nil').</p>
 
 <h4>Other Options</h4>
 
 <dl>
+
+<dt>:pred</dt>
+
+<dd>Name of the recognizer for the aggregate -- must be a valid symbol for a
+new function. Defaults to @('agg-p'), where @('agg') is the name of the
+aggregate.</dd>
 
 <dt>:mode</dt>
 
@@ -278,7 +276,14 @@ defined a \"compatible\" recognizer.</dd>
 
 <dd>These options are as in @(see xdoc).  Whatever you supply for @(':long')
 will follow some automatically generated documentation that describes the
-fields of the aggregate.</dd>
+fields of the aggregate.  If you don't want that @(see xdoc), you can
+turn it off with the next option.</dd>
+
+<dt>:suppress-xdoc</dt>
+
+<dd>You can use @(':suppress-xdoc t') to prevent @(see xdoc) from being
+created for this aggregate.  Overrides the automatically generated
+documentation as well as@(':parents'), @(':short'), and @(':long').</dd>
 
 <dt>:extra-field-keywords</dt>
 
@@ -537,6 +542,7 @@ would have had to call @('(student->fullname x)').  For instance:</p>
 (def-primitive-aggregate agginfo
   (tag     ;; The :tag for the aggregate, a symbol
    name    ;; The base name for the aggregate
+   pred    ;; The name of the recognizer
    fields  ;; The field names with no extra info, a symbol-list
    efields ;; The parsed formallist-p that has basic type requirements.
    ;; It'd be easy to add additional fields later on.
@@ -652,6 +658,11 @@ would have had to call @('(student->fullname x)').  For instance:</p>
                            `(and ,@(strip-cadrs require))
                            honsp layout))
 
+(defun da-make-remaker (basename tag plain-fields require honsp layout pred)
+  (da-make-remaker-raw basename tag plain-fields
+                       `(and ,@(strip-cadrs require))
+                       honsp layout pred))
+
 (defun da-make-honsed-constructor
   (basename
    tag
@@ -710,15 +721,15 @@ would have had to call @('(student->fullname x)').  For instance:</p>
 ;;                  (da-insert-debugging-statements-into-require (cdr require))))))
 
 ;; bozo removed debugp for now
-(defun da-make-recognizer (basename tag plain-fields require layout)
+(defun da-make-recognizer (basename tag plain-fields require layout pred)
   (da-make-recognizer-raw basename tag plain-fields
                           `(and ,@(strip-cadrs require))
-                          layout))
+                          layout pred))
 
 #||
 (da-make-recognizer 'taco :taco '(shell meat cheese lettuce sauce)
                  '((shell-p-of-taco->shell (shellp shell)))
-                   t)
+                   t nil)
 
 ;; (DEFUND TACO-P (X)
 ;;         (DECLARE (XARGS :GUARD T))
@@ -745,30 +756,33 @@ would have had to call @('(student->fullname x)').  For instance:</p>
             (da-fields-recognizer-map basename (cdr fields)))
     nil))
 
-(defun da-make-requirement-of-recognizer (name require map accnames)
+(defun da-make-requirement-of-recognizer (name require map accnames pred)
   (let ((rule-classes (if (eq (third require) :rule-classes)
                           (fourth require)
                         :rewrite)))
     `(defthm ,(first require)
-       (implies (force (,(da-recognizer-name name) ,(da-x name)))
+       (implies (force (,(da-recognizer-name name pred) ,(da-x name)))
                 ,(ACL2::sublis map (second require)))
        :rule-classes ,rule-classes
        :hints(("Goal"
                :in-theory
                (union-theories
-                '(,(da-recognizer-name name) . ,accnames)
+                '(,(da-recognizer-name name pred) . ,accnames)
                 (theory 'defaggregate-basic-theory)))))))
 
-(defun da-make-requirements-of-recognizer-aux (name require map accnames)
+(defun da-make-requirements-of-recognizer-aux (name require map accnames pred)
   (if (consp require)
-      (cons (da-make-requirement-of-recognizer name (car require) map accnames)
-            (da-make-requirements-of-recognizer-aux name (cdr require) map accnames))
+      (cons (da-make-requirement-of-recognizer name (car require)
+                                               map accnames pred)
+            (da-make-requirements-of-recognizer-aux name (cdr require)
+                                                    map accnames pred))
     nil))
 
-(defun da-make-requirements-of-recognizer (name require fields)
+(defun da-make-requirements-of-recognizer (name require fields pred)
   (da-make-requirements-of-recognizer-aux name require
                                           (da-fields-recognizer-map name fields)
-                                          (da-accessor-names name fields)))
+                                          (da-accessor-names name fields)
+                                          pred))
 
 
 (defun da-field-doc (x acc base-pkg state)
@@ -833,132 +847,139 @@ would have had to call @('(student->fullname x)').  For instance:</p>
        (acc (str::revappend-chars "</ul>" acc)))
     (mv acc state)))
 
-(defun da-main-autodoc (name fields parents short long base-pkg state)
+(defun da-main-autodoc (name fields parents short long base-pkg pred state)
   (b* ( ;; We begin by constructing the :long string
        (acc  nil)
-       (foop (da-recognizer-name name))
+       (foop (da-recognizer-name name pred))
        (acc  (str::revappend-chars "<p>@(call " acc))
-       ;; This isn't right, in general.  Need to properly get the name
-       ;; into escaped format.
-       (acc  (str::revappend-chars (symbol-package-name foop) acc))
-       (acc  (str::revappend-chars "::" acc))
-       (acc  (str::revappend-chars (symbol-name foop) acc))
+       (acc  (str::revappend-chars (xdoc::full-escape-symbol foop) acc))
        (acc  (str::revappend-chars ") is a @(see std::defaggregate) of the following fields.</p>" acc))
        ((mv acc state) (da-fields-doc fields acc base-pkg state))
        (acc  (str::revappend-chars "<p>Source link: @(srclink " acc))
-       (acc  (str::revappend-chars (acl2::string-downcase (symbol-name name)) acc))
+       (acc  (str::revappend-chars (xdoc::full-escape-symbol foop) acc))
        (acc  (str::revappend-chars ")</p>" acc))
-       (acc  (str::revappend-chars (or long "") acc))
-       (long (str::rchars-to-string acc)))
+       ;; long may be a form that evaluates to a string:
+       (acc  `(str::revappend-chars ,(or long "") ',acc))
+       (long `(str::rchars-to-string ,acc)))
     (mv `(defxdoc ,foop
            :parents ,parents
            :short ,short
            :long ,long)
         state)))
 
-(defun da-field-autodoc (name field)
+(defun da-field-autodoc (name field pred)
   (declare (xargs :guard (formal-p field)))
   (b* (((formal field) field)
-       (foop     (da-recognizer-name name))
-       (accessor (da-accessor-name name field.name))
-       ;; bozo escaping issues...
-       (short    (str::cat "Access the <tt>" (acl2::string-downcase (symbol-name field.name))
-                           "</tt> field of a @(see " (xdoc::full-escape-symbol foop)
-                           ") structure.")))
+       (foop      (da-recognizer-name name pred))
+       (accessor  (da-accessor-name name field.name))
+
+       ;; Create the short string.
+       (fieldname (xdoc::name-low (symbol-name field.name)))
+       (acc nil)
+       (acc (str::revappend-chars "Access the <tt>" acc))
+       (acc (xdoc::simple-html-encode-str fieldname 0 (length fieldname) acc))
+       (acc (str::revappend-chars "</tt> field of a " acc))
+       (acc (str::revappend-chars (xdoc::see foop) acc))
+       (acc (str::revappend-chars " structure." acc))
+       (short (str::rchars-to-string acc)))
     `(defxdoc ,accessor
        :parents (,foop)
        :short ,short)))
 
-(defun da-fields-autodoc (name fields)
+(defun da-fields-autodoc (name fields pred)
   (declare (xargs :guard (formallist-p fields)))
   (if (consp fields)
-      (cons (da-field-autodoc name (car fields))
-            (da-fields-autodoc name (cdr fields)))
+      (cons (da-field-autodoc name (car fields) pred)
+            (da-fields-autodoc name (cdr fields) pred))
     nil))
 
-(defun da-ctor-optional-fields (fields)
-  (declare (xargs :guard (formallist-p fields)))
-  (b* (((when (atom fields))
-        nil)
-       (name1 (xdoc::name-low (symbol-name (formal->name (car fields)))))
+(defconst *nl* (str::implode (list #\Newline)))
+
+(defun da-ctor-optional-fields (field-names pad acc)
+  (declare (xargs :guard (and (symbol-listp field-names)
+                              (stringp pad))))
+  (b* (((when (atom field-names))
+        acc)
+       (name1 (xdoc::name-low (symbol-name (car field-names))))
        (len1  (length name1))
-       (acc   nil)
        (acc   (str::revappend-chars "[:" acc))
        (acc   (xdoc::simple-html-encode-str name1 0 len1 acc))
        (acc   (str::revappend-chars " &lt;" acc))
        (acc   (xdoc::simple-html-encode-str name1 0 len1 acc))
-       (acc   (str::revappend-chars "&gt;]" acc)))
-    (cons (str::rchars-to-string acc)
-          (da-ctor-optional-fields (cdr fields)))))
+       (acc   (str::revappend-chars "&gt;]" acc))
+       (acc   (if (consp (cdr field-names))
+                  (str::revappend-chars pad acc)
+                acc)))
+    (da-ctor-optional-fields (cdr field-names) pad acc)))
 
-(defconst *nl* (str::implode (list #\Newline)))
-
-(defun da-ctor-optional-call (name        ; e.g., make-honsed-foo
-                              field-strs  ; e.g., ("[:field1 <field1>]" "[field2 <field2>"])
-                              )
+(defun da-ctor-optional-call (name line1 field-names)
   (declare (xargs :guard (and (symbolp name)
-                              (string-listp field-strs))))
+                              (stringp line1)
+                              (symbol-listp field-names))))
   (b* ((ctor-name (xdoc::name-low (symbol-name name)))
-       ;; +2 to account for the leading paren and trailing space after ctor-name 
-       (len       (+ 2 (length ctor-name)))
-       (pad       (str::implode (cons #\Newline
-                                      (make-list len :initial-element #\Space))))
-       (args      (str::join field-strs pad)))
-    (str::cat "<code>" *nl* "(" ctor-name " " args ")" *nl* "</code>")))
+       (pad (str::implode ;; +2 for leading paren & trailing space after ctor-name
+             (cons #\Newline
+                   (make-list (+ 2 (length ctor-name))
+                              :initial-element #\Space))))
+       (acc nil)
+       (acc (str::revappend-chars "<code>" acc))
+       (acc (cons #\Newline acc))
+       (acc (cons #\( acc))
+       (acc (xdoc::simple-html-encode-str ctor-name 0 (length ctor-name) acc))
+       (acc (cons #\Space acc))
+       (acc (if (equal line1 "")
+                acc
+              (str::revappend-chars pad
+                                    (str::revappend-chars line1 acc))))
+       (acc (da-ctor-optional-fields field-names pad acc))
+       (acc (cons #\) acc))
+       (acc (cons #\Newline acc))
+       (acc (str::revappend-chars "</code>" acc)))
+    (str::rchars-to-string acc)))
 
 #||
-
-(da-ctor-optional-call 'make-honsed-foo
-                       '("[:lettuce <lettuce>]"
-                         "[:cheese <cheese>]"
-                         "[:meat <meat>]"))
-
-(da-ctor-optional-call 'change-honsed-foo
-                       '("x"
-                         "[:lettuce <lettuce>]"
-                         "[:cheese <cheese>]"
-                         "[:meat <meat>]"))
+(da-ctor-optional-call 'make-foo "" '(lettuce cheese meat))
+(da-ctor-optional-call 'change-honsed-foo "x" '(lettuce cheese meat))
 ||#
 
-(defun da-ctor-autodoc (name fields honsp)
+(defun da-ctor-autodoc (name fields honsp pred)
   (declare (xargs :guard (and (symbolp name)
                               (formallist-p fields))))
   (b* ((foo                (da-constructor-name name))
-       (foo-p              (da-recognizer-name name))
+       (foo-p              (da-recognizer-name name pred))
        (honsed-foo         (da-honsed-constructor-name name))
-       (make-foo-fn        (da-maker-fn-name name))
        (make-foo           (da-maker-name name))
        (make-honsed-foo    (da-honsed-maker-name name))
-       (make-honsed-foo-fn (da-honsed-maker-fn-name name))
-       (change-foo-fn      (da-changer-fn-name name))
        (change-foo         (da-changer-name name))
 
        (see-foo-p           (xdoc::see foo-p))
-       (plain-foo-p         (str::cat "<tt>" (xdoc::name-low (symbol-name foo-p)) "</tt>"))
+       (plain-foo-p         (let* ((foo-p-low (xdoc::name-low (symbol-name foo-p)))
+                                   (acc nil)
+                                   (acc (str::revappend-chars "<tt>" acc))
+                                   (acc (xdoc::simple-html-encode-str foo-p-low 0 (length foo-p-low) acc))
+                                   (acc (str::revappend-chars "</tt>" acc)))
+                              (str::rchars-to-string acc)))
+
        (see-foo             (xdoc::see foo))
        (see-honsed-foo      (xdoc::see honsed-foo))
        (see-make-foo        (xdoc::see make-foo))
        (see-make-honsed-foo (xdoc::see make-honsed-foo))
        (see-change-foo      (xdoc::see change-foo))
 
-       (pkg               (symbol-package-name name))
-       (call-foo          (str::cat "@(ccall " pkg "::" (symbol-name foo) ")"))
-       (call-honsed-foo   (str::cat "@(ccall " pkg "::" (symbol-name honsed-foo) ")"))
+       (call-foo            (str::cat "@(ccall " (xdoc::full-escape-symbol foo) ")"))
+       (call-honsed-foo     (str::cat "@(ccall " (xdoc::full-escape-symbol honsed-foo) ")"))
 
        ;; For make-foo, change-foo, etc., it's nicer to present a list of [:fld <fld>] options
        ;; rather than just saying &rest args, which is what @(call ...) would do.
-       (opt-fields           (da-ctor-optional-fields fields))
-       (call-make-foo        (da-ctor-optional-call make-foo opt-fields))
-       (call-make-honsed-foo (da-ctor-optional-call make-honsed-foo opt-fields))
-       (call-change-foo      (da-ctor-optional-call change-foo (cons "x" opt-fields)))
+       (field-names          (formallist->names fields))
+       (call-make-foo        (da-ctor-optional-call make-foo "" field-names))
+       (call-make-honsed-foo (da-ctor-optional-call make-honsed-foo "" field-names))
+       (call-change-foo      (da-ctor-optional-call change-foo "x" field-names))
 
        (def-foo                (str::cat "@(def " (xdoc::full-escape-symbol foo) ")"))
        (def-honsed-foo         (str::cat "@(def " (xdoc::full-escape-symbol honsed-foo) ")"))
-       (def-make-foo-fn        (str::cat "@(def " (xdoc::full-escape-symbol make-foo-fn) ")"))
        (def-make-foo           (str::cat "@(def " (xdoc::full-escape-symbol make-foo) ")"))
-       (def-make-honsed-foo-fn (str::cat "@(def " (xdoc::full-escape-symbol make-honsed-foo-fn) ")"))
        (def-make-honsed-foo    (str::cat "@(def " (xdoc::full-escape-symbol make-honsed-foo) ")"))
-       (def-change-foo-fn      (str::cat "@(def " (xdoc::full-escape-symbol change-foo-fn) ")"))
        (def-change-foo         (str::cat "@(def " (xdoc::full-escape-symbol change-foo) ")")))
 
     (list
@@ -1042,8 +1063,7 @@ would have had to call @('(student->fullname x)').  For instance:</p>
                 <p>This is an ordinary @('make-') macro introduced by @(see
                 std::defaggregate).</p>"
 
-                def-make-foo
-                def-make-foo-fn))
+                def-make-foo))
 
      `(defxdoc ,make-honsed-foo
         :parents (,foo-p)
@@ -1066,8 +1086,7 @@ would have had to call @('(student->fullname x)').  For instance:</p>
                 <p>This is an ordinary honsing @('make-') macro introduced by
                 @(see std::defaggregate).</p>"
 
-                def-make-honsed-foo
-                def-make-honsed-foo-fn))
+                def-make-honsed-foo))
 
      `(defxdoc ,change-foo
         :parents (,foo-p)
@@ -1087,25 +1106,26 @@ would have had to call @('(student->fullname x)').  For instance:</p>
                 <p>This is an ordinary @('change-') macro introduced by @(see
                 std::defaggregate).</p>"
 
-                def-change-foo
-                def-change-foo-fn)))))
+                def-change-foo)))))
 
-(defun da-autodoc (name fields honsp parents short long base-pkg state)
+(defun da-autodoc (name fields honsp parents short long base-pkg pred state)
   (declare (xargs :guard (formallist-p fields)))
   (b* (((mv main state)
-        (da-main-autodoc name fields parents short long base-pkg state))
-       (ctors     (da-ctor-autodoc name fields honsp))
-       (accessors (da-fields-autodoc name fields)))
+        (da-main-autodoc name fields parents short long base-pkg pred state))
+       (ctors     (da-ctor-autodoc name fields honsp pred))
+       (accessors (da-fields-autodoc name fields pred)))
     (mv (cons main (append ctors accessors)) state)))
 
 (defconst *da-valid-keywords*
   '(:tag
-    :legiblep
+    :layout
     :hons
+    :pred
     :mode
     :parents
     :short
     :long
+    :suppress-xdoc
     :already-definedp
     :extra-field-keywords
     :verbosep
@@ -1175,56 +1195,51 @@ would have had to call @('(student->fullname x)').  For instance:</p>
         (mv (raise "~x0: :parents must be a list of symbols." name) state))
 
        (short (cdr (assoc :short kwd-alist)))
-       ((unless (or (stringp short) (not short)))
-        (mv (raise "~x0: :short must be a string (or nil)" name) state))
+       ((unless (or (stringp short) (true-listp short)))
+        (mv (raise "~x0: :short must be a string or a true list." name) state))
 
        (long (cdr (assoc :long kwd-alist)))
-       ((unless (or (stringp long) (not long)))
-        (mv (raise "~x0: :long must be a string (or nil)" name) state))
+       ((unless (or (stringp long) (true-listp long)))
+        (mv (raise "~x0: :long must be a string or a true list." name) state))
+
+       (suppress-xdocp (cdr (assoc :suppress-xdoc kwd-alist)))
+
+       (pred (cdr (assoc :pred kwd-alist)))
+       ((unless (symbolp pred))
+        (mv (raise "~x0: :pred must be a symbol." name) state))
 
        (mode (or (cdr (assoc :mode kwd-alist)) current-defun-mode))
        ((unless (member mode '(:logic :program)))
-        (mv (raise "~x0: :mode must be :logic or :program" name) state))
+        (mv (raise "~x0: :mode must be :logic or :program." name) state))
 
        (already-definedp (cdr (assoc :already-definedp kwd-alist)))
        ((unless (booleanp already-definedp))
-        (mv (raise "~x0: :already-definedp should be a boolean." name) state))
+        (mv (raise "~x0: :already-definedp must be a boolean." name) state))
 
-       (legiblep (if (assoc :legiblep kwd-alist)
-                     (cdr (assoc :legiblep kwd-alist))
-                   t))
-       ((unless (or (booleanp legiblep)
-                    (eq legiblep :ordered)))
-        (mv (raise "~x0: :legiblep should be a boolean or :ordered." name) state))
+       (layout (or (cdr (assoc :layout kwd-alist)) :alist))
+       ((unless (member layout '(:alist :list :tree :fulltree)))
+        (mv (raise "~x0: :layout must be :alist, :list, :tree, or :fulltree." name) state))
 
        (honsp (cdr (assoc :hons kwd-alist)))
        ((unless (booleanp honsp))
-        (mv (raise "~x0: :hons should be a boolean." name) state))
+        (mv (raise "~x0: :hons must be a boolean." name) state))
 
        (verbosep (cdr (assoc :verbosep kwd-alist)))
        ((unless (booleanp verbosep))
-        (mv (raise "~x0: :verbosep should be a boolean." name) state))
+        (mv (raise "~x0: :verbosep must be a boolean." name) state))
 
        ;; Expand requirements to include stuff from the field specifiers.
        (old-reqs   (cdr (assoc :require kwd-alist)))
        (field-reqs (da-formals-to-requires name efields))
        (require    (append field-reqs old-reqs))
        ((unless (da-requirelist-p require))
-        (mv (raise "~x0: malformed :require field" name) state))
+        (mv (raise "~x0: malformed :require field." name) state))
        ((unless (no-duplicatesp (strip-cars require)))
         (mv (raise "~x0: The names given to :require must be unique." name) state))
 
        (x        (da-x name))
-       (foop     (da-recognizer-name name))
+       (foop     (da-recognizer-name name pred))
        (make-foo (da-constructor-name name))
-
-       (layout (cond ((or honsp (not legiblep))
-                       ;; forces illegible
-                       :illegible)
-                     ((eq legiblep :ordered)
-                      :ordered)
-                     (t
-                      :legible)))
 
        (foop-of-make-foo
         (intern-in-package-of-symbol (str::cat (symbol-name foop)
@@ -1232,9 +1247,10 @@ would have had to call @('(student->fullname x)').  For instance:</p>
                                                (symbol-name make-foo))
                                      name))
        ((mv doc-events state)
-        (da-autodoc name efields honsp parents short long base-pkg state))
+        (da-autodoc name efields honsp parents short long base-pkg pred state))
 
        (agginfo (make-agginfo :name    name
+                              :pred    pred
                               :tag     tag
                               :fields  field-names
                               :efields efields))
@@ -1262,7 +1278,9 @@ would have had to call @('(student->fullname x)').  For instance:</p>
 
            (set-inhibit-warnings "theory") ;; implicitly local
            (da-extend-agginfo-table ',agginfo)
-           ,@doc-events
+           ,@(if (not suppress-xdocp)
+                 doc-events
+               '())
 
            ,(if (eq mode :logic)
                 '(logic)
@@ -1270,10 +1288,11 @@ would have had to call @('(student->fullname x)').  For instance:</p>
 
            ,@(if already-definedp
                  nil
-               (list (da-make-recognizer name tag field-names require layout)))
+               (list (da-make-recognizer name tag field-names require layout pred)))
            ,(da-make-constructor name tag field-names require honsp layout)
            ,(da-make-honsed-constructor name tag field-names require layout)
-           ,@(da-make-accessors name tag field-names layout)
+           ,@(da-make-accessors name tag field-names layout pred)
+           ,@(da-make-remaker name tag field-names require honsp layout pred)
 
            ,@(and
               (eq mode :logic)
@@ -1372,18 +1391,12 @@ would have had to call @('(student->fullname x)').  For instance:</p>
                                           (theory 'defaggregate-basic-theory)))))
 
                 ,@(da-make-accessors-of-constructor name field-names)
-                ,@(da-make-requirements-of-recognizer name require field-names)))
+                ,@(da-make-requirements-of-recognizer name require field-names pred)))
 
            ,(da-make-binder name all-binder-names)
-
-           ,(da-make-changer-fn name field-names)
-           ,(da-make-changer name field-names)
-
-           ,(da-make-maker-fn name field-names field-defaults)
-           ,(da-make-maker name field-names)
-
-           ,(da-make-honsed-maker-fn name field-names field-defaults)
-           ,(da-make-honsed-maker name field-names)
+           ,(da-make-changer name field-names (da-maybe-remake-name name honsp layout))
+           ,(da-make-maker name field-names field-defaults)
+           ,(da-make-honsed-maker name field-names field-defaults)
 
            (with-output :stack :pop
              (progn . ,other-events))

@@ -1,7 +1,7 @@
 #|$ACL2s-Preamble$;
 (include-book ;; Newline to fool ACL2/cert.pl dependency scanner
  "../portcullis")
-(begin-book t);$ACL2s-Preamble$|#
+(begin-book t :ttags :all);$ACL2s-Preamble$|#
 
 #|           
 Sat May 10  EDT 2014
@@ -29,6 +29,7 @@ is accepted by ACL2s, but this is not
 (include-book "defdata-core")
 (include-book "random-state")
 (include-book "enumerators-gen")
+(include-book "defdata-util")
 
 (include-book "library-support")
 
@@ -47,10 +48,10 @@ is accepted by ACL2s, but this is not
   (enum '(#\X #\Y #\L #\N #\Z #\I #\J #\K #\A #\B #\C 
           #\M #\D #\E #\F #\G #\H #\0 #\1  
           #\O #\P #\Q #\R #\S #\T #\U #\V #\W  
-          #\2 #\3 #\4 #\5 #\6 #\7 #\8 #\9)))
+          #\2 #\3 #\4 #\5 #\6 #\7 #\8 #\9 #\-)))
 
 ; What to replace nil and t by
-(defconst *non-nil-non-t-fix* '(#\X)) 
+(def-const *non-nil-non-t-fix* '(#\X)) 
 
 ; The numeric characters
 (defdata var-char-num 
@@ -97,16 +98,18 @@ is accepted by ACL2s, but this is not
 (encapsulate 
  nil
  (local
-  (include-book "arithmetic-5/top" :dir :system))
+  (include-book "arithmetic-5/top" :dir :system)))
 
-  (verify-termination nth-var-char))
+(set-ignore-ok t)
+(verify-termination nth-var-char-builtin)
+(set-ignore-ok nil)
 
 ; generate a char-list-aux from a list of nats
 (defun get-var-char-list-aux-from-positions (l)
   (declare (xargs :guard (nat-listp l)))
   (if (endp l)
     nil
-    (cons (nth-var-char (car l))
+    (cons (nth-var-char-builtin (car l))
           (get-var-char-list-aux-from-positions (cdr l)))))
 
 ; fixing a var-char-list-aux so that it is a var-char-list
@@ -173,22 +176,82 @@ is accepted by ACL2s, but this is not
        (clist (fix-char-list charlist)))
       (coerce clist 'string)))
 
-(defun nth-var (n)
+(defun nth-var-builtin (n)
 ;  (declare (xargs :guard (natp n)))
-  (intern-in-package-of-symbol (nth-var-string n) 'acl2::acl2-pkg-witness))
+;  (intern-in-package-of-symbol (nth-var-string n) 'acl2::acl2-pkg-witness))
+  (intern$ (nth-var-string n) "ACL2S"))
 
 (defun varp (x)
   (declare (xargs :guard t))
-  (b* (((unless (symbolp x)) nil)
-       ((when (keywordp x)) nil)
-       ((unless (acl2::legal-variablep x)) nil)
+  (b* (((unless (legal-variablep x)) nil)
        (name (symbol-name x))
        (clist (coerce name 'list)))
       (var-char-listp clist)))
         
-(register-type var :predicate varp :enumerator nth-var) 
+(register-type var :predicate varp :enumerator nth-var-builtin) 
+
+(defthm legal-variable-is-symbol
+  (and (implies (legal-variablep x)
+                (symbolp x)))
+  :hints (("goal" :in-theory (enable legal-variable-or-constant-namep)))
+  :rule-classes (:compound-recognizer
+                 :forward-chaining))
+
+(defthm legal-variable-disjoint-with-keys
+  (implies (keywordp x)
+           (not (legal-variablep x)))
+  :hints (("goal" :in-theory (enable legal-variable-or-constant-namep)))
+  :rule-classes ((:rewrite :backchain-limit-lst 1)))
+
+(defthm legal-variable-disjoint-with-bool
+  (implies (booleanp x)
+           (not (legal-variablep x)))
+  :hints (("goal" :in-theory (enable legal-variable-or-constant-namep)))
+  :rule-classes ((:rewrite :backchain-limit-lst 1)))
+
+(defthm legal-variable-disjoint-with-legal-constant
+  (implies (legal-constantp x)
+           (not (legal-variablep x)))
+  :hints (("goal" :in-theory (enable legal-variable-or-constant-namep)))
+  :rule-classes ((:rewrite :backchain-limit-lst 1)))
+
+(in-theory (disable legal-variablep legal-constantp))
 
 (defthm var-symbolp
   (implies (varp x)
            (symbolp x))
+  :hints (("goal" :in-theory (enable legal-variable-or-constant-namep)))
   :rule-classes ((:compound-recognizer) (:forward-chaining)))
+
+(defthm var-legal-variablep
+  (implies (varp x)
+           (legal-variablep x))
+  :rule-classes ((:rewrite :backchain-limit-lst 1)))
+
+(defthm legal-variablep-proper-symbolp
+  (implies (legal-variablep x)
+           (defdata::proper-symbolp x))
+  :hints (("goal" :in-theory (e/d (defdata::proper-symbolp)
+                                  (keywordp))))
+  :rule-classes ((:rewrite :backchain-limit-lst 1)))
+
+(in-theory (disable varp))
+
+(defthm var-disjoint-with-keys
+  (implies (keywordp x)
+           (not (varp x)))
+  :hints (("goal" :in-theory (e/d () (keywordp))))
+  :rule-classes ((:rewrite :backchain-limit-lst 1)))
+
+(defthm var-disjoint-with-bool
+  (implies (booleanp x)
+           (not (varp x)))
+  :hints (("goal" :in-theory (enable legal-variable-or-constant-namep)))
+  :rule-classes ((:rewrite :backchain-limit-lst 1)))
+
+(defthm var-proper-symbolp
+  (implies (varp x)
+           (defdata::proper-symbolp x))
+  :hints (("goal" :in-theory (enable defdata::proper-symbolp)))
+  :rule-classes ((:rewrite :backchain-limit-lst 1)))
+

@@ -40,13 +40,13 @@
 ; other, conflicting theorems about.
 
 (include-book "std/util/top" :dir :system)
-(include-book "std/misc/two-nats-measure" :dir :system)
+(include-book "std/basic/two-nats-measure" :dir :system)
 (include-book "std/lists/list-defuns" :dir :system)
 (include-book "centaur/misc/alist-equiv" :dir :system)
 (include-book "centaur/misc/hons-extra" :dir :system)
 (include-book "std/strings/top" :dir :system)
-(include-book "std/strings/fast-cat" :dir :system)
-(include-book "misc/assert" :dir :system)
+(include-book "std/strings/cat" :dir :system)
+(include-book "std/testing/assert-bang" :dir :system)
 (include-book "misc/definline" :dir :system) ;; bozo
 (include-book "std/system/non-parallel-book" :dir :system)
 (local (include-book "arithmetic/top-with-meta" :dir :system))
@@ -356,27 +356,6 @@ from @('alist')."
         (acl2-count x))
     :rule-classes ((:rewrite) (:linear))
     :enable acl2-count))
-
-
-(define redundant-list-fix (x)
-  :parents (utilities)
-  :short "@(call redundant-list-fix) is the same as @('(list-fix x)'), but
-avoids consing when @('x') is already a true-listp."
-
-  :long "<p>I sometimes want to @('list-fix') something that I know is almost
-certainly already a @('true-listp') in practice.  In such cases,
-@('redundant-list-fix') may be a better choice than @('list-fix'), because
-checking @('true-listp') is much cheaper than re-consing the a list.</p>
-
-<p>I leave this function enabled.  Logically it is just an alias for
-@('list-fix'), so you should never need to reason about it.</p>"
-
-  :enabled t
-
-  (mbe :logic (list-fix x)
-       :exec (if (true-listp x)
-                 x
-               (list-fix x))))
 
 
 (deflist string-list-listp (x)
@@ -835,4 +814,3 @@ versions of the standard.  We currently have some support for:</p>
 <li>@(':verilog-2005') corresponds to IEEE Std 1364-2005.</li>
 <li>@(':system-verilog-2012') corresponds to IEEE Std 1800-2012.</li>
 </ul>")
-

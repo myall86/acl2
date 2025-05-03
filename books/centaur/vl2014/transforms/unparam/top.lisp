@@ -515,10 +515,10 @@ introduced.</p>"
                 (mv nil warnings (vl-genelement-fix x))))
             (mv t warnings
                 (change-vl-genblock x :elems res-elems)))
-            
+
 
           ;; Didn't expect to see these resolved forms yet; leave them.
-          
+
           :vl-genarray
           (mv t (warn :type :vl-already-resolved-generate
                       :msg "~a0: Didn't expect to see an already-resolved genarray."
@@ -706,7 +706,7 @@ introduced.</p>"
    (warnings vl-warninglist-p)
    (modname stringp)
    (sigalist vl-unparam-sigalist-p))
-  :parents (xf-unparameterize)
+  :parents (unparameterization)
   :short "Collect parameterization signatures needed for module instances of a given module."
   :long "<p>Expects that the module is fully unparameterized, with parameter values
          substituted in everywhere.  Accumulates an unparameterization signature

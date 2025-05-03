@@ -29,72 +29,42 @@
 ;   DEALINGS IN THE SOFTWARE.
 ;
 ; Original author: Jared Davis <jared@kookamara.com>
+; Contributing author: Alessandro Coglio <coglio@kestrel.edu>
 ;
 ; take.lisp
 ; This file was originally part of the Unicode library.
 
 (in-package "ACL2")
+
 (include-book "list-fix")
 (include-book "equiv")
 (local (include-book "std/basic/inductions" :dir :system))
+;; Mihir M. mod: The sets book is included to help with
+;; no-duplicatesp-of-take; and the definitions repeat, take-of-too-many, and
+;; subsetp-of-repeat from the repeat book are introduced prematurely in order
+;; to prove subsetp-of-take.
+(local (include-book "std/lists/sets" :dir :system))
 
-(local (defthm commutativity-2-of-+
-         (equal (+ x (+ y z))
-                (+ y (+ x z)))))
+(local (defun repeat (n x)
+         (if (zp n)
+             nil
+           (cons x (repeat (- n 1) x)))))
 
-(local (defthm fold-consts-in-+
-         (implies (and (syntaxp (quotep x))
-                       (syntaxp (quotep y)))
-                  (equal (+ x (+ y z)) (+ (+ x y) z)))))
+(local
+ (defthm take-of-too-many
+   (implies (<= (len x) (nfix n))
+            (equal (take n x)
+                   (append x (repeat (- (nfix n) (len x)) nil))))))
 
-(local (defthm distributivity-of-minus-over-+
-         (equal (- (+ x y)) (+ (- x) (- y)))))
-
-(defun simpler-take-induction (n xs)
-  ;; Not generally meant to be used; only meant for take-induction
-  ;; and take-redefinition.
-  (if (zp n)
-      nil
-    (cons (car xs)
-          (simpler-take-induction (1- n) (cdr xs)))))
-
-
-(in-theory (disable (:definition take)))
+(local
+ (defthm subsetp-of-repeat
+   (iff (subsetp-equal (repeat n x) y)
+        (or (zp n) (member-equal x y)))
+   :hints (("goal" :in-theory (enable subsetp-equal repeat)))))
 
 (defsection std/lists/take
   :parents (std/lists take)
   :short "Lemmas about @(see take) available in the @(see std/lists) library."
-
-  :long "<p>ACL2's built-in definition of @('take') is not especially good for
-reasoning since it is written in terms of the tail-recursive function
-@('first-n-ac').  We provide a much nicer @(see definition) rule:</p>
-
-  @(def take-redefinition)
-
-<p>And we also set up an analogous @(see induction) rule.  We generally
-recommend using @('take-redefinition') instead of @('(:definition take)').</p>"
-
-  (encapsulate
-    ()
-    (local (in-theory (enable take)))
-
-    (local (defthm equivalence-lemma
-             (implies (true-listp acc)
-                      (equal (first-n-ac n xs acc)
-                             (revappend acc (simpler-take-induction n xs))))))
-
-    (defthm take-redefinition
-      (equal (take n x)
-             (if (zp n)
-                 nil
-               (cons (car x)
-                     (take (1- n) (cdr x)))))
-      :rule-classes ((:definition :controller-alist ((TAKE T NIL))))))
-
-  (defthm take-induction t
-    :rule-classes ((:induction
-                    :pattern (take n x)
-                    :scheme (simpler-take-induction n x))))
 
   (defthm consp-of-take
     (equal (consp (take n xs))
@@ -163,8 +133,10 @@ recommend using @('take-redefinition') instead of @('(:definition take)').</p>"
            (list-fix x)))
 
   (defthm subsetp-of-take
-    (implies (<= (nfix n) (len x))
-             (subsetp (take n x) x)))
+    (iff (subsetp (take n x) x)
+         (or (<= (nfix n) (len x))
+             (member-equal nil x)))
+    :hints (("goal" :induct (mv (member-equal nil x) (take n x)))))
 
   (defthm take-fewer-of-take-more
     ;; Note: see also repeat.lisp for related cases and a stronger rule that
@@ -179,6 +151,22 @@ recommend using @('take-redefinition') instead of @('(:definition take)').</p>"
     (equal (take a (take a x))
            (take a x)))
 
+  (defthm no-duplicatesp-of-take
+    (implies (and (no-duplicatesp-equal l)
+                  (<= (nfix n) (len l)))
+             (no-duplicatesp-equal (take n l))))
+
+  ;; Mihir M. mod: this lemma is useful in a few different places when
+  ;; reasoning about take, decrementing n but keeping l the same. Thanks are
+  ;; owed to Matt K. for suggesting the precise rule-classes that allow the
+  ;; new definition to be admitted without a new body.
+  (defthmd take-as-append-and-nth
+    (equal (take n l) (if (zp n)
+                          nil
+                        (append (take (- n 1) l) (list (nth (- n 1) l)))))
+    :rule-classes ((:definition :install-body nil)))
+
+  (theory-invariant (incompatible (:rewrite take-as-append-and-nth) (:definition take)))
 
   (defcong list-equiv equal (take n x) 2
     :hints(("Goal"
@@ -229,11 +217,6 @@ guard does not require @('(true-listp x)')."
   :long "<p><b>Reasoning Note.</b> We leave @('first-n') enabled, so it will
 just get rewritten into @('take').  You should typically never write a theorem
 about @('first-n'): write theorems about @('take') instead.</p>"
-
-  (local (defun repeat (n x)
-           (if (zp n)
-               nil
-             (cons x (repeat (- n 1) x)))))
 
   (local (defthm l0
            (equal (append (repeat n x) (cons x y))

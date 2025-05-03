@@ -24,22 +24,22 @@
 #|
 To certify this book, first, create a world with the following packages:
 
-(DEFPKG 
-  "ACL2-ASG" 
-  (UNION-EQ 
-   *ACL2-EXPORTS* 
+(DEFPKG
+  "ACL2-ASG"
+  (UNION-EQ
+   *ACL2-EXPORTS*
    *COMMON-LISP-SYMBOLS-FROM-MAIN-LISP-PACKAGE*))
 
-(DEFPKG 
-  "ACL2-AGP" 
-  (UNION-EQ *ACL2-EXPORTS* 
+(DEFPKG
+  "ACL2-AGP"
+  (UNION-EQ *ACL2-EXPORTS*
 	    *COMMON-LISP-SYMBOLS-FROM-MAIN-LISP-PACKAGE*))
 
-(DEFPKG 
-  "ACL2-CRG" 
-  (UNION-EQ 
-   *ACL2-EXPORTS* 
-   *COMMON-LISP-SYMBOLS-FROM-MAIN-LISP-PACKAGE*)) 
+(DEFPKG
+  "ACL2-CRG"
+  (UNION-EQ
+   *ACL2-EXPORTS*
+   *COMMON-LISP-SYMBOLS-FROM-MAIN-LISP-PACKAGE*))
 
 (certify-book "aof" 3)
 |#
@@ -48,7 +48,7 @@ To certify this book, first, create a world with the following packages:
 ; An ordered field is Archimedean if and only if each element of the field is
 ; less than some positive integer. This book contains a convenient ACL2
 ; axiomatization of such fields. ACL2 is able to verify that the axioms are
-; consistent. The axioms permit the definition of a function, called 
+; consistent. The axioms permit the definition of a function, called
 ; Least-nat-bound, that returns the least nonnegative integer larger than its
 ; input.
 
@@ -59,6 +59,8 @@ To certify this book, first, create a world with the following packages:
 
 (local
  (include-book "../../../arithmetic/inequalities"))
+
+(local (include-book "cowles/acl2-crg" :dir :system))
 
 ; Note that the Abelian SemiGroup, Abelian Group, and Commutative Ring Books
 ;  are also temporarily available because they help certify the Arithmetic Book.
@@ -76,7 +78,7 @@ To certify this book, first, create a world with the following packages:
 
  ; Witnesses:
  (local
-  (defun 
+  (defun
     aofp (x)
     (rationalp x)))
 
@@ -268,13 +270,15 @@ To certify this book, first, create a world with the following packages:
 				(equal (<_a x y) nil))))))
 
  (defthm
-   <=_a-extends-<_a   
+   <=_a-extends-<_a
    (implies (and (<_a x y)
 		 (aofp x)
 		 (aofp y))
 	    (<=_a x y))
    :rule-classes (:rewrite :forward-chaining)
-   :doc "Equivalent to asymmetry of <_a.")
+; Matt K. mod: :doc is no longer supported for defthm after v7-1
+   ;; :doc "Equivalent to asymmetry of <_a."
+   )
 
  (defthm
    Transitivity-of-<_a
@@ -284,7 +288,7 @@ To certify this book, first, create a world with the following packages:
 		 (aofp y)
 		 (aofp z))
 	    (<_a x z)))
- 
+
  (defthm
    Antisymmetry-of-<=_a
    (implies (and (<=_a x y)
@@ -293,7 +297,9 @@ To certify this book, first, create a world with the following packages:
 		 (aofp y))
 	    (equal x y))
    :rule-classes :forward-chaining
-   :doc "Equivalent to trichotomy of <_a.")
+; Matt K. mod: :doc is no longer supported for defthm after v7-1
+   ;; :doc "Equivalent to trichotomy of <_a."
+   )
 
  (defthm
    Compatibility-Laws
@@ -343,7 +349,7 @@ To certify this book, first, create a world with the following packages:
                            (unary--_a unary-- unary--_a)
                            (unary-/_a unary-/ unary-/_a))))
 
-;The next two Right Unicity theorems are needed 
+;The next two Right Unicity theorems are needed
 ; for Knuth's generalized 91 function:
 
 (defthm
@@ -368,24 +374,16 @@ To certify this book, first, create a world with the following packages:
 		(equal (*_a x y z)
 		       (*_a y x z))))
   :hints (("Goal"
-	   :use ((:instance
-		  (:functional-instance
-		   acl2-asg::commutativity-2-of-op
-		   (acl2-asg::equiv equal)
-		   (acl2-asg::pred aofp)
-		   (acl2-asg::op binary-+_a))
-		  (acl2-asg::x x)
-		  (acl2-asg::y y)
-		  (acl2-asg::z z))
-		 (:instance
-		  (:functional-instance
-		   acl2-asg::commutativity-2-of-op
-		   (acl2-asg::equiv equal)
-		   (acl2-asg::pred aofp)
-		   (acl2-asg::op binary-*_a))
-		  (acl2-asg::x x)
-		  (acl2-asg::y y)
-		  (acl2-asg::z z))))))
+	   :use ((:functional-instance
+                  acl2-asg::commutativity-2-of-op
+                  (acl2-asg::equiv equal)
+                  (acl2-asg::pred aofp)
+                  (acl2-asg::op binary-+_a))
+		 (:functional-instance
+                  acl2-asg::commutativity-2-of-op
+                  (acl2-asg::equiv equal)
+                  (acl2-asg::pred aofp)
+                  (acl2-asg::op binary-*_a))))))
 
 (defthm
   Reverse-Extension-Laws
@@ -438,16 +436,14 @@ To certify this book, first, create a world with the following packages:
 		(equal (*_a x 0)
 		       0)))
   :hints (("Goal"
-	   :use (:instance
-		 (:functional-instance
-		  acl2-crg::Left-nullity-of-zero-for-times
-		  (acl2-crg::equiv equal)
-		  (acl2-crg::pred aofp)
-		  (acl2-crg::plus binary-+_a)
-		  (acl2-crg::times binary-*_a)
-		  (acl2-crg::minus unary--_a)
-		  (acl2-crg::zero (lambda () 0)))
-		 (acl2-crg::x x)))))
+	   :use (:functional-instance
+                 acl2-crg::Left-nullity-of-zero-for-times
+                 (acl2-crg::equiv equal)
+                 (acl2-crg::pred aofp)
+                 (acl2-crg::plus binary-+_a)
+                 (acl2-crg::times binary-*_a)
+                 (acl2-crg::minus unary--_a)
+                 (acl2-crg::zero (lambda () 0))))))
 
 (defthm
   Type-of-/_a
@@ -517,26 +513,22 @@ To certify this book, first, create a world with the following packages:
 			 (equal (/_a (/_a x))
 				x))))
   :hints (("Goal"
-	   :use ((:instance
-		  (:functional-instance
-		   acl2-agp::Involution-of-inv
-		   (acl2-agp::equiv equal)
-		   (acl2-agp::pred aofp)
-		   (acl2-agp::op binary-+_a)
-		   (acl2-agp::id (lambda () 0))
-		   (acl2-agp::inv unary--_a))
-		  (acl2-agp::x x))
-		 (:instance
-		  (:functional-instance
-		   acl2-agp::Involution-of-inv
-		   (acl2-agp::equiv equal)
-		   (acl2-agp::pred (lambda (x) 
-				     (and (aofp x)
-					  (not (equal x 0)))))
-		   (acl2-agp::op binary-*_a)
-		   (acl2-agp::id (lambda () 1))
-		   (acl2-agp::inv unary-/_a))
-		  (acl2-agp::x x))))))
+	   :use ((:functional-instance
+                  acl2-agp::Involution-of-inv
+                  (acl2-agp::equiv equal)
+                  (acl2-agp::pred aofp)
+                  (acl2-agp::op binary-+_a)
+                  (acl2-agp::id (lambda () 0))
+                  (acl2-agp::inv unary--_a))
+		 (:functional-instance
+                  acl2-agp::Involution-of-inv
+                  (acl2-agp::equiv equal)
+                  (acl2-agp::pred (lambda (x)
+                                    (and (aofp x)
+                                         (not (equal x 0)))))
+                  (acl2-agp::op binary-*_a)
+                  (acl2-agp::id (lambda () 1))
+                  (acl2-agp::inv unary-/_a))))))
 
 (defthm
   Inverse-Distributive-Laws
@@ -549,28 +541,22 @@ To certify this book, first, create a world with the following packages:
 			 (equal (/_a (*_a x y))
 				(*_a (/_a x)(/_a y))))))
   :hints (("Goal"
-	   :use ((:instance
-                  (:functional-instance
-                   acl2-agp::Distributivity-of-inv-over-op
-                   (acl2-agp::equiv equal)
-                   (acl2-agp::pred aofp)
-                   (acl2-agp::op binary-+_a)
-                   (acl2-agp::id (lambda () 0))
-                   (acl2-agp::inv unary--_a))
-                  (acl2-agp::x x)
-                  (acl2-agp::y y))
-		 (:instance
-                  (:functional-instance
-                   acl2-agp::Distributivity-of-inv-over-op
-                   (acl2-agp::equiv equal)
-                   (acl2-agp::pred (lambda (x)
-                                     (and (aofp x)
-                                          (not (equal x 0)))))
-                   (acl2-agp::op binary-*_a)
-                   (acl2-agp::id (lambda () 1))
-                   (acl2-agp::inv unary-/_a))
-                  (acl2-agp::x x)
-                  (acl2-agp::y y))))))
+	   :use ((:functional-instance
+                  acl2-agp::Distributivity-of-inv-over-op
+                  (acl2-agp::equiv equal)
+                  (acl2-agp::pred aofp)
+                  (acl2-agp::op binary-+_a)
+                  (acl2-agp::id (lambda () 0))
+                  (acl2-agp::inv unary--_a))
+		 (:functional-instance
+                  acl2-agp::Distributivity-of-inv-over-op
+                  (acl2-agp::equiv equal)
+                  (acl2-agp::pred (lambda (x)
+                                    (and (aofp x)
+                                         (not (equal x 0)))))
+                  (acl2-agp::op binary-*_a)
+                  (acl2-agp::id (lambda () 1))
+                  (acl2-agp::inv unary-/_a))))))
 
 (defthm
   Inverse-Cancellation-Laws
@@ -586,28 +572,22 @@ To certify this book, first, create a world with the following packages:
 			      (equal (*_a x (/_a x) y)
 				     y)))))
   :hints (("Goal"
-	   :use ((:instance
-		  (:functional-instance
-		   acl2-agp::inv-cancellation-on-right
-		   (acl2-agp::equiv equal)
-		   (acl2-agp::pred aofp)
-		   (acl2-agp::op binary-+_a)
-		   (acl2-agp::id (lambda () 0))
-		   (acl2-agp::inv unary--_a))
-		  (acl2-agp::x x)
-		  (acl2-agp::y y))
-		 (:instance
-		  (:functional-instance
-		   acl2-agp::inv-cancellation-on-right
-		   (acl2-agp::equiv equal)
-		   (acl2-agp::pred (lambda (x) 
-				     (and (aofp x)
-					  (not (equal x 0)))))
-		   (acl2-agp::op binary-*_a)
-		   (acl2-agp::id (lambda () 1))
-		   (acl2-agp::inv unary-/_a))
-		  (acl2-agp::x x)
-		  (acl2-agp::y y))))))
+	   :use ((:functional-instance
+                  acl2-agp::inv-cancellation-on-right
+                  (acl2-agp::equiv equal)
+                  (acl2-agp::pred aofp)
+                  (acl2-agp::op binary-+_a)
+                  (acl2-agp::id (lambda () 0))
+                  (acl2-agp::inv unary--_a))
+		 (:functional-instance
+                  acl2-agp::inv-cancellation-on-right
+                  (acl2-agp::equiv equal)
+                  (acl2-agp::pred (lambda (x)
+                                    (and (aofp x)
+                                         (not (equal x 0)))))
+                  (acl2-agp::op binary-*_a)
+                  (acl2-agp::id (lambda () 1))
+                  (acl2-agp::inv unary-/_a))))))
 
 (defthm
   Cancellation-Laws
@@ -634,31 +614,23 @@ To certify this book, first, create a world with the following packages:
 		(equal (equal (*_a z x)(*_a z y))
 		       (or (equal z 0)
 			   (equal x y)))))
-  :hints (("Goal" 
-	   :use ((:instance
-		  (:functional-instance
-		   acl2-agp::Right-cancellation-for-op
-		   (acl2-agp::equiv equal)
-		   (acl2-agp::pred aofp)
-		   (acl2-agp::op binary-+_a)
-		   (acl2-agp::id (lambda () 0))
-		   (acl2-agp::inv unary--_a))
-		  (acl2-agp::x x)
-		  (acl2-agp::y y)
-		  (acl2-agp::z z))
-		 (:instance
-		  (:functional-instance
-		   acl2-agp::Right-cancellation-for-op
-		   (acl2-agp::equiv equal)
-		   (acl2-agp::pred (lambda (x) 
-				     (and (aofp x)
-					  (not (equal x 0)))))
-		   (acl2-agp::op binary-*_a)
-		   (acl2-agp::id (lambda () 1))
-		   (acl2-agp::inv unary-/_a))
-		  (acl2-agp::x x)
-		  (acl2-agp::y y)
-		  (acl2-agp::z z))))))
+  :hints (("Goal"
+	   :use ((:functional-instance
+                  acl2-agp::Right-cancellation-for-op
+                  (acl2-agp::equiv equal)
+                  (acl2-agp::pred aofp)
+                  (acl2-agp::op binary-+_a)
+                  (acl2-agp::id (lambda () 0))
+                  (acl2-agp::inv unary--_a))
+		 (:functional-instance
+                  acl2-agp::Right-cancellation-for-op
+                  (acl2-agp::equiv equal)
+                  (acl2-agp::pred (lambda (x)
+                                    (and (aofp x)
+                                         (not (equal x 0)))))
+                  (acl2-agp::op binary-*_a)
+                  (acl2-agp::id (lambda () 1))
+                  (acl2-agp::inv unary-/_a))))))
 
 (defthm
   Equal_-_a-zero
@@ -707,15 +679,13 @@ To certify this book, first, create a world with the following packages:
 	   (equal (equal (+_a x x) x)
 		  (equal x 0)))
   :hints (("Goal"
-	   :use ((:instance
-		  (:functional-instance
-		   acl2-agp::Uniqueness-of-id-as-op-idempotent
-		   (acl2-agp::equiv equal)
-		   (acl2-agp::pred aofp)
-		   (acl2-agp::op binary-+_a)
-		   (acl2-agp::id (lambda () 0))
-		   (acl2-agp::inv unary--_a))
-		  (acl2-agp::x x))))))
+	   :use ((:functional-instance
+                  acl2-agp::Uniqueness-of-id-as-op-idempotent
+                  (acl2-agp::equiv equal)
+                  (acl2-agp::pred aofp)
+                  (acl2-agp::op binary-+_a)
+                  (acl2-agp::id (lambda () 0))
+                  (acl2-agp::inv unary--_a))))))
 
 (defthm
   Projection-Laws
@@ -741,20 +711,17 @@ To certify this book, first, create a world with the following packages:
 		  (and (not (equal x 0))
 		       (equal y (/_a x)))))
   :hints (("Goal"
-	   :use ((:instance
-		  (:functional-instance
-		   acl2-agp::Uniqueness-of-op-inverses
-		   (acl2-agp::equiv equal)
-		   (acl2-agp::pred (lambda (x) 
-				     (and (aofp x)
-					  (not (equal x 0)))))
-		   (acl2-agp::op binary-*_a)
-		   (acl2-agp::id (lambda () 1))
-		   (acl2-agp::inv unary-/_a))
-		  (acl2-agp::x x)
-		  (acl2-agp::y y))))))
+	   :use ((:functional-instance
+                  acl2-agp::Uniqueness-of-op-inverses
+                  (acl2-agp::equiv equal)
+                  (acl2-agp::pred (lambda (x)
+                                    (and (aofp x)
+                                         (not (equal x 0)))))
+                  (acl2-agp::op binary-*_a)
+                  (acl2-agp::id (lambda () 1))
+                  (acl2-agp::inv unary-/_a))))))
 
-(defthm 
+(defthm
   Functional-Commutativity-Laws-1
   (implies (and (aofp x)
 		(aofp y))
@@ -763,17 +730,14 @@ To certify this book, first, create a world with the following packages:
 		(equal (*_a (-_a y) x)
 		       (-_a (*_a y x)))))
   :hints (("Goal"
-	   :use ((:instance
-		  (:functional-instance
-		   acl2-crg::functional-commutativity-of-minus-times-right
-		   (acl2-crg::equiv equal)
-		   (acl2-crg::pred aofp)
-		   (acl2-crg::plus binary-+_a)
-		   (acl2-crg::times binary-*_a)
-		   (acl2-crg::zero (lambda () 0))
-		   (acl2-crg::minus unary--_a))
-		  (acl2-crg::x x)
-		  (acl2-crg::y y))))))
+	   :use ((:functional-instance
+                  acl2-crg::functional-commutativity-of-minus-times-right
+                  (acl2-crg::equiv equal)
+                  (acl2-crg::pred aofp)
+                  (acl2-crg::plus binary-+_a)
+                  (acl2-crg::times binary-*_a)
+                  (acl2-crg::zero (lambda () 0))
+                  (acl2-crg::minus unary--_a))))))
 
 (local
  (defthm
@@ -813,7 +777,9 @@ To certify this book, first, create a world with the following packages:
   Reflexivity-of-<=_a
   (implies (aofp x)
 	   (<=_a x x))
-  :doc "Equivalent to irreflexivity of <_a.")
+; Matt K. mod: :doc is no longer supported for defthm after v7-1
+  ;; :doc "Equivalent to irreflexivity of <_a."
+  )
 
 (defthm
   Transitivity-of-<=_a
@@ -921,13 +887,13 @@ To certify this book, first, create a world with the following packages:
 		 (x (<_a (/_a x) 0))
 		 (y (<_a x 0))))))
 
-(local 
+(local
  (defthm
    <_a-Cancellation-Laws-for-+_a-lemma
    (implies (and (<_a (+_a x y)(+_a x z))
 		 (aofp x)
 		 (aofp y)
-		 (aofp z))	    
+		 (aofp z))
 	    (<_a y z))
    :hints (("Goal"
 	    :use (:instance
@@ -1162,7 +1128,7 @@ To certify this book, first, create a world with the following packages:
 			       (>_a y 0)))))))))
 
 (local
- (in-theory (disable  
+ (in-theory (disable
 	     (:REWRITE <_A-CANCELLATION-LAWS-FOR-+_A-LEMMA))))
 
 (local
@@ -1360,7 +1326,7 @@ To certify this book, first, create a world with the following packages:
   Least-nat-bound-loop (i x)
   (declare (xargs :guard (and (integerp i)
 			      (aofp x))
-		  :measure 
+		  :measure
 		  (let ((i (ifix i))
 			(x (afix x)))
 		       (cond ((<_a x 0)
@@ -1368,7 +1334,7 @@ To certify this book, first, create a world with the following packages:
 			     ((>_a i x)
 			      0)
 			     (t
-			      (+ 1 
+			      (+ 1
 				 (Nat-Int-Bound x)(- i)))))))
   (let ((i (ifix i))
 	(x (afix x)))
@@ -1405,7 +1371,7 @@ To certify this book, first, create a world with the following packages:
 		 (z 1)))))
 
 (local
- (defthm 
+ (defthm
    Least-nat-bound-loop-is-LEAST-bound-lemma
    (IMPLIES (AND (NOT (<_A X I))
 		 (NOT (<_A I X))
@@ -1455,7 +1421,7 @@ To certify this book, first, create a world with the following packages:
 	   (>_a (+_a 1 x) 0))
   :hints (("Goal"
 	   :in-theory (disable transitivity-of-<_a)
-	   :use (:instance 
+	   :use (:instance
 		 transitivity-of-<_a
 		 (x 0)(y x)(z (+_a 1 x))))))
 
@@ -1493,7 +1459,7 @@ To certify this book, first, create a world with the following packages:
 	   (>= (least-nat-bound-loop 0 x) 0))
   :rule-classes :type-prescription
   :hints (("Goal"
-	   :in-theory (disable 
+	   :in-theory (disable
 		       <=-rationalp-Least-nat-bound-loop)
 	   :use (:instance
 		 <=-rationalp-Least-nat-bound-loop
@@ -1507,7 +1473,7 @@ To certify this book, first, create a world with the following packages:
 		(>=_a x r))
 	   (< r (least-nat-bound-loop i x)))
   :hints (("Goal"
-	   :in-theory (disable 
+	   :in-theory (disable
 		       <=-rationalp-Least-nat-bound-loop)
 	   :use <=-rationalp-Least-nat-bound-loop)))
 
@@ -1518,7 +1484,7 @@ To certify this book, first, create a world with the following packages:
 	   (> (least-nat-bound-loop 0 x) 0))
   :rule-classes :type-prescription
   :hints (("Goal"
-	   :in-theory (disable 
+	   :in-theory (disable
 		       <-rationalp-Least-nat-bound-loop)
 	   :use (:instance
 		 <-rationalp-Least-nat-bound-loop

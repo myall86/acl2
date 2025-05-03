@@ -66,37 +66,52 @@ hints given should either be computed hints or reference later subgoals.</p>")
     (or (and (consp (car hints))
              (stringp (caar hints))
              (standard-char-listp (coerce (caar hints) 'list))
-             (equal (string-upcase (caar hints)) "GOAL"))
+             (equal (string-upcase (caar hints)) "GOAL")
+             (car hints))
         (look-for-goal-hint (cdr hints)))))
 
 (defun def-functional-instance-fn
-  (newname oldname subst hints rule-classes rule-classesp state)
+  (newname oldname subst hints rule-classes rule-classesp
+           translate macro-subst by-hint-p state)
   (declare (xargs :stobjs state :mode :program))
   (b* ((world (w state))
-       (body (fgetprop oldname 'theorem nil world))
+       (body (if translate
+                 (fgetprop oldname 'theorem nil world)
+               (fgetprop oldname 'untranslated-theorem nil world)))
        (rule-classes (if rule-classesp
                          rule-classes
                        (fgetprop oldname 'classes nil world)))
        ((unless body)
         (er soft 'def-functional-instance-fn
             "Theorem ~x0 not found in the ACL2 world" oldname))
-       (alist (pairlis$ (strip-cars subst)
-                        (strip-cadrs subst)))
+       (alist (append (pairlis$ (strip-cars subst)
+                                (strip-cadrs subst))
+                      (pairlis$ (strip-cars macro-subst)
+                                (strip-cadrs macro-subst))))
        (new-body (sublis alist body))
-       (untrans-body (untranslate new-body nil world))
+       (untrans-body (if translate
+                         (untranslate new-body nil world)
+                       new-body))
        (form `(defthm ,newname
                 ,untrans-body
-                :hints (("goal" :use ((:functional-instance ,oldname . ,subst)))
+                :hints (("goal"
+                         ,@(if by-hint-p
+                               `(:by (:functional-instance ,oldname . ,subst))
+                             `(:use ((:functional-instance ,oldname . ,subst))))
+                         . ,(cdr (look-for-goal-hint hints)))
                         . ,hints)
                 :rule-classes ,rule-classes)))
-    (and (look-for-goal-hint hints)
-         (cw "WARNING:  In DEF-FUNCTIONAL-INSTANCE, any user-provided hint ~
-keyed on subgoal \"GOAL\" will be ignored.  If your proof fails, please try ~
-again with a computed hint or a subgoal specifier other than \"GOAL\". "))
+;;     (and (look-for-goal-hint hints)
+;;          (cw "WARNING:  In DEF-FUNCTIONAL-INSTANCE, any user-provided hint ~
+;; keyed on subgoal \"GOAL\" will be ignored.  If your proof fails, please try ~
+;; again with a computed hint or a subgoal specifier other than \"GOAL\". "))
     (value form)))
 
 (defmacro def-functional-instance
-  (newname oldname subst &key hints (rule-classes 'nil rule-classesp))
+  (newname oldname subst &key hints (rule-classes 'nil rule-classesp)
+           (translate 't)
+           (by-hint-p 'nil)
+           macro-subst)
   `(make-event
     (def-functional-instance-fn
-      ',newname ',oldname ',subst ',hints ',rule-classes ',rule-classesp state)))
+      ',newname ',oldname ',subst ',hints ',rule-classes ',rule-classesp ',translate ',macro-subst ',by-hint-p state)))

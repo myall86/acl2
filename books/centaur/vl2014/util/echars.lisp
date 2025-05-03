@@ -42,10 +42,10 @@
 (include-book "std/strings/decimal" :dir :system)
 (include-book "centaur/nrev/pure" :dir :system)
 (include-book "xdoc/alter" :dir :system)
-(local (include-book "centaur/misc/arith-equivs" :dir :system))
+(local (include-book "std/basic/arith-equivs" :dir :system))
 (local (include-book "arithmetic/top" :dir :system))
 (local (include-book "std/lists/top" :dir :system))
-(local (include-book "misc/assert" :dir :system))
+(local (include-book "std/testing/assert-bang" :dir :system))
 (local (include-book "arithmetic"))
 (local (std::add-default-post-define-hook :fix))
 
@@ -384,10 +384,8 @@ bounds."
    (let ((name 'vl-echar)
          (fields '(char loc)))
      `(progn
-        ,(std::da-make-maker-fn name fields nil)
-        ,(std::da-make-maker name fields)
-        ,(std::da-make-changer-fn name fields)
-        ,(std::da-make-changer name fields)
+        ,(std::da-make-maker name fields nil)
+        ,(std::da-make-changer name fields nil)
         ,(std::da-make-binder name fields))))
 
   ;; Rudimentary testing of defaggregate stuff
@@ -408,7 +406,7 @@ bounds."
 (xdoc::delete-topic vl-echar-p)
 
 (defxdoc vl-echar-p
-  :parents (extended-characters)
+  :parents (extended-characters vl-echar-raw)
   :short "Representation of a single extended character."
   :long "<p>Historically, a @('vl-echar-p') was an ordinary aggregate with a
 character and a location.  This was nice and simple, but required a lot of
@@ -492,7 +490,7 @@ the interface for constructing echars can be kept simple and bounds-free.</p>
   ;;   (implies (force (<= (nfix n) (len x)))
   ;;            (equal (vl-echarlist->chars (take n x))
   ;;                   (take n (vl-echarlist->chars x))))
-  ;;   :hints(("Goal" :in-theory (enable acl2::take-redefinition))))
+  ;;   :hints(("Goal" :in-theory (enable acl2::take))))
   )
 
 

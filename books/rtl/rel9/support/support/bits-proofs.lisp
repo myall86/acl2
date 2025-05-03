@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -132,7 +120,7 @@ stuff may happen (but we can easily handle these cases).
 (defthm bits-upper-bound
   (< (bits x i j) (expt 2 (+ 1 i (- j))))
   :rule-classes (:rewrite (:linear :trigger-terms ((bits x i j))))
-  :hints (("Goal" :in-theory (enable bits 
+  :hints (("Goal" :in-theory (enable bits
                                      expt-minus
                                      expt-split))))
 
@@ -148,11 +136,11 @@ stuff may happen (but we can easily handle these cases).
            (<= (bits x i j) (1- (expt 2 (+ i 1 (- j))))))
   :rule-classes (:rewrite (:linear :trigger-terms ((bits x i j))))
   :hints (("Goal" :cases ((rationalp x) (not (acl2-numberp x)))
-           :in-theory (enable bits 
+           :in-theory (enable bits
                               expt-minus
                               expt-split))))
 
-  
+
 ;like  mod-upper-bound-3
 (defthm bits-upper-bound-2
   (implies (and (<= (expt 2 (+ 1 i (- j))) z) ;backchain-limit?
@@ -229,9 +217,9 @@ stuff may happen (but we can easily handle these cases).
                 (integerp i)
                 )
            (equal (bits x i 0) (- x (* -1 (expt 2 (+ i 1))))))
-  :hints (("Goal" 
+  :hints (("Goal"
            :use (:instance bits-force (a -1)))))
-                                      
+
 ;remove:?
 ;(in-theory (disable bits-force))
 
@@ -252,9 +240,9 @@ stuff may happen (but we can easily handle these cases).
                           (integerp n))
            :in-theory (e/d (expt-minus
                               mod-cancel
-                              bits 
+                              bits
                               expt-split
-                            
+
                               )
                            (  ;these are disabled to speed up he proof:
                             INTEGERP-PROD-OF-3-FIRST-AND-LAST
@@ -288,18 +276,18 @@ stuff may happen (but we can easily handle these cases).
                           (integerp n))
            :in-theory (enable expt-minus
                               mod-cancel
-                              bits 
+                              bits
                               expt-split))))
 |#
 
 (local (in-theory (enable mod-cancel)))
-  
+
 ;allows you to split bit vectors into two parts
 ;free var n (where to split)
 ;resembles doc's bits-plus-bits-1 and another rule in merge
 (defthm bits-plus-bits2
   (implies (and ;(rationalp x)
-                (integerp i) 
+                (integerp i)
                 (integerp j)
                 (integerp n)
                 (<= j n)
@@ -356,7 +344,7 @@ stuff may happen (but we can easily handle these cases).
 (defthm bits-bvecp-simple
   (implies (equal k (+ 1 i (* -1 j)))
            (bvecp (bits x i j) k))
-  :hints (("Goal" :in-theory (enable 
+  :hints (("Goal" :in-theory (enable
                               bvecp))))
 
 
@@ -470,9 +458,9 @@ stuff may happen (but we can easily handle these cases).
 #|
 
 This series of events deals with simplifying expressions like
-(equal (bits x 8 0) 
+(equal (bits x 8 0)
        (+ (bits x 6 0) k))
-Intuitively, bits 6 down-to 0 appear on both sides of the sum and should be "cancelled".  
+Intuitively, bits 6 down-to 0 appear on both sides of the sum and should be "cancelled".
 The remaining bits will need to be "shifted" back into place.
 
 More rules are probably needed to make the theory complete.
@@ -490,10 +478,10 @@ More rules are probably needed to make the theory complete.
                 )
            (equal (equal (+ k (bits x i j))
                          (bits x i+ j))
-                  (equal (* (expt 2 (+ 1 i (- j))) 
-                            (BITS X I+ (+ 1 I))) 
+                  (equal (* (expt 2 (+ 1 i (- j)))
+                            (BITS X I+ (+ 1 I)))
                          k)))
-  :hints (("Goal"          
+  :hints (("Goal"
            :use (:instance bits-plus-bits-1 (n (+ i 1)) (i i+))
            :in-theory (enable expt-split)
            )))
@@ -509,10 +497,10 @@ More rules are probably needed to make the theory complete.
                 )
            (equal (equal (+ (bits x i j) k)
                          (bits x i+ j))
-                  (equal (* (expt 2 (+ 1 i (- j))) 
-                            (BITS X I+ (+ 1 I))) 
+                  (equal (* (expt 2 (+ 1 i (- j)))
+                            (BITS X I+ (+ 1 I)))
                          k)))
-  :hints (("Goal"          
+  :hints (("Goal"
            :use (:instance bits-plus-bits-1 (n (+ i 1)) (i i+))
            :in-theory (enable expt-split)
            )))
@@ -538,10 +526,10 @@ equality in which each side should have a power of 2 divided out of it
                 )
            (equal (equal (+ k (bits x i j))
                          (bits x i+ j))
-                  (equal (*  
-                            (BITS X I+ (+ 1 I))) 
+                  (equal (*
+                            (BITS X I+ (+ 1 I)))
                          (/ k (expt 2 (+ 1 i (- j)))))))
-  :hints (("Goal"          
+  :hints (("Goal"
            :use (:instance bits-cancel-lowbits-in-comparison)
            :in-theory (set-difference-theories
                        (enable expt-split)
@@ -564,9 +552,9 @@ equality in which each side should have a power of 2 divided out of it
            (equal (equal (+ (bits x i+ j) k)
                          (+ y (bits x i j)))
                   (equal (* (expt 2 (+ 1 i (- j )))
-                            (BITS X I+ (+ 1 I))) 
+                            (BITS X I+ (+ 1 I)))
                          (- y k))))
-  :hints (("Goal"          
+  :hints (("Goal"
            :use (:instance bits-plus-bits-1 (n (+ i 1)) (i i+))
            :in-theory (set-difference-theories
                        (enable expt-split)
@@ -587,9 +575,9 @@ equality in which each side should have a power of 2 divided out of it
                          (bits x i+ j))
                   (equal (* 2 (EXPT 2 I)
                            (/ (EXPT 2 J))
-                           (BITS X I+ (+ 1 I))) 
+                           (BITS X I+ (+ 1 I)))
                          0)))
-  :hints (("Goal"          
+  :hints (("Goal"
            :use (:instance bits-plus-bits-1 (n (+ i 1)) (i i+))
            :in-theory (set-difference-theories
                        (enable expt-split)
@@ -609,9 +597,9 @@ equality in which each side should have a power of 2 divided out of it
                          (bits x i j))
                   (equal (* 2 (EXPT 2 I)
                            (/ (EXPT 2 J))
-                           (BITS X I+ (+ 1 I))) 
+                           (BITS X I+ (+ 1 I)))
                          0)))
-  :hints (("Goal"          
+  :hints (("Goal"
            :use (:instance bits-plus-bits-1 (n (+ i 1)) (i i+))
            :in-theory (set-difference-theories
                        (enable expt-split)
@@ -672,7 +660,7 @@ equality in which each side should have a power of 2 divided out of it
 #|
 (defthm bits-shift-alt
   (implies (and (syntaxp (should-have-a-2-factor-divided-out x))
-                (> j 0) ;restricts application 
+                (> j 0) ;restricts application
                 (rationalp x)
 ;                (integerp n)
                 (integerp i)
@@ -760,7 +748,7 @@ equality in which each side should have a power of 2 divided out of it
                 (case-split (integerp j))
                 (case-split (integerp j2))
                 )
-           (< (BITS x i j) 
+           (< (BITS x i j)
               (BINARY-+ k (BINARY-* k (BITS x i j2)))))
   :hints (("Goal" :use (:instance bits-plus-bits2 (j j) (n j2)))))
 
@@ -774,7 +762,7 @@ equality in which each side should have a power of 2 divided out of it
                 (case-split (integerp j))
                 (case-split (integerp j2))
                 )
-           (equal (< (BINARY-+ k (BINARY-* k (BITS x i j2))) 
+           (equal (< (BINARY-+ k (BINARY-* k (BITS x i j2)))
                      (BITS x i j))
                   nil))
   :hints (("Goal" :use (:instance bits-plus-bits2 (j j) (n j2)))))
@@ -837,7 +825,7 @@ equality in which each side should have a power of 2 divided out of it
 
  (defthmd bits-ignore-negative-bits-of-integer-main-case
    (implies (and (<= j 0)
-                 (integerp x) 
+                 (integerp x)
                  (case-split (integerp j))
                  (case-split (<= j i))
                  )
@@ -893,7 +881,7 @@ equality in which each side should have a power of 2 divided out of it
   :hints (("Goal" :in-theory (set-difference-theories
                               (enable power2p)
                               '(bits-shift))
-           :use  (:instance bits-shift 
+           :use  (:instance bits-shift
                            (x (/ x c))
                            (n (expo c))
                            ))))
@@ -995,8 +983,8 @@ comments from bits.lisp (these may duplicate comments in this book)
            (equal (bits x i j)
                   (bits (/ x 2) (- i 1) (- j 1) )))
   :hints (("Goal" :in-theory (enable expt-minus
-                                     bits 
-                                     mod-cancel 
+                                     bits
+                                     mod-cancel
                                      expt-split-rewrite)))
   )
 
@@ -1070,9 +1058,9 @@ comments from bits.lisp (these may duplicate comments in this book)
 
 
 This series of events deals with simplifying expressions like
-(equal (bits x 8 0) 
+(equal (bits x 8 0)
        (+ (bits x 6 0) k))
-Intuitively, bits 6 down-to 0 appear on both sides of the sum and should be "cancelled".  
+Intuitively, bits 6 down-to 0 appear on both sides of the sum and should be "cancelled".
 The remaining bits will need to be "shifted" back into place.
 
 More rules are probably needed to make the theory complete.
@@ -1089,8 +1077,8 @@ More rules are probably needed to make the theory complete.
                 )
            (equal (equal (+ k (bits x i j))
                          (bits x i+ j))
-                  (equal (* (expt 2 (+ 1 i (- j))) 
-                            (BITS X I+ (+ 1 I))) 
+                  (equal (* (expt 2 (+ 1 i (- j)))
+                            (BITS X I+ (+ 1 I)))
                          k))))
 
 (defthm bits-cancel-lowbits-in-comparison-alt-2
@@ -1104,8 +1092,8 @@ More rules are probably needed to make the theory complete.
                 )
            (equal (equal (+ (bits x i j) k)
                          (bits x i+ j))
-                  (equal (* (expt 2 (+ 1 i (- j))) 
-                            (BITS X I+ (+ 1 I))) 
+                  (equal (* (expt 2 (+ 1 i (- j)))
+                            (BITS X I+ (+ 1 I)))
                          k))))
 
 
@@ -1129,8 +1117,8 @@ equality in which each side should have a power of 2 divided out of it
                 )
            (equal (equal (+ k (bits x i j))
                          (bits x i+ j))
-                  (equal (*  
-                            (BITS X I+ (+ 1 I))) 
+                  (equal (*
+                            (BITS X I+ (+ 1 I)))
                          (/ k (expt 2 (+ 1 i (- j))))))))
 
 
@@ -1149,7 +1137,7 @@ equality in which each side should have a power of 2 divided out of it
            (equal (equal (+ (bits x i+ j) k)
                          (+ y (bits x i j)))
                   (equal (* (expt 2 (+ 1 i (- j )))
-                            (BITS X I+ (+ 1 I))) 
+                            (BITS X I+ (+ 1 I)))
                          (- y k)))))
 
 ;better conclusion?
@@ -1165,7 +1153,7 @@ equality in which each side should have a power of 2 divided out of it
                          (bits x i+ j))
                   (equal (* 2 (EXPT 2 I)
                            (/ (EXPT 2 J))
-                           (BITS X I+ (+ 1 I))) 
+                           (BITS X I+ (+ 1 I)))
                          0))))
 
 (defthm bits-cancel-lowbits-in-comparison-no-constant-2
@@ -1180,7 +1168,7 @@ equality in which each side should have a power of 2 divided out of it
                          (bits x i j))
                   (equal (* 2 (EXPT 2 I)
                            (/ (EXPT 2 J))
-                           (BITS X I+ (+ 1 I))) 
+                           (BITS X I+ (+ 1 I)))
                          0))))
 ;the theory above (cancelling bits in comparisons) is not complete
 ;it should also deal with bitn
@@ -1189,7 +1177,7 @@ equality in which each side should have a power of 2 divided out of it
 
 (defthm bits-shift-alt
   (implies (and (syntaxp (should-have-a-2-factor-divided-out x))
-                (> j 0) ;restricts application 
+                (> j 0) ;restricts application
                 (rationalp x)
                 (integerp i)
                 (integerp j)
@@ -1331,8 +1319,8 @@ equality in which each side should have a power of 2 divided out of it
   :rule-classes (:rewrite :linear)
   :hints (("goal" :in-theory (enable bits x-times-something>=1))))
 
-(defthm bits-bvecp-when-x-is	
-  (implies (and (bvecp x k)	
+(defthm bits-bvecp-when-x-is
+  (implies (and (bvecp x k)
                 (case-split (<= 0 j))
                 )
            (bvecp (bits x i j) k))
@@ -1499,7 +1487,7 @@ equality in which each side should have a power of 2 divided out of it
 (local
  (defthm bits-fl-by-2-helper
    (implies (and (integerp i)
-                 (<= 0 i) 
+                 (<= 0 i)
                  )
             (equal (fl (* 1/2 (bits x i 0))) ;gen 0 to j?
                    (bits x i 1)))
@@ -1633,7 +1621,7 @@ equality in which each side should have a power of 2 divided out of it
                 (and (= (bits x (+ m n) n) 0)
                      (= (mod x (expt 2 n)) 0))))
   :rule-classes ()
-  :hints (("goal" :in-theory (e/d (bits expt-split) (BITS-FL)) 
+  :hints (("goal" :in-theory (e/d (bits expt-split) (BITS-FL))
            :use ((:instance mod-0-0 (m x) (n (expt 2 n)) (p (expt 2 (1+ m))))
                  (:instance bits-shift-down-1 (k n) (i m) (j 0))))))
 
@@ -1664,7 +1652,7 @@ equality in which each side should have a power of 2 divided out of it
                 )
            (equal (bits x i 0)
                   (mod x (expt 2 (1+ i)))))
-  :hints (("Goal" 
+  :hints (("Goal"
            :cases ((rationalp i) (complex-rationalp i))
            :in-theory (e/d (bits) ( EXPT-SPLIT)))))
 
@@ -1771,7 +1759,7 @@ equality in which each side should have a power of 2 divided out of it
            :expand   (bits x (1- j) 0)))
   )
 
-;note that although the RHS looks slightly gross, 
+;note that although the RHS looks slightly gross,
 ;gen the (integerp x) hyp!!
 (defthm bits-minus-better
   (implies (and (case-split (integerp x)) ;gen!
@@ -1799,7 +1787,7 @@ equality in which each side should have a power of 2 divided out of it
 ;BOZO export in lib/ or user/!
 (defthm bits-tighten
   (implies (and (bvecp x i)
-                (<= i n) 
+                (<= i n)
                 (case-split (integerp n))
                 )
            (equal (bits x n j)

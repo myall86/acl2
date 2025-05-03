@@ -33,7 +33,7 @@
 (include-book "../mlib/typedecide")
 (include-book "../mlib/welltyped")
 (include-book "../mlib/lvalues")
-(include-book "centaur/misc/arith-equivs" :dir :system)
+(include-book "std/basic/arith-equivs" :dir :system)
 (local (in-theory (enable acl2::arith-equiv-forwarding lnfix)))
 ;; (local (include-book "clause-processors/autohide" :dir :system))
 (local (include-book "../util/arithmetic"))
@@ -1053,7 +1053,7 @@ integer atom."
        ((when (eq finaltype :vl-unsigned))
         ;; Just do a zero-extension.
         (b* ((new-bits (append (replicate (- finalwidth guts.origwidth) :vl-0val)
-                               (redundant-list-fix guts.bits)))
+                               (list-fix guts.bits)))
              (new-guts (change-vl-weirdint guts
                                            :bits new-bits
                                            :origwidth finalwidth
@@ -1067,7 +1067,7 @@ integer atom."
        ;; Else, we want a sign-extension.
        (sign-bit  (car guts.bits))
        (new-bits  (append (replicate (- finalwidth guts.origwidth) sign-bit)
-                          (redundant-list-fix guts.bits)))
+                          (list-fix guts.bits)))
        (new-guts  (change-vl-weirdint guts
                                       :bits new-bits
                                       :origwidth finalwidth))
@@ -1733,7 +1733,6 @@ minor warning for assignments where the rhs is a constant.</p>"
            acl2::natp-rw
            posp-when-member-equal-of-pos-listp
            natp-when-member-equal-of-nat-listp
-           (:ruleset tag-reasoning)
            acl2::car-when-all-equalp
            member-equal-when-member-equal-of-cdr-under-iff
            (:ruleset basic-arithmetic-rules)
@@ -3709,7 +3708,7 @@ replace a positional assignment pattern."
                               assignment pattern ~a1"
                         :args (list (vl-context-fix ctx) (vl-expr-fix orig-x))))))
           (mv t (pairlis$ (vl-structmemberlist->types lhs-type.members)
-                          (redundant-list-fix (vl-exprlist-fix fields)))
+                          (list-fix (vl-exprlist-fix fields)))
               (ok))))
        (dim (if (consp udims) (car udims) (car pdims)))
        ((unless (and (not (eq dim :vl-unsized-dimension))
@@ -3729,7 +3728,7 @@ replace a positional assignment pattern."
                          (vl-datatype-update-dims pdims (cdr udims) lhs-type)
                        (vl-datatype-update-dims (cdr pdims) nil lhs-type))))
     (mv t (pairlis$ (repeat (len fields) new-datatype)
-                    (redundant-list-fix (vl-exprlist-fix fields)))
+                    (list-fix (vl-exprlist-fix fields)))
         (ok)))
   ///
   (defthm vl-exprlist-max-count-of-vl-assignpattern-positional-replacement

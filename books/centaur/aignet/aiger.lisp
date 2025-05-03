@@ -34,6 +34,7 @@
 (include-book "tools/defmacfun" :dir :system)
 (local (include-book "clause-processors/instantiate" :dir :system))
 (local (include-book "arithmetic/top-with-meta" :dir :system))
+(local (include-book "data-structures/list-defthms" :dir :system))
 (set-state-ok t)
 
 (local (in-theory (disable acl2::nth-with-large-index
@@ -53,30 +54,27 @@
   ;; sequentially, tracked by nextgate, which starts at 1+nins+nregs.
   (defiteration aignet-aiger-number-nodes (aignet aigernums)
     (declare (xargs :stobjs (aignet aigernums)
-                    :guard (<= (num-nodes aignet) (u32-length aigernums))
+                    :guard (<= (num-fanins aignet) (u32-length aigernums))
                     :guard-hints (("goal" :in-theory (enable aignet-idp)))))
     (b* ((type (id->type n aignet))
          (nextgate (lnfix nextgate))
          ((when (int= type (out-type)))
           (mv aigernums nextgate))
-         (val (aignet-seq-case
-               type (io-id->regp n aignet)
-               :gate  nextgate
-               :pi    (+ 1 (io-id->ionum n aignet))
-               :reg   (+ 1 (num-ins aignet) (io-id->ionum n aignet))
-               :const 0))
-         (nextgate (if (int= type (gate-type))
-                       (1+ nextgate)
-                     nextgate))
+         ((mv val nextgate) (aignet-case
+                              type (id->regp n aignet)
+                              :and   (mv nextgate (1+ nextgate))
+                              :xor   (mv (+ 2 nextgate) (+ 3 nextgate))
+                              :pi    (mv (+ 1 (ci-id->ionum n aignet)) nextgate)
+                              :reg   (mv (+ 1 (num-ins aignet) (ci-id->ionum n aignet)) nextgate)
+                              :const (mv 0 nextgate)))
          (aigernums (set-u32 n val aigernums)))
       (mv aigernums nextgate))
     :returns (mv aigernums nextgate)
-    :top-returns aigernums
     :index n
     :init-vals ((nextgate (+ 1 (num-ins aignet) (num-regs aignet))))
     :iter-decls ((type (integer 0 *) nextgate))
     :first 0
-    :last (num-nodes aignet))
+    :last (num-fanins aignet))
 
   (in-theory (disable aignet-aiger-number-nodes))
   (local (in-theory (enable aignet-aiger-number-nodes)))
@@ -88,6 +86,10 @@
             (aignet-aiger-number-nodes-iter n nextgate aignet aigernums)))
     :rule-classes :type-prescription)
 
+  (defthm natp-of-aignet-aiger-number-nodes-nextgate
+    (natp (mv-nth 1 (aignet-aiger-number-nodes aignet aigernums)))
+    :rule-classes :type-prescription)
+
   ;; (defun aignet-aiger-number-nodes-iter (n regoffset nextgate aignet aigernums)
   ;;   (declare (type (integer 0 *) n)
   ;;            (type (integer 0 *) regoffset)
@@ -95,9 +97,9 @@
   ;;            (xargs :stobjs (aignet aigernums)
   ;;                   :guard (and (u32arr-sizedp aigernums aignet)
   ;;                               (aignet-iterator-p n aignet))
-  ;;                   :measure (nfix (- (nfix (num-nodes aignet)) (nfix n)))))
-  ;;   (b* (((when (mbe :logic (zp (- (nfix (num-nodes aignet)) (nfix n)))
-  ;;                    :exec (int= (num-nodes aignet) n)))
+  ;;                   :measure (nfix (- (nfix (num-fanins aignet)) (nfix n)))))
+  ;;   (b* (((when (mbe :logic (zp (- (nfix (num-fanins aignet)) (nfix n)))
+  ;;                    :exec (int= (num-fanins aignet) n)))
   ;;         aigernums)
   ;;        (nextgate (lnfix nextgate))
   ;;        ((mv aigernums nextgate)
@@ -109,7 +111,7 @@
   ;;            (b* ((aigernums (set-u32 n (+ (if (int= (io-id->regp (to-id n) aignet) 1)
   ;;                                              (lnfix regoffset)
   ;;                                            1)
-  ;;                                          (io-id->ionum (to-id n) aignet))
+  ;;                                          (ci-id->ionum (to-id n) aignet))
   ;;                                     aigernums)))
   ;;              (mv aigernums nextgate)))
   ;;           (3 ;; CO -- skip
@@ -121,10 +123,12 @@
   ;;                               aigernums)))
 
   (defthm aigernums-size-of-aignet-aiger-number-nodes-iter
-    (implies (< (node-count aignet) (len aigernums))
-             (< (node-count aignet) (len (mv-nth 0 (aignet-aiger-number-nodes-iter
+    (implies (and (< (fanin-count aignet) (len aigernums))
+                  (<= (ifix n) (+ 1 (fanin-count aignet))))
+             (equal (len (mv-nth 0 (aignet-aiger-number-nodes-iter
                                                     n nextgate aignet
-                                                    aigernums)))))
+                                                    aigernums)))
+                    (len aigernums)))
     :hints((acl2::just-induct-and-expand
             (aignet-aiger-number-nodes-iter
              n nextgate aignet
@@ -143,8 +147,9 @@
 
 
   (defthm aigernums-size-of-aignet-aiger-number-nodes
-    (implies (< (node-count aignet) (len aigernums))
-             (< (node-count aignet) (len (aignet-aiger-number-nodes aignet aigernums))))
+    (implies (< (fanin-count aignet) (len aigernums))
+             (equal (len (mv-nth 0 (aignet-aiger-number-nodes aignet aigernums)))
+                    (len aigernums)))
     :rule-classes :linear)
 
   (defthm aignet-number-nodes-iter-nextgate-incr
@@ -155,6 +160,11 @@
     :hints((acl2::just-induct-and-expand
             (aignet-aiger-number-nodes-iter
                             n nextgate aignet aigernums)))
+    :rule-classes :linear)
+
+  (defthm aignet-number-nodes-nextgate-incr
+    (<= (+ 1 (num-ins aignet) (num-regs aignet))
+        (mv-nth 1 (aignet-aiger-number-nodes aignet aigernums)))
     :rule-classes :linear))
 
 
@@ -178,8 +188,8 @@
 
 (define aiger-fanins-precede-gates (n aignet aigernums)
   (declare (type (integer 0 *) n)
-           (xargs :guard (and (<= n (num-nodes aignet))
-                              (<= (num-nodes aignet) (u32-length aigernums)))
+           (xargs :guard (and (<= n (num-fanins aignet))
+                              (<= (num-fanins aignet) (u32-length aigernums)))
                   :guard-hints (("goal" :in-theory (enable aignet-idp)))))
   (b* (((when (zp n)) t)
        (n (1- n))
@@ -187,20 +197,29 @@
         (aiger-fanins-precede-gates n aignet aigernums))
        (idv0 (get-u32 (lit-id (gate-id->fanin0 n aignet)) aigernums))
        (idv1 (get-u32 (lit-id (gate-id->fanin1 n aignet)) aigernums))
-       (idvn (get-u32 n aigernums)))
-    (and (< idv0 idvn)
-         (< idv1 idvn)
-         (aiger-fanins-precede-gates n aignet aigernums)))
+       (idvn (get-u32 n aigernums))
+       (rest (aiger-fanins-precede-gates n aignet aigernums)))
+    (and (if (eql 1 (id->regp n aignet))
+             (and (< (+ 2 idv0) idvn)
+                  (< (+ 2 idv1) idvn))
+           (and (< idv0 idvn)
+                (< idv1 idvn)))
+         rest))
   ///
   (defcong nat-equiv equal (aiger-fanins-precede-gates n aignet aigernums) 1)
 
+  (local (in-theory (disable acl2::nfix-equal-to-nonzero
+                             acl2::inequality-with-nfix-hyp-2
+                             acl2::inequality-with-nfix-hyp-1
+                             acl2::zp-when-gt-0
+                             not)))
 
   (defthm aiger-fanins-precede-gates-of-update-later
     (implies (and (aiger-fanins-precede-gates
                    n aignet aigernums)
                   (<= (nfix n) (nfix m))
                   (aignet-idp m aignet)
-                  ;;(<= (nfix n) (num-nodes aignet))
+                  ;;(<= (nfix n) (num-fanins aignet))
                   )
              (aiger-fanins-precede-gates
               n aignet (update-nth m v aigernums)))
@@ -208,6 +227,7 @@
                                    ((:d aiger-fanins-precede-gates)))
             :induct (aiger-fanins-precede-gates
                      n aignet (update-nth m v aigernums))
+            :do-not-induct t
             :expand ((:free (aigernums)
                       (aiger-fanins-precede-gates
                        n aignet aigernums))
@@ -217,8 +237,8 @@
 
 (define aiger-max-id (n aignet aigernums)
   (declare (type (integer 0 *) n)
-           (xargs :guard (and (<= n (num-nodes aignet))
-                              (<= (num-nodes aignet) (u32-length aigernums)))
+           (xargs :guard (and (<= n (num-fanins aignet))
+                              (<= (num-fanins aignet) (u32-length aigernums)))
                   :verify-guards nil))
   :returns (max natp :rule-classes :type-prescription)
   (b* (((when (zp n)) 0)
@@ -266,16 +286,15 @@
                                                n nextgate aignet aigernums)))))))
     :rule-classes :linear))
 
-(defthm not-out-type-when-aignet-litp
-  (implies (aignet-litp lit aignet)
-           (not (equal (ctype (stype (car (lookup-id (lit-id lit) aignet))))
-                       (out-ctype))))
-  :hints(("Goal" :in-theory (enable aignet-litp))))
+;; (defthm not-out-type-when-aignet-litp
+;;   (implies (aignet-litp lit aignet)
+;;            (not (equal (ctype (stype (car (lookup-id (lit-id lit) aignet))))
+;;                        (out-ctype)))))
 
 
 
 (defthm aiger-fanins-precede-gate-of-aignet-aiger-number-nodes-iter
-  (implies (<= (nfix n) (num-nodes aignet))
+  (implies (<= (nfix n) (num-fanins aignet))
            (b* (((mv aigernums nextgate)
                  (aignet-aiger-number-nodes-iter
                   n (+ 1 (stype-count (pi-stype) aignet)
@@ -305,83 +324,62 @@
 
 (defthm aiger-fanins-precede-gate-of-aignet-aiger-number-nodes
   (aiger-fanins-precede-gates
-   (+ 1 (node-count aignet)) aignet
-   (aignet-aiger-number-nodes aignet aigernums))
+   (+ 1 (fanin-count aignet)) aignet
+   (mv-nth 0 (aignet-aiger-number-nodes aignet aigernums)))
   :hints(("Goal" :in-theory (enable aignet-aiger-number-nodes))))
 
 
-(defsection lits-ordered-when-aiger-fanins-precede-gates
-  (local (include-book "centaur/bitops/ihsext-basics" :dir :system))
-  (local (include-book "arithmetic/top-with-meta" :dir :system))
-  (defthm mk-lit-compare
-    (implies (< (nfix id1) (nfix id2))
-             (< (lit-val (mk-lit id1 neg1))
-                (lit-val (mk-lit id2 neg2))))
-    :hints(("Goal" :in-theory (e/d* (mk-lit
-                                     acl2::ihsext-redefs)))))
-
-  (defthm ids-ordered-when-aiger-fanins-precede-gates
-    (implies (and (aiger-fanins-precede-gates n aignet aigernums)
-                  (< (nfix m) (nfix n))
-                  (equal (id->type m aignet) (gate-type)))
-             (let* ((look (lookup-id m aignet))
-                    (a0 (nth (lit-id (aignet-lit-fix
-                                      (gate-node->fanin0 (car look))
-                                      (cdr look)))
-                             aigernums))
-                    (a1 (nth (lit-id (aignet-lit-fix
-                                      (gate-node->fanin1 (car look))
-                                      (cdr look)))
-                             aigernums)))
-               (and (< (nfix a0) (nfix (nth m aigernums)))
-                    ;; (implies (natp a0)
-                    ;;          (< a0 (nfix (nth m aigernums))))
-                    (< (nfix a1) (nfix (nth m aigernums)))
-                    ;; (implies (natp a1)
-                    ;;          (< a1 (nfix (nth m aigernums))))
-                    )))
-    :hints (("goal" :induct (aiger-fanins-precede-gates n aignet aigernums)
-             :in-theory (enable (:i aiger-fanins-precede-gates))
-             :expand ((aiger-fanins-precede-gates n aignet aigernums)))))
-
-  (defthm lits-ordered-when-aiger-fanins-precede-gates-1
-    (implies (and (aiger-fanins-precede-gates n aignet aigernums)
-                  (< (nfix m) (nfix n))
-                  (equal (id->type m aignet) (gate-type)))
-             (b* ((look (lookup-id m aignet))
-                  (?a0 (nth (lit-id (aignet-lit-fix
-                                     (gate-node->fanin0 (car look))
-                                     (cdr look)))
-                            aigernums))
-                  (?a1 (nth (lit-id (aignet-lit-fix
-                                     (gate-node->fanin1 (car look))
-                                     (cdr look)))
-                            aigernums))
-                  (mid (nth m aigernums)))
-               (and (< (lit-val (mk-lit a0 neg0))
-                       (lit-val (mk-lit mid 0)))
-                    (< (lit-val (mk-lit a1 neg1))
-                       (lit-val (mk-lit mid 0))))))
-    :rule-classes :linear))
 
 
 
 
 
 
+;; (local (defthmd id-lte-max-fanin-when-aignet-litp-0
+;;          (implies (aignet-litp lit aignet)
+;;                   (<= (lit-id lit)
+;;                       (fanin-count (find-max-fanin aignet))))
+;;          :hints(("Goal" :in-theory (enable aignet-litp find-max-fanin)))))
+
+
+(local (in-theory (disable w)))
 
 (defsection aignet-outs-write-aiger-lits
+  ;; (local (defthmd id-lte-max-fanin-when-aignet-litp-2
+  ;;          (implies (and (not (equal (ctype (stype (car (lookup-id id aignet))))
+  ;;                                    :output))
+  ;;                        (natp id)
+  ;;                        (<= id (fanin-count aignet)))
+  ;;                   (<= id
+  ;;                       (fanin-count (find-max-fanin aignet))))
+  ;;          :hints(("Goal" :in-theory (enable lookup-id find-max-fanin)))))
+
+  ;; (local (defthmd id-lte-max-fanin-when-aignet-litp-1
+  ;;          (implies (and (aignet-extension-p aignet aignet2)
+  ;;                        (not (equal (ctype (stype (car (lookup-id id aignet2))))
+  ;;                                    :output))
+  ;;                        (natp id)
+  ;;                        (<= id (fanin-count aignet2)))
+  ;;                   (<= id
+  ;;                       (fanin-count (find-max-fanin aignet))))
+  ;;          :hints(("Goal" :in-theory (enable aignet-idp id-lte-max-fanin-when-aignet-litp-2)))))
+
+  
+
   (local (defthm <-0-by-transitive
            (implies (and (< a b)
                          (<= 0 a))
                     (< 0 b))
            :rule-classes :forward-chaining))
+
+  (local (in-theory (enable lookup-stype-in-bounds)))
+
   (defiteration aignet-outs-write-aiger-lits (aignet aigernums channel state)
     (declare (xargs :stobjs (aignet aigernums state)
                     :guard (and (symbolp channel)
                                 (open-output-channel-p channel :byte state)
-                                (<= (num-nodes aignet) (u32-length aigernums)))))
-    (b* ((fanin-lit (co-id->fanin (outnum->id idx aignet) aignet))
+                                (<= (num-fanins aignet) (u32-length aigernums)))))
+    (b* ((fanin-lit (outnum->fanin idx aignet))
          (aiger-id (get-u32 (lit-id fanin-lit) aigernums))
          (lit (mk-lit aiger-id (lit-neg fanin-lit)))
          (state (acl2::write-ascii-nat lit channel state)))
@@ -411,7 +409,17 @@
              (let ((state (aignet-outs-write-aiger-lits aignet aigernums channel state)))
                (and (state-p1 state)
                     (open-output-channel-p1 channel :byte state))))
-    :hints(("Goal" :in-theory (enable aignet-outs-write-aiger-lits)))))
+    :hints(("Goal" :in-theory (enable aignet-outs-write-aiger-lits))))
+
+  (defthm w-state-of-aignet-outs-write-aiger-lits-iter
+    (equal (w (aignet-outs-write-aiger-lits-iter idx aignet aigernums channel state))
+           (w state))
+    :hints((acl2::just-induct-and-expand
+            (aignet-outs-write-aiger-lits-iter idx aignet aigernums channel state))))
+
+  (defthm w-state-of-aignet-outs-write-aiger-lits
+    (equal (w (aignet-outs-write-aiger-lits aignet aigernums channel state))
+           (w state))))
 
 (defsection aignet-nxsts-write-aiger-lits
   (local (defthm <-0-by-transitive
@@ -424,12 +432,8 @@
     (declare (xargs :stobjs (aignet aigernums state)
                     :guard (and (symbolp channel)
                                 (open-output-channel-p channel :byte state)
-                                (<= (num-nodes aignet) (u32-length aigernums)))))
-    (b* ((reg-id (regnum->id idx aignet))
-         (nxst (reg-id->nxst reg-id aignet))
-         (fanin-lit (if (int= (id->type nxst aignet) (out-type))
-                        (co-id->fanin nxst aignet)
-                      (mk-lit nxst 0)))
+                                (<= (num-fanins aignet) (u32-length aigernums)))))
+    (b* ((fanin-lit (regnum->nxst idx aignet))
          (aiger-id (get-u32 (lit-id fanin-lit) aigernums))
          (lit (mk-lit aiger-id (lit-neg fanin-lit)))
          (state (acl2::write-ascii-nat lit channel state)))
@@ -459,40 +463,174 @@
              (let ((state (aignet-nxsts-write-aiger-lits aignet aigernums channel state)))
                (and (state-p1 state)
                     (open-output-channel-p1 channel :byte state))))
-    :hints(("Goal" :in-theory (enable aignet-nxsts-write-aiger-lits)))))
+    :hints(("Goal" :in-theory (enable aignet-nxsts-write-aiger-lits))))
+
+  (defthm w-state-of-aignet-nxsts-write-aiger-lits-iter
+    (equal (w (aignet-nxsts-write-aiger-lits-iter idx aignet aigernums channel state))
+           (w state))
+    :hints((acl2::just-induct-and-expand
+            (aignet-nxsts-write-aiger-lits-iter idx aignet aigernums channel state))))
+
+  (defthm w-state-of-aignet-nxsts-write-aiger-lits
+    (equal (w (aignet-nxsts-write-aiger-lits aignet aigernums channel state))
+           (w state))))
+
+(local
+ (defsection lits-ordered-when-aiger-fanins-precede-gates
+   (local (include-book "centaur/bitops/ihsext-basics" :dir :system))
+   (local (include-book "arithmetic/top-with-meta" :dir :system))
+   (defthm mk-lit-compare
+     (implies (< (nfix id1) (nfix id2))
+              (< (mk-lit id1 neg1)
+                 (mk-lit id2 neg2)))
+     :hints(("Goal" :in-theory (e/d* (mk-lit
+                                      acl2::ihsext-redefs)))))
+
+   (defthm ids-ordered-when-aiger-fanins-precede-gates
+     (implies (and (aiger-fanins-precede-gates n aignet aigernums)
+                   (< (nfix m) (nfix n))
+                   (equal (id->type m aignet) (gate-type)))
+              (let* ((look (lookup-id m aignet))
+                     (a0 (nth (lit-id (fanin 0 look))
+                              aigernums))
+                     (a1 (nth (lit-id (fanin 1 look))
+                              aigernums)))
+                (and (< (nfix a0) (nfix (nth m aigernums)))
+                     ;; (implies (natp a0)
+                     ;;          (< a0 (nfix (nth m aigernums))))
+                     (< (nfix a1) (nfix (nth m aigernums)))
+                     ;; (implies (natp a1)
+                     ;;          (< a1 (nfix (nth m aigernums))))
+                     (implies (equal (stype (car (lookup-id m aignet))) :xor)
+                              (And (< (nfix a0) (+ -2 (nfix (nth m aigernums))))
+                                   (< (nfix a1) (+ -2 (nfix (nth m aigernums))))
+                                   (< (nfix a0) (+ -1 (nfix (nth m aigernums))))
+                                   (< (nfix a1) (+ -1 (nfix (nth m aigernums))))
+                                   (<= 2 (nfix (nth m aigernums)))
+                                   (satlink::varp (+ -2 (nfix (nth m aigernums))))
+                                   (< 0 (nth m aigernums))
+                                   (integerp (nth m aigernums))))
+                     )))
+     :hints (("goal" :induct (aiger-fanins-precede-gates n aignet aigernums)
+              :in-theory (enable (:i aiger-fanins-precede-gates))
+              :expand ((aiger-fanins-precede-gates n aignet aigernums)))))
+
+   (defthm lits-ordered-when-aiger-fanins-precede-gates-1
+     (implies (and (aiger-fanins-precede-gates n aignet aigernums)
+                   (< (nfix m) (nfix n))
+                   (equal (id->type m aignet) (gate-type)))
+              (b* ((look (lookup-id m aignet))
+                   (?a0 (nth (lit-id (fanin 0 look))
+                             aigernums))
+                   (?a1 (nth (lit-id (fanin 1 look))
+                             aigernums))
+                   (mid (nth m aigernums)))
+                (and (< (mk-lit a0 neg0)
+                        (mk-lit mid 0))
+                     (< (mk-lit a1 neg1)
+                        (mk-lit mid 0))
+                     (implies (equal (stype (car (lookup-id m aignet))) :xor)
+                              (and (< (mk-lit a0 neg0)
+                                      (mk-lit (+ -2 (nfix mid)) 0))
+                                   (< (mk-lit a1 neg0)
+                                      (mk-lit (+ -2 (nfix mid)) 0))
+                                   (< (mk-lit a0 neg0)
+                                      (mk-lit (+ -1 (nfix mid)) 0))
+                                   (< (mk-lit a1 neg0)
+                                      (mk-lit (+ -1 (nfix mid)) 0)))))))
+     :hints (("goal" :use ((:instance ids-ordered-when-aiger-fanins-precede-gates))
+              :in-theory (disable ids-ordered-when-aiger-fanins-precede-gates)))
+     :rule-classes :linear)))
+
+(define aignet-write-aiger-and-gate ((lit1 litp)
+                               (lit2 litp)
+                               (id natp)
+                               (channel symbolp)
+                               (state))
+  :guard (and (symbolp channel)
+              (open-output-channel-p channel :byte state)
+              (< (lit-id lit1) id)
+              (< (lit-id lit2) id))
+  :returns (new-state)
+  :prepwork ((local (defthm make-lit-greater
+                      (implies (and (< (lit->var lit) id)
+                                    (natp id) (litp lit))
+                               (and (< lit (make-lit id neg))
+                                    (<= lit (make-lit id neg))))
+                      :hints(("Goal" :use ((:instance mk-lit-compare
+                                            (id1 (lit->var lit)) (neg1 (lit->neg lit))
+                                            (id2 id) (neg2 neg))))))))
+  (b* ((lit1 (lit-fix lit1))
+       (lit2 (lit-fix lit2))
+       ((mv lit1 lit2)
+        (if (< lit1 lit2)
+            (mv lit2 lit1)
+          (mv lit1 lit2)))
+       (delta1 (- (mk-lit id 0) lit1))
+       (delta2 (- lit1 lit2))
+       (state (acl2::aiger-write-delta delta1 channel state)))
+    (acl2::aiger-write-delta delta2 channel state))
+  ///
+
+  (defret open-output-channel-p1-of-<fn>
+    (implies (and (state-p1 state)
+                  (symbolp channel)
+                  (open-output-channel-p1 channel :byte state))
+             (and (state-p1 new-state)
+                  (open-output-channel-p1 channel :byte new-state))))
+
+  (defret w-state-of-<fn>
+    (equal (w new-state)
+           (w state))))
 
 (defsection aignet-write-aiger-gates
-  (local (in-theory (disable gate-fanin0-aignet-litp-when-aignet-nodes-ok
-                             gate-fanin1-aignet-litp-when-aignet-nodes-ok)))
+  ;; (local (defthm id-less-than-max-fanin-by-gate-ctype
+  ;;          (implies (and ;; (not (equal (ctype (stype (car (lookup-id id aignet)))) :output))
+  ;;                        ;; (not (equal (ctype (stype (car (lookup-id id aignet)))) :const))
+  ;;                    (equal (ctype (stype (car (lookup-id id aignet)))) :gate)
+  ;;                    (natp id))
+  ;;                   (<= id (fanin-count (find-max-fanin aignet))))
+  ;;          :hints (("goal" :use ((:instance id-less-than-max-fanin-by-ctype))
+  ;;                   :in-theory (disable id-less-than-max-fanin-by-ctype)))
+  ;;          :rule-classes ((:forward-chaining  :trigger-terms
+  ;;                          ((ctype (stype (car (lookup-id id aignet)))))))))
+  (local (in-theory (e/d (;; id-less-than-max-fanin-by-stype
+                          )
+                         (gate-fanin0-aignet-litp-when-aignet-nodes-ok
+                          gate-fanin1-aignet-litp-when-aignet-nodes-ok))))
   (defiteration aignet-write-aiger-gates (aignet aigernums channel state)
     (declare (xargs :stobjs (aignet aigernums state)
                     :guard (and (symbolp channel)
                                 (open-output-channel-p channel :byte state)
-                                (<= (num-nodes aignet) (u32-length aigernums))
+                                (<= (num-fanins aignet) (u32-length aigernums))
                                 (aiger-fanins-precede-gates
-                                 (num-nodes aignet) aignet aigernums))
-                    :guard-hints ('(:in-theory (enable aignet-idp)))))
+                                 (num-fanins aignet) aignet aigernums))
+                    :guard-hints ('(:in-theory (enable aignet-idp)
+                                    :do-not-induct t))))
     (b* ((slot0 (id->slot id 0 aignet))
          (type (snode->type slot0))
          ((unless (int= type (gate-type)))
           state)
-         (lit1 (gate-id->fanin0 id aignet))
-         (lit2 (gate-id->fanin1 id aignet))
-         (lit1 (aignet-to-aiger-lit lit1 aigernums))
-         (lit2 (aignet-to-aiger-lit lit2 aigernums))
-         ((mv lit1 lit2)
-          (if (< (lit-val lit1) (lit-val lit2))
-              (mv lit2 lit1)
-            (mv lit1 lit2)))
-         (lhslit (aignet-to-aiger-lit (mk-lit id 0) aigernums))
-         (delta1 (- (lit-val lhslit) (lit-val lit1)))
-         (delta2 (- (lit-val lit1) (lit-val lit2)))
-         (state (acl2::aiger-write-delta delta1 channel state)))
-      (acl2::aiger-write-delta delta2 channel state))
+         (slot1 (id->slot id 1 aignet))
+         (lit1 (snode->fanin slot0))
+         (lit2 (snode->fanin slot1))
+         (aiger-lit1 (aignet-to-aiger-lit lit1 aigernums))
+         (aiger-lit2 (aignet-to-aiger-lit lit2 aigernums))
+         (aiger-id (get-u32 id aigernums))
+         ((when (eql 0 (snode->regp slot1)))
+          ;; and
+          (aignet-write-aiger-and-gate aiger-lit1 aiger-lit2 aiger-id channel state))
+         ;; xor
+         (state (aignet-write-aiger-and-gate aiger-lit1 aiger-lit2 (- aiger-id 2) channel state))
+         (state (aignet-write-aiger-and-gate (lit-negate aiger-lit1) (lit-negate aiger-lit2)
+                                             (- aiger-id 1) channel state)))
+      (aignet-write-aiger-and-gate (mk-lit (- aiger-id 2) 1)
+                                   (mk-lit (- aiger-id 1) 1)
+                                   aiger-id channel state))
     :returns state
     :index id
     :first 0
-    :last (num-nodes aignet))
+    :last (num-fanins aignet))
 
   (in-theory (disable aignet-write-aiger-gates))
   (local (in-theory (enable aignet-write-aiger-gates)))
@@ -514,22 +652,34 @@
                   (open-output-channel-p1 channel :byte state))
              (let ((state (aignet-write-aiger-gates aignet aigernums channel state)))
                (and (state-p1 state)
-                    (open-output-channel-p1 channel :byte state))))))
+                    (open-output-channel-p1 channel :byte state)))))
+
+  (defthm w-state-of-aignet-write-aiger-gates-iter
+    (equal (w (aignet-write-aiger-gates-iter idx aignet aigernums channel state))
+           (w state))
+    :hints((acl2::just-induct-and-expand
+            (aignet-write-aiger-gates-iter idx aignet aigernums channel state))))
+
+  (defthm w-state-of-aignet-write-aiger-gates
+    (equal (w (aignet-write-aiger-gates aignet aigernums channel state))
+           (w state))))
 
 
 (define aignet-write-aiger-chan (aignet (channel symbolp) state)
   :guard (open-output-channel-p channel :byte state)
+  :returns (new-state)
   (b* (((local-stobjs aigernums)
         (mv aigernums state))
-       (aigernums (resize-u32 (num-nodes aignet) aigernums))
+       (aigernums (resize-u32 (num-fanins aignet) aigernums))
        (nlatches (num-regs aignet))
        (nouts    (num-outs aignet))
        (nins     (num-ins aignet))
-       (ngates   (num-gates aignet))
-       (aigernums (aignet-aiger-number-nodes aignet aigernums))
+       ;; (ngates   (num-gates aignet))
+       ((mv aigernums next-gate) (aignet-aiger-number-nodes aignet aigernums))
+       (num-gates (- next-gate (+ 1 nins nlatches)))
        (state (acl2::aiger-write-header
-               (+ (num-ins aignet) (num-regs aignet) (num-gates aignet))
-               nins nlatches nouts ngates 0 0 channel state))
+               (+ (num-ins aignet) (num-regs aignet) num-gates)
+               nins nlatches nouts num-gates 0 0 channel state))
        (state (aignet-nxsts-write-aiger-lits aignet aigernums channel state))
        (state (aignet-outs-write-aiger-lits aignet aigernums channel state))
        (state (aignet-write-aiger-gates aignet aigernums channel state)))
@@ -542,9 +692,40 @@
                   (open-output-channel-p1 channel :byte state))
              (let ((state (aignet-write-aiger-chan aignet channel state)))
                (and (state-p1 state)
-                    (open-output-channel-p1 channel :byte state))))))
+                    (open-output-channel-p1 channel :byte state)))))
+
+  (defret w-state-of-<fn>
+    (equal (w new-state)
+           (w state))))
 
 (defttag aignet-write-aiger)
+
+;; BOZO these are not in the right place
+(defthm w-of-open-output-channel
+  (equal (w (mv-nth 1 (open-output-channel fname type state)))
+         (w state))
+  :hints(("Goal" :in-theory (enable w open-output-channel get-global))))
+
+(defthm w-of-close-output-channel
+  (equal (w (close-output-channel channel state))
+         (w state))
+  :hints(("Goal" :in-theory (enable w close-output-channel get-global))))
+
+(defthm w-of-open-input-channel
+  (equal (w (mv-nth 1 (open-input-channel fname type state)))
+         (w state))
+  :hints(("Goal" :in-theory (enable w open-input-channel get-global))))
+
+(defthm w-of-close-input-channel
+  (equal (w (close-input-channel channel state))
+         (w state))
+  :hints(("Goal" :in-theory (enable w close-input-channel get-global))))
+
+(defthm w-of-put-global
+  (implies (not (eq name 'acl2::current-acl2-world))
+           (equal (w (put-global name val state))
+                  (w state)))
+  :hints(("Goal" :in-theory (enable w put-global get-global))))
 
 (define aignet-write-aiger
   ((fname stringp "the aiger file to be written")
@@ -553,6 +734,7 @@
   :parents (aignet)
   :short "Write an aignet into a binary <a
   href='http://fmv.jku.at/aiger/'>AIGER</a> file."
+  :returns (new-state)
   (b* (((mv channel state)
         (open-output-channel! fname :byte state))
        ((unless channel)
@@ -560,23 +742,37 @@
             "Failed to open aiger output file ~x0~%" fname)
         state)
        (state (aignet-write-aiger-chan aignet channel state)))
-    (close-output-channel channel state)))
+    (close-output-channel channel state))
+  ///
+  (defthm state-p1-of-aignet-write-aiger
+    (implies (and (stringp fname)
+                  (state-p1 state))
+             (state-p1 (aignet-write-aiger fname aignet state))))
 
-(acl2::defmacfun
- aiger-write (fname &optional latch-aigs out-aigs acl2::&auto state)
- (declare (xargs :stobjs state
-                 :guard (and (stringp fname)
-                             (true-listp latch-aigs)
-                             (true-listp out-aigs)
-                             (non-bool-atom-listp (alist-keys latch-aigs)))
-                 :guard-debug t))
- ; (declare (xargs :mode :program))
- (b* (((local-stobjs aignet) (mv pis state aignet))
-      (len (+ (len latch-aigs) (len out-aigs)))
-      ((mv aignet ?varmap invars ?regvars)
-       (aig-fsm-to-aignet latch-aigs out-aigs (+ 1 (* 5 len)) 2 aignet))
-      (state (aignet-write-aiger fname aignet state)))
-   (mv invars state aignet)))
+  (defret w-state-of-<fn>
+    (equal (w new-state)
+           (w state))))
+
+(define aiger-write (fname &optional latch-aigs out-aigs (state 'state))
+  (declare (xargs :guard (and (stringp fname)
+                              (true-listp latch-aigs)
+                              (true-listp out-aigs)
+                              (acl2::aig-var-listp (alist-keys latch-aigs)))
+                  :guard-debug t))
+; (declare (xargs :mode :program))
+  :returns (mv input-vars
+               new-state) 
+  (b* (((local-stobjs aignet) (mv pis state aignet))
+       (len (+ (len latch-aigs) (len out-aigs)))
+       ((mv aignet ?varmap invars ?regvars)
+        (aig-fsm-to-aignet latch-aigs out-aigs (+ 1 (* 5 len)) 2 aignet))
+       (state (aignet-write-aiger fname aignet state)))
+    (mv invars state aignet))
+  ///
+  (defret w-state-of-<fn>
+    (equal (w new-state)
+           (w state))))
+
 
 
 ;; (defun aignet-no-outsp (n aignet)
@@ -606,17 +802,21 @@
 
 (define aignet-make-n-inputs (n aignet)
   (declare (type (integer 0 *) n))
-  (b* (((when (zp n)) aignet)
+  (b* (((when (zp n))
+        (mbe :logic (non-exec (node-list-fix aignet))
+             :exec aignet))
        (aignet (aignet-add-in aignet)))
     (aignet-make-n-inputs (1- n) aignet))
   ///
+  (fty::deffixequiv aignet-make-n-inputs)
+
   (def-aignet-preservation-thms aignet-make-n-inputs)
 
   (defthm num-inputs-of-aignet-make-n-inputs
     (equal (stype-count (pi-stype)
                         (aignet-make-n-inputs n aignet))
            (+ (nfix n) (stype-count (pi-stype) aignet))))
-  
+
   (defthm stype-counts-preserved-of-aignet-make-n-inputs
     (implies (not (equal (stype-fix stype) (pi-stype)))
              (equal (stype-count stype (aignet-make-n-inputs n aignet))
@@ -625,13 +825,13 @@
 
 ;; (defthm aignet-no-outsp-add-in-preserved
 ;;   (implies (and (aignet-no-outsp n aignet)
-;;                 (<= (nfix n) (nfix (num-nodes aignet))))
+;;                 (<= (nfix n) (nfix (num-fanins aignet))))
 ;;            (aignet-no-outsp n (mv-nth 1 (aignet-add-in aignet)))))
 
 ;; (defthm aignet-no-outsp-of-make-n-inputs
-;;   (implies (aignet-no-outsp (nth *num-nodes* aignet) aignet)
+;;   (implies (aignet-no-outsp (nth *num-fanins* aignet) aignet)
 ;;            (let ((aignet (aignet-make-n-inputs n aignet)))
-;;              (implies (equal (nfix k) (nfix (num-nodes aignet)))
+;;              (implies (equal (nfix k) (nfix (num-fanins aignet)))
 ;;                       (aignet-no-outsp k aignet)))))
 
 ;; (defthm aignet-ris-unconnected-add-in-preserved
@@ -649,17 +849,21 @@
 
 (define aignet-make-n-regs (n aignet)
   (declare (type (integer 0 *) n))
-  (b* (((when (zp n)) aignet)
+  (b* (((when (zp n))
+        (mbe :logic (non-exec (node-list-fix aignet))
+             :exec aignet))
        (aignet (aignet-add-reg aignet)))
     (aignet-make-n-regs (1- n) aignet))
   ///
+  (fty::deffixequiv aignet-make-n-regs)
+
   (def-aignet-preservation-thms aignet-make-n-regs)
 
   (defthm num-regs-of-aignet-make-n-regs
     (equal (stype-count (reg-stype)
                         (aignet-make-n-regs n aignet))
            (+ (nfix n) (stype-count (reg-stype) aignet))))
-  
+
   (defthm stype-counts-preserved-of-aignet-make-n-regs
     (implies (not (equal (stype-fix stype) (reg-stype)))
              (equal (stype-count stype (aignet-make-n-regs n aignet))
@@ -668,13 +872,13 @@
 
 ;; (defthm aignet-no-outsp-add-reg-preserved
 ;;   (implies (and (aignet-no-outsp n aignet)
-;;                 (<= (nfix n) (nfix (num-nodes aignet))))
+;;                 (<= (nfix n) (nfix (num-fanins aignet))))
 ;;            (aignet-no-outsp n (mv-nth 1 (aignet-add-reg aignet)))))
 
 ;; (defthm aignet-no-outsp-of-make-n-regs
-;;   (implies (aignet-no-outsp (nth *num-nodes* aignet) aignet)
+;;   (implies (aignet-no-outsp (nth *num-fanins* aignet) aignet)
 ;;            (let ((aignet (aignet-make-n-regs n aignet)))
-;;              (implies (equal (nfix k) (nfix (num-nodes aignet)))
+;;              (implies (equal (nfix k) (nfix (num-fanins aignet)))
 ;;                       (aignet-no-outsp k aignet)))))
 
 ;; (defthm aignet-ris-unconnected-add-reg-preserved
@@ -704,7 +908,7 @@
 ;; (defthm new-reg-of-aignet-add-reg
 ;;   (implies (equal (nfix k) (nfix (num-regs aignet)))
 ;;            (equal (nth-id k (nth *regsi* (mv-nth 1 (aignet-add-reg aignet))))
-;;                   (to-id (nth *num-nodes* aignet))))
+;;                   (to-id (nth *num-fanins* aignet))))
 ;;   :hints(("Goal" :in-theory (enable* aignet-frame-thms
 ;;                                      aignet-add-reg))))
 
@@ -743,25 +947,28 @@
 (define aignet-read-aiger-latches/outs (idx litarr ncount nxtbyte channel state)
   (declare (type (integer 0 *) idx)
            (type (integer 0 *) ncount)
-           (Xargs :stobjs (litarr state)
-                  :guard (and (symbolp channel)
+           (Xargs :guard (and (symbolp channel)
                               (open-input-channel-p channel :byte state)
                               (acl2::maybe-byte-p nxtbyte)
                               (<= ncount (lits-length litarr))
                               (<= idx ncount))
                   :measure (nfix (- (nfix ncount)
                                     (nfix idx)))))
+  :returns (mv err
+               new-litarr
+               (new-nxtbyte acl2::maybe-byte-p :rule-classes (:rewrite :type-prescription))
+               new-state)
   (b* (((when (mbe :logic (zp (- (nfix ncount)
                                  (nfix idx)))
                    :exec (= idx ncount)))
-        (mv nil litarr nxtbyte state))
+        (mv nil litarr (acl2::maybe-byte-fix nxtbyte) state))
        ((mv num nxtbyte state)
         (acl2::read-ascii-nat channel nxtbyte state))
        ((when (not num))
         (cw "Failed to parse number~%")
         (break$)
         (mv "Failed to parse number" litarr nxtbyte state))
-       (litarr (set-lit idx (to-lit num) litarr))
+       (litarr (set-lit idx num litarr))
        ((mv nxt nxtbyte state)
         (acl2::read-byte-buf channel nxtbyte state))
        ((when (not (eql nxt (char-code #\Newline))))
@@ -787,10 +994,10 @@
                (and (state-p1 state)
                     (open-input-channel-p1 channel :byte state)))))
 
-  (defthm maybe-byte-p-of-aignet-read-aiger-latches/outs
-    (implies (acl2::maybe-byte-p nxtbyte)
-             (acl2::maybe-byte-p (mv-nth 2 (aignet-read-aiger-latches/outs
-                                            idx litarr ncount nxtbyte channel state))))))
+  
+  (defret w-state-of-<fn>
+    (equal (w new-state)
+           (w state))))
 
 
 
@@ -819,31 +1026,29 @@
                               (a (numerator b)) (b (denominator b))))))))))
 
    (defthm id-in-bounds-of-diff
-     (implies (and (posp num-nodes)
+     (implies (and (posp num-fanins)
                    (posp delta1))
               (<
                (LIT-ID
-                (TO-LIT
-                 (+ (LIT-VAL (MK-LIT num-nodes 0))
-                    (- delta1))))
-               num-nodes))
-     :hints(("Goal" :in-theory (e/d (lit-id mk-lit
+                (+ (MK-LIT num-fanins 0)
+                   (- delta1)))
+               num-fanins))
+     :hints(("Goal" :in-theory (e/d (lit-id mk-lit lit-fix
                                             nfix)
                                     (floor))))
      :rule-classes :linear)
 
    (defthm id-in-bounds-of-diff2
-     (implies (and (posp num-nodes)
+     (implies (and (posp num-fanins)
                    (posp delta1)
                    (natp delta2))
               (<
                (LIT-ID
-                (TO-LIT
-                 (+
-                  (LIT-VAL (MK-LIT num-nodes 0))
-                  (- delta1)
-                  (- delta2))))
-               num-nodes))
+                (+
+                 (MK-LIT num-fanins 0)
+                 (- delta1)
+                 (- delta2)))
+               num-fanins))
      :hints (("goal" :use ((:instance id-in-bounds-of-diff
                             (delta1 (+ delta1 delta2))))))
      :rule-classes :linear)))
@@ -861,12 +1066,11 @@
 
 ;; (defthm aignet-no-outsp-of-aignet-add-gate
 ;;   (implies (and (aignet-no-outsp n aignet)
-;;                 (<= (nfix n) (nfix (num-nodes aignet))))
+;;                 (<= (nfix n) (nfix (num-fanins aignet))))
 ;;            (aignet-no-outsp n (mv-nth 1 (aignet-add-gate f0 f1 aignet)))))
 
 (define aignet-read-aiger-gates (idx numgates aignet nxtbyte channel state)
-  (declare (Xargs :stobjs (aignet state)
-                  :guard (and (symbolp channel)
+  (declare (Xargs :guard (and (symbolp channel)
                               (open-input-channel-p channel :byte state)
                               (acl2::maybe-byte-p nxtbyte)
                               (natp idx) (natp numgates)
@@ -876,13 +1080,18 @@
                   :measure (nfix (- (nfix numgates)
                                     (nfix idx)))
                   :guard-hints (("goal" :do-not-induct t
-                                 :in-theory (enable aignet-litp aignet-idp)))))
-  :returns (mv msg aignet nxtbyte state)
+                                 :in-theory (enable aignet-idp))
+                                (and stable-under-simplificationp
+                                     '(:in-theory (enable litp))))))
+  :returns (mv msg
+               new-aignet
+               (new-nxtbyte acl2::maybe-byte-p :rule-classes (:rewrite :type-prescription))
+               new-state)
   (b* (((when (mbe :logic (zp (- (nfix numgates)
                                  (nfix idx)))
                    :exec (= idx numgates)))
-        (mv nil aignet nxtbyte state))
-       (aiger-idx (lit-val (mk-lit (num-nodes aignet) 0)))
+        (mv nil aignet (acl2::maybe-byte-fix nxtbyte) state))
+       (aiger-idx (mk-lit (num-fanins aignet) 0))
        ((mv err delta1 nxtbyte state)
         (acl2::read-bytecoded-nat channel nxtbyte state))
        ((when err) (mv err aignet nxtbyte state))
@@ -899,9 +1108,9 @@
        ((when err) (mv err aignet nxtbyte state))
        (aiger-rhs1 (- aiger-idx delta1))
        (aiger-rhs2 (- aiger-rhs1 delta2))
-       (rhs1 (to-lit aiger-rhs1))
-       (rhs2 (to-lit aiger-rhs2))
-       (aignet (aignet-add-gate rhs1 rhs2 aignet)))
+       (rhs1 aiger-rhs1)
+       (rhs2 aiger-rhs2)
+       (aignet (aignet-add-and rhs1 rhs2 aignet)))
     (aignet-read-aiger-gates
      (1+ (nfix idx)) numgates aignet nxtbyte channel state))
 
@@ -925,11 +1134,16 @@
   (def-aignet-preservation-thms aignet-read-aiger-gates)
 
   (defthm stype-counts-preserved-of-aignet-read-aiger-gates
-    (implies (not (equal (stype-fix stype) (gate-stype)))
+    (implies (and (not (equal (stype-fix stype) (and-stype)))
+                  (not (equal (stype-fix stype) (xor-stype))))
              (equal (stype-count stype (mv-nth 1 (aignet-read-aiger-gates
                                                   idx numgates aignet nxtbyte
                                                   channel state)))
-                    (stype-count stype aignet)))))
+                    (stype-count stype aignet))))
+
+  (defret w-state-of-<fn>
+    (equal (w new-state)
+           (w state))))
 
 
 ;; (def-aignet-frame aignet-read-aiger-gates
@@ -942,10 +1156,10 @@
 
 ;; (def-aignet-preservation-thms aignet-read-aiger-gates)
 
-;; (defthm num-nodes-of-aignet-read-aiger-gates
-;;   (implies (natp (nth *num-nodes* aignet))
-;;            (<= (nth *num-nodes* aignet)
-;;                (nth *num-nodes* (mv-nth 1 (aignet-read-aiger-gates
+;; (defthm num-fanins-of-aignet-read-aiger-gates
+;;   (implies (natp (nth *num-fanins* aignet))
+;;            (<= (nth *num-fanins* aignet)
+;;                (nth *num-fanins* (mv-nth 1 (aignet-read-aiger-gates
 ;;                                           idx numgates aignet nxtbyte channel
 ;;                                           state)))))
 ;;   :rule-classes (:rewrite :linear))
@@ -962,7 +1176,7 @@
 ;; (defthm aignet-ris-unconnected-of-aignet-add-regin
 ;;   (implies (and (aignet-ris-unconnected k aignet)
 ;;                 (aignet-idp (id-fix ro) aignet)
-;;                 (< (io-id->ionum ro aignet) (nfix k))
+;;                 (< (ci-id->ionum ro aignet) (nfix k))
 ;;                 (aignet-well-formedp aignet))
 ;;            (aignet-ris-unconnected k (aignet-add-regin f ro aignet)))
 ;;   :hints(("Goal" :in-theory (enable* aignet-frame-thms
@@ -979,17 +1193,17 @@
 ;;                                  (aignet-well-formedp-regnum))))))
 
 ;; (defthm aignet-no-outsp-of-aignet-read-aiger-gates
-;;   (implies (aignet-no-outsp (nth *num-nodes* aignet) aignet)
+;;   (implies (aignet-no-outsp (nth *num-fanins* aignet) aignet)
 ;;            (let ((aignet (mv-nth 1 (aignet-read-aiger-gates idx numgates aignet nxtbyte channel
 ;;                                                          state))))
-;;              (implies (equal (nfix k) (nfix (num-nodes aignet)))
+;;              (implies (equal (nfix k) (nfix (num-fanins aignet)))
 ;;                       (aignet-no-outsp k aignet))))
 ;;   :hints(("goal" :induct t
 ;;           :expand ((aignet-no-outsp k aignet)))))
 
 ;; (defthm aignet-no-outsp-of-aignet-add-regin
 ;;   (implies (and (aignet-no-outsp k aignet)
-;;                 (<= (nfix k) (nfix (num-nodes aignet))))
+;;                 (<= (nfix k) (nfix (num-fanins aignet))))
 ;;            (aignet-no-outsp k (aignet-add-regin f ro aignet)))
 ;;   :hints(("Goal" :in-theory (enable* aignet-frame-thms))))
 
@@ -998,7 +1212,7 @@
  (defthm aignet-not-output-when-no-outs2
    (implies (and (equal (stype-count (po-stype) aignet2) 0)
                  (equal (stype-count (nxst-stype) aignet2) 0)
-                 (<= (nfix id) (node-count aignet2))
+                 (<= (nfix id) (fanin-count aignet2))
                  (aignet-extension-p aignet aignet2))
             (not (equal (ctype (stype (car (lookup-id id aignet))))
                         (out-ctype))))
@@ -1018,7 +1232,7 @@
            (xargs :stobjs (regarr aignet)
                   :guard (and (<= (num-regs aignet) (lits-length regarr))
                               (<= idx (num-regs aignet))
-                              (<= maxid (num-nodes aignet))
+                              (<= maxid (num-fanins aignet))
                               (non-exec
                                (and (equal (num-outs (lookup-id (1- maxid) aignet))
                                            0)
@@ -1026,8 +1240,8 @@
                                            0))))
                   :measure (nfix (- (nfix (num-regs aignet))
                                     (nfix idx)))
-                  :guard-hints(("goal" 
-                                :in-theory (enable* aignet-litp aignet-idp)
+                  :guard-hints(("goal"
+                                :in-theory (enable* aignet-idp)
                                 :do-not-induct t))))
   :guard-debug t
   (b* (((when (mbe :logic (zp (- (nfix (num-regs aignet))
@@ -1037,8 +1251,7 @@
        (fanin (get-lit idx regarr))
        ((when (<= (lnfix maxid) (lit-id fanin)))
         (mv "PO fanin out of bounds" aignet))
-       (ro (regnum->id idx aignet))
-       (aignet (aignet-set-nxst fanin ro aignet)))
+       (aignet (aignet-set-nxst fanin idx aignet)))
     (aignet-aiger-copy-nxsts (1+ (lnfix idx)) maxid regarr aignet))
 
   ///
@@ -1050,19 +1263,19 @@
                                                   idx maxid regarr aignet)))
                     (stype-count stype aignet)))))
 
-  
+
 
 ;; (local (defthm linear-help1
 ;;          (implies (and (< (id-val (lit-id bla-bla)) maxid)
-;;                        (<= maxid (nth *num-nodes* aignet)))
-;;                   (< (id-val (lit-id bla-bla)) (nth *num-nodes* aignet)))))
+;;                        (<= maxid (nth *num-fanins* aignet)))
+;;                   (< (id-val (lit-id bla-bla)) (nth *num-fanins* aignet)))))
 
 
 ;; (local (in-theory (disable linear-help1)))
 
 ;; (defthm aignet-no-outsp-of-aignet-add-out
 ;;   (implies (and (aignet-no-outsp k aignet)
-;;                 (<= (nfix k) (nfix (num-nodes aignet))))
+;;                 (<= (nfix k) (nfix (num-fanins aignet))))
 ;;            (aignet-no-outsp k (aignet-add-out f aignet)))
 ;;   :hints(("Goal" :in-theory (enable* aignet-frame-thms))))
 
@@ -1072,7 +1285,7 @@
            (type (integer 0 *) outnum)
            (xargs :stobjs (outarr aignet)
                   :guard (and (<= outnum (lits-length outarr))
-                              (<= maxid (num-nodes aignet))
+                              (<= maxid (num-fanins aignet))
                               (<= idx outnum)
                               (non-exec
                                (and (equal (num-outs (lookup-id (1- maxid) aignet))
@@ -1081,14 +1294,14 @@
                                            0))))
                   :measure (nfix (- (nfix outnum)
                                     (nfix idx)))
-                  :guard-hints(("goal" 
-                                :in-theory (enable* aignet-idp aignet-litp)
+                  :guard-hints(("goal"
+                                :in-theory (enable* aignet-idp)
                                 :do-not-induct t))))
   (b* (((when (mbe :logic (zp (- (nfix outnum)
                                  (nfix idx)))
                    :exec (int= idx outnum)))
         (mv nil aignet))
-       (fanin (to-lit (get-lit idx outarr)))
+       (fanin (get-lit idx outarr))
        ((when (<= (lnfix maxid) (lit-id fanin)))
         (mv "Register fanin out of bounds" aignet))
        (aignet (aignet-add-out fanin aignet)))
@@ -1125,6 +1338,9 @@
                   :guard-debug t
                   :guard-hints (("goal"
                                  :do-not-induct t))))
+  :returns (mv err
+               new-aignet
+               new-state)
   (b* (((mv err i l a o b c nxtbyte state)
         (acl2::aiger-parse-header channel nil state))
        ((when err) (mv err aignet state))
@@ -1148,7 +1364,7 @@
                (er hard? 'aignet-read-aiger
                    "Wrong number of gates read: ~x0, should be ~x1~%"
                    (num-gates aignet) a)))
-       (maxid (num-nodes aignet))
+       (maxid (num-fanins aignet))
        ((mv err aignet) (aignet-aiger-copy-nxsts 0 maxid regarr aignet))
        ((when err) (mv err aignet state outarr regarr))
        ((mv err aignet) (aignet-aiger-copy-outs 0 maxid outarr (+ o b c) aignet)))
@@ -1163,7 +1379,13 @@
              (let ((state (mv-nth 2 (aignet-read-aiger-chan
                                      aignet channel state))))
                (and (state-p1 state)
-                    (open-input-channel-p1 channel :byte state))))))
+                    (open-input-channel-p1 channel :byte state)))))
+
+  (defret w-state-of-<fn>
+    (equal (w new-state)
+           (w state))))
+
+
 
 (define aignet-read-aiger
   ((fname stringp "the name of the aiger file to be read")
@@ -1172,14 +1394,26 @@
   :parents (aignet)
   :short "Read an aignet from a binary <a
   href='http://fmv.jku.at/aiger/'>AIGER</a> file."
+  :returns (mv err
+               new-aignet
+               new-state)
   (b* (((mv channel state) (open-input-channel fname :byte state))
        ((when (not channel))
         (mv "Could not open input file" aignet state))
        ((mv err aignet state)
         (aignet-read-aiger-chan aignet channel state))
        (state (close-input-channel channel state)))
-    (mv err aignet state)))
+    (mv err aignet state))
+  ///
+  (defthm state-p1-of-aignet-read-aiger
+    (implies (and (state-p1 state)
+                  (Stringp fname))
+             (state-p1 (mv-nth 2 (aignet-read-aiger fname aignet state)))))
+
+  (defret w-state-of-<fn>
+    (equal (w new-state)
+           (w state))))
 
 
 
- 
+

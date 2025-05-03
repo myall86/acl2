@@ -68,7 +68,9 @@
   ((len natp)
    (value natp)
    acc)
-  :measure (nfix len)
+; Removed after v7-2 by Matt K. since logically, the definition is
+; non-recursive:
+; :measure (nfix len)
   :enabled t
   (mbe :logic
        (revappend (vl-constint-lsb-bits-aux len value) acc)
@@ -129,7 +131,7 @@ handled any sign/zero extensions, so we assume here that the atom's
                        :vl-1val
                        :vl-1val
                        :vl-1val))))
-  
+
 
 (local
  (assert! (equal (vl-constint->msb-bits

@@ -1,3 +1,5 @@
+#!/usr/bin/env ruby
+
 # VL Verilog Toolkit
 # Copyright (C) 2008-2015 Centaur Technology
 #
@@ -28,6 +30,7 @@
 #
 # Original author: Jared Davis <jared@centtech.com>
 
+require 'require_relative' if RUBY_VERSION =~ /1\.8/
 require_relative '../utils'
 
 outlaw_bad_warnings()
@@ -64,6 +67,25 @@ outlaw_warning(:m1, "VL-WARN-TRUNCATION", "normal3")
 match_warning(:m1, "VL-WARN-TRUNCATION", "trunc1")
 
 
+outlaw_warning(:a0, "VL-WARN-TRUNCATION", "mod1")
+outlaw_warning(:a0, "VL-WARN-TRUNCATION", "mod2")
+outlaw_warning(:a0, "VL-WARN-TRUNCATION", "mod3")
+
+match_warning(:a0, "VL-WARN-TRUNCATION", "mod4")
+match_warning(:a0, "VL-WARN-TRUNCATION", "mod5")
+
+outlaw_warning(:a1, "VL-WARN-TRUNCATION", "xx0")
+outlaw_warning(:a1, "VL-WARN-TRUNCATION", "xx1")
+outlaw_warning(:a1, "VL-WARN-TRUNCATION", "xx2")
+
+outlaw_warning(:a1, "VL-WARN-TRUNCATION", "yy0")
+match_warning(:a1, "VL-WARN-EXTENSION", "yy0")
+outlaw_warning(:a1, "VL-WARN-TRUNCATION", "yy1")
+match_warning(:a1, "VL-WARN-TRUNCATION", "yy2")
+
+outlaw_warning(:a1, "VL-WARN-TRUNCATION", "zz0")
+outlaw_warning(:a1, "VL-WARN-TRUNCATION", "zz1")
+match_warning(:a1, "VL-WARN-TRUNCATION", "zz2")
 
 test_passed()
 

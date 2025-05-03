@@ -1,26 +1,13 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
 ;
 ; Contact:
-;   David Russinoff
+;   David M. Russinoff
 ;   1106 W 9th St., Austin, TX 78703
-;   http://www.russsinoff.com/
+;   david@russinoff.com
+;   http://www.russinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
+; See license file books/rtl/rel11/license.txt.
 ;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
-;
-; Author: David M. Russinoff (david@russinoff.com)
 
 (in-package "RTL")
 
@@ -31,11 +18,7 @@
 (set-inhibit-warnings "theory") ; avoid warning in the next event
 (local (in-theory nil))
 
-;; From basic.lisp:
-
-(defund fl (x)
-  (declare (xargs :guard (real/rationalp x)))
-  (floor x 1))
+(include-book "defs")
 
 ;;;**********************************************************************
 ;;;				BVECP
@@ -56,7 +39,9 @@
 		(< x (expt 2 k))))
   :rule-classes :forward-chaining)
 
-(defun nats (n) (if (zp n) () (cons (1- n) (nats (1- n)))))
+(defun nats (n)
+  (declare (xargs :guard (natp n)))
+  (if (zp n) () (cons (1- n) (nats (1- n)))))
 
 (defthm bvecp-member
   (implies (and (natp n)
@@ -143,10 +128,17 @@
 		  (integerp j))
 	     (and (natp (bits x i j))
 		  (< (bits x i j) (expt 2 (1+ (- i j))))))
-  :rule-classes())
+    :rule-classes())
+
+(defthmd bits-upper-bound
+  (implies (and (integerp i)
+                (integerp j))
+           (< (bits x i j)
+              (expt 2 (1+ (- i j)))))
+  :rule-classes :linear)
 
 (defthm mod-bits-equal
-  (implies (= (mod x (expt 2 (1+ i))) 
+  (implies (= (mod x (expt 2 (1+ i)))
 	      (mod y (expt 2 (1+ i))))
 	   (= (bits x i j) (bits y i j)))
   :rule-classes ())
@@ -197,15 +189,18 @@
 		  (< x 0)
 		  (>= x (- (expt 2 j)))
 		  (>= i j))
-	     (equal (bits x i j) 
+	     (equal (bits x i j)
                     (1- (expt 2 (1+ (- i j)))))))
 
-(defthmd bits-minus-1
-    (implies (and (natp i)
-		  (natp j)
-		  (>= i j))
-	     (equal (bits -1 i j) 
-                    (1- (expt 2 (1+ (- i j)))))))
+(defthmd bits-top-ones
+  (implies (and (natp i)
+                (natp j)
+		(>= i j)
+		(natp x)
+		(< x (expt 2 (1+ i)))
+		(>= x (- (expt 2 (1+ i)) (expt 2 j))))
+	   (equal (bits x i j)
+	          (1- (expt 2 (- (1+ i) j))))))
 
 (defthm bits-bits-sum
   (implies (and (integerp x)
@@ -261,6 +256,24 @@
                   (- (fl (/ x (expt 2 j)))
                      (* (expt 2 (- i j))
                         (fl (/ x (expt 2 i)))))))
+  :rule-classes ())
+
+(defthmd bits-fl-diff-alt
+  (implies (and (integerp x)
+                (integerp i)
+                (integerp j)
+                (>= i (1- j)))
+           (equal (bits x i j)
+                  (- (fl (/ x (expt 2 j)))
+                     (* (expt 2 (- (1+ i) j))
+                        (fl (/ x (expt 2 (1+ i)))))))))
+
+(defthm bits-mod-fl
+  (implies (and (integerp i)
+                (integerp j))
+           (equal (bits x (1- i) j)
+                  (mod (fl (/ x (expt 2 j)))
+                       (expt 2 (- i j)))))
   :rule-classes ())
 
 (defthm bits-neg-indices
@@ -369,7 +382,7 @@
 		(<= j2 j) (<= j i) (<= i i2)
 		(equal k (bits k2 (+ i (- j2)) (+ (- j2) j)))
 		(<= 0 i) (<= 0 j) (<= 0 k) (<= 0 i2) (<= 0 j2) (<= 0 k2)
-		(integerp i) (integerp j)  (integerp k) (integerp i2) (integerp j2) (integerp k2))
+		(integerp i) (integerp j) (integerp k) (integerp i2) (integerp j2) (integerp k2))
 	   (equal (equal k (bits x i j))
 		  t)))
 
@@ -377,7 +390,7 @@
 ;;(thm (implies (equal 7 (bits x 8 6))
 ;;		(not (equal 4 (bits x 15 6)))))
 
-(defthmd bits-dont-match 
+(defthmd bits-dont-match
   (implies (and (syntaxp (and (quotep i)
 			      (quotep j)
 			      (quotep k)))
@@ -388,7 +401,7 @@
 		(<= j2 j) (<= j i) (<= i i2)
 		(not (equal k (bits k2 (+ i (- j2)) (+ (- j2) j))))
 		(<= 0 i) (<= 0 j) (<= 0 k) (<= 0 i2) (<= 0 j2) (<= 0 k2)
-		(integerp i) (integerp j)  (integerp k) (integerp i2) (integerp j2) (integerp k2))
+		(integerp i) (integerp j) (integerp k) (integerp i2) (integerp j2) (integerp k2))
 	   (equal (equal k (bits x i j))
 		  nil)))
 )
@@ -491,8 +504,8 @@
     (implies (natp i)
 	     (equal (bitn -1 i) 1)))
 
-;; The rewrite rule neg-bitn-2 has the hypotheses (integerp n) and (< x (- (expt 2 k) (expt 2 n))), 
-;; where n does not occur in the lhs.  When n is bound to a large integer, (expt 2 n) blows up. 
+;; The rewrite rule neg-bitn-2 has the hypotheses (integerp n) and (< x (- (expt 2 k) (expt 2 n))),
+;; where n does not occur in the lhs.  When n is bound to a large integer, (expt 2 n) blows up.
 
 (defthmd neg-bitn-2
     (implies (and (integerp x)
@@ -550,6 +563,8 @@
   :rule-classes ())
 
 (defun sumbits (x n)
+  (declare (xargs :guard (and (integerp x)
+                              (natp n))))
   (if (zp n)
       0
     (+ (* (expt 2 (1- n)) (bitn x (1- n)))
@@ -569,33 +584,37 @@
 	     (equal (sumbits x n)
 		    x)))
 
-(defun all-bits-p (b k)
-  (if (zp k)
-      t
-    (and (or (= (nth (1- k) b) 0)
-	     (= (nth (1- k) b) 1))
-	 (all-bits-p b (1- k)))))
+(defnd all-bits-p (b k)
+  (if (posp k)
+      (and (consp b)
+           (all-bits-p (cdr b) (1- k))
+           (or (equal (car b) 0)
+               (equal (car b) 1)))
+    (and (true-listp b)
+         (equal k 0))))
 
 (defun sum-b (b k)
+  (declare (xargs :guard (all-bits-p b k)))
   (if (zp k)
       0
     (+ (* (expt 2 (1- k)) (nth (1- k) b))
        (sum-b b (1- k)))))
 
 (defthmd sum-bitn
-  (implies (and (natp n)
-		(all-bits-p b n)
+  (implies (and (all-bits-p b n)
 	        (natp k)
 		(< k n))
            (equal (bitn (sum-b b n) k)
 	          (nth k b))))
 
-;; The next lemma can be used to prove equality of two bit vectors by 
+;; The next lemma can be used to prove equality of two bit vectors by
 ;; proving that they have the same value at bit n for all n.
 
-(defun bit-diff (x y)
-  (declare (xargs :measure (+ (abs (ifix x)) (abs (ifix y)))))
-  (if (or (not (integerp x)) (not (integerp y)) (= x y))
+(defn bit-diff (x y)
+  (declare (xargs :measure (:? x y)))
+  (if (or (not (integerp x))
+          (not (integerp y))
+          (= x y))
       ()
     (if (= (bitn x 0) (bitn y 0))
         (1+ (bit-diff (fl (/ x 2)) (fl (/ y 2))))
@@ -644,8 +663,8 @@
   :rule-classes ())
 
 (defthmd bitn-plus-mult
-    (implies (and (< n m) 
-		  (integerp m) 
+    (implies (and (< n m)
+		  (integerp m)
 		  (integerp k))
 	     (equal (bitn (+ x (* k (expt 2 m))) n)
 		    (bitn x n))))
@@ -673,19 +692,19 @@
          (bits y (1- n) 0))
     0))
 
-;; We define a macro, CAT, that takes a list of alternating data values and 
-;; sizes.  CAT-SIZE returns the formal sum of the sizes.  The list must contain 
-;; at least 1 data/size pair, but we do not need to specify this in the guard, 
+;; We define a macro, CAT, that takes a list of alternating data values and
+;; sizes.  CAT-SIZE returns the formal sum of the sizes.  The list must contain
+;; at least 1 data/size pair, but we do not need to specify this in the guard,
 ;; and leaving it out of the guard simplifies the guard proof.
 
-(defun formal-+ (x y)
-  (declare (xargs :guard t))
+(defn formal-+ (x y)
   (if (and (acl2-numberp x) (acl2-numberp y))
       (+ x y)
     (list '+ x y)))
 
 (defun cat-size (x)
-  (declare (xargs :guard (and (true-listp x) (evenp (length x)))))
+  (declare (xargs :guard (and (true-listp x)
+                              (evenp (length x)))))
   (if (endp (cddr x))
       (cadr x)
     (formal-+ (cadr x)
@@ -698,9 +717,9 @@
         ((endp (cddddr x))
          `(binary-cat ,@x))
         (t
-         `(binary-cat ,(car x) 
-                      ,(cadr x) 
-                      (cat ,@(cddr x)) 
+         `(binary-cat ,(car x)
+                      ,(cadr x)
+                      (cat ,@(cddr x))
                       ,(cat-size (cddr x))))))
 
 (defthm cat-nonnegative-integer-type
@@ -737,6 +756,16 @@
 (defthmd cat-bits-2
     (equal (cat x m (bits y (1- n) 0) n)
 	   (cat x m y n)))
+
+(defthm cat-bits-3
+  (implies (and (integerp i) (integerp m) (>= i (1- m)))
+           (equal (cat (bits x i 0) m y n)
+                  (cat x m y n))))
+
+(defthm cat-bits-4
+  (implies (and (integerp i) (integerp n) (>= i (1- n)))
+           (equal (cat x m (bits y i 0) n)
+                  (cat x m y n))))
 
 (defthm cat-associative
   (implies (and (case-split (<= (+ m n) p))
@@ -835,7 +864,7 @@
 		    (if (>= j n)
 			(bits x (if (< i (+ m n))
 				    (- i n)
-				  (1- m)) 
+				  (1- m))
 			      (- j n))
 		      (cat (bits x (if (< i (+ m n))
 					(- i n)
@@ -859,7 +888,7 @@
 		    (if (>= j n)
 			(bits x (if (< i (+ m n))
 				    (- i n)
-				  (1- m)) 
+				  (1- m))
 			      (- j n))
 		      (cat (bits x (if (< i (+ m n))
 				       (- i n)
@@ -893,26 +922,16 @@
 		      (bitn x (- i n))
 		    0)))))
 
-;; We introduce mbe for MULCAT not because we want particularly fast execution, 
-;; but because the existing logic definition does not satisfy the guard of cat, 
-;; which can't be changed because of the guard of bits.
-
 (defund mulcat (l n x)
-  (declare (xargs :guard (and (integerp l) (< 0 l) (acl2-numberp n) (natp x))))
-  (mbe :logic (if (and (integerp n) (> n 0))
-                  (cat (mulcat l (1- n) x)
-                       (* l (1- n))
-                       x
-                       l)
-                0)
-       :exec  (cond ((eql n 1)
-                     (bits x (1- l) 0))
-                    ((and (integerp n) (> n 0))
-                     (cat (mulcat l (1- n) x)
-                          (* l (1- n))
-                          x
-                          l))
-                    (t 0))))
+  (declare (xargs :guard (and (natp l)
+                              (natp n)
+                              (natp x))))
+  (if (and (integerp n) (> n 0))
+      (cat (mulcat l (1- n) x)
+           (* l (1- n))
+           x
+           l)
+    0))
 
 (defthm mulcat-nonnegative-integer-type
   (and (integerp (mulcat l n x))
@@ -935,7 +954,7 @@
 
 (defthm mulcat-1
     (implies (natp l)
-	     (equal (mulcat l 1 x) 
+	     (equal (mulcat l 1 x)
 		    (bits x (1- l) 0))))
 
 (defthm mulcat-0
@@ -956,33 +975,167 @@
 )
 
 ;;;**********************************************************************
-;;;		      Signed Integer Encodings
+;;;		 Signed Integer and Fixed-Point Encodings
 ;;;**********************************************************************
 
 (defsection-rtl |Signed Integer Formats| |Bit Vectors|
 
-(defun intval (w x)
-  (if (= (bitn x (1- w)) 1)
-      (- x (expt 2 w))
-    x))
+(defnd ui (r) r)
 
-(defthm intval-bits
+(defund si (r n)
+  (declare (xargs :guard (and (integerp r)
+                              (natp n))))
+  (if (= (bitn r (1- n)) 1)
+      (- r (expt 2 n))
+    r))
+
+(defthm int-si
+  (implies (and (integerp r)
+                (natp n))
+	   (integerp (si r n)))
+  :rule-classes (:type-prescription :rewrite))
+
+(defthm si-bits
     (implies (and (integerp x)
-		  (natp w)
-		  (< x (expt 2 (1- w)))
-		  (>= x (- (expt 2 (1- w)))))
-	     (= (intval w (bits x (1- w) 0))
+		  (natp n)
+		  (< x (expt 2 (1- n)))
+		  (>= x (- (expt 2 (1- n)))))
+	     (= (si (bits x (1- n) 0) n)
                 x))
-    :rule-classes nil)
+    :rule-classes ())
 
-(defun sign-extend (n m x)
-  (bits (intval m x) (1- n) 0))
+(defthmd bits-si
+  (implies (and (integerp n)
+                (< i n))
+           (equal (bits (si r n) i j)
+                  (bits r i j))))
 
-(defthmd intval-sign-extend
+(defthmd si-shift
+  (implies (and (natp n)
+                (natp k)
+                (bvecp r n))
+           (equal (si (* (expt 2 k) r) (+ k n))
+                  (* (expt 2 k) (si r n)))))
+
+(defund sextend (m n r)
+  (declare (xargs :guard (and (natp m)
+                              (natp n)
+                              (integerp r))))
+  (bits (si r n) (1- m) 0))
+
+(defthmd si-sextend
     (implies (and (natp n)
 		  (natp m)
-		  (<= m n)
-		  (bvecp x m))
-	     (equal (intval n (sign-extend n m x))
-		    (intval m x))))
+		  (<= n m)
+		  (bvecp r n))
+	     (equal (si (sextend m n r) m)
+		    (si r n))))
+
+(defthmd si-approx
+  (implies (and (not (zp n))
+                (integerp x)
+                (integerp y)
+                (< (abs (si (mod x (expt 2 n)) n))
+                   (- (expt 2 (1- n)) (abs (- x y)))))
+           (equal (- (si (mod x (expt 2 n)) n)
+                     (si (mod y (expt 2 n)) n))
+                  (- x y))))
+
+(defthmd si-to-fl-mod
+  (implies (and (rationalp x)
+                (integerp m)
+                (integerp n)
+                (< m n))
+           (equal (si x n)
+                  (+ (* (expt 2 m)
+                        (si (fl (/ x (expt 2 m)))
+                            (- n m)))
+                     (mod x (expt 2 m))))))
+
+;;;**********************************************************************
+;;;                      Fixed-Point Registers
+;;;**********************************************************************
+
+(defund uf (r n m)
+  (declare (xargs :guard (and (natp r)
+                              (natp n)
+                              (natp m))))
+  (* (expt 2 (- m n)) (ui r)))
+
+(defund sf (r n m)
+  (declare (xargs :guard (and (integerp r)
+                              (natp n)
+                              (natp m))))
+  (* (expt 2 (- m n)) (si r n)))
+
+(defthmd bits-uf
+  (let ((x (uf r n m))
+        (f (- n m)))
+    (implies (and (natp n)
+                  (natp m)
+                  (<= m n)
+                  (bvecp r n)
+                  (natp i)
+                  (natp j)
+                  (<= j i))
+             (equal (bits r i j)
+                    (* (expt 2 (- f j))
+                       (- (chop x (- f j))
+                          (chop x (- f (1+ i)))))))))
+
+(defthmd bits-sf
+  (let ((x (sf r n m))
+        (f (- n m)))
+    (implies (and (natp n)
+                  (natp m)
+                  (<= m n)
+                  (bvecp r n)
+                  (natp i)
+                  (natp j)
+                  (<= j i)
+                  (< i n))
+             (equal (bits r i j)
+                    (* (expt 2 (- f j))
+                       (- (chop x (- f j))
+                          (chop x (- f (1+ i)))))))))
+
+(defthm chop-uf
+  (let ((x (uf r n m))
+        (f (- n m)))
+    (implies (and (natp n)
+                  (natp m)
+                  (<= m n)
+                  (bvecp r n)
+                  (integerp k)
+                  (<= (- f n) k)
+                  (< k f))
+             (iff (= (chop x k) x)
+                  (= (bits r (1- (- f k)) 0) 0))))
+  :rule-classes ())
+
+(defthm chop-sf
+  (let ((x (sf r n m))
+        (f (- n m)))
+    (implies (and (natp n)
+                  (natp m)
+                  (<= m n)
+                  (bvecp r n)
+                  (integerp k)
+                  (<= (- f n) k)
+                  (< k f))
+             (iff (= (chop x k) x)
+                  (= (bits r (1- (- f k)) 0) 0))))
+  :rule-classes ())
+
+(defthmd sf-val
+  (implies (and (natp n)
+                (natp m)
+                (<= m n)
+                (bvecp r n)
+                (integerp y)
+                (= (mod y (expt 2 n)) r)
+                (<= (- (expt 2 (1- n))) y)
+                (< y (expt 2 (1- n))))
+            (equal (sf r n m)
+                   (* (expt 2 (- m n)) y))))
 )

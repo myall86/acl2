@@ -32,7 +32,7 @@
 (in-package "STD")
 (include-book "../defines")
 (include-book "../deflist")
-
+(include-book "utils")
 
 (defun foo (x)
   (declare (xargs :guard (natp x) :mode :logic))
@@ -56,6 +56,11 @@
     (if (zp x)
         nil
       (my-evenp (- x 1)))))
+
+(assert-disabled my-evenp)
+(assert-disabled my-oddp)
+(assert-logic-mode my-evenp)
+(assert-logic-mode my-oddp)
 
 (defines basic2
   :parents (hi)
@@ -243,7 +248,7 @@
   (defthm global2 (integerp (len x))))
 
 (include-book "std/strings/substrp" :dir :system)
-(include-book "misc/assert" :dir :system)
+(include-book "std/testing/assert-bang" :dir :system)
 
 (assert!
  (let ((long (cdr (assoc :long (xdoc::find-topic 'doc-test (xdoc::get-xdoc-table (w state)))))))
@@ -288,3 +293,27 @@
 ;;   ///
 ;;   (local (defthm local2 (integerp (len x))))
 ;;   (defthm global2 (integerp (len x))))
+
+
+(defines program-mode-test-1
+  :mode :program
+  (define program-f1 (x) (if (atom x) nil (program-g1 x)))
+  (define program-g1 (x) (program-h1 x))
+  (define program-h1 (x) (program-f1 x)))
+
+(assert-program-mode program-f1)
+(assert-program-mode program-g1)
+(assert-program-mode program-h1)
+
+
+(encapsulate
+  ()
+  (program)
+  (defines program-mode-test-2
+    (define program-f2 (x) (if (atom x) nil (program-g2 x)))
+    (define program-g2 (x) (program-h2 x))
+    (define program-h2 (x) (program-f2 x))))
+
+(assert-program-mode program-f2)
+(assert-program-mode program-g2)
+(assert-program-mode program-h2)

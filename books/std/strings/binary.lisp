@@ -27,6 +27,7 @@
 ;   DEALINGS IN THE SOFTWARE.
 ;
 ; Original author: Jared Davis <jared@centtech.com>
+; Contributing author: Alessandro Coglio <coglio@kestrel.edu>
 
 (in-package "STR")
 (include-book "ieqv")
@@ -34,7 +35,6 @@
 (include-book "std/util/deflist" :dir :system)
 (include-book "ihs/basic-definitions" :dir :system)
 (local (include-book "arithmetic"))
-(local (include-book "misc/assert" :dir :system))
 (local (include-book "centaur/bitops/ihsext-basics" :dir :system))
 (local (in-theory (disable unsigned-byte-p)))
 (local (in-theory (acl2::enable* acl2::arith-equiv-forwarding)))
@@ -122,209 +122,219 @@
 
 (local (xdoc::set-default-parents binary))
 
-(define bit-digitp (x)
+(define bin-digit-char-p (x)
   :short "Recognizer for characters #\\0 and #\\1."
   :returns bool
-  :long "<p>@(call bit-digitp) is the binary alternative to @(see digitp).</p>"
+  :long "<p>@(call bin-digit-char-p) is the binary alternative to @(see dec-digit-char-p).</p>"
   :inline t
   (or (eql x #\0)
       (eql x #\1))
   ///
-  (defcong ichareqv equal (bit-digitp x) 1
+  (defcong ichareqv equal (bin-digit-char-p x) 1
     :hints(("Goal" :in-theory (enable ichareqv
                                       downcase-char
                                       char-fix))))
-  (defthm characterp-when-bit-digitp
-    (implies (bit-digitp char)
+  (defthm characterp-when-bin-digit-char-p
+    (implies (bin-digit-char-p char)
              (characterp char))
     :rule-classes :compound-recognizer))
 
-(std::deflist bit-digit-listp (x)
-  :short "Recognizes lists of @(see bit-digitp) characters."
-  (bit-digitp x)
+(std::deflist bin-digit-char-listp (x)
+  :short "Recognizes lists of @(see bin-digit-char-p) characters."
+  (bin-digit-char-p x)
   ///
-  (defcong icharlisteqv equal (bit-digit-listp x) 1
+  (defcong icharlisteqv equal (bin-digit-char-listp x) 1
     :hints(("Goal" :in-theory (enable icharlisteqv)))))
 
-(define bit-digit-val
-  :short "Coerces a @(see bit-digitp) character into a number, 0 or 1."
-  ((x bit-digitp :type character))
+(define bin-digit-char-value
+  :short "Coerces a @(see bin-digit-char-p) character into a number, 0 or 1."
+  ((x bin-digit-char-p :type character))
+  :returns (bit bitp :rule-classes :type-prescription)
   :split-types t
-  :returns (val natp :rule-classes :type-prescription)
   :inline t
   (if (eql x #\1)
       1
     0)
   ///
-  (local (in-theory (enable bit-digitp)))
-  (defcong ichareqv equal (bit-digit-val x) 1
+  (local (in-theory (enable bin-digit-char-p)))
+
+  (defcong ichareqv equal (bin-digit-char-value x) 1
     :hints(("Goal" :in-theory (enable ichareqv downcase-char char-fix))))
-  (defthm bit-digit-val-upper-bound
-    (< (bit-digit-val x) 2)
-    :rule-classes ((:rewrite) (:linear)))
-  (defthm bitp-of-bit-digit-val
-    (acl2::bitp (bit-digit-val x)))
-  (defthm unsigned-byte-p-of-bit-digit-val
-    (unsigned-byte-p 1 (bit-digit-val x)))
-  (defthm equal-of-bit-digit-val-and-bit-digit-val
-    (implies (and (bit-digitp x)
-                  (bit-digitp y))
-             (equal (equal (bit-digit-val x) (bit-digit-val y))
+
+  ;; [Jared] 2016-04-08: shouldn't be needed now that we have a bitp type-prescription
+  ;; :returns specifier.
+  ;;
+  ;; (defthm bin-digit-char-value-upper-bound
+  ;;   (< (bin-digit-char-value x) 2)
+  ;;   :rule-classes ((:rewrite) (:linear)))
+  ;;
+  ;; (defthm bitp-of-bin-digit-char-value
+  ;;   (acl2::bitp (bin-digit-char-value x))
+  ;;   :rule-classes :type-prescription)
+
+  ;; [Jared] this is kind of ugly, might be better to just have a global rule
+  ;; that bitp means unsigned-byte-p 1.
+  (defthm unsigned-byte-p-of-bin-digit-char-value
+    (unsigned-byte-p 1 (bin-digit-char-value x)))
+  (defthm equal-of-bin-digit-char-value-and-bin-digit-char-value
+    (implies (and (bin-digit-char-p x)
+                  (bin-digit-char-p y))
+             (equal (equal (bin-digit-char-value x) (bin-digit-char-value y))
                     (equal x y))))
-  (defthm bit-digit-val-of-digit-to-char
-    (implies (and (natp n)
-                  (< n 2))
-             (equal (bit-digit-val (digit-to-char n))
+  (defthm bin-digit-char-value-of-digit-to-char
+    (implies (bitp n)
+             (equal (bin-digit-char-value (digit-to-char n))
                     n))))
 
-(define bit-digit-list-value1
-  :parents (bit-digit-list-value)
-  ((x bit-digit-listp)
+(define bin-digit-chars-value1
+  :parents (bin-digit-chars-value)
+  ((x bin-digit-char-listp)
    (val :type unsigned-byte))
   (mbe :logic (if (consp x)
-                  (bit-digit-list-value1 (cdr x)
-                                         (+ (bit-digit-val (car x))
-                                            (ash (nfix val) 1)))
+                  (bin-digit-chars-value1 (cdr x)
+                                          (+ (bin-digit-char-value (car x))
+                                             (ash (nfix val) 1)))
                 (nfix val))
        :exec (if (consp x)
-                 (bit-digit-list-value1
+                 (bin-digit-chars-value1
                   (cdr x)
                   (the unsigned-byte
                     (+ (the (unsigned-byte 8) (if (eql (car x) #\1) 1 0))
                        (the unsigned-byte (ash (the unsigned-byte val) 1)))))
                (the unsigned-byte val)))
-  :guard-hints (("Goal" :in-theory (enable bit-digit-val bit-digitp))))
+  :guard-hints (("Goal" :in-theory (enable bin-digit-char-value bin-digit-char-p))))
 
-(define bit-digit-list-value
+(define bin-digit-chars-value
   :short "Coerces a list of bit digits into a natural number."
-  ((x bit-digit-listp))
+  ((x bin-digit-char-listp))
   :returns (value natp :rule-classes :type-prescription)
-  :long "<p>For instance, @('(bit-digit-list-value '(#\1 #\0 #\0 #\0))') is 8.
+  :long "<p>For instance, @('(bin-digit-chars-value '(#\1 #\0 #\0 #\0))') is 8.
 See also @(see parse-bits-from-charlist) for a more flexible function that can
 tolerate non-bit digits after the number.</p>"
   :inline t
   :verify-guards nil
   (mbe :logic (if (consp x)
-                  (+ (ash (bit-digit-val (car x)) (1- (len x)))
-                     (bit-digit-list-value (cdr x)))
+                  (+ (ash (bin-digit-char-value (car x)) (1- (len x)))
+                     (bin-digit-chars-value (cdr x)))
                 0)
-       :exec (bit-digit-list-value1 x 0))
+       :exec (bin-digit-chars-value1 x 0))
   ///
-  (defcong icharlisteqv equal (bit-digit-list-value x) 1
+  (defcong icharlisteqv equal (bin-digit-chars-value x) 1
     :hints(("Goal" :in-theory (e/d (icharlisteqv)))))
-  (defthm unsigned-byte-p-of-bit-digit-list-value
-    (unsigned-byte-p (len x) (bit-digit-list-value x)))
-  (defthm bit-digit-list-value-upper-bound
-    (< (bit-digit-list-value x)
+  (defthm unsigned-byte-p-of-bin-digit-chars-value
+    (unsigned-byte-p (len x) (bin-digit-chars-value x)))
+  (defthm bin-digit-chars-value-upper-bound
+    (< (bin-digit-chars-value x)
        (expt 2 (len x)))
     :rule-classes ((:rewrite) (:linear))
     :hints(("Goal"
             :in-theory (e/d (unsigned-byte-p)
-                            (unsigned-byte-p-of-bit-digit-list-value))
-            :use ((:instance unsigned-byte-p-of-bit-digit-list-value)))))
-  (defthm bit-digit-list-value-upper-bound-free
+                            (unsigned-byte-p-of-bin-digit-chars-value))
+            :use ((:instance unsigned-byte-p-of-bin-digit-chars-value)))))
+  (defthm bin-digit-chars-value-upper-bound-free
     (implies (equal n (len x))
-             (< (bit-digit-list-value x) (expt 2 n))))
-  (defthm bit-digit-list-value1-removal
-    (equal (bit-digit-list-value1 x val)
-           (+ (bit-digit-list-value x)
+             (< (bin-digit-chars-value x) (expt 2 n))))
+  (defthm bin-digit-chars-value1-removal
+    (equal (bin-digit-chars-value1 x val)
+           (+ (bin-digit-chars-value x)
               (ash (nfix val) (len x))))
     :hints(("Goal"
-            :in-theory (enable bit-digit-list-value1)
-            :induct (bit-digit-list-value1 x val))))
-  (verify-guards bit-digit-list-value$inline)
-  (defthm bit-digit-list-value-of-append
-    (equal (bit-digit-list-value (append x (list a)))
-           (+ (ash (bit-digit-list-value x) 1)
-              (bit-digit-val a))))
-  (local
-   (assert! (and (equal (bit-digit-list-value (explode "0")) #b0)
-                 (equal (bit-digit-list-value (explode "1")) #b1)
-                 (equal (bit-digit-list-value (explode "01")) #b01)
-                 (equal (bit-digit-list-value (explode "0101011101")) #b0101011101)))))
+            :in-theory (enable bin-digit-chars-value1)
+            :induct (bin-digit-chars-value1 x val))))
+  (verify-guards bin-digit-chars-value$inline)
+  (defthm bin-digit-chars-value-of-append
+    (equal (bin-digit-chars-value (append x (list a)))
+           (+ (ash (bin-digit-chars-value x) 1)
+              (bin-digit-char-value a)))))
 
 (define skip-leading-bit-digits
   :short "Skip over any leading 0-1 characters at the start of a character list."
   ((x character-listp))
   :returns (tail character-listp :hyp :guard)
   (cond ((atom x)             nil)
-        ((bit-digitp (car x)) (skip-leading-bit-digits (cdr x)))
+        ((bin-digit-char-p (car x)) (skip-leading-bit-digits (cdr x)))
         (t                    x))
   ///
+  (local (defun ind (x y)
+           (if (or (atom x) (atom y))
+               (list x y)
+             (ind (cdr x) (cdr y)))))
   (defcong charlisteqv charlisteqv (skip-leading-bit-digits x) 1
-    :hints(("Goal" :in-theory (enable charlisteqv))))
+    :hints(("Goal" :induct (ind x x-equiv))))
   (defcong icharlisteqv icharlisteqv (skip-leading-bit-digits x) 1
     :hints(("Goal" :in-theory (enable icharlisteqv))))
   (defthm len-of-skip-leading-bit-digits
-    (implies (bit-digitp (car x))
+    (implies (bin-digit-char-p (car x))
              (< (len (skip-leading-bit-digits x))
                 (len x)))))
 
-(define take-leading-bit-digits
+(define take-leading-bin-digit-chars
   :short "Collect any leading 0-1 characters from the start of a character list."
   ((x character-listp))
   :returns (head character-listp)
   (cond ((atom x)             nil)
-        ((bit-digitp (car x)) (cons (car x) (take-leading-bit-digits (cdr x))))
+        ((bin-digit-char-p (car x)) (cons (car x) (take-leading-bin-digit-chars (cdr x))))
         (t                    nil))
   ///
   (local (defthm l0 ;; Gross, but gets us an equal congruence
-           (implies (bit-digitp x)
+           (implies (bin-digit-char-p x)
                     (equal (ichareqv x y)
                            (equal x y)))
            :hints(("Goal" :in-theory (enable ichareqv
                                              downcase-char
-                                             bit-digitp
+                                             bin-digit-char-p
                                              char-fix)))))
-  (defcong icharlisteqv equal (take-leading-bit-digits x) 1
+  (defcong icharlisteqv equal (take-leading-bin-digit-chars x) 1
     :hints(("Goal" :in-theory (enable icharlisteqv))))
-  (defthm bit-digit-listp-of-take-leading-bit-digits
-    (bit-digit-listp (take-leading-bit-digits x)))
-  (defthm bound-of-len-of-take-leading-bit-digits
-    (<= (len (take-leading-bit-digits x)) (len x))
+  (defthm bin-digit-char-listp-of-take-leading-bin-digit-chars
+    (bin-digit-char-listp (take-leading-bin-digit-chars x)))
+  (defthm bound-of-len-of-take-leading-bin-digit-chars
+    (<= (len (take-leading-bin-digit-chars x)) (len x))
     :rule-classes :linear)
-  (defthm equal-of-take-leading-bit-digits-and-length
-    (equal (equal (len (take-leading-bit-digits x)) (len x))
-           (bit-digit-listp x)))
-  (defthm take-leading-bit-digits-when-bit-digit-listp
-    (implies (bit-digit-listp x)
-             (equal (take-leading-bit-digits x)
+  (defthm equal-of-take-leading-bin-digit-chars-and-length
+    (equal (equal (len (take-leading-bin-digit-chars x)) (len x))
+           (bin-digit-char-listp x)))
+  (defthm take-leading-bin-digit-chars-when-bin-digit-char-listp
+    (implies (bin-digit-char-listp x)
+             (equal (take-leading-bin-digit-chars x)
                     (list-fix x))))
-  (defthm consp-of-take-leading-bit-digits
-    (equal (consp (take-leading-bit-digits x))
-           (bit-digitp (car x)))))
+  (defthm consp-of-take-leading-bin-digit-chars
+    (equal (consp (take-leading-bin-digit-chars x))
+           (bin-digit-char-p (car x)))))
 
-(define bit-digit-string-p-aux
-  :parents (bit-digit-string-p)
+(define bin-digit-string-p-aux
+  :parents (bin-digit-string-p)
   ((x  stringp             :type string)
    (n  natp                :type unsigned-byte)
    (xl (eql xl (length x)) :type unsigned-byte))
   :guard (<= n xl)
-  :measure (nfix (- (nfix xl) (nfix n)))
+; Removed after v7-2 by Matt K. since logically, the definition is
+; non-recursive:
+; :measure (nfix (- (nfix xl) (nfix n)))
   :split-types t
   :verify-guards nil
   :enabled t
   (mbe :logic
-       (bit-digit-listp (nthcdr n (explode x)))
+       (bin-digit-char-listp (nthcdr n (explode x)))
        :exec
        (if (eql n xl)
            t
-         (and (bit-digitp (char x n))
-              (bit-digit-string-p-aux x
+         (and (bin-digit-char-p (char x n))
+              (bin-digit-string-p-aux x
                                       (the unsigned-byte (+ 1 n))
                                       xl))))
   ///
-  (verify-guards bit-digit-string-p-aux
-    :hints(("Goal" :in-theory (enable bit-digit-listp)))))
+  (verify-guards bin-digit-string-p-aux
+    :hints(("Goal" :in-theory (enable bin-digit-char-listp)))))
 
-(define bit-digit-string-p
+(define bin-digit-string-p
   :short "Recognizer for strings whose characters are all 0 or 1."
   ((x :type string))
   :returns bool
   :long "<p>Corner case: this accepts the empty string since all of its
 characters are bit digits.</p>
 
-<p>Logically this is defined in terms of @(see bit-digit-listp).  But in the
+<p>Logically this is defined in terms of @(see bin-digit-char-listp).  But in the
 execution, we use a @(see char)-based function that avoids exploding the
 string.  This provides much better performance, e.g., on an AMD FX-8350 with
 CCL:</p>
@@ -333,90 +343,90 @@ CCL:</p>
     ;; 0.53 seconds, no garbage
     (let ((x \"01001\"))
       (time$ (loop for i fixnum from 1 to 10000000 do
-                   (str::bit-digit-string-p x))))
+                   (str::bin-digit-string-p x))))
 
     ;; 0.99 seconds, 800 MB allocated
     (let ((x \"01001\"))
       (time$ (loop for i fixnum from 1 to 10000000 do
-                   (str::bit-digit-listp (explode x)))))
+                   (str::bin-digit-char-listp (explode x)))))
 })"
   :inline t
   :enabled t
-  (mbe :logic (bit-digit-listp (explode x))
-       :exec (bit-digit-string-p-aux x 0 (length x)))
+  (mbe :logic (bin-digit-char-listp (explode x))
+       :exec (bin-digit-string-p-aux x 0 (length x)))
   ///
-  (defcong istreqv equal (bit-digit-string-p x) 1))
+  (defcong istreqv equal (bin-digit-string-p x) 1))
 
 
-(define basic-natchars2
-  :parents (natchars2)
-  :short "Logically simple definition that is similar to @(see natchars2)."
+(define basic-nat-to-bin-chars
+  :parents (nat-to-bin-chars)
+  :short "Logically simple definition that is similar to @(see nat-to-bin-chars)."
   ((n natp))
-  :returns (chars bit-digit-listp)
-  :long "<p>This <i>almost</i> computes @('(natchars2 n)'), but when @('n') is
+  :returns (chars bin-digit-char-listp)
+  :long "<p>This <i>almost</i> computes @('(nat-to-bin-chars n)'), but when @('n') is
 zero it returns @('nil') instead of @('(#\\0)').  You would normally never call
 this function directly, but it is convenient for reasoning about @(see
-natchars2).</p>"
+nat-to-bin-chars).</p>"
   (if (zp n)
       nil
     (cons (if (eql (the bit (logand n 1)) 1) #\1 #\0)
-          (basic-natchars2 (ash n -1))))
+          (basic-nat-to-bin-chars (ash n -1))))
   ///
-  (defthm basic-natchars2-when-zp
+  (defthm basic-nat-to-bin-chars-when-zp
     (implies (zp n)
-             (equal (basic-natchars2 n)
+             (equal (basic-nat-to-bin-chars n)
                     nil)))
-  (defthm true-listp-of-basic-natchars2
-    (true-listp (basic-natchars2 n))
+  (defthm true-listp-of-basic-nat-to-bin-chars
+    (true-listp (basic-nat-to-bin-chars n))
     :rule-classes :type-prescription)
-  (defthm character-listp-of-basic-natchars2
-    (character-listp (basic-natchars2 n)))
-  (defthm basic-natchars2-under-iff
-    (iff (basic-natchars2 n)
+  (defthm character-listp-of-basic-nat-to-bin-chars
+    (character-listp (basic-nat-to-bin-chars n)))
+  (defthm basic-nat-to-bin-chars-under-iff
+    (iff (basic-nat-to-bin-chars n)
          (not (zp n))))
-  (defthm consp-of-basic-natchars2
-    (equal (consp (basic-natchars2 n))
-           (if (basic-natchars2 n) t nil)))
+  (defthm consp-of-basic-nat-to-bin-chars
+    (equal (consp (basic-nat-to-bin-chars n))
+           (if (basic-nat-to-bin-chars n) t nil)))
   (local (defun my-induction (n m)
            (if (or (zp n)
                    (zp m))
                nil
              (my-induction (ash n -1) (ash m -1)))))
-  (defthm basic-natchars2-one-to-one
-    (equal (equal (basic-natchars2 n)
-                  (basic-natchars2 m))
+  (defthm basic-nat-to-bin-chars-one-to-one
+    (equal (equal (basic-nat-to-bin-chars n)
+                  (basic-nat-to-bin-chars m))
            (equal (nfix n)
                   (nfix m)))
     :hints(("Goal" :induct (my-induction n m)
             :in-theory (acl2::enable* acl2::ihsext-recursive-redefs)))))
 
-(define natchars2-aux ((n natp) acc)
-  :parents (natchars2)
+(define nat-to-bin-chars-aux ((n natp) acc)
+  :parents (nat-to-bin-chars)
   :verify-guards nil
   :enabled t
   (mbe :logic
-       (revappend (basic-natchars2 n) acc)
+       (revappend (basic-nat-to-bin-chars n) acc)
        :exec
        (if (zp n)
            acc
-         (natchars2-aux
+         (nat-to-bin-chars-aux
           (the unsigned-byte (ash (the unsigned-byte n) -1))
           (cons (if (eql (the bit (logand n 1)) 1) #\1 #\0)
                 acc))))
   ///
-  (verify-guards natchars2-aux
-    :hints(("Goal" :in-theory (enable basic-natchars2)))))
+  (verify-guards nat-to-bin-chars-aux
+    :hints(("Goal" :in-theory (enable basic-nat-to-bin-chars)))))
 
-(define natchars2
+(define nat-to-bin-chars
   :short "Convert a natural number into a list of bits."
   ((n natp))
-  :returns (chars bit-digit-listp)
-  :long "<p>For instance, @('(natchars 8)') is @('(#\\1 #\\0 #\\0 #\\0)').</p>
+  :returns (chars bin-digit-char-listp)
+  :long "<p>For instance, @('(nat-to-dec-chars 8)') is @('(#\\1 #\\0 #\\0 #\\0)').</p>
 
 <p>This is like ACL2's built-in function @(see explode-nonnegative-integer),
 except that it doesn't deal with accumulators and is limited to base 2 numbers.
 These simplifications lead to particularly nice rules, e.g., about @(see
-bit-digit-list-value), and somewhat better performance:</p>
+bin-digit-chars-value), and somewhat better performance:</p>
 
 @({
   ;; Times reported by an AMD FX-8350, Linux, 64-bit CCL:
@@ -424,7 +434,7 @@ bit-digit-list-value), and somewhat better performance:</p>
   ;; .204 seconds, 303 MB allocated
   (progn (gc$)
          (time (loop for i fixnum from 1 to 1000000 do
-                     (str::natchars2 i))))
+                     (str::nat-to-bin-chars i))))
 
   ;; 1.04 seconds, 303 MB allocated
   (progn (gc$)
@@ -432,14 +442,14 @@ bit-digit-list-value), and somewhat better performance:</p>
             (explode-nonnegative-integer i 2 nil))))
 })"
   :inline t
-  (or (natchars2-aux n nil) '(#\0))
+  (or (nat-to-bin-chars-aux n nil) '(#\0))
   ///
-  (defthm true-listp-of-natchars2
-    (and (true-listp (natchars2 n))
-         (consp (natchars2 n)))
+  (defthm true-listp-of-nat-to-bin-chars
+    (and (true-listp (nat-to-bin-chars n))
+         (consp (nat-to-bin-chars n)))
     :rule-classes :type-prescription)
-  (defthm character-listp-of-natchars2
-    (character-listp (natchars2 n)))
+  (defthm character-listp-of-nat-to-bin-chars
+    (character-listp (nat-to-bin-chars n)))
   (local (defthm lemma1
            (equal (equal (rev x) (list y))
                   (and (consp x)
@@ -447,49 +457,49 @@ bit-digit-list-value), and somewhat better performance:</p>
                        (equal (car x) y)))
            :hints(("Goal" :in-theory (enable rev)))))
   (local (defthmd lemma2
-           (not (equal (basic-natchars2 n) '(#\0)))
-           :hints(("Goal" :in-theory (acl2::enable* basic-natchars2
+           (not (equal (basic-nat-to-bin-chars n) '(#\0)))
+           :hints(("Goal" :in-theory (acl2::enable* basic-nat-to-bin-chars
                                                     acl2::ihsext-recursive-redefs)))))
-  (defthm natchars2-one-to-one
-    (equal (equal (natchars2 n) (natchars2 m))
+  (defthm nat-to-bin-chars-one-to-one
+    (equal (equal (nat-to-bin-chars n) (nat-to-bin-chars m))
            (equal (nfix n) (nfix m)))
     :hints(("Goal"
-            :in-theory (disable basic-natchars2-one-to-one)
-            :use ((:instance basic-natchars2-one-to-one)
+            :in-theory (disable basic-nat-to-bin-chars-one-to-one)
+            :use ((:instance basic-nat-to-bin-chars-one-to-one)
                   (:instance lemma2)
                   (:instance lemma2 (n m))))))
-  (local (defthm bit-digit-list-value-of-rev-of-basic-natchars2
-           (equal (bit-digit-list-value (rev (basic-natchars2 n)))
+  (local (defthm bin-digit-chars-value-of-rev-of-basic-nat-to-bin-chars
+           (equal (bin-digit-chars-value (rev (basic-nat-to-bin-chars n)))
                   (nfix n))
            :hints(("Goal"
-                   :induct (basic-natchars2 n)
-                   :in-theory (acl2::enable* basic-natchars2
+                   :induct (basic-nat-to-bin-chars n)
+                   :in-theory (acl2::enable* basic-nat-to-bin-chars
                                              acl2::ihsext-recursive-redefs
                                              acl2::logcons)))))
-  (defthm bit-digit-list-value-of-natchars2
-    (equal (bit-digit-list-value (natchars2 n))
+  (defthm bin-digit-chars-value-of-nat-to-bin-chars
+    (equal (bin-digit-chars-value (nat-to-bin-chars n))
            (nfix n))))
 
 
-(define revappend-natchars2-aux ((n natp) (acc))
-  :parents (revappend-natchars2)
+(define revappend-nat-to-bin-chars-aux ((n natp) (acc))
+  :parents (revappend-nat-to-bin-chars)
   :enabled t
   :verify-guards nil
   (mbe :logic
-       (append (basic-natchars2 n) acc)
+       (append (basic-nat-to-bin-chars n) acc)
        :exec
        (if (zp n)
            acc
          (cons (if (eql (the bit (logand n 1)) 1) #\1 #\0)
-               (revappend-natchars2-aux
+               (revappend-nat-to-bin-chars-aux
                 (the unsigned-byte (ash (the unsigned-byte n) -1))
                 acc))))
   ///
-  (verify-guards revappend-natchars2-aux
-    :hints(("Goal" :in-theory (enable basic-natchars2)))))
+  (verify-guards revappend-nat-to-bin-chars-aux
+    :hints(("Goal" :in-theory (enable basic-nat-to-bin-chars)))))
 
-(define revappend-natchars2
-  :short "More efficient version of @('(revappend (natchars2 n) acc).')"
+(define revappend-nat-to-bin-chars
+  :short "More efficient version of @('(revappend (nat-to-bin-chars n) acc).')"
   ((n natp)
    (acc))
   :returns (new-acc)
@@ -497,50 +507,50 @@ bit-digit-list-value), and somewhat better performance:</p>
 consing together characters in reverse order.</p>"
   :inline t
   :enabled t
-  :prepwork ((local (in-theory (enable natchars2))))
-  (mbe :logic (revappend (natchars2 n) acc)
+  :prepwork ((local (in-theory (enable nat-to-bin-chars))))
+  (mbe :logic (revappend (nat-to-bin-chars n) acc)
        :exec (if (zp n)
                  (cons #\0 acc)
-               (revappend-natchars2-aux n acc))))
+               (revappend-nat-to-bin-chars-aux n acc))))
 
-(define natstr2
+(define nat-to-bin-string
   :short "Convert a natural number into a string with its bits."
   ((n natp))
   :returns (str stringp :rule-classes :type-prescription)
-  :long "<p>For instance, @('(natstr2 8)') is @('\"1000\"').</p>"
+  :long "<p>For instance, @('(nat-to-bin-string 8)') is @('\"1000\"').</p>"
   :inline t
-  (implode (natchars2 n))
+  (implode (nat-to-bin-chars n))
   ///
-  (defthm bit-digit-listp-of-natstr
-    (bit-digit-listp (explode (natstr2 n))))
-  (defthm natstr2-one-to-one
-    (equal (equal (natstr2 n) (natstr2 m))
+  (defthm bin-digit-char-listp-of-nat-to-dec-string
+    (bin-digit-char-listp (explode (nat-to-bin-string n))))
+  (defthm nat-to-bin-string-one-to-one
+    (equal (equal (nat-to-bin-string n) (nat-to-bin-string m))
            (equal (nfix n) (nfix m))))
-  (defthm bit-digit-list-value-of-natstr
-    (equal (bit-digit-list-value (explode (natstr2 n)))
+  (defthm bin-digit-chars-value-of-nat-to-dec-string
+    (equal (bin-digit-chars-value (explode (nat-to-bin-string n)))
            (nfix n)))
-  (defthm natstr2-nonempty
-    (not (equal (natstr2 n) ""))))
+  (defthm nat-to-bin-string-nonempty
+    (not (equal (nat-to-bin-string n) ""))))
 
-(define natstr2-list
+(define nat-to-bin-string-list
   :short "Convert a list of natural numbers into a list of bit strings."
   ((x nat-listp))
   :returns (strs string-listp)
   (if (atom x)
       nil
-    (cons (natstr2 (car x))
-          (natstr2-list (cdr x))))
+    (cons (nat-to-bin-string (car x))
+          (nat-to-bin-string-list (cdr x))))
   ///
-  (defthm natstr2-list-when-atom
+  (defthm nat-to-bin-string-list-when-atom
     (implies (atom x)
-             (equal (natstr2-list x)
+             (equal (nat-to-bin-string-list x)
                     nil)))
-  (defthm natstr2-list-of-cons
-    (equal (natstr2-list (cons a x))
-           (cons (natstr2 a)
-                 (natstr2-list x)))))
+  (defthm nat-to-bin-string-list-of-cons
+    (equal (nat-to-bin-string-list (cons a x))
+           (cons (nat-to-bin-string a)
+                 (nat-to-bin-string-list x)))))
 
-(define natsize2
+(define nat-to-bin-string-size
   :short "Number of characters in the binary representation of a natural."
   ((x natp))
   :returns (size posp :rule-classes :type-prescription
@@ -550,16 +560,16 @@ consing together characters in reverse order.</p>"
       1
     (integer-length x))
   ///
-  (defthm len-of-natchars2
-    (equal (len (natchars2 x))
-           (natsize2 x))
-    :hints(("Goal" :in-theory (acl2::enable* natchars2
-                                             basic-natchars2
+  (defthm len-of-nat-to-bin-chars
+    (equal (len (nat-to-bin-chars x))
+           (nat-to-bin-string-size x))
+    :hints(("Goal" :in-theory (acl2::enable* nat-to-bin-chars
+                                             basic-nat-to-bin-chars
                                              acl2::ihsext-recursive-redefs))))
-  (defthm length-of-natstr2
-    (equal (length (natstr2 x))
-           (natsize2 x))
-    :hints(("Goal" :in-theory (enable natstr2)))))
+  (defthm length-of-nat-to-bin-string
+    (equal (length (nat-to-bin-string x))
+           (nat-to-bin-string-size x))
+    :hints(("Goal" :in-theory (enable nat-to-bin-string)))))
 
 (define parse-bits-from-charlist
   :short "Parse a binary number from the beginning of a character list."
@@ -573,7 +583,7 @@ consing together characters in reverse order.</p>"
       (len  "Number of initial bits we read.")
       (rest "The rest of @('x'), past the leading bits."))
   :long "<p>This function is somewhat complicated.  See also @(call
-bit-digit-list-value), which is a simpler way to interpret strings where all of
+bin-digit-chars-value), which is a simpler way to interpret strings where all of
 the characters are 0 or 1.</p>"
   :split-types t
   (declare (type unsigned-byte val len))
@@ -581,8 +591,8 @@ the characters are 0 or 1.</p>"
   (mbe :logic
        (cond ((atom x)
               (mv (nfix val) (nfix len) nil))
-             ((bit-digitp (car x))
-              (let ((digit-val (bit-digit-val (car x))))
+             ((bin-digit-char-p (car x))
+              (let ((digit-val (bin-digit-char-value (car x))))
                 (parse-bits-from-charlist (cdr x)
                                           (+ digit-val (ash (nfix val) 1))
                                           (+ 1 (nfix len)))))
@@ -603,20 +613,20 @@ the characters are 0 or 1.</p>"
          (mv val len x)))
   ///
   (verify-guards parse-bits-from-charlist
-    :hints(("Goal" :in-theory (enable bit-digitp
-                                      bit-digit-val
+    :hints(("Goal" :in-theory (enable bin-digit-char-p
+                                      bin-digit-char-value
                                       char-fix))))
   (defthm val-of-parse-bits-from-charlist
     (equal (mv-nth 0 (parse-bits-from-charlist x val len))
-           (+ (bit-digit-list-value (take-leading-bit-digits x))
-              (ash (nfix val) (len (take-leading-bit-digits x)))))
-    :hints(("Goal" :in-theory (enable take-leading-bit-digits
-                                      bit-digit-list-value))))
+           (+ (bin-digit-chars-value (take-leading-bin-digit-chars x))
+              (ash (nfix val) (len (take-leading-bin-digit-chars x)))))
+    :hints(("Goal" :in-theory (enable take-leading-bin-digit-chars
+                                      bin-digit-chars-value))))
 
   (defthm len-of-parse-bits-from-charlist
     (equal (mv-nth 1 (parse-bits-from-charlist x val len))
-           (+ (nfix len) (len (take-leading-bit-digits x))))
-    :hints(("Goal" :in-theory (enable take-leading-bit-digits))))
+           (+ (nfix len) (len (take-leading-bin-digit-chars x))))
+    :hints(("Goal" :in-theory (enable take-leading-bin-digit-chars))))
 
   (defthm rest-of-parse-bits-from-charlist
     (equal (mv-nth 2 (parse-bits-from-charlist x val len))
@@ -685,15 +695,15 @@ of our logical definition.</p>"
          (mv val len)))
   ///
   ;; Minor speed hint
-  (local (in-theory (disable BOUND-OF-LEN-OF-TAKE-LEADING-BIT-DIGITS
+  (local (in-theory (disable BOUND-OF-LEN-OF-TAKE-LEADING-BIN-DIGIT-CHARS
                              ACL2::RIGHT-SHIFT-TO-LOGTAIL
-                             BIT-DIGIT-LISTP-OF-CDR-WHEN-BIT-DIGIT-LISTP)))
+                             BIN-DIGIT-CHAR-LISTP-OF-CDR-WHEN-BIN-DIGIT-CHAR-LISTP)))
 
   (verify-guards parse-bits-from-string
-    :hints(("Goal" :in-theory (enable bit-digitp
-                                      bit-digit-val
-                                      bit-digit-list-value
-                                      take-leading-bit-digits)))))
+    :hints(("Goal" :in-theory (enable bin-digit-char-p
+                                      bin-digit-char-value
+                                      bin-digit-chars-value
+                                      take-leading-bin-digit-chars)))))
 
 
 (define strval2
@@ -709,8 +719,8 @@ characters other than 0 or 1, or is empty, we return @('nil').</p>"
   (mbe :logic
        (let ((chars (explode x)))
          (and (consp chars)
-              (bit-digit-listp chars)
-              (bit-digit-list-value chars)))
+              (bin-digit-char-listp chars)
+              (bin-digit-chars-value chars)))
        :exec
        (b* (((the unsigned-byte xl) (length x))
             ((mv (the unsigned-byte val) (the unsigned-byte len))
@@ -719,9 +729,4 @@ characters other than 0 or 1, or is empty, we return @('nil').</p>"
               (eql len xl)
               val)))
   ///
-  (defcong istreqv equal (strval2 x) 1)
-  (local (assert! (equal (strval2 "") nil)))
-  (local (assert! (equal (strval2 "0") 0)))
-  (local (assert! (equal (strval2 "0101") #b0101))))
-
-
+  (defcong istreqv equal (strval2 x) 1))

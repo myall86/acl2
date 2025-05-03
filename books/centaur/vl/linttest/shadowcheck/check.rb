@@ -1,3 +1,5 @@
+#!/usr/bin/env ruby
+
 # VL Verilog Toolkit
 # Copyright (C) 2008-2015 Centaur Technology
 #
@@ -28,6 +30,7 @@
 #
 # Original author: Jared Davis <jared@centtech.com>
 
+require 'require_relative' if RUBY_VERSION =~ /1\.8/
 require_relative '../utils'
 
 def fine(modname, wirename)
@@ -52,5 +55,10 @@ fine(:m0, "fine_r2")
 fine(:m1, "clk")
 tricky(:m1, "shadowed_p1")
 fine(:m1, "whatever")
+
+fine(:m2, "m2in1")
+fine(:m2, "m2var1")
+fine(:m2, "m2var2")
+fine(:m2, "m2var3")
 
 test_passed()

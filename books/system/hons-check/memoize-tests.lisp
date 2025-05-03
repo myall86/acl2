@@ -32,11 +32,15 @@
 ; errors in LispWorks and Allegro CL (at least).
 
 (in-package "ACL2")
-(include-book "misc/assert" :dir :system)
+
+; Added by Matt K., May 2015.  Improvement observed when certification used
+; the :delay strategy:
+; 92.53 sec. vs. 314.30 sec.
+(value-triple (set-gc-strategy :delay))
+
+(include-book "std/testing/assert-bang" :dir :system)
 (include-book "std/lists/flatten" :dir :system)
 (include-book "std/util/bstar" :dir :system)
-
-; cert_param: (hons-only)
 
 ; This file does nothing useful and should never be included in another
 ; book.  We just do some very basic computations to make sure the memoize
@@ -396,6 +400,8 @@
   (pand (check-thread1 n)
         (check-thread2 n)))
 
+(comp t) ;; so gcl will compile to avoid stack overflow in (check-both 100) below
+
 ;; Timings on compute-1-1:
 ;;  - ACL2(hp): no memoization: 12.33 seconds (many GC messages)
 ;;  - ACL2(h):  no memoization: 15.54 seconds (many GC messages)
@@ -415,6 +421,3 @@
 ;;  - ACL2(hp): memoization, lock contention:     242 seconds (many gc messages)
 ;;  - ACL2(h):  memoization, no lock contention:   61 seconds (many gc messages)
 (assert! (time$ (check-both 100)))
-
-
-

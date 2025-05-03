@@ -67,7 +67,9 @@ interface_ansi_header ::=
 
   ((name     stringp               "Name of the interface.")
    (params   vl-paramdecllist-p    "Parameters declarations from the #(...) list, if any.")
-   (ports    vl-portlist-p         "Ports like (o, a, b).")
+   (ansi-ports vl-ansi-portdecllist-p "Temporary ANSI portdecl structures")
+   (ports    vl-portlist-p         "Non-ANSI Ports like (o, a, b).")
+   (ansi-p   booleanp              "Ansi or non-ANSI ports?")
    (items    vl-genelementlist-p   "Items from the interface's body, i.e., until endinterface.")
    (atts     vl-atts-p)
    (minloc   vl-location-p)
@@ -81,46 +83,86 @@ interface_ansi_header ::=
                                             '(:vl-generate
                                               ;; :vl-port    -- not allowed, they were parsed separately
                                               :vl-portdecl
-                                              ;; :vl-assign  -- not allowed
-                                              ;; :vl-alias   -- not allowed (bozo yet?)
+                                              :vl-assign
+                                              :vl-alias
                                               :vl-vardecl
                                               :vl-paramdecl
-                                              ;; :vl-fundecl  -- not allowed
-                                              ;; :vl-taskdecl -- not allowed
-                                              ;; :vl-modinst  -- not allowed
-                                              ;; :vl-gateinst -- not allowed
-                                              ;; :vl-always   -- not allowed
-                                              ;; :vl-initial  -- not allowed
-                                              ;; :vl-typedef    -- bozo? not yet
+                                              :vl-fundecl
+                                              :vl-taskdecl
+                                              :vl-modinst
+                                              ;; :vl-gateinst -- don't think these are allowed
+                                              :vl-always
+                                              :vl-initial
+                                              :vl-final
+                                              :vl-typedef
                                               :vl-import
                                               ;; :vl-fwdtypedef -- bozo? not yet
                                               :vl-modport
+                                              :vl-assertion
+                                              :vl-cassertion
+                                              :vl-property
+                                              :vl-sequence
+                                              :vl-clkdecl
+                                              :vl-gclkdecl
+                                              :vl-defaultdisable
+                                              :vl-dpiimport
+                                              :vl-dpiexport
+                                              :vl-bind
+                                              :vl-class
+                                              :vl-letdecl
+                                              ;; covergroups?  not sure -- if you add them, add them to the parsetree,
+                                              ;; here, below, and remove them from the excluded fields in
+                                              ;; *vl-interface/genblob-fields* in mlib/blocks.lisp
+                                              :vl-elabtask
                                               )))
        (warnings
         (if (not bad-item)
             warnings
           (fatal :type :vl-bad-interface-item
-                 :msg "~a0: an interface may not contain ~x1s."
-                 :args (list bad-item (tag bad-item)))))
+                 :msg "~a0: an interface may not contain a ~s1."
+                 :args (list bad-item (vl-genelement->short-kind-string bad-item)))))
 
        ((vl-genblob c) (vl-sort-genelements items)))
 
-     (make-vl-interface :name       name
-                        :ports      ports
-                        :portdecls  c.portdecls
-                        :vardecls   c.vardecls
-                        :paramdecls c.paramdecls
-                        :modports   c.modports
-                        :generates  c.generates
-                        :imports    c.imports
-                        :atts       atts
-                        :minloc     minloc
-                        :maxloc     maxloc
-                        :warnings   warnings
-                        :origname   name
-                        :comments   nil
-                        :loaditems  items
-                        )))
+     (make-vl-interface :name        name
+                        :imports     c.imports
+                        :ports       ports
+                        :portdecls   c.portdecls
+                        :modports    c.modports
+                        :vardecls    c.vardecls
+                        :paramdecls  c.paramdecls
+                        :fundecls    c.fundecls
+                        :taskdecls   c.taskdecls
+                        :typedefs    c.typedefs
+                        :dpiimports  c.dpiimports
+                        :dpiexports  c.dpiexports
+                        :properties  c.properties
+                        :sequences   c.sequences
+                        :clkdecls    c.clkdecls
+                        :gclkdecls   c.gclkdecls
+                        :defaultdisables c.defaultdisables
+                        :binds       c.binds
+                        :classes     c.classes
+                        :elabtasks   c.elabtasks
+                        :modinsts    c.modinsts
+                        :assigns     c.assigns
+                        :assertions  c.assertions
+                        :cassertions c.cassertions
+                        :alwayses    c.alwayses
+                        :initials    c.initials
+                        :finals      c.finals
+                        :generates   c.generates
+                        :genvars     c.genvars
+                        :atts        atts
+                        :minloc      minloc
+                        :maxloc      maxloc
+                        :warnings    warnings
+                        :origname    name
+                        :parse-temps (make-vl-parse-temps
+                                      :ansi-p ansi-p
+                                      :loaditems items
+                                      :ansi-ports ansi-ports)
+                        :comments    nil)))
 
 (defparser vl-parse-interface-declaration-core (atts interface-kwd name)
   :guard (and (vl-atts-p atts)
@@ -140,22 +182,19 @@ interface_ansi_header ::=
        (:= (vl-parse-endblock-name (vl-idtoken->name name)
                                    "interface/endinterface"))
        (return-raw
-        (b* (((vl-parsed-ports portinfo))
-             (name     (vl-idtoken->name name))
+        (b* ((name     (vl-idtoken->name name))
              (minloc   (vl-token->loc interface-kwd))
              (maxloc   (vl-token->loc endkwd))
              (warnings (vl-parsestate->warnings (vl-tokstream->pstate)))
-             ((when (and portinfo.ansi-p (vl-genelementlist->portdecls items))) ;; User's fault
+             ((mv ansi-p ansi-portdecls ports)
+              (vl-parsed-ports-case portinfo
+                :ansi (mv t portinfo.decls nil)
+                :nonansi (mv nil nil portinfo.ports)))
+             ((when (and ansi-p (vl-genelementlist->portdecls items))) ;; User's fault
               (vl-parse-error "ANSI interface cannot have internal port declarations."))
-             ((when (and (not portinfo.ansi-p)
-                         (or portinfo.portdecls portinfo.vardecls)))
-              (vl-parse-error "Non-ANSI interface ports are somehow causing declarations?
-                               Programming error."))
              (items (append (vl-modelementlist->genelements imports)
-                            (vl-modelementlist->genelements portinfo.portdecls)
-                            (vl-modelementlist->genelements portinfo.vardecls)
                             items))
-             (interface (vl-make-interface-by-items name params portinfo.ports items
+             (interface (vl-make-interface-by-items name params ansi-portdecls ports ansi-p items
                                               atts minloc maxloc warnings)))
           (mv nil interface tokstream)))))
 
@@ -215,7 +254,7 @@ interface_ansi_header ::=
                                :msg "[[ Remaining ]]: ~s0 ~s1.~%"
                                :args (list (vl-tokenlist->string-with-spaces
                                             (take (min 4 (len tokens))
-                                                  (redundant-list-fix tokens)))
+                                                  (list-fix tokens)))
                                            (if (> (len tokens) 4) "..." ""))
                                :fatalp t
                                :fn __function__)))

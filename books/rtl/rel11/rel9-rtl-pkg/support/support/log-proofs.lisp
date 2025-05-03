@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -158,7 +146,7 @@
    :hints (("Goal" :induct (log-induct x y))
            ("Subgoal *1/2" :use ((:instance logior-logand-2)
                                  (:instance fl-mod-equal
-                                            
+
                                             (y (logand (logior x y) x))))))))
 ;BOZO export!
 ;gen?
@@ -262,7 +250,7 @@
    :rule-classes ()
    :hints (("Goal" :use ((:instance mod-logand-1)
 ;			(:instance mod>=0 (m x) (n (expt 2 n)))
-                         (:instance logand-logior 
+                         (:instance logand-logior
                                     (x y)
                                     (y (* (expt 2 n) (fl (/ x (expt 2 n)))))
                                     (z (mod x (expt 2 n))))
@@ -274,7 +262,7 @@
 		  (integerp y) (>= y 0)
 		  (integerp n) (>= n 0))
 	     (= (logand x y)
-		(logior (* (expt 2 n) 
+		(logior (* (expt 2 n)
 			   (logand (fl (/ x (expt 2 n)))
 				   (fl (/ y (expt 2 n)))))
 			(logand (mod x (expt 2 n))
@@ -289,7 +277,7 @@
                  (integerp y) (>= y 0)
                  (integerp n) (>= n 0))
             (= (logand x y)
-               (+ (* (expt 2 n) 
+               (+ (* (expt 2 n)
                      (logand (fl (/ x (expt 2 n)))
                              (fl (/ y (expt 2 n)))))
                   (logand (mod x (expt 2 n))
@@ -301,7 +289,7 @@
                                                (fl (/ y (expt 2 n)))))
                                     (y (logand (mod x (expt 2 n))
                                                y)))
-;			(:instance mod>=0 (m x) (n (expt 2 n)))			
+;			(:instance mod>=0 (m x) (n (expt 2 n)))
                          (:instance mod-bnd-1 (m x) (n (expt 2 n)))
                          (:instance logand-bnd (x (mod x (expt 2 n))))
                          )))))
@@ -315,10 +303,10 @@
   :rule-classes ()
   :hints (("goal" :use ((:instance mod-logand-4)
 			(:instance mod-mult-eric
-				   (x (logand (mod x (expt 2 n)) y)) 
+				   (x (logand (mod x (expt 2 n)) y))
 				   (y (expt 2 n))
 				   (a (logand (fl (/ x (expt 2 n))) (fl (/ y (expt 2 n))))))
-;			(:instance mod>=0 (m x) (n (expt 2 n)))			
+;			(:instance mod>=0 (m x) (n (expt 2 n)))
 			(:instance mod-bnd-1 (m x) (n (expt 2 n)))
 			(:instance logand-bnd (x (mod x (expt 2 n))))
 			(:instance mod-does-nothing (m (logand (mod x (expt 2 n)) y)) (n (expt 2 n)))))))
@@ -412,12 +400,12 @@
                            (logior (logior (logand (* (expt 2 j) (bits x i j))
                                                    (* (expt 2 j) (bits y i j)))
                                            (logand (* (expt 2 j) (bits y i j))
-                                                   (bits x (1- j) 0)))					
+                                                   (bits x (1- j) 0)))
                                    (logior (logand (bits x (1- j) 0)
                                                    (bits y (1- j) 0))
                                            (logand (* (expt 2 j) (bits x i j))
                                                    (bits y (1- j) 0))))))
-				
+
                :rule-classes ()
                :hints (("Goal" :use (bits-logand-2
                      ;                 (:instance expt-pos (x j))
@@ -434,7 +422,7 @@
                              (integerp j) (> j 0))
                         (= (logand (* (expt 2 j) (bits x i j))
                                    (* (expt 2 j) (bits y i j)))
-                           (* (expt 2 j) (logand (bits x i j) (bits y i j)))))				
+                           (* (expt 2 j) (logand (bits x i j) (bits y i j)))))
                :rule-classes ()
                :hints (("Goal" :use (
                      ;                 (:instance expt-pos (x j))
@@ -471,7 +459,7 @@
                                            0)
                                    (logior (logand (bits x (1- j) 0)
                                                    (bits y (1- j) 0))
-                                           0))))				
+                                           0))))
                :rule-classes ()
                :hints (("Goal" :use (bits-logand-4
                                      bits-logand-5
@@ -502,7 +490,7 @@
                            (logior (* (expt 2 j) (logand (bits x i j) (bits y i j)))
                                    (bits (logand x y) (1- j) 0))))
                :rule-classes ()
-               :hints (("Goal" :in-theory (enable 
+               :hints (("Goal" :in-theory (enable
                                            bits
                                            )
                         :use (bits-logand-9
@@ -644,7 +632,7 @@
 			(bits (logior x y) (1- j) 0))))
     :otf-flg t
   :rule-classes ()
-  :hints (("Goal" :in-theory (enable bits mod-logior 
+  :hints (("Goal" :in-theory (enable bits mod-logior
                                      )
            :use (bits-logior-4
                  (:instance or-dist-c (n j) (x (bits x i j)) (y (bits y i j))))))))
@@ -746,7 +734,7 @@
                 (integerp k) (>= k 0))
            (= (logior x (expt 2 k))
               (+ x
-                 (* (expt 2 k) 
+                 (* (expt 2 k)
                     (- 1 (bitn x k))))))
   :rule-classes ()
   :hints (("goal"  :in-theory (enable expt) :induct (or-dist-induct x k))
@@ -776,7 +764,7 @@
             (= (mod (1- (expt 2 n)) 2)
                1))
    :rule-classes ()
-   :hints (("Goal" :in-theory (enable expt) 
+   :hints (("Goal" :in-theory (enable expt)
             :use ((:instance mod-2*i+1 (i (1- (expt 2 (1- n)))))
                   (:instance mod012 (m (1- (expt 2 n)))))))))
 
@@ -802,7 +790,7 @@
             (= (logand x (- (expt 2 n) (expt 2 k)))
                (* 2 (logand (fl (/ x 2)) (- (expt 2 (1- n)) (expt 2 (1- k)))))))
    :rule-classes ()
-   :hints (("Goal" :in-theory (enable expt) 
+   :hints (("Goal" :in-theory (enable expt)
             :use ((:instance logand-def (i x) (j (- (expt 2 n) (expt 2 k))))
                   (:instance expt-weak-monotone (n k) (m n))
                   (:instance mod-2*i (i (- (expt 2 (1- n)) (expt 2 (1- k))))))))))
@@ -1038,7 +1026,7 @@
                                      (logand y (lnot x n)))
                              2))))
           :rule-classes ()
-          :hints (("Goal" :use ( ;(:instance logior-fl 
+          :hints (("Goal" :use ( ;(:instance logior-fl
 ;                        (i (logand x (lnot y n)))
 ;                       (j (logand y (lnot x n))))
                                 )))))

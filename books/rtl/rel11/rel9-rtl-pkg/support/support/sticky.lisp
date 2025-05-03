@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -50,18 +38,34 @@
 	((< x 1) (cons 1 (fl (/ x))))
 	(t (fl x))))
 
-(defund expo (x)
-  (declare (xargs :guard t
-                  :measure (expo-measure x)))
-  (cond ((or (not (rationalp x)) (equal x 0)) 0)
-	((< x 0) (expo (- x)))
-	((< x 1) (1- (expo (* 2 x))))
-	((< x 2) 0)
-	(t (1+ (expo (/ x 2))))))
+(defnd expo (x)
+  (declare (xargs :measure (expo-measure x)
+                  :verify-guards nil))
+  (mbe
+   :logic
+   (cond ((or (not (rationalp x)) (equal x 0)) 0)
+         ((< x 0) (expo (- x)))
+         ((< x 1) (1- (expo (* 2 x))))
+         ((< x 2) 0)
+         (t (1+ (expo (/ x 2)))))
+   :exec
+   (if (rationalp x)
+       (let* ((n (abs (numerator x)))
+              (d (denominator x))
+              (ln (integer-length n))
+              (ld (integer-length d))
+              (l (- ln ld)))
+         (if (>= ln ld)
+             (if (>= (ash n (- l)) d) l (1- l))
+           (if (> ln 1)
+               (if (> n (ash d l)) l (1- l))
+             (- (integer-length (1- d))))))
+     0)))
 
 ;could redefine to divide by the power of 2 (instead of making it a negative power of 2)...
 (defund sig (x)
-  (declare (xargs :guard t))
+  (declare (xargs :guard t
+                  :verify-guards nil))
   (if (rationalp x)
       (if (< x 0)
           (- (* x (expt 2 (- (expo x)))))
@@ -85,7 +89,8 @@
   (+ x (expt 2 (- (1+ (expo x)) n))))
 
 (defund trunc (x n)
-  (declare (xargs :guard (integerp n)))
+  (declare (xargs :guard (integerp n)
+                  :verify-guards nil))
   (* (sgn x) (fl (* (expt 2 (1- n)) (sig x))) (expt 2 (- (1+ (expo x)) n))))
 
 (defund away (x n)
@@ -140,7 +145,7 @@
 		  (integerp n) (> n 0)
 		  (integerp k))
 	     (= (sticky (* (expt 2 k) x) n)
-		(* (expt 2 k) (sticky x n))))		
+		(* (expt 2 k) (sticky x n))))
   :rule-classes ())
 
 (defthm sticky-minus
@@ -259,11 +264,11 @@
 		  (not (exactp x n)))
 	     (= (away x n)
 		(+ (trunc x n)
-		   (expt 2 (+ (expo x) 1 (- n))))))		
+		   (expt 2 (+ (expo x) 1 (- n))))))
   :rule-classes ())
 
 (defthm sticky-0
-  (equal (sticky 0 n) 
+  (equal (sticky 0 n)
          0))
 
 (defthm minus-sticky
@@ -310,13 +315,13 @@
 (defthm sticky-exactp-m
     (implies (and (rationalp x)
 		  (integerp m)
-		  (integerp n) 
+		  (integerp n)
 		  (> n m)
 		  (> m 0))
 	     (iff (exactp (sticky x n) m)
 		  (exactp x m)))
   :rule-classes ())
 
-          
+
 
 

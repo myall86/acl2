@@ -1,5 +1,5 @@
 ; XDOC Documentation System for ACL2
-; Copyright (C) 2009-2013 Centaur Technology
+; Copyright (C) 2009-2015 Centaur Technology
 ;
 ; Contact:
 ;   Centaur Technology Formal Verification Group
@@ -47,8 +47,14 @@
          ;; seems, trans-eval will just do whatever the default guard checking
          ;; mode is.  And, in some make-events, it appears that guard checking
          ;; gets disabled somehow.
-         (with-guard-checking t
-                              (trans-eval sexpr 'unsound-eval state t)))
+         (with-guard-checking-error-triple
+          t
+
+; Matt K. mod, 9/8/2017: replacing trans-eval by the trans-eval-no-warning, to
+; avoid the new "User-stobjs-modified" warnings.  Suppressing such warnings
+; seems in the spirit of unsound-eval.
+
+          (trans-eval-no-warning sexpr 'unsound-eval state t)))
         ((when err)
          (mv (msg "Failed to evaluate ~x0; trans eval failed? ~x1." sexpr err)
              nil state))

@@ -1,19 +1,5 @@
-; Arithmetic-3 Library
-; Copyright (C) 2004 Robert Krug <rkrug@cs.utexas.edu>
-;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT
-; ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-; FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
-; details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; if not, write to the Free Software Foundation, Inc., 51
-; Franklin Street, Suite 500, Boston, MA 02110-1335, USA.
+; See the top-level arithmetic-3 LICENSE file for authorship,
+; copyright, and license information.
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -35,7 +21,7 @@
 (local
  (include-book "default-hint"))
 
-(set-default-hints '((nonlinearp-default-hint stable-under-simplificationp 
+(set-default-hints '((nonlinearp-default-hint stable-under-simplificationp
                                               hist pspv)))
 
 (local
@@ -157,7 +143,7 @@
 		 (not (integerp (* 1/2 i))))
 	    (< (expt r i) 0))
    :rule-classes (:type-prescription :generalize)
-   :hints (("Goal" :use ((:instance 
+   :hints (("Goal" :use ((:instance
 			  expt-type-prescription-negative-base-even-exponent
 				    (r r)
 				    (i (- i 1)))
@@ -165,7 +151,7 @@
 	    :in-theory (disable reduce))))
 
  )
-  
+
 
 
 
@@ -182,7 +168,7 @@
 
 (encapsulate
  ()
- 
+
  (local
   (defthm expt-negative-base-odd-exponent-hack
       (implies (and (integerp i)
@@ -192,11 +178,11 @@
     :hints (("Goal" :induct (ind i)))
     :rule-classes nil))
 
- (local 
+ (local
   (defthm hack654
       (equal (* -1 x)
              (- x))))
-  
+
  (defthm expt-negative-base-odd-exponent
      (implies (and (integerp i)
                    (not (integerp (* 1/2 i))))

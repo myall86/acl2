@@ -7,10 +7,14 @@
           (cons (car x) (rm e (cdr x))))
       nil))
 
-(defun memb (e x)
+; Matt K. mod: First parameter changed from e to a for compatibility with
+; meta/term-defuns.lisp.
+(defun memb (a x)
+  ;; Alessandro Coglio: added guard for compatibility with meta/term-defuns.lisp
+  (declare (xargs :guard t))
   (if (consp x)
-      (or (equal e (car x))
-          (memb e (cdr x)))
+      (or (equal a (car x))
+          (memb a (cdr x)))
       nil))
 
 (defun perm (x y)

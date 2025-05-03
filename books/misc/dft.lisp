@@ -6,10 +6,22 @@
 
 ; All the "terms" encountered in this work are untranslated.  We nevertheless
 ; explore them.  We will always check that they are "deft terms" which means
-; they are 
+; they are
 ; <dterm> ::= <atom> -- variables, constants, unquoted evgs like 3 and "abc" |
 ;             (quote x) |
 ;             (sym <dterm> ... <dterm>)
+
+(include-book "xdoc/top" :dir :system)
+(defxdoc dft
+  :parents (defthm events)
+  :short "Provide an explicit proof, for example chaining equalities"
+  :long "<p>@('Dft') is a proof-checking-like macro that allows you to chain
+ together equalities.  The name @('\"dft\"') is short for @('\"defthm\"').  In
+ the @(see community-books) see @('books/misc/dft-ex.lisp') for some
+ examples.</p>
+
+ <p>This tool has not been used in big proofs and probably can be improved
+ quite a bit.  The author encourages users to build improved versions.</p>")
 
 (defmacro enable-disable (a b)
   `(set-difference-theories (enable ,@a) ',b))
@@ -34,7 +46,7 @@
         (member-eq (car x) '(cond let let*)))
 
 ; We list above some commonly used macros that violate the syntax of
-; <dterm> above.  
+; <dterm> above.
 
     `(er soft 'deft
          "We do not permit ~p0 as a function symbol."
@@ -113,7 +125,7 @@
     (list* :instance (dterm-sublis-into-lmi alist (cadr lmi))
            (dterm-sublis-subst alist (cddr lmi))))
    (t lmi)))
-          
+
 
 (defun dterm-sublis-into-use-hint (alist lst)
   (declare (xargs :mode :program))
@@ -131,7 +143,7 @@
                               (cond ((and (consp (cadr keyword-alist))
                                           (eq (car (cadr keyword-alist)) :instance))
                                      (dterm-sublis-into-lmi bindings (cadr keyword-alist)))
-                                    (t (dterm-sublis-into-use-hint bindings 
+                                    (t (dterm-sublis-into-use-hint bindings
                                                                    (cadr keyword-alist)))))
                              (t (cadr keyword-alist))))
                  (convert-keyword-alist-to-alist bindings (cddr keyword-alist))))))
@@ -215,7 +227,7 @@
 ; (about the exprs, not the vars) to be proved and alist is a substitution
 ; mapping the vars to the exprs.
 
-  (declare (xargs :mode :program))  
+  (declare (xargs :mode :program))
   (cond
    ((atom phrase)
     (mv nil
@@ -589,7 +601,7 @@
            (er-form (mv er-form nil nil))
            (t (let* (
 
-; The first element of revents -- the last to be generated -- is 
+; The first element of revents -- the last to be generated -- is
 ; of the form (defthm name dterm :rule-classes nil :hints hints ...)
 ; and we are merely interested in the hints.
 
@@ -696,7 +708,7 @@
                   ,@(and hints
                          (not (or in-theory enable disable
                                   use expand cases restrict
-                                  induct by do-not do-not-induct)) 
+                                  induct by do-not do-not-induct))
                          `(:hints ,hints))
                   ,@(and (or in-theory enable disable use expand cases
                              restrict induct by do-not do-not-induct)

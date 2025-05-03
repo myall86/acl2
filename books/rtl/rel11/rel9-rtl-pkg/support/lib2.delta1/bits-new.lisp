@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -28,12 +16,12 @@
 
 (include-book "../lib2/basic")
 
-(local (include-book "bits-new-proofs"))  
+(local (include-book "bits-new-proofs"))
 
 ;; It is important that we don't have export a definition of "bits",
-;; "bitn". 
-;; 
-;; eventually we will add a wrapper to redefine "bits_alt" as new "bits" 
+;; "bitn".
+;;
+;; eventually we will add a wrapper to redefine "bits_alt" as new "bits"
 ;;                                              "bitn_alt" as new "bitn"
 ;;
 
@@ -106,9 +94,9 @@
 ;;;**********************************************************************
 
 ;;;
-;;; Thu Feb  5 09:13:43 2009. new definition for bits 
+;;; Thu Feb  5 09:13:43 2009. new definition for bits
 ;;;
-;;; later we will redefine bits to have the same definition of bits_alt. 
+;;; later we will redefine bits to have the same definition of bits_alt.
 ;;;
 
 (defund bits_alt (x i j)
@@ -145,7 +133,7 @@
            (bvecp (bits_alt x i j) k)))
 
 (defthm mod-bits_alt-equal
-  (implies (= (mod x (expt 2 (1+ i))) 
+  (implies (= (mod x (expt 2 (1+ i)))
 	      (mod y (expt 2 (1+ i))))
 	   (= (bits_alt x i j) (bits_alt y i j)))
   :rule-classes ())
@@ -206,14 +194,14 @@
 		  (< x 0)
 		  (>= x (- (expt 2 j)))
 		  (>= i j))
-	     (equal (bits_alt x i j) 
+	     (equal (bits_alt x i j)
                     (+ -1 (expt 2 (+ 1 i (* -1 j)))))))
 
 (defthmd bits_alt-minus-1
     (implies (and (natp i)
 		  (natp j)
 		  (>= i j))
-	     (equal (bits_alt -1 i j) 
+	     (equal (bits_alt -1 i j)
                     (+ -1 (expt 2 (+ 1 i (* -1 j)))))))
 
 (defthm bits_alt-tail
@@ -340,7 +328,7 @@
 ;;		(not (equal 4 (bits_alt x 15 6)))))
 ;;See also bits_alt-match.
 
-(defthmd bits_alt-dont-match 
+(defthmd bits_alt-dont-match
   (implies (and (syntaxp (and (quotep i)
 			      (quotep j)
 			      (quotep k)))
@@ -357,7 +345,7 @@
 
 ;;
 ;; Thu Feb  5 10:09:26 2009: from lib2/bits.lisp
-;; 
+;;
 
 (defun bitvec (x n)
    (if (bvecp x n) x 0))
@@ -610,8 +598,8 @@
   :rule-classes ())
 
 (defthmd bitn_alt-plus-mult
-    (implies (and (< n m) 
-		  (integerp m) 
+    (implies (and (< n m)
+		  (integerp m)
 		  (integerp k))
 	     (equal (bitn_alt (+ x (* k (expt 2 m))) n)
 		    (bitn_alt x n))))
@@ -664,9 +652,9 @@
         ((endp (cddddr x))
          `(binary-cat_alt ,@x))
         (t
-         `(binary-cat_alt ,(car x) 
-                      ,(cadr x) 
-                      (cat_alt ,@(cddr x)) 
+         `(binary-cat_alt ,(car x)
+                      ,(cadr x)
+                      (cat_alt ,@(cddr x))
                       ,(cat-size (cddr x))))))
 
 (defthm cat_alt-nonnegative-integer-type
@@ -801,7 +789,7 @@
 		    (if (>= j n)
 			(bits_alt x (if (< i (+ m n))
 				    (- i n)
-				  (1- m)) 
+				  (1- m))
 			      (- j n))
 		      (cat_alt (bits_alt x (if (< i (+ m n))
 					(- i n)
@@ -825,7 +813,7 @@
 		    (if (>= j n)
 			(bits_alt x (if (< i (+ m n))
 				    (- i n)
-				  (1- m)) 
+				  (1- m))
 			      (- j n))
 		      (cat_alt (bits_alt x (if (< i (+ m n))
 				       (- i n)
@@ -903,7 +891,7 @@
 
 (defthm mulcat_alt-1
     (implies (natp l)
-	     (equal (mulcat_alt l 1 x) 
+	     (equal (mulcat_alt l 1 x)
 		    (bits_alt x (1- l) 0))))
 
 (defthm mulcat_alt-0

@@ -35,29 +35,16 @@
 (include-book "xdoc/top" :dir :system)
 (include-book "system/f-put-global" :dir :system)
 (include-book "std/lists/list-defuns" :dir :system)
+(include-book "std/basic/bytep" :dir :system)
 (include-book "file-measure")
 (local (include-book "std/lists/append" :dir :system))
 (local (include-book "std/lists/revappend" :dir :system))
 (local (include-book "std/lists/rev" :dir :system))
 (local (include-book "std/strings/coerce" :dir :system))
 
-(defsection bytep
-
-  ;; This should probably be defined elsewhere.
-  ;;
-  ;; We leave this enabled since arithmetic theories probably shouldn't need to
-  ;; know about it.
-
-  (defun bytep (x)
-    (declare (xargs :guard t))
-    (and (natp x)
-         (< x 256)))
-
-  (defthm bytep-compound-recognizer
-    (implies (bytep x)
-             (and (integerp x)
-                  (<= 0 x)))
-    :rule-classes :compound-recognizer))
+; We enable this since arithmetic theories probably shouldn't need to know
+; about it.
+(in-theory (enable bytep))
 
 ;; Various guard-related facts about IO functions.  BOZO maybe some of these
 ;; theorems should be local.
@@ -107,9 +94,9 @@
            (open-channels-p (add-pair k v x)))
   :hints(("Goal" :in-theory (enable open-channels-p))))
 
-(defthm open-channels-p-of-delete-assoc-equal
+(defthm open-channels-p-of-remove1-assoc-equal
   (implies (open-channels-p x)
-           (open-channels-p (delete-assoc-equal k x)))
+           (open-channels-p (remove1-assoc-equal k x)))
   :hints(("Goal" :in-theory (enable open-channels-p
                                     open-channel-listp
                                     ordered-symbol-alistp))))
@@ -140,6 +127,21 @@
 ; -----------------------------------------------------------------------------
 
 (defsection std/io/open-input-channel
+
+; Matt K. mod:
+; The documentation formerly said:
+
+;   BOZO it's too bad that the failure situations are handled so differently.
+;   It would probably be nicer to never cause a hard error, and instead return
+;   some explanation of why opening the file failed.
+
+; In fact open-input-channel should never cause a hard error; this is ensured
+; by the use of safe-open in its source code, which in turn invokes
+; ignore-errors.  Perhaps it's possible to add some explanation, but it's not
+; clear (to me, at this time) how to get that information from Lisp.  Even if
+; we had that information, it would be a major change to open-input-channel to
+; return a non-nil first value in the failure case.
+
   :parents (std/io open-input-channel)
   :short "Open an file for reading."
 
@@ -168,22 +170,9 @@ Under the hood, this symbol will be associated with a raw Lisp file stream.
 Note that to avoid resource leaks, you should eventually use @(see
 close-input-channel) to free this stream.</p>
 
-<p>There are various reasons and ways that @('open-input-channel') can fail.
-For instance:</p>
-
-<ul>
-
-<li>If you try to open a file that does not exist, @('channel') will be
-@('nil').</li>
-
-<li>If you try to open a file for which you do not have permission, say
-@('/etc/shadow'), a hard Lisp error can result.</li>
-
-</ul>
-
-<p>BOZO it's too bad that the failure situations are handled so differently.
-It would probably be nicer to never cause a hard error, and instead return some
-explanation of why opening the file failed.</p>"
+<p>On failure, @('channel') is @('nil').  There are various reasons that
+@('open-input-channel') can fail.  For example, this can happen if you try to
+open a file that does not exist or for which you do not have permission.</p>"
 
   (defthm state-p1-of-open-input-channel
     (implies (and (state-p1 state)
@@ -206,10 +195,7 @@ explanation of why opening the file failed.</p>"
               channel
               type
               (mv-nth 1 (open-input-channel fname type state))))
-    :hints(("Goal" :in-theory (enable state-p1))))
-
-
-  )
+    :hints(("Goal" :in-theory (enable state-p1)))))
 
 
 ;; helper theorems for reading
@@ -616,7 +602,7 @@ foo
 
 @({
  (in-package \"ACL2\")
- (include-book \"tools/bstar\" :dir :system)
+ (include-book \"std/util/bstar\" :dir :system)
  (include-book \"centaur/vl/portcullis\" :dir :system)
 
  (make-event
@@ -705,7 +691,45 @@ foo
                      state))
      :hints(("Goal" :in-theory (e/d (read-object state-p1)))))))
 
+(defsection std/io/read-file-into-string
+  :parents (std/io read-file-into-string)
 
+  :long "<p>See @(see read-file-into-string).</p>"
+
+  (local (in-theory (disable read-char$ open-input-channel-p1)))
+
+  (defthm
+    stringp-of-read-file-into-string1
+    (implies
+     (not
+      (null
+       (mv-nth 0
+               (read-file-into-string1 channel state ans bound))))
+     (stringp
+      (mv-nth 0
+              (read-file-into-string1 channel state ans bound))))
+    :rule-classes
+    (:rewrite
+     (:type-prescription
+      :corollary
+      (or
+       (null
+        (mv-nth 0
+                (read-file-into-string1 channel state ans bound)))
+       (stringp
+        (mv-nth
+         0
+         (read-file-into-string1 channel state ans bound)))))))
+
+  (defthm
+    state-p1-of-read-file-into-string1
+    (implies
+     (and (symbolp channel)
+          (open-input-channel-p channel
+                                :character state)
+          (state-p state))
+     (state-p1 (mv-nth 1
+                       (read-file-into-string1 channel state ans bound))))))
 
 ; -----------------------------------------------------------------------------
 ;
@@ -748,19 +772,11 @@ package.  Under the hood, this symbol will be associated with the Lisp stream.
 Note that to avoid resource leaks, you should eventually use @(see
 close-output-channel) to free this stream.</p>
 
-<p>There are various reasons and ways that @('open-output-channel') can fail,
-which can be platform dependent.  For instance:</p>
-
-<ul>
-
-<li>If you try to write to a file in a directory that does not exist, then on
-SBCL you will get a raw Lisp error but on CCL the directory will be
-created.</li>
-
-<li>If you try to open a file for which you do not have permission, say
-@('/etc/shadow'), a hard Lisp error can result.</li>
-
-</ul>"
+<p>On failure, @('channel') is @('nil').  There are various reasons that
+@('open-output-channel') can fail.  For example, this can happen if you try to
+write to a file in a directory that does not exist, and it may happen
+(depending on your host Lisp) if you try to open a file for which you do not
+have permission.</p>"
 
   (defthm state-p1-of-open-output-channel
     (implies (and (state-p1 state)
@@ -789,7 +805,9 @@ created.</li>
     ;; This is needed for open-output-channel!.
     (equal (open-output-channel-p1 channel type (put-global key val state))
            (open-output-channel-p1 channel type state))
-    :hints(("Goal" :in-theory (enable open-output-channel-p1 put-global)))))
+    :hints(("Goal" :in-theory (enable open-output-channel-p1 put-global))))
+
+  )
 
 
 
@@ -975,14 +993,6 @@ with @('channel').</p>"
              (open-output-channel-p1 channel
                                      :object (print-object$ x channel state))))
 
-  "<p>Knowing about @('hons-enabledp') is necessary for using @(see
-   set-serialize-character).</p>"
-
-  (defthm hons-enabledp-of-print-object$
-    (equal (acl2::hons-enabledp (print-object$ obj channel state))
-           (acl2::hons-enabledp state))
-    :hints(("Goal" :in-theory (enable get-global))))
-
   (defthm get-serialize-character-of-print-object$
     (equal (get-serialize-character (print-object$ obj channel state))
            (get-serialize-character state))
@@ -1019,8 +1029,7 @@ with @('channel').</p>"
     (equal (get-serialize-character (set-serialize-character c state))
            (cond ((not c)
                   nil)
-                 ((and (hons-enabledp state)
-                       (serialize-characterp c))
+                 ((serialize-characterp c)
                   c)
                  (t
                   (get-serialize-character state))))
@@ -1028,21 +1037,12 @@ with @('channel').</p>"
                                       set-serialize-character
                                       serialize-characterp))))
 
-  (defthm hons-enabledp-of-set-serialize-character
-    (equal (hons-enabledp (set-serialize-character c state))
-           (hons-enabledp state))
-    :hints(("Goal" :in-theory (enable set-serialize-character
-                                      get-global
-                                      put-global
-                                      hons-enabledp))))
-
   (defthm boundp-global1-of-set-serialize-character
     (iff (boundp-global1 'serialize-character
                          (set-serialize-character c state))
          (cond ((not c)
                 t)
-               ((and (hons-enabledp state)
-                     (serialize-characterp c))
+               ((serialize-characterp c)
                 t)
                (t
                 (boundp-global1 'serialize-character state))))

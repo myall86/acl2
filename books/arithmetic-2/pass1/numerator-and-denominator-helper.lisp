@@ -1,19 +1,6 @@
 ; ACL2 Arithmetic Nonnegative Integer Mod and Gcd book.
 ; Copyright (C) 1998  John R. Cowles, University of Wyoming
-
-; This book is free software; you can redistribute it and/or modify
-; it under the terms of the GNU General Public License as published by
-; the Free Software Foundation; either version 2 of the License, or
-; (at your option) any later version.
-
-; This book is distributed in the hope that it will be useful,
-; but WITHOUT ANY WARRANTY; without even the implied warranty of
-; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-; GNU General Public License for more details.
-
-; You should have received a copy of the GNU General Public License
-; along with this book; if not, write to the Free Software
-; Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+; License: A 3-clause BSD license.  See the LICENSE file distributed with ACL2.
 
 ; Written by:
 ; John Cowles
@@ -33,7 +20,7 @@
 
 This book is used to prove all the axioms in the
      Arithmetic Rationals-with-axioms book
-     [All the axioms in that book are 
+     [All the axioms in that book are
       now theorems in the book
       Rationals-with-axioms-proved]
 
@@ -79,15 +66,15 @@ This book is used to prove all the axioms in the
 	 (nfix n))
   :rule-classes ((:elim
 		  :corollary
-		  (implies (and 
+		  (implies (and
 			    (integerp n)
 			    (integerp d)
 			    (>= n 0)
 			    (>= d 0))
 			   (equal
-			    (+ 
+			    (+
 			     (nonneg-int-mod n d)
-			     (* d 
+			     (* d
 				(nonnegative-integer-quotient n
 							      d)))
 			    n)))))
@@ -155,7 +142,7 @@ This book is used to prove all the axioms in the
   Divisor-nonnegative-integer-quotient
   (implies (equal (nonneg-int-mod n d) 0)
 	   (equal (* (nfix d)
-		     (nonnegative-integer-quotient n d)) 
+		     (nonnegative-integer-quotient n d))
 		  (nfix n)))
   :rule-classes nil)
 
@@ -226,7 +213,7 @@ This book is used to prove all the axioms in the
 	   (equal (nonneg-int-mod (+ (* a x)(* b y)) n) 0))
   :hints (("Goal"
 	   :in-theory (disable Nonneg-Int-mod-minus-0)
-	   :use ((:instance 
+	   :use ((:instance
 		  Nonneg-Int-mod-minus-0
 		  (x (* a x))
 		  (y (* b (- y))))
@@ -234,7 +221,7 @@ This book is used to prove all the axioms in the
 		  Nonneg-int-mod-*-0
 		  (j b)
 		  (y (- y)))
-		 (:instance 
+		 (:instance
 		  Nonneg-Int-mod-minus-0
 		  (x (* b y))
 		  (y (* a (- x))))
@@ -255,7 +242,7 @@ This book is used to prove all the axioms in the
 (defthm
   Nonneg-int-mod-1
   (equal (nonneg-int-mod n 1) 0))
-	  
+
 ;;;;;;;;;;;;;;;;;;;;
 ;; Nonneg-int-gcd ;;
 ;;;;;;;;;;;;;;;;;;;;
@@ -306,7 +293,7 @@ This book is used to prove all the axioms in the
      (if (zp y)
 	 0
          (+ (nonneg-int-gcd-multiplier1 y (nonneg-int-mod x y))
-	    (- (* (nonneg-int-gcd-multiplier2 y 
+	    (- (* (nonneg-int-gcd-multiplier2 y
 					      (nonneg-int-mod x y))
 		  (nonnegative-integer-quotient x y)))))))
 
@@ -315,7 +302,7 @@ This book is used to prove all the axioms in the
     (equal (nonneg-int-gcd x y)
 	   (+ (* (nfix x)
 		 (nonneg-int-gcd-multiplier1 x y))
-	      (* (nfix y) 
+	      (* (nfix y)
 		 (nonneg-int-gcd-multiplier2 x y)))))
 
 (in-theory (disable Linear-combination-for-nonneg-int-gcd))
@@ -327,7 +314,7 @@ This book is used to prove all the axioms in the
 	   (equal (nonneg-int-mod (nonneg-int-gcd x y) d)
 		  0))
   :hints (("Goal"
-	   :in-theory 
+	   :in-theory
 	   (enable Linear-combination-for-nonneg-int-gcd))))
 
 (defthm
@@ -349,21 +336,21 @@ This book is used to prove all the axioms in the
 		(>= x 0)
 		(>= y 0))
 	   (and (equal (* (nonneg-int-gcd x y)
-			  (nonnegative-integer-quotient 
-			   x 
+			  (nonnegative-integer-quotient
+			   x
 			   (nonneg-int-gcd x y)))
 		       x)
 		(equal (* (nonneg-int-gcd x y)
-			  (nonnegative-integer-quotient 
-			   y 
+			  (nonnegative-integer-quotient
+			   y
 			   (nonneg-int-gcd x y)))
 		       y)))
   :hints (("Goal"
-	   :use ((:instance 
+	   :use ((:instance
 		  Divisor-nonnegative-integer-quotient
 		  (n x)
 		  (d (nonneg-int-gcd x y)))
-		 (:instance 
+		 (:instance
 		  Divisor-nonnegative-integer-quotient
 		  (n y)
 		  (d (nonneg-int-gcd x y)))))))
@@ -386,7 +373,7 @@ This book is used to prove all the axioms in the
 		(>= y 0))
 	   (equal (nonneg-int-mod x z) 0))
   :rule-classes nil
-  :hints (("Goal" 
+  :hints (("Goal"
 	   :use ((:instance
 		  Linear-combination-nonneg-int-mod
 		  (a (* x y))
@@ -412,9 +399,9 @@ This book is used to prove all the axioms in the
 				(<= 0 n)
 				(<= (+ x (* j n)) 0)
 				(<= x 0))
-			   (equal 
+			   (equal
 			    (nonneg-int-mod (+ (- x)(- (* j n)))
-					    (nonneg-int-gcd (- x) 
+					    (nonneg-int-gcd (- x)
 							    n))
 			    0))
 		  :hints (("Goal"
@@ -427,7 +414,7 @@ This book is used to prove all the axioms in the
 				(<= 0 n)
 				(<= 0 (+ x (* j n)))
 				(<= x 0))
-			   (equal 
+			   (equal
 			    (nonneg-int-mod (+ x (* j n))
 					    (nonneg-int-gcd (- x)
 							    n))
@@ -440,7 +427,7 @@ This book is used to prove all the axioms in the
 				(<= 0 n)
 				(<= (+ x (* j n)) 0)
 				(<= 0 x))
-			   (equal 
+			   (equal
 			    (nonneg-int-mod (+ (- x) (- (* j n)))
 					    (nonneg-int-gcd x n))
 			    0)))
@@ -452,7 +439,7 @@ This book is used to prove all the axioms in the
 				(<= 0 n)
 				(<= 0 (+ x (* j n)))
 				(<= 0 x))
-			   (equal 
+			   (equal
 			    (nonneg-int-mod (+ x (* j n))
 					    (nonneg-int-gcd x n))
 			    0))))
@@ -465,7 +452,7 @@ This book is used to prove all the axioms in the
 		 (y (- j))
 		 (n (nonneg-int-gcd (- x) n))))
 	  ("Subgoal 3"
-	   :use (:instance 
+	   :use (:instance
 		 Linear-combination-nonneg-int-mod
 		 (a (- x))
 		 (b n)
@@ -505,9 +492,9 @@ This book is used to prove all the axioms in the
 		(integerp n)
 		(integerp x)
 		(< 0 n))
-	   (equal 
+	   (equal
 	    (nonneg-int-mod (abs x)
-			    (nonneg-int-gcd (abs (+ x (* j n))) 
+			    (nonneg-int-gcd (abs (+ x (* j n)))
 					    n))
 	    0))
   :rule-classes ((:rewrite
@@ -518,10 +505,10 @@ This book is used to prove all the axioms in the
 				(<= 0 n)
 				(<= (+ x (* j n)) 0)
 				(<= x 0))
-			   (equal 
+			   (equal
 			    (nonneg-int-mod (- x)
 					    (nonneg-int-gcd
-					     (+ (- x)(- (* j n))) 
+					     (+ (- x)(- (* j n)))
 					     n))
 			    0)))
 		 (:rewrite
@@ -532,10 +519,10 @@ This book is used to prove all the axioms in the
 				(< 0 n)
 				(<= 0 (+ x (* j n)))
 				(<= x 0))
-			   (equal 
+			   (equal
 			    (nonneg-int-mod (- x)
-					    (nonneg-int-gcd 
-					     (+ x (* j n)) 
+					    (nonneg-int-gcd
+					     (+ x (* j n))
 					     n))
 			    0)))
 		 (:rewrite
@@ -546,9 +533,9 @@ This book is used to prove all the axioms in the
 				(< 0 n)
 				(<= (+ x (* j n)) 0)
 				(<= 0 x))
-			   (equal 
+			   (equal
 			    (nonneg-int-mod x
-					    (nonneg-int-gcd 
+					    (nonneg-int-gcd
 					     (+ (- x)(- (* j n)))
 					     n))
 			    0)))
@@ -560,14 +547,14 @@ This book is used to prove all the axioms in the
 				(< 0 n)
 				(<= 0 (+ x (* j n)))
 				(<= 0 x))
-			   (equal 
+			   (equal
 			    (nonneg-int-mod x
-					    (nonneg-int-gcd 
-					     (+ x (* j n)) 
+					    (nonneg-int-gcd
+					     (+ x (* j n))
 					     n))
 			    0))))
   :hints (("Subgoal 4"
-	   :use (:instance 
+	   :use (:instance
 		 Linear-combination-nonneg-int-mod
 		 (a (+ (- x)(- (* j n))))
 		 (b n)
@@ -583,7 +570,7 @@ This book is used to prove all the axioms in the
 		 (y (- j))
 		 (n (nonneg-int-gcd (+ (- x) (- (* j n))) n))))
 	  ("Subgoal 2"
-	   :use (:instance 
+	   :use (:instance
 		 Linear-combination-nonneg-int-mod
 		 (a (+ x (* j n)))
 		 (b n)
@@ -625,7 +612,7 @@ This book is used to prove all the axioms in the
 				(< 0 n)
 				(<= (+ x (* j n)) 0)
 				(<= x 0))
-			   (equal 
+			   (equal
 			    (nonneg-int-gcd (+ (- x)(- (* j n))) n)
 			    (nonneg-int-gcd (- x) n)))
 		  :hints (("Goal"
@@ -648,7 +635,7 @@ This book is used to prove all the axioms in the
 				(< 0 n)
 				(<= (+ x (* j n)) 0)
 				(<= 0 x))
-			   (equal 
+			   (equal
 			    (nonneg-int-gcd (+ (- x)(- (* j n))) n)
 			    (nonneg-int-gcd x n))))
 		 (:rewrite
@@ -743,7 +730,7 @@ This book is used to prove all the axioms in the
 		  :corollary
 		  (implies (<= (numerator x) 0)
 			   (equal (nonneg-int-gcd (denominator x)
-						  (- 
+						  (-
 						   (numerator x)))
 				  1))))
   :hints (("Goal"
@@ -752,12 +739,12 @@ This book is used to prove all the axioms in the
 		 (n (nonneg-int-gcd (abs (numerator x))
 				    (denominator x)))
 		 (r (* (signum (numerator x))
-		       (nonnegative-integer-quotient 
+		       (nonnegative-integer-quotient
 			(abs (numerator x))
 			(nonneg-int-gcd (abs (numerator x))
 					(denominator x)))))
-		 (q (nonnegative-integer-quotient 
-		     (denominator x) 
+		 (q (nonnegative-integer-quotient
+		     (denominator x)
 		     (nonneg-int-gcd (abs (numerator x))
 				     (denominator x))))))))
 
@@ -809,11 +796,11 @@ This book is used to prove all the axioms in the
   (implies (and (integerp n)
 		(integerp d)
 		(> d 0))
-	   (and (equal (nonneg-int-mod d 
+	   (and (equal (nonneg-int-mod d
 				       (denominator (* (/ d) n)))
 		       0)
 		(equal (nonneg-int-mod (abs n)
-				       (abs 
+				       (abs
 					(numerator (* (/ d) n))))
 		       0)))
   :rule-classes ((:rewrite
@@ -821,8 +808,8 @@ This book is used to prove all the axioms in the
 		  (implies (and (integerp n)
 				(integerp d)
 				(> d 0))
-			   (equal 
-			    (nonneg-int-mod d 
+			   (equal
+			    (nonneg-int-mod d
 					    (denominator (* (/ d)
 							    n)))
 			    0)))
@@ -832,8 +819,8 @@ This book is used to prove all the axioms in the
 				(integerp d)
 				(>= n 0)
 				(> d 0))
-			   (equal 
-			    (nonneg-int-mod n 
+			   (equal
+			    (nonneg-int-mod n
 					    (numerator (* (/ d)
 							  n)))
 			    0)))
@@ -843,9 +830,9 @@ This book is used to prove all the axioms in the
 				(integerp d)
 				(<= n 0)
 				(> d 0))
-			   (equal 
-			    (nonneg-int-mod (- n) 
-					    (- 
+			   (equal
+			    (nonneg-int-mod (- n)
+					    (-
 					     (numerator (* (/ d)
 							   n))))
 			    0))))

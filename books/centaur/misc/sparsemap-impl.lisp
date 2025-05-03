@@ -32,11 +32,11 @@
 (include-book "std/lists/resize-list" :dir :system)
 (include-book "count-up")
 (include-book "remove-assoc")
-(include-book "arith-equivs")
+(include-book "std/basic/arith-equivs" :dir :system)
 (include-book "std/util/bstar" :dir :system)
 (include-book "tools/mv-nth" :dir :system)
 (include-book "misc/definline" :dir :system)
-(include-book "centaur/misc/absstobjs" :dir :system)
+(include-book "std/stobjs/absstobjs" :dir :system)
 (local (include-book "std/alists/strip-cars" :dir :system))
 (local (in-theory (enable* arith-equiv-forwarding)))
 
@@ -1931,6 +1931,11 @@
   (declare (xargs :guard (smsetp$a smset)))
   (len (car smset)))
 
+(defun smset-clear$a (smset)
+  (declare (xargs :guard (smsetp$a smset)))
+  (cons nil (cdr smset)))
+
+
 (include-book "centaur/misc/equal-sets" :dir :system)
 
 
@@ -2001,7 +2006,7 @@
   ;; This abstracts a set-only sparsemap (no sm-set/sm-get, only sm-add/sm-inp)
   ;; as a pair of a list and an upper bound (range)
   (defabsstobj-events smset
-    :concrete sm
+    :foundation sm
     :recognizer (smsetp :logic smsetp$a :exec smp)
     :creator (smset-create :logic smset-create$a :exec create-sm)
     :corr-fn smset$corr
@@ -2013,7 +2018,9 @@
                             :protect t)
               (smset-set-range :logic smset-set-range$a :exec sm-set-range
                                :protect t)
-              (smset-eltcount :logic smset-eltcount$a :exec sm-eltcount$inline))))
+              (smset-eltcount :logic smset-eltcount$a :exec sm-eltcount$inline)
+              (smset-clear :logic smset-clear$a :exec sm-clear$inline
+                           :protect t))))
 
 
 
@@ -2067,6 +2074,11 @@
 (defun smmap-eltcount$a (smmap)
   (declare (xargs :guard (smmapp$a smmap)))
   (len (remove-duplicates-equal (strip-cars (car smmap)))))
+
+(defun smmap-clear$a (smmap)
+  (declare (xargs :guard (smmapp$a smmap)))
+  (cons nil (cdr smmap)))
+
 
 (include-book "centaur/misc/alist-equiv" :dir :system)
 
@@ -2160,7 +2172,8 @@
                                                                                    x))))
                            (if (assoc k x)
                                (1- (len (remove-duplicates-equal (strip-cars x))))
-                             (len (remove-duplicates-equal (strip-cars x))))))))
+                             (len (remove-duplicates-equal (strip-cars x))))))
+           :hints (("Goal" :in-theory (enable remove-assoc-equal)))))
 
   (local (defthm not-alist-equiv-when-lookup-unequal
            (implies (and (alistp x) (alistp y)
@@ -2220,6 +2233,7 @@
              (equal (len (remove-duplicates-equal (strip-cars x)))
                     (len (remove-duplicates-equal (strip-cars y)))))
     :hints (("goal"
+             :in-theory (disable strip-cars-of-remove-assoc-equal)
              :induct (ind x y)
              :do-not-induct t)))
 
@@ -2246,7 +2260,7 @@
   ;; This abstracts a set-only sparsemap (no sm-set/sm-get, only sm-add/sm-inp)
   ;; as a pair of a list and an upper bound (range)
   (defabsstobj-events smmap
-    :concrete sm
+    :foundation sm
     :recognizer (smmapp :logic smmapp$a :exec smp)
     :creator (smmap-create :logic smmap-create$a :exec create-sm)
     :corr-fn smmap$corr
@@ -2259,7 +2273,9 @@
                             :protect t)
               (smmap-set-range :logic smmap-set-range$a :exec sm-set-range
                                :protect t)
-              (smmap-eltcount :logic smmap-eltcount$a :exec sm-eltcount$inline))))
+              (smmap-eltcount :logic smmap-eltcount$a :exec sm-eltcount$inline)
+              (smmap-clear :logic smmap-clear$a :exec sm-clear$inline
+                           :protect t))))
 
 
 
@@ -2318,11 +2334,15 @@
                               (< n (sm$a-get-range sm)))))
   (ec-call (sm-delete n sm)))
 
+(defun-nx sm$a-clear (sm)
+  (declare (xargs :guard (sm$ap sm)))
+  (ec-call (sm-clear sm)))
+
 
 ;; This "abstracts" a sparsemap as just a sparsemap, but folds sm-wfp into the
 ;; stobj recognizer.
 (defabsstobj-events sma
-    :concrete sm
+    :foundation sm
     :recognizer (smap :logic sm$ap :exec smp)
     :creator (create-sma :logic create-sm$a :exec create-sm)
     :corr-fn equal
@@ -2337,4 +2357,6 @@
               (sma-set-range :logic sm$a-set-range :exec sm-set-range
                              :protect t)
               (sma-delete :logic sm$a-delete :exec sm-delete
+                          :protect t)
+              (sma-clear :logic sm$a-clear :exec sm-clear$inline
                           :protect t)))

@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -30,15 +18,15 @@
 
 
 
-(local 
- (encapsulate () 
+(local
+ (encapsulate ()
               (local (include-book "bits-new-proofs"))
 
              (defthm bits_alt-is-bits
                (equal (bits_alt x i j)
                       (bits x i j)))
 
-             
+
              (defthm bitn_alt-is-bitn
                (equal (bitn_alt x n)
                       (bitn x n)))
@@ -49,7 +37,7 @@
                       (binary-cat x m y n)))
 
              ))
-               
+
 
 
 
@@ -65,7 +53,7 @@
       (+ -1 (expt 2 n) (- (bits_alt x (1- n) 0)))
     0))
 
-(local 
+(local
  (defthm lnot_alt-is-lnot
    (equal (lnot_alt x n)
           (lnot x n))
@@ -76,7 +64,7 @@
        (<= 0 (lnot_alt x n)))
   :rule-classes ((:type-prescription :typed-term (lnot_alt x n))))
 
-(in-theory (disable (:type-prescription lnot_alt))) 
+(in-theory (disable (:type-prescription lnot_alt)))
 
 (defthmd lnot_alt-bits_alt-1
   (equal (lnot_alt (bits_alt x (1- n) 0) n)
@@ -184,7 +172,7 @@
 (local (include-book "log-new"))
 
 (defund binary-land_alt (x y n)
-  (declare (xargs :guard (and (natp x) 
+  (declare (xargs :guard (and (natp x)
                               (natp y)
                               (integerp n)
                               (< 0 n))
@@ -203,7 +191,7 @@
        (logand (bits_alt x (1- n) 0)
                (bits_alt y (1- n) 0))))
 
-(local 
+(local
  (defthm land_alt-is-land
    (equal (binary-land_alt x y n)
           (binary-land x y n))
@@ -216,7 +204,7 @@
                               (consp (cddr x)))))
   (cond ((endp (cdddr x))
          `(binary-land_alt ,@x))
-        (t         
+        (t
          `(binary-land_alt ,(car x)
                        (land_alt ,@(cdr x))
                        ,(car (last x))))))
@@ -229,7 +217,7 @@
 (in-theory (disable (:type-prescription binary-land_alt)))
 
 (defund binary-lior_alt (x y n)
-  (declare (xargs :guard (and (natp x) 
+  (declare (xargs :guard (and (natp x)
                               (natp y)
                               (integerp n)
                               (< 0 n))
@@ -249,7 +237,7 @@
                (bits_alt y (1- n) 0))))
 
 
-(local 
+(local
  (defthm lior_alt-is-lior
    (equal (binary-lior_alt x y n)
           (binary-lior x y n))
@@ -262,7 +250,7 @@
                               (consp (cddr x)))))
   (cond ((endp (cdddr x)) ;(lior_alt x y n) -- the base case
          `(binary-lior_alt ,@x))
-        (t         
+        (t
          `(binary-lior_alt ,(car x)
                        (lior_alt ,@(cdr x))
                        ,(car (last x))))))
@@ -275,7 +263,7 @@
 (in-theory (disable (:type-prescription binary-lior_alt)))
 
 (defund binary-lxor_alt (x y n)
-  (declare (xargs :guard (and (natp x) 
+  (declare (xargs :guard (and (natp x)
                               (natp y)
                               (integerp n)
                               (< 0 n))
@@ -295,7 +283,7 @@
                (bits_alt y (1- n) 0))))
 
 
-(local 
+(local
  (defthm lxor_alt-is-lxor
    (equal (binary-lxor_alt x y n)
           (binary-lxor x y n))
@@ -309,7 +297,7 @@
                               (consp (cddr x)))))
   (cond ((endp (cdddr x))
          `(binary-lxor_alt ,@x))
-        (t         
+        (t
          `(binary-lxor_alt ,(car x)
                        (lxor_alt ,@(cdr x))
                        ,(car (last x))))))
@@ -590,8 +578,8 @@
 		(case-split (integerp n))
 		(case-split (integerp i)))
 	   (equal (bits_alt (land_alt x y n) i j)
-		  (land_alt (bits_alt x i j) 
-			(bits_alt y i j) 
+		  (land_alt (bits_alt x i j)
+			(bits_alt y i j)
 			(+ (min n (1+ i)) (- j)))))
   :hints (("Goal" :use bits-land)))
 
@@ -600,8 +588,8 @@
 		(case-split (integerp n))
 		(case-split (integerp i)))
 	   (equal (bits_alt (lior_alt x y n) i j)
-		  (lior_alt (bits_alt x i j) 
-			(bits_alt y i j) 
+		  (lior_alt (bits_alt x i j)
+			(bits_alt y i j)
 			(+ (min n (1+ i)) (- j)))))
   :hints (("Goal" :use bits-lior)))
 
@@ -610,8 +598,8 @@
 		(case-split (integerp n))
 		(case-split (integerp i)))
 	   (equal (bits_alt (lxor_alt x y n) i j)
-		  (lxor_alt (bits_alt x i j) 
-			(bits_alt y i j) 
+		  (lxor_alt (bits_alt x i j)
+			(bits_alt y i j)
 			(+ (min n (1+ i)) (- j)))))
   :hints (("Goal" :use bits-lxor)))
 
@@ -620,8 +608,8 @@
 		(case-split (integerp n)))
 	   (equal (bitn_alt (land_alt x y n) k)
 		  (if (< k n)
-		      (land_alt (bitn_alt x k) 
-			    (bitn_alt y k) 
+		      (land_alt (bitn_alt x k)
+			    (bitn_alt y k)
 			    1)
 		    0)))
   :hints (("Goal" :use bitn-land)))
@@ -631,8 +619,8 @@
 		(case-split (integerp n)))
 	   (equal (bitn_alt (lior_alt x y n) k)
 		  (if (< k n)
-		      (lior_alt (bitn_alt x k) 
-			    (bitn_alt y k) 
+		      (lior_alt (bitn_alt x k)
+			    (bitn_alt y k)
 			    1)
 		    0)))
   :hints (("Goal" :use bitn-lior)))
@@ -642,8 +630,8 @@
 		(case-split (integerp n)))
 	   (equal (bitn_alt (lxor_alt x y n) k)
 		  (if (< k n)
-		      (lxor_alt (bitn_alt x k) 
-			    (bitn_alt y k) 
+		      (lxor_alt (bitn_alt x k)
+			    (bitn_alt y k)
 			    1)
 		    0)))
   :hints (("Goal" :use bitn-lxor)))
@@ -733,13 +721,6 @@
   (<= (lxor_alt x y n) (lior_alt x y n))
   :rule-classes (:rewrite :linear)
   :hints (("Goal" :use lxor-bnd)))
-
-(defthmd lior_alt-plus
-  (implies (= (land_alt x y n) 0)
-           (equal (lior_alt x y n)
-                  (+ (bits_alt x (1- n) 0)
-                     (bits_alt y (1- n) 0))))
-  :hints (("Goal" :use lior-plus)))
 
 (defthmd land_alt-with-shifted-arg
   (implies (and (integerp x)
@@ -838,62 +819,6 @@
 	   (equal (lxor_alt k x n)
 		  (lnot_alt x n)))
   :hints (("Goal" :use lxor-ones-rewrite)))
-
-(defthm land_alt-slice
-  (implies (and (<= j i)
-		(<= i n)
-		(integerp n)
-		(integerp i)
-		(integerp j)
-		(<= 0 j))
-	   (equal (land_alt x (- (expt 2 i) (expt 2 j)) n)
-		  (* (expt 2 j) (bits_alt x (1- i) j))))
-  :rule-classes ()
-  :hints (("Goal" :use land-slice)))
-
-(defthmd lior_alt-slice
-  (implies (and (<= j i)
-		(<= i n)
-		(integerp n)
-		(integerp i)
-		(integerp j)
-		(<= 0 j))
-	   (equal (lior_alt x
-                        (- (expt 2 i) (expt 2 j))
-                        n)
-		  (cat_alt (bits_alt x (1- n) i)     (- n i)
-                       (1- (expt 2 (- i j))) (- i j)
-                       (bits_alt x (1- j) 0)     j)))
-  :hints (("Goal" :use lior-slice)))
-
-(defthmd lxor_alt-slice
-  (implies (and (<= j i)
-		(<= i n)
-		(integerp n)
-		(integerp i)
-		(integerp j)
-		(<= 0 j))
-	   (equal (lxor_alt x
-                        (- (expt 2 i) (expt 2 j))
-                        n)
-		  (cat_alt (bits_alt x (1- n) i) (- n i)
-                       (lnot_alt (bits_alt x (1- i) j) (- i j)) (- i j)
-                       (bits_alt x (1- j) 0) j)))
-  :hints (("Goal" :use lxor-slice)))
-
-(defthmd land_alt-slices
-  (implies (and (natp n)
-                (natp l)
-                (natp k)
-                (<= l k)
-                (< k n))
-           (equal (land_alt (- (expt 2 n) (1+ (expt 2 l)))
-                        (- (expt 2 n) (expt 2 k))
-                        n)
-                  (if (= l k)
-                      (- (expt 2 n) (expt 2 (1+ k)))
-                    (- (expt 2 n) (expt 2 k)))))
-  :hints (("Goal" :use land-slices)))
 
 
 ;;;**********************************************************************

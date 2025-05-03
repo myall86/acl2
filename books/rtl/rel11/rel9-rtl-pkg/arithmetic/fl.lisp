@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -39,7 +27,7 @@
 ;weird rule...
 (defthm integerp-<-non-integerp
   (implies (and (and (syntaxp (quotep x)))
-                (not (integerp x)) 
+                (not (integerp x))
                 (integerp n) ;backchain limit?
                 (case-split (rationalp x))
                 )
@@ -50,7 +38,7 @@
 ;weird rule...
 (defthm non-integerp-<-integerp
   (implies (and (and (syntaxp (quotep x)))
-                (not (integerp x)) 
+                (not (integerp x))
                 (integerp n) ;backchain limit?
                 (case-split (rationalp x))
                 )
@@ -101,7 +89,7 @@
 
 ;make a separate rewrite-version
 (defthm fl-def-linear-part-1
-  (implies (case-split (not (complex-rationalp x))) 
+  (implies (case-split (not (complex-rationalp x)))
            (<= (fl x) x))
   :rule-classes (:rewrite (:linear :trigger-terms ((fl x)))))
 
@@ -290,7 +278,7 @@
                 (case-split (rationalp x)))
            (equal (< y (fl x))
                   (<= (+ 1 y) x))))
-             
+
 
 ;should this be disabled?
 (defthm fl-equal-0
@@ -307,7 +295,7 @@
                 )
            (equal (fl x) 0)))
 
-;bad names?                  
+;bad names?
 ;fl-def-linear isn't rewrite!
 ;remove this??
 (defthm fl-strong-monotone
@@ -337,7 +325,7 @@
 
 ;Our scheme for dealing with FLOOR is to always rewrite calls of it to FL
 (defthm floor-fl
-  (equal (floor m n) 
+  (equal (floor m n)
          (fl (/ m n))))
 
 (theory-invariant (incompatible (:rewrite floor-fl)
@@ -536,7 +524,7 @@
                        (<= n x)
                        (< x (1+ n)))
                   (equal (fl x) n)))
-  :rule-classes nil)  
+  :rule-classes nil)
 
 (defthm fl-m+1
   (implies (and (integerp m)

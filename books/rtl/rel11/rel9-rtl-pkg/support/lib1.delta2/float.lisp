@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -39,25 +27,41 @@
 ;;;**********************************************************************
 
 
-(defund sgn (x) 
+(defund sgn (x)
   (declare (xargs :guard t))
   (if (or (not (rationalp x)) (equal x 0))
       0
     (if (< x 0) -1 +1)))
 
 
-(defund expo (x)
-  (declare (xargs :guard t
-                  :measure (:? x)))
-  (cond ((or (not (rationalp x)) (equal x 0)) 0)
-	((< x 0) (expo (- x)))
-	((< x 1) (1- (expo (* 2 x))))
-	((< x 2) 0)
-	(t (1+ (expo (/ x 2))))))
+(defnd expo (x)
+  (declare (xargs :measure (:? x)
+                  :verify-guards nil))
+  (mbe
+   :logic
+   (cond ((or (not (rationalp x)) (equal x 0)) 0)
+         ((< x 0) (expo (- x)))
+         ((< x 1) (1- (expo (* 2 x))))
+         ((< x 2) 0)
+         (t (1+ (expo (/ x 2)))))
+   :exec
+   (if (rationalp x)
+       (let* ((n (abs (numerator x)))
+              (d (denominator x))
+              (ln (integer-length n))
+              (ld (integer-length d))
+              (l (- ln ld)))
+         (if (>= ln ld)
+             (if (>= (ash n (- l)) d) l (1- l))
+           (if (> ln 1)
+               (if (> n (ash d l)) l (1- l))
+             (- (integer-length (1- d))))))
+     0)))
 
 
 (defund sig (x)
-  (declare (xargs :guard t))
+  (declare (xargs :guard t
+                  :verify-guards nil))
   (if (rationalp x)
       (if (< x 0)
           (- (* x (expt 2 (- (expo x)))))
@@ -160,7 +164,7 @@
 
 
 (defthm sig-sig
-    (equal (sig (sig x)) 
+    (equal (sig (sig x))
 	   (sig x)))
 
 
@@ -200,12 +204,12 @@
   (implies (and (rationalp x)
                 (not (equal x 0))
                 (integerp n))
-           (equal (expo (* (expt 2 n) x)) 
+           (equal (expo (* (expt 2 n) x))
                   (+ n (expo x)))))
 
 
 (defthmd sig-shift
-  (equal (sig (* (expt 2 n) x)) 
+  (equal (sig (* (expt 2 n) x))
          (sig x)))
 
 
@@ -517,7 +521,7 @@
 
 
 (defund esgnf  (x p q) (bitn x (+ p q)))
-(defund eexpof (x p q) (bits x (1- (+ p q)) p)) 
+(defund eexpof (x p q) (bits x (1- (+ p q)) p))
 (defund esigf  (x p)   (bits x (1- p) 0))
 
 (defund bias (q) (- (expt 2 (- q 1)) 1) )
@@ -569,7 +573,7 @@
 		  (integerp p)
 		  (> p 1)
 		  (integerp q)
-		  (> q 0))  
+		  (> q 0))
 	     (equal (expo (ndecode x p q))
 		    (- (iexpof x p q) (bias q)))))
 
@@ -799,36 +803,6 @@
                 (> q 0)
                 (drepp r p q))
            (>= (abs r) (spd p q))))
-
-
-;; (defthmd spd-mult
-;;   (implies (and (integerp p)
-;;                 (> p 1)
-;;                 (integerp q)
-;;                 (> q 0)
-;; 		(rationalp r)
-;; 		(= m (/ r (spd p q))))
-;; 	   (iff (drepp r p q)
-;; 		(and (natp m)
-;; 		     (<= 1 m)
-;; 		     (< m (expt 2 (1- p)))))))
-;; not true!! 
-
-(defthmd spd-mult
-  (implies (and (integerp p)
-                (> p 1)
-                (integerp q)
-                (> q 0)
-                (> r 0)
-		(rationalp r)
-		(= m (/ r (spd p q))))
-	   (iff (drepp r p q)
-		(and (natp m)
-		     (<= 1 m)
-		     (< m (expt 2 (1- p)))))))
-
-
-
 
 (defund rebias-expo (expo old new)
   (+ expo (- (bias new) (bias old))))

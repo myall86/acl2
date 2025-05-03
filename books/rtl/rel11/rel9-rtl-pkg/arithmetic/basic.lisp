@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -144,7 +132,7 @@
   :rule-classes (:type-prescription))
 
 (defthmd fl-def ; use defthmd to avoid wrecking old proofs (rel4->rel5 transition)
-  (and (integerp (fl x))    
+  (and (integerp (fl x))
        (implies (case-split (rationalp x))
 	        (and (<= (fl x) x)
 		     (< x (1+ (fl x))))))
@@ -181,7 +169,7 @@
 
 (encapsulate
  ()
- (local (include-book "expt")) 
+ (local (include-book "expt"))
 
  (defthm expt-2-positive-rational-type
    (and (rationalp (expt 2 i))
@@ -193,12 +181,12 @@
             (and (integerp (expt 2 i))
                  (< 0 (expt 2 i))))
    :rule-classes (:type-prescription))
- 
+
 ;the rewrite rule counterpart to expt-2-positive-integer-type
  (defthm expt-2-integerp
    (implies (<= 0 i)
             (integerp (expt 2 i))))
- 
+
 
 
 ; (in-theory (disable a14)) ;the rules above are better than this one for (expt 2 i)
@@ -222,7 +210,7 @@
  (theory-invariant (incompatible (:rewrite expt-split)
                                  (:definition a15))
                    :key expt-split-invariant)
- 
+
  (defthmd expt-weak-monotone
    (implies (and (integerp n)
                  (integerp m))

@@ -32,7 +32,7 @@
 (include-book "mk1")
 (include-book "centaur/aig/aig-base" :dir :system)
 (include-book "std/strings/defs-program" :dir :system)
-(local (include-book "centaur/misc/arith-equivs" :dir :system))
+(local (include-book "std/basic/arith-equivs" :dir :system))
 (local (in-theory (enable* arith-equiv-forwarding)))
 
 
@@ -40,6 +40,76 @@
   :parents (bed)
   :short "Translators to convert Hons @(see acl2::aig)s into BEDs, and
   vice-versa.")
+
+(define aig-var-quotation-p (x)
+  (and (consp x)
+       (consp (cdr x))
+       (eq (cadr x) :aig-var-quote)
+       (or (not (aig-var-p (cddr x)))
+           (aig-var-quotation-p (cddr x)))))
+
+(define make-aig-var (x)
+  :returns (var aig-var-p)
+  (if (and (aig-var-p x)
+           (not (aig-var-quotation-p x)))
+      x
+    (cons nil (cons :aig-var-quote x))))
+
+(define aig-var->name ((x aig-var-p))
+  :prepwork ((local (in-theory (enable aig-var-quotation-p))))
+  (if (aig-var-quotation-p x)
+      (cddr x)
+    x)
+  ///
+  (defthm aig-var->name-of-make-aig-var
+    (equal (aig-var->name (make-aig-var x))
+           x)
+    :hints(("Goal" :in-theory (enable make-aig-var))))
+
+  (defthm make-aig-var-of-aig-var->name
+    (implies (aig-var-p x)
+             (equal (make-aig-var (aig-var->name x))
+                    x))
+    :hints(("Goal" :in-theory (enable make-aig-var aig-var-p)))))
+
+(define aig-env-to-bed-env (x)
+  (if (atom x)
+      nil
+    (if (and (consp (car x))
+             (aig-var-p (caar x)))
+        (cons (cons (aig-var->name (caar x)) (cdar x))
+              (aig-env-to-bed-env (cdr x)))
+      (aig-env-to-bed-env (cdr x))))
+  ///
+  (defthm lookup-in-aig-env-to-bed-env
+    (equal (hons-assoc-equal k (aig-env-to-bed-env x))
+           (let* ((look (hons-assoc-equal (make-aig-var k) x)))
+             (and look
+                  (cons k (cdr look))))))
+
+  (defthm bed-env-lookup-in-aig-env-to-bed-env
+    (equal (bed-env-lookup k (aig-env-to-bed-env env))
+           (if (booleanp k)
+               k
+             (aig-env-lookup (make-aig-var k) env)))
+    :hints(("Goal" :in-theory (e/d (bed-env-lookup aig-env-lookup)
+                                   (aig-env-to-bed-env))))))
+
+(define bed-env-to-aig-env (x)
+  (if (atom x)
+      nil
+    (if (consp (car x))
+        (cons (cons (make-aig-var (caar x)) (cdar x))
+              (bed-env-to-aig-env (cdr x)))
+      (bed-env-to-aig-env (cdr x))))
+  ///
+  (defthm lookup-in-bed-env-to-aig-env
+    (equal (hons-assoc-equal k (bed-env-to-aig-env x))
+           (let* ((look (hons-assoc-equal (aig-var->name k) x)))
+             (and (aig-var-p k)
+                  look
+                  (cons k (cdr look)))))))
+
 
 (define aig-from-bed
   :parents (aig-translation)
@@ -54,10 +124,14 @@ use it.</p>"
   (b* (((when (atom bed))
         (if bed t nil))
        ((cons a b) bed)
-       ((when (atom a))
-        (aig-ite a
-                 (aig-from-bed (car$ b))
-                 (aig-from-bed (cdr$ b))))
+       ((unless (integerp b))
+        (if (booleanp a)
+            (if a
+                (aig-from-bed (car$ b))
+              (aig-from-bed (cdr$ b)))
+          (aig-ite (make-aig-var a)
+                   (aig-from-bed (car$ b))
+                   (aig-from-bed (cdr$ b)))))
        (op    (bed-op-fix b))
        (left  (aig-from-bed (car$ a)))
        (right (aig-from-bed (cdr$ a)))
@@ -95,22 +169,25 @@ use it.</p>"
                   t)))
 
   (local (defthm aig-eval-of-atom
-           (implies (and (atom x)
-                         (not (booleanp x)))
+           (implies (aig-var-p x)
                     (equal (aig-eval x env)
-                           (and (aig-env-lookup x env)
-                                t)))
+                           (aig-env-lookup x env)))
            :hints(("Goal" :in-theory (enable aig-eval)))))
 
-  (local (defthm bed-env-lookup-removal
-           (equal (bed-env-lookup var env)
-                  (if (booleanp var)
-                      var
-                    (aig-env-lookup var env)))
-           :hints(("Goal" :in-theory (enable bed-env-lookup
-                                             aig-env-lookup)))))
+  ;; (local (defthm bed-env-lookup-removal
+  ;;          (equal (bed-env-lookup var env)
+  ;;                 (if (booleanp var)
+  ;;                     var
+  ;;                   (acl2::aig-alist-lookup var env)))
+  ;;          :hints(("Goal" :in-theory (enable bed-env-lookup
+  ;;                                            acl2::aig-alist-lookup)))))
 
-  (local (in-theory (disable aig-env-lookup)))
+  ;; (local (defthm aig-alist-lookup-in-terms-of-env-lookup
+  ;;          (iff (acl2::aig-alist-lookup var env)
+  ;;               (aig-env-lookup var env))))
+
+  (local (in-theory (disable acl2::aig-alist-lookup
+                             aig-env-lookup)))
 
   (local (defthm crock
            (implies (and (bed-op-p op)
@@ -154,7 +231,7 @@ use it.</p>"
            (b* (((when (atom x))
                  nil)
                 ((cons a b) x)
-                ((when (atom a))
+                ((unless (integerp b))
                  (list (my-induct (car b))
                        (my-induct (cdr b)))))
              (list (my-induct (car a))
@@ -162,11 +239,11 @@ use it.</p>"
 
   (defthm aig-eval-of-aig-from-bed
     (equal (aig-eval (aig-from-bed bed) env)
-           (eql 1 (bed-eval bed env)))
+           (eql 1 (bed-eval bed (aig-env-to-bed-env env))))
     :hints(("Goal"
             :induct (my-induct bed)
-            :in-theory (e/d (bed-eval)
-                            (aig-eval))
+            :in-theory (e/d (bed-eval default-car default-cdr)
+                            (aig-eval (make-aig-var)))
             :expand (aig-from-bed bed)
             :do-not '(eliminate-destructors generalize fertilize)
             :do-not-induct t))))
@@ -178,7 +255,7 @@ use it.</p>"
   :returns (mv (okp "Whether @('x') matches @('(not arg)').")
                (arg "On success, the @('arg') from the match."))
   :inline t
-  (if (and (consp x)
+  (if (and (not (aig-atom-p x))
            (not (cdr x)))
       (mv t (car x))
     (mv nil nil))
@@ -241,7 +318,7 @@ use it.</p>"
                (arg1 "On success, @('arg1') from the match.")
                (arg2 "On success, @('arg2') from the match."))
   :inline t
-  (if (and (consp x)
+  (if (and (not (aig-atom-p x))
            (cdr x))
       (mv t (car x) (cdr x))
     (mv nil nil nil))
@@ -711,7 +788,7 @@ to pattern match it against @('(IF VAR A B)')?"
                (order "The updated ordering.")
                (memo  "The updated seen table."))
   :parents (bed-from-aig)
-  (b* (((when (atom x))
+  (b* (((when (aig-atom-p x))
         (cond ((or (eq x t)
                    (eq x nil))
                (mv x order memo))
@@ -785,7 +862,6 @@ to pattern match it against @('(IF VAR A B)')?"
     (fast-alist-free memo)
     (mv bed order))
   ///
-  (local (include-book "centaur/misc/arith-equivs" :dir :system))
   (local (in-theory (enable* arith-equiv-forwarding)))
 
   (local (in-theory (enable bed-from-aig-aux)))
@@ -816,8 +892,8 @@ to pattern match it against @('(IF VAR A B)')?"
 
   (local (defthm bed-env-lookup-is-aig-env-lookup
            (implies (not (booleanp var))
-                    (equal (bed-env-lookup var env)
-                           (aig-env-lookup var env)))
+                    (iff (bed-env-lookup var env)
+                         (aig-env-lookup var env)))
            :hints(("Goal" :in-theory (enable bed-env-lookup)))))
   (local (in-theory (disable aig-env-lookup)))
 

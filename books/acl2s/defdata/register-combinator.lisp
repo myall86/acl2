@@ -20,7 +20,7 @@ data last modified: [2014-08-06]
 (defun get-defconst-val (x wrld)
   (cadr (acl2-getprop x 'acl2::const wrld)))
 
-(defconst *register-user-combinator-keywords*
+(def-const *register-user-combinator-keywords*
 '(:arity :aliases :expansion :verbose
          :syntax-restriction-fn :syntax-restriction-msg 
         ; :local-theory-template :theory-template
@@ -31,7 +31,8 @@ data last modified: [2014-08-06]
 
 (defun register-user-combinator-fn (name args ctx wrld)
   (declare (ignorable wrld))
-  (b* (((mv kwd-alist rest) (extract-keywords ctx *register-user-combinator-keywords* args nil))
+  (b* (((mv kwd-alist rest)
+        (extract-keywords ctx *register-user-combinator-keywords* args nil nil))
        ((when rest) (er hard? ctx "~| Extra args: ~x0~%" rest))
        ((unless (proper-symbolp name)) (er hard? ctx "~| ~x0 should be a proper symbol.~%" name))
        ;; ((unless (well-formed-type-metadata-p kwd-alist wrld))
@@ -60,6 +61,7 @@ data last modified: [2014-08-06]
     (add-pre-post-hook defdata-defaults-table :pre-pred-hook-fns ',(get1 :pre-pred-hook-fns kwd-alist) )
     (add-pre-post-hook defdata-defaults-table :in-pred-hook-fns ',(get1 :in-pred-hook-fns kwd-alist))
     (add-pre-post-hook defdata-defaults-table :post-pred-hook-fns ',(get1 :post-pred-hook-fns kwd-alist))
+    (add-pre-post-hook defdata-defaults-table :post-hook-fns ',(get1 :post-hook-fns kwd-alist))
     )))
 
 (logic)

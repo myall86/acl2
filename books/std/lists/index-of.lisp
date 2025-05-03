@@ -37,8 +37,8 @@
   :short "@(call index-of) returns the index of the first occurrence of element
 @('k') in list @('x') if it exists, @('NIL') otherwise."
 
-  :long "Like the Common Lisp function @('position') but only operates on lists
-and is not (logically) tail-recursive."
+  :long "Index-of is like the Common Lisp function @(tsee position), but only
+  operates on lists and is not (logically) tail-recursive."
 
 
 
@@ -92,10 +92,20 @@ and is not (logically) tail-recursive."
 
   (local (in-theory (enable index-of)))
 
+; Matt K. mod: Beta-reduced the right-hand side; then the first occurrence of
+; index-of may be rewritten maintaining IFF.  In community books
+; books/centaur/vl2014/util/position.lisp, the lemma
+; position-equal-upper-bound-weak-when-stringp failed after ACL2 no longer
+; expanded away LETs on right-hand sides of rewrite rules (after v8-0).  That
+; seemed to be because ACL2 no longer used an IFF rule,
+; acl2::index-of-iff-member, to rewrite (and (index-of k x) ...) to (and
+; (member-equal k x) ...) for specific values of k and x.
   (defthm index-of-aux-removal
     (equal (index-of-aux k x acc)
-           (let ((res (index-of k x)))
-             (and res (+ res (ifix acc))))))
+;          (let ((res (index-of k x)))
+;            (and res (+ res (ifix acc))))
+           (and (index-of k x)
+                (+ (index-of k x) (ifix acc)))))
 
   (verify-guards index-of)
 
@@ -147,6 +157,3 @@ and is not (logically) tail-recursive."
            (or (index-of k x)
                (and (index-of k y)
                     (+ (len x) (index-of k y)))))))
-                
-
-  

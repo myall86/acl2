@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -38,8 +26,8 @@
 (defthmd lior0-land0-1
   (equal (lior0 x (land0 y z n) n)
          (land0 (lior0 x y n) (lior0 x z n) n))
-  :hints (("Goal" :use ((:instance logior-logand 
-				   (x (bits x (1- n) 0)) 
+  :hints (("Goal" :use ((:instance logior-logand
+				   (x (bits x (1- n) 0))
 				   (y (bits y (1- n) 0))
 				   (z (bits z (1- n) 0))))
            :in-theory (enable lior0 land0))))
@@ -47,8 +35,8 @@
 (defthmd lior0-land0-2
   (equal (lior0 (land0 y z n) x n)
          (land0 (lior0 x y n) (lior0 x z n) n))
-  :hints (("Goal" :use ((:instance logior-logand 
-				   (x (bits x (1- n) 0)) 
+  :hints (("Goal" :use ((:instance logior-logand
+				   (x (bits x (1- n) 0))
 				   (y (bits y (1- n) 0))
 				   (z (bits z (1- n) 0))))
            :in-theory (enable lior0 land0))))
@@ -56,8 +44,8 @@
 (defthmd land0-lior0-1
   (equal (land0 x (lior0 y z n) n)
          (lior0 (land0 x y n) (land0 x z n) n))
-  :hints (("Goal" :use ((:instance logand-logior 
-				   (x (bits x (1- n) 0)) 
+  :hints (("Goal" :use ((:instance logand-logior
+				   (x (bits x (1- n) 0))
 				   (y (bits y (1- n) 0))
 				   (z (bits z (1- n) 0))))
            :in-theory (enable lior0 land0))))
@@ -65,8 +53,8 @@
 (defthmd land0-lior0-2
   (equal (land0 (lior0 y z n) x n)
          (lior0 (land0 x y n) (land0 x z n) n))
-  :hints (("Goal" :use ((:instance logand-logior 
-				   (x (bits x (1- n) 0)) 
+  :hints (("Goal" :use ((:instance logand-logior
+				   (x (bits x (1- n) 0))
 				   (y (bits y (1- n) 0))
 				   (z (bits z (1- n) 0))))
            :in-theory (enable lior0 land0))))
@@ -75,7 +63,7 @@
   (equal (lior0 (land0 x y n) (lior0 (land0 x z n) (land0 y z n) n) n)
          (lior0 (land0 x y n) (land0 (lxor0 x y n) z n) n))
   :hints (("Goal" :use ((:instance log3
-				   (x (bits x (1- n) 0)) 
+				   (x (bits x (1- n) 0))
 				   (y (bits y (1- n) 0))
 				   (z (bits z (1- n) 0))))
            :in-theory (enable lior0 land0 lxor0))))
@@ -86,7 +74,7 @@
                (land0 y (lnot x n) n)
                n))
   :hints (("Goal" :use ((:instance logxor-rewrite-2
-				   (x (bits x (1- n) 0)) 
+				   (x (bits x (1- n) 0))
 				   (y (bits y (1- n) 0))))
            :in-theory (enable lior0 land0 lxor0))))
 
@@ -94,7 +82,7 @@
   (equal (lnot (lxor0 x y n) n)
          (lxor0 (lnot x n) y n))
   :hints (("Goal" :use ((:instance lnot-logxor
-				   (x (bits x (1- n) 0)) 
+				   (x (bits x (1- n) 0))
 				   (y (bits y (1- n) 0))))
            :in-theory (enable lxor0))))
 
@@ -126,7 +114,7 @@
 ; Matt K.:  The original proof fails using v2-8-alpha-12-30-03.  I don't know
 ; why, but I do notice that the induction heuristics are getting in the way,
 ; because the problem goal (the one with the hint below) goes through in the
-; proof-checker.  So we use the proof-checker proof.
+; proof-builder.  So we use the proof-builder proof.
 
 #|
 (local

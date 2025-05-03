@@ -27,6 +27,7 @@
 ;   DEALINGS IN THE SOFTWARE.
 ;
 ; Original author: Jared Davis <jared@centtech.com>
+; Contributing author: Alessandro Coglio <coglio@kestrel.edu>
 
 (in-package "ACL2")
 (include-book "std/util/deflist" :dir :system)
@@ -60,6 +61,10 @@ std::deflist).</p>"
     (implies (symbol-listp x)
              (symbol-listp (remove-equal a x))))
 
+  (defthm symbol-listp-of-remove1-equal
+    (implies (symbol-listp x)
+             (symbol-listp (remove1-equal a x))))
+
   (defthm symbol-listp-of-make-list-ac
     ;; BOZO probably silly with REPEAT as the normal form
     (equal (symbol-listp (make-list-ac n x ac))
@@ -68,6 +73,6 @@ std::deflist).</p>"
                     (zp n)))))
 
   (defthm eqlable-listp-when-symbol-listp
-    ;; Useful for, e.g., MEMBER-EQ guards 
+    ;; Useful for, e.g., MEMBER-EQ guards
     (implies (symbol-listp x)
              (eqlable-listp x))))

@@ -31,6 +31,7 @@
 ;;;****************************************************************************
 
 (defxdoc meta-lemmas
+  :parents (meta)
   :short "A book of general purpose @(see meta) lemmas."
   :long "<p>Note that it may be a good idea to load this book last, so that the
 lemmas in this book will take precedence over all others.</p>")
@@ -174,7 +175,7 @@ T)') or @('(QUOTE NIL)').</p>"
 (defsection formal-member
   :parents (meta-functions)
   :short "The definition of @(see MEMBER) for any @('x') on an @(see
-  EQLABLE-LISTP') constant @('l')."
+  EQLABLE-LISTP) constant @('l')."
   :long "<p>This definition reposes the question @('(MEMBER x l)') as a set of
   nested IFs.</p>"
 

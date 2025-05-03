@@ -47,16 +47,16 @@
 ; of modules.
 
 
-(defthm take-leading-digits-under-iff
+(defthm take-leading-dec-digit-chars-under-iff
   ;; BOZO consider moving to string library
-  (iff (str::take-leading-digits x)
-       (str::digitp (car x)))
-  :hints(("Goal" :in-theory (enable str::take-leading-digits))))
+  (iff (str::take-leading-dec-digit-chars x)
+       (str::dec-digit-char-p (car x)))
+  :hints(("Goal" :in-theory (enable str::take-leading-dec-digit-chars))))
 
 
 
 (defxdoc skip-detection
-  :parents (lint)
+  :parents (vl-lint)
   :short "We try to detect missing signals from expressions."
 
   :long "<p>Related wires often have similar names, e.g., in one module we
@@ -94,9 +94,9 @@ assign bcNxtWCBEntSrc_P =
 
 (local (xdoc::set-default-parents skip-detection))
 
-(defaggregate sd-key
+(defprod sd-key
   :tag :sd-key
-  :legiblep nil
+  :layout :fulltree
   :short "Keys are derived from wire names and are the basis of our skip
           detection."
 
@@ -124,13 +124,10 @@ pattern @('bcL2RB*NoRtry_P').  We had previously considered using a list of
 indices, but found it easier to just generate multiple keys, each with a single
 index.</p>")
 
-(deflist sd-keylist-p (x)
-  (sd-key-p x)
-  :guard t)
+(fty::deflist sd-keylist :elt-type sd-key-p)
 
-(defprojection sd-keylist->indicies (x)
-  (sd-key->index x)
-  :guard (sd-keylist-p x))
+(defprojection sd-keylist->indicies ((x sd-keylist-p))
+  (sd-key->index x))
 
 
 (defsection sd-keygen
@@ -153,7 +150,7 @@ wire name, and accumulates them into @('acc')."
                  (key      (make-sd-key :pat x-honsed :index nil :orig x-honsed)))
             (cons key acc)))
          (char (char x n))
-         ((unless (str::digitp char))
+         ((unless (str::dec-digit-char-p char))
           (sd-keygen-aux (+ 1 n) x xl acc))
          ;; Else, we found a number.
          ((mv val len) (str::parse-nat-from-string x 0 0 n xl))
@@ -196,52 +193,16 @@ wire name, and accumulates them into @('acc')."
 
 
 
-(defsection sd-patalist-p
-  :short "@(call sd-patalist-p) recognizes alists that bind strings to @(see
-sd-keylist-p)s."
-
-  (defund sd-patalist-p (x)
-    (declare (xargs :guard t))
-    (if (atom x)
-        t
-      (and (consp (car x))
-           (stringp (caar x))
-           (sd-keylist-p (cdar x))
-           (sd-patalist-p (cdr x)))))
-
-  (local (in-theory (enable sd-patalist-p)))
-
-  (defthm sd-patalist-p-when-not-consp
-    (implies (not (consp x))
-             (equal (sd-patalist-p x)
-                    t)))
-
-  (defthm sd-patalist-p-of-cons
-    (equal (sd-patalist-p (cons a x))
-           (and (consp a)
-                (stringp (car a))
-                (sd-keylist-p (cdr a))
-                (sd-patalist-p x))))
-
-  (defthm sd-keylist-p-of-cdr-of-hons-assoc-equal-when-sd-patalist-p
-    (implies (force (sd-patalist-p x))
-             (sd-keylist-p (cdr (hons-assoc-equal a x)))))
-
-  (defthm sd-patalist-p-of-hons-shrink-alist
-    (implies (and (sd-patalist-p x)
-                  (sd-patalist-p y))
-             (sd-patalist-p (hons-shrink-alist x y)))
-    :hints(("Goal" :in-theory (enable (:i hons-shrink-alist))))))
+(fty::defalist sd-patalist :key-type string :val-type sd-keylist)
 
 
-
-(defsection sd-patalist
-  :short "@(call sd-patalist) separates a @(see sd-keylist-p) by their
+(defsection make-sd-patalist
+  :short "@(call make-sd-patalist) separates a @(see sd-keylist-p) by their
 patterns, producing a @(see sd-patalist-p)."
 
   :long "<p>We return a fast alist which has no shadowed pairs.</p>"
 
-  (defund sd-patalist-aux (x acc)
+  (defund make-sd-patalist-aux (x acc)
     (declare (xargs :guard (and (sd-keylist-p x)
                                 (sd-patalist-p acc))))
     (if (atom x)
@@ -250,38 +211,39 @@ patterns, producing a @(see sd-patalist-p)."
              (pat   (sd-key->pat key))
              (entry (cdr (hons-get pat acc)))
              (acc   (hons-acons pat (cons key entry) acc)))
-        (sd-patalist-aux (cdr x) acc))))
+        (make-sd-patalist-aux (cdr x) acc))))
 
-  (local (in-theory (enable sd-patalist-aux)))
+  (local (in-theory (enable make-sd-patalist-aux)))
 
-  (defthm alistp-of-sd-patalist-aux
+  (defthm alistp-of-make-sd-patalist-aux
     (implies (alistp acc)
-             (alistp (sd-patalist-aux x acc))))
+             (alistp (make-sd-patalist-aux x acc))))
 
-  (defthm sd-patalist-p-of-sd-patalist-aux
+  (defthm sd-patalist-p-of-make-sd-patalist-aux
     (implies (and (force (sd-keylist-p x))
                   (force (sd-patalist-p acc)))
-             (sd-patalist-p (sd-patalist-aux x acc))))
+             (sd-patalist-p (make-sd-patalist-aux x acc))))
 
-  (defund sd-patalist (x)
+  (defund make-sd-patalist (x)
     (declare (xargs :guard (sd-keylist-p x)))
-    (b* ((unclean (sd-patalist-aux x nil))
+    (b* ((unclean (make-sd-patalist-aux x nil))
          (clean   (hons-shrink-alist unclean nil))
          (-       (flush-hons-get-hash-table-link unclean)))
         clean))
 
-  (local (in-theory (enable sd-patalist)))
+  (local (in-theory (enable make-sd-patalist)))
 
-  (defthm sd-patalist-p-of-sd-patalist
+  (defthm sd-patalist-p-of-make-sd-patalist
     (implies (force (sd-keylist-p x))
-             (sd-patalist-p (sd-patalist x))))
+             (sd-patalist-p (make-sd-patalist x))))
 
-  (defthm alistp-of-sd-patalist
-    (alistp (sd-patalist x))))
+  (defthm alistp-of-make-sd-patalist
+    (alistp (make-sd-patalist x))))
 
 
-(defaggregate sd-problem
+(defprod sd-problem
   :tag :sd-problem
+  :layout :fulltree
   :short "An alleged problem noticed by skip detection."
   ((type symbolp :rule-classes :type-prescription
          "What kind of problem this is.  At the moment the type is always
@@ -307,9 +269,7 @@ patterns, producing a @(see sd-patalist-p)."
 
    (ctx vl-context1-p "Says where this problem originates.")))
 
-(deflist sd-problemlist-p (x)
-  (sd-problem-p x)
-  :elementp-of-nil nil)
+(fty::deflist sd-problemlist :elt-type sd-problem-p)
 
 (define sd-problem-score ((x sd-problem-p))
   :returns (score natp :rule-classes :type-prescription)
@@ -342,20 +302,8 @@ patterns, producing a @(see sd-patalist-p)."
 (acl2::defsort
  :comparablep sd-problem-p
  :compare< sd-problem->
- :prefix sd-problem)
-
-(defthm sd-problem-list-p-removal
-  (equal (sd-problem-list-p x)
-         (sd-problemlist-p x))
-  :hints(("Goal" :in-theory (enable sd-problem-list-p sd-problemlist-p))))
-
-(defthm sd-problemlist-p-of-sd-problem-sort
-  (implies (sd-problemlist-p x)
-           (sd-problemlist-p (sd-problem-sort x)))
-  :hints(("Goal"
-          :in-theory (disable SD-PROBLEM-SORT-CREATES-COMPARABLE-LISTP)
-          :use ((:instance SD-PROBLEM-SORT-CREATES-COMPARABLE-LISTP
-                           (acl2::x x))))))
+ :prefix sd-problem
+ :comparable-listp sd-problemlist-p)
 
 
 
@@ -477,7 +425,7 @@ of three wires, but it's really suspicious to omit one out of ten.</p>"
          the list of all pattern names that were found in the expression, and
          which we need to investigate.")
    (x sd-patalist-p "The pattern produced for some particular expression.")
-   (y sd-patalist-p "The global @(see sd-patalist-p) that we assume was 
+   (y sd-patalist-p "The global @(see sd-patalist-p) that we assume was
                      produced for the entire module.")
    (ctx vl-context1-p "Where this expression came from."))
   :returns (probs sd-problemlist-p :hyp :fguard)
@@ -494,7 +442,12 @@ collecting any problems that have been reported.</p>"
           (cons first rest)
         rest))))
 
-(defsection sd-analyze-ctxexprs
+(define sd-analyze-ctxexprs ((ctxexprs vl-ctxexprlist-p)
+                              (global-pats sd-patalist-p))
+  :returns (problems sd-problemlist-p
+                     :hyp (sd-patalist-p global-pats)
+                     :hints(("Goal" :in-theory (enable sd-problemlist-p))))
+  :prepwork ((local (in-theory (disable (force)))))
   :short "Perform skip-detection for a list of expressions."
 
   :long "<p><b>Signature:</b> @(call sd-analyze-ctxexprs) returns a list of
@@ -502,11 +455,11 @@ collecting any problems that have been reported.</p>"
 
 <ul>
 
-<li>@('ctxexprs') is an @(see vl-exprctxalist-p) that associates expressions
+<li>@('ctxexprs') is an @(see vl-ctxexprlist) that associates expressions
 with their contexts.  Generally we expect that this alist includes every
 expression in a module.</li>
 
-<li>@('global-pats') is the @(see sd-patalist-p) that was constructed for all
+<li>@('global-pats') is the @(see sd-patalist) that was constructed for all
 names in the module, which is needed by @(see sd-patalist-compare).</li>
 
 </ul>
@@ -514,61 +467,46 @@ names in the module, which is needed by @(see sd-patalist-compare).</li>
 <p>We just call @(see sd-patalist-compare) for every expression in
 @('ctxexprs') and combine the results.</p>"
 
-  (defund sd-analyze-ctxexprs (ctxexprs global-pats)
-    (declare (xargs :guard (and (vl-exprctxalist-p ctxexprs)
-                                (sd-patalist-p global-pats))))
-    (if (atom ctxexprs)
-        nil
-      (b* ((expr       (caar ctxexprs))
-           (ctx        (vl-context1-fix (cdar ctxexprs)))
-           (expr-names (vl-expr-names expr))
-           (expr-keys  (sd-keygen-list expr-names nil))
-           (expr-pats  (sd-patalist expr-keys))
-           (dom        (strip-cars expr-pats))
-           (report1    (sd-patalist-compare dom expr-pats global-pats ctx))
-           (-          (flush-hons-get-hash-table-link expr-pats)))
-          (append report1
-                  (sd-analyze-ctxexprs (cdr ctxexprs) global-pats)))))
+  (if (atom ctxexprs)
+      nil
+    (b* (((vl-ctxexpr x1) (car ctxexprs))
+         (expr-names (vl-expr-varnames x1.expr))
+         (expr-keys  (sd-keygen-list expr-names nil))
+         (expr-pats  (make-sd-patalist expr-keys))
+         (dom        (strip-cars expr-pats))
+         (report1    (sd-patalist-compare dom expr-pats global-pats x1.ctx))
+         (-          (flush-hons-get-hash-table-link expr-pats)))
+      (append report1
+              (sd-analyze-ctxexprs (cdr ctxexprs) global-pats))))
+  ///
+  (defret true-listp-of-sd-analyze-ctxexprs
+    (true-listp problems)
+    :rule-classes :type-prescription))
 
-  (local (in-theory (enable sd-analyze-ctxexprs)))
-
-  (defthm true-listp-of-sd-analyze-ctxexprs
-    (true-listp (sd-analyze-ctxexprs ctxexprs global-pats))
-    :rule-classes :type-prescription)
-
-  (defthm sd-problemlist-p-of-sd-analyze-ctxexprs
-    (implies (and (force (vl-exprctxalist-p ctxexprs))
-                  (force (sd-patalist-p global-pats)))
-             (sd-problemlist-p (sd-analyze-ctxexprs ctxexprs global-pats)))))
-
-
-
-
-(defthm vl-exprlist-p-of-alist-keys-when-vl-exprctxalist-p
-  (implies (vl-exprctxalist-p x)
-           (vl-exprlist-p (alist-keys x)))
-  :hints(("Goal" :induct (len x))))
+(defprojection vl-ctxexprlist->exprs ((x vl-ctxexprlist-p))
+  :returns (exprs vl-exprlist-p)
+  (vl-ctxexpr->expr x))
 
 (define sd-analyze-module-aux
   :short "Collect all the problems."
   ((x vl-module-p))
-  :returns (probs sd-problemlist-p :hyp :fguard "Not sorted yet.")
+  :returns (probs sd-problemlist-p "Not sorted yet.")
   (b* (;;(modname (vl-module->name x))
        ;;(- (cw "Analyzing ~s0.~%" modname))
-       (ctxexprs  (cwtime (vl-module-ctxexprs x)
+       (ctxexprs  (cwtime (vl-module-ctxexprs x nil) ;; empty scopestack
                           :mintime 1/2
                           :name sd-harvest-ctxexprs))
 
        ;; BOZO is all-names sufficient?  Should we perhaps also collect all
        ;; declared wire names, in case they aren't ever used in an expression?
 
-       (all-names (cwtime (vl-exprlist-names (alist-keys ctxexprs))
+       (all-names (cwtime (vl-exprlist-varnames (vl-ctxexprlist->exprs ctxexprs))
                           :mintime 1/2
                           :name sd-extract-names))
        (all-keys  (cwtime (mergesort (sd-keygen-list all-names nil))
                           :mintime 1/2
                           :name sd-make-global-keys))
-       (global-pats (cwtime (sd-patalist all-keys)
+       (global-pats (cwtime (make-sd-patalist all-keys)
                             :mintime 1/2
                             :name sd-make-global-pats))
        (report (cwtime (sd-analyze-ctxexprs ctxexprs global-pats)
@@ -580,7 +518,7 @@ names in the module, which is needed by @(see sd-patalist-compare).</li>
 (define sd-analyze-module
   :short "Perform skip-detection on a module."
   ((x vl-module-p))
-  :returns (probs sd-problemlist-p :hyp :fguard "Sorted in priority order.")
+  :returns (probs sd-problemlist-p "Sorted in priority order.")
   (sd-problem-sort (sd-analyze-module-aux x))
   ///
   (defthm true-listp-of-sd-analyze-module
@@ -589,7 +527,7 @@ names in the module, which is needed by @(see sd-patalist-compare).</li>
 
 
 (define sd-analyze-modulelist-aux ((x vl-modulelist-p))
-  :returns (probs sd-problemlist-p :hyp :fguard "Not sorted yet.")
+  :returns (probs sd-problemlist-p "Not sorted yet.")
   (if (atom x)
       nil
     (append (sd-analyze-module-aux (car x))
@@ -598,7 +536,7 @@ names in the module, which is needed by @(see sd-patalist-compare).</li>
 (define sd-analyze-modulelist
   :short "Perform skip-detection on a module list."
   ((x vl-modulelist-p))
-  :returns (probs sd-problemlist-p :hyp :fguard "Sorted in priority order.")
+  :returns (probs sd-problemlist-p "Sorted in priority order.")
   (b* ((analyze (cwtime (sd-analyze-modulelist-aux x)
                         :name sd-analyze-modulelist-aux
                         :mintime 1))
@@ -715,6 +653,3 @@ names in the module, which is needed by @(see sd-patalist-compare).</li>
       ps
     (vl-ps-seq (sd-pp-problem-long (car x))
                (sd-pp-problemlist-long (cdr x)))))
-
-
-

@@ -1,3 +1,6 @@
+; Copyright (C) 2004, Regents of the University of Texas
+; Written by Sol Swords
+; License: A 3-clause BSD license.  See the LICENSE file distributed with ACL2.
 
 
 ;; Parsing of bracket expressions such as [a-z], [a-z3-9], [^bcd], etc
@@ -18,14 +21,14 @@
                                   (charset-memberp last))
                               (charsetp charset))
                   :measure (string-index-measure idx str)))
-                  
+
   (if (string-index-end idx str)
       ;; no closing bracket found
       (mv "Mismatched brackets" idx)
 
     ;; Binding of allprev to a couple cases where we just want
     ;; all previous stuff grouped together
-    (let ((allprev 
+    (let ((allprev
            (if last
                (cons last charset)
              (if charset
@@ -37,7 +40,7 @@
          ;; Reached the end of the bracket expression
          (mv allprev (1+ idx)))
         (#\-
-         ;; Unless last is nil or (cadr str) is ], 
+         ;; Unless last is nil or (cadr str) is ],
          (if (or (not last)
                  (string-index-end (1+ idx) str)
                  (equal (char str (1+ idx)) #\]))
@@ -59,9 +62,9 @@
                 (or (not last)
                     (charset-memberp last))
                 (charsetp charset)
-                (not (stringp 
+                (not (stringp
                       (mv-nth 0 (parse-bracket-inner str idx last charset)))))
-           (charsetp 
+           (charsetp
             (mv-nth 0 (parse-bracket-inner str idx last charset)))))
 ;;   :rule-classes
 ;;   (:rewrite
@@ -106,13 +109,15 @@
 (defun parse-bracket (str idx)
   (declare (xargs :guard (and (stringp str)
                               (natp idx))
-                  :measure (string-index-measure idx str)))
+; Removed after v7-2 by Matt K. since the definition is non-recursive:
+;                 :measure (string-index-measure idx str)
+                  ))
   (if (string-index-end idx str)
       ;; No closing bracket found
       (mv "Mismatched brackets" idx)
     ;;Cases for first character
     (case (char str idx)
-      (#\^ 
+      (#\^
        ;; Invert the contents of this bracket exprn
        ;; Look for ] as second character and add it as literal character
        ;; if it's there.

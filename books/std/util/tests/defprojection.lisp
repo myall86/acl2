@@ -30,7 +30,7 @@
 
 (in-package "STD")
 (include-book "../defprojection")
-(include-book "misc/assert" :dir :system)
+(include-book "std/testing/assert-bang" :dir :system)
 
 (make-event
  (prog2$
@@ -139,12 +139,12 @@
 
 (local (in-theory (enable symbol-listp)))
 
-(defprojection symbol-<-foo-list (x)
-  (symbol-< :foo x)
+(defprojection symbol<-foo-list (x)
+  (symbol< :foo x)
   :guard (symbol-listp x))
 
-(defprojection symbol-<-bar-list (x)
-  (symbol-< 'bar x)
+(defprojection symbol<-bar-list (x)
+  (symbol< 'bar x)
   :guard (symbol-listp x))
 
 
@@ -251,7 +251,10 @@
                           (:compound-recognizer acl2::natp-compound-recognizer)
                           (:type-prescription nfix))))
 
-(defprojection nfix-list ((x nat-listp))
+; Thu Aug 26 13:53:36 2021: Moore changed nfix-list to nfix-list1 to avoid
+; a name clash.
+
+(defprojection nfix-list1 ((x nat-listp))
   (nfix x)
   :returns (new-x nat-listp))
 
@@ -277,3 +280,53 @@
                     (b* ((new-x (ifix-list x)))
                       (nat-listp new-x))))))
 
+;; Tests of the share-suffix option
+(defund incr-if-greater (x n)
+  (declare (xargs :guard (and (integerp x) (integerp n))))
+  (ifix (if (< n x)
+            (+ 1 x)
+          x)))
+
+(defthm incr-if-greater-type
+  (integerp (incr-if-greater x n))
+  :hints(("Goal" :in-theory (enable incr-if-greater ifix)))
+  :rule-classes :type-prescription)
+
+
+(include-book "centaur/nrev/fast" :dir :system)
+
+(defprojection incr-if-greater-list ((x integer-listp)
+                                     (k integerp))
+  :share-suffix t
+  :returns (new-x integer-listp)
+  (incr-if-greater x k))
+
+;; Cheat so we can test eq of the two suffixes, in violation of guards...
+(defun my-eq (x y)
+  (declare (xargs :mode :program))
+  (eq x y))
+
+(make-event
+ (if (let* ((x '(6 8 9 1 2 3))
+            (incr (incr-if-greater-list x 5)))
+       (and (equal incr '(7 9 10 1 2 3))
+            (my-eq (nthcdr 3 incr) (nthcdr 3 x))))
+     '(value-triple :ok)
+   (er hard? 'incr-if-greater-test
+       "Problem with share-suffix argument")))
+
+;; Test without share-suffix to make sure our my-eq hack works...
+(defprojection incr-if-greater-list-ns ((x integer-listp)
+                                        (k integerp))
+
+  :returns (new-x integer-listp)
+  (incr-if-greater x k))
+
+(make-event
+ (if (let* ((x '(6 8 9 1 2 3))
+            (incr (incr-if-greater-list-ns x 5)))
+       (and (equal incr '(7 9 10 1 2 3))
+            (not (my-eq (nthcdr 3 incr) (nthcdr 3 x)))))
+     '(value-triple :ok)
+   (er hard? 'incr-if-greater-test
+       "Problem with share-suffix argument")))

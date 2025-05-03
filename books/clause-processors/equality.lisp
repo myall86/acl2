@@ -304,8 +304,8 @@
   ;; Kind of bulky, but this way we don't have to export flag-pseudo-termp.
   (local (flag::make-flag flag-pseudo-termp
                           pseudo-termp
-                          :flag-mapping ((pseudo-termp . term)
-                                         (pseudo-term-listp . list))))
+                          :flag-mapping ((pseudo-termp term)
+                                         (pseudo-term-listp list))))
 
   (local (defthm-flag-pseudo-termp lemma
            (term (implies (and (pseudo-termp x)
@@ -389,44 +389,3 @@
            (esc-eval (disjoin clause) env))
   :rule-classes :clause-processor
   :hints(("Goal" :in-theory (enable equality-substitute-clause))))
-
-
-
-; Here is an application contributed by Erik Reeber (which we make local so
-; that it's not exported).
-
-(local
- (progn
-
-   (encapsulate
-    (((f *) => *)
-     ((g *) => *)
-     ((p * *) => *))
-    (local (defun f (x) x))
-    (local (defun g (x) x))
-    (local (defun p (x y) (declare (ignore x y)) t))
-    (defthm p-axiom (p (g x) (g y))))
-
-; Define must-succeed and must-fail macros.
-   (local (include-book "misc/eval" :dir :system))
-
-   (must-fail ; illustrates why we need a hint
-    (defthm p-thm-fail
-      (implies (and (equal (f x) (g x))
-                    (equal (f y) (g y)))
-               (p (f x) (f y)))))
-
-   (defthm p-thm
-     (implies (and (equal (f x) (g x))
-                   (equal (f y) (g y)))
-              (p (f x) (f y)))
-     :hints (("Goal"
-              :clause-processor
-              (:function
-               equality-substitute-clause
-               :hint
-; The following is an alist with entries (old . new), where new is to be
-; substituted for old.
-               '(((f x) . (g x))
-                 ((f y) . (g y)))))))
-   ))

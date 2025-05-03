@@ -3,6 +3,10 @@
 
 (in-package "ACL2")
 
+; The following comment line tells the build system that if *acl2-exports*
+; changes, then every book that uses this file should be recertified:
+; (depends-on "build/acl2-exports.certdep" :dir :system)
+
 (defconst *cowles-package-symbols*
   (set-difference-equal
    (union-eq *acl2-exports*
@@ -12,14 +16,14 @@
 ; information about that, see:
 ; http://code.google.com/p/acl2-books/issues/detail?id=4
 
-             '(arithmetic
-               cowles
+             '(algebra
                abelian-semigroups
                abelian-groups
                commutative-rings
                defxdoc
                defsection
                rewrite
+               x y z
                ))
    '(zero)))
 

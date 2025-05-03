@@ -1,19 +1,5 @@
-; Arithmetic-2 Library
-; Copyright (C) 1999 Robert Krug <rkrug@cs.utexas.edu>
-;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT
-; ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-; FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
-; details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; if not, write to the Free Software Foundation, Inc., 51
-; Franklin Street, Suite 500, Boston, MA 02110-1335, USA.
+; See the top-level arithmetic-2 LICENSE file for authorship,
+; copyright, and license information.
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
@@ -381,7 +367,7 @@ In these books we use the newly developed extended meta functions.
 	(t
 	 (mv-let (flag new-leaves)
 	   (subtract-leaf leaf (cdr leaves))
-	   (if flag 
+	   (if flag
 	       (mv t (cons (car leaves)
 			   new-leaves))
 	     (mv nil leaves))))))
@@ -450,7 +436,7 @@ In these books we use the newly developed extended meta functions.
 		    (consp new-leaves))
 	       (mv-let (flag bag-list)
 		 (collect-bags-intp new-leaves intp-bags)
-		 (if flag 
+		 (if flag
 		     (mv t
 			 (cons (car non-intp-bags)
 			       bag-list))
@@ -553,7 +539,7 @@ In these books we use the newly developed extended meta functions.
 
  (local
   (defthm big-tree-big-tree-2
-    (and 
+    (and
      (equal (intp-eva (big-tree bags 'INTP-+ 'BINARY-+) a)
 	    (intp-eva (big-tree-2 bags 'BINARY-+ 'BINARY-+) a))
      (equal (intp-eva (big-tree bags 'INTP-* 'BINARY-*) a)

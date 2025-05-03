@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -53,7 +41,7 @@ might be useful if we choose to keep setbits disabled...
 
 is this comment still valid? :
 ;it may happen that setbitn is called with an index which is a signal rather than a constant.
-;in that case, we probably don't want it to expand to setbits. 
+;in that case, we probably don't want it to expand to setbits.
 ;thus, we always expect the indices in setbits calls to be constants
 
 
@@ -72,7 +60,7 @@ is this comment still valid? :
 
 |#
 
-;Note: when j is 0, there is no lower part of x, but we have cat-with-n-0 to handle this case. 
+;Note: when j is 0, there is no lower part of x, but we have cat-with-n-0 to handle this case.
 (defund setbits (x w i j y)
   (declare (xargs :guard (and (natp x)
                               (natp y)
@@ -209,7 +197,7 @@ is this comment still valid? :
   (implies (and (< k j) ;case 1
                 (< i w)
                 (<= 0 i)
-                (<= 0 j) 
+                (<= 0 j)
                 (<= 0 k)
                 (<= j i)
                 (integerp k)
@@ -224,7 +212,7 @@ is this comment still valid? :
   (implies (and(<= k i) ;;case-2
                (<= j k) ;;case-2
                (<= 0 i)
-               (<= 0 j) 
+               (<= 0 j)
                (< i w)
                (integerp k)
                (integerp w)
@@ -239,7 +227,7 @@ is this comment still valid? :
                 (< k w) ;;case-3
 ;                (< i w)
                 (<= 0 i)
-                (<= 0 j) 
+                (<= 0 j)
                 (<= j i)
                 (integerp i)
                 (integerp j)
@@ -258,7 +246,7 @@ is this comment still valid? :
                 (<= 0 l)
                 (integerp i)
                 (integerp j)
-                (integerp w) 
+                (integerp w)
                 (acl2-numberp l) ;(integerp l)
                 )
            (equal (bits (setbits x w i j y) k l)

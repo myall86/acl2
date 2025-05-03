@@ -1,3 +1,7 @@
+; Copyright (C) 2004-2015 Advanced Micro Devices, Inc.
+; All rights reserved.
+; License: A 3-clause BSD license.  See the LICENSE file distributed with ACL2.
+
 ; Matt Kaufmann, included starting with ACL2 Version 2.8.
 
 ; Replacement function rtl-untranslate for predefined untranslate, suitable for
@@ -101,7 +105,7 @@
 
   (let ((term (if preprocess-fn
                   (mv-let (erp term1)
-                          (ev-fncall-w preprocess-fn
+                          (ev-fncall-w! preprocess-fn
                                        (list term wrld)
                                        wrld
                                        nil ; user-stobj-alist
@@ -131,6 +135,7 @@
                                                             untrans-tbl sigs-btree lops-alist
                                                             preprocess-fn
                                                             wrld))
+            nil ; type-dcls; setting to nil to match legacy (pre-2022) behavior
             (rtl-untrans1 (lambda-body (ffn-symb term)) iff-flg untrans-tbl sigs-btree lops-alist
                           preprocess-fn wrld)))
           ((and (eq (ffn-symb term) 'nth)
@@ -265,7 +270,7 @@
 ; Even though translate insists that the second argument of synp is quoted, can
 ; we really guarantee that every termp given to rtl-untrans came through
 ; translate?  Not necessarily; for example, maybe substitution was performed
-; for some reason (say, in the proof-checker one replaces the quoted argument
+; for some reason (say, in the proof-builder one replaces the quoted argument
 ; by a variable known to be equal to it).
 
                 (quotep (fargn term 2)))
@@ -641,7 +646,7 @@
            (cdr (assoc 'sigs-btree (table-alist 'rtl-tbl world))))))
 
 ; Finally, we deal with the right-assoc-macros-table, so that DV and numeric
-; dive commands will work in the proof-checker.
+; dive commands will work in the proof-builder.
 
 (defun expand-address-cat (car-addr raw-term term wrld)
   (declare (ignore term wrld))

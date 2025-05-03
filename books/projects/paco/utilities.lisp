@@ -196,23 +196,23 @@
                (intersection-eq (cdr l1) l2)))
         (t (intersection-eq (cdr l1) l2))))
 
-(defun delete1-eq (x lst)
+(defun remove1-eq (x lst)
   (cond ((endp lst) nil)
         ((eq x (car lst)) (cdr lst))
-        (t (cons (car lst) (delete1-eq x (cdr lst))))))
+        (t (cons (car lst) (remove1-eq x (cdr lst))))))
 
-(defun delete1-equal (x lst)
+(defun remove1-equal (x lst)
   (cond ((endp lst) nil)
         ((equal x (car lst)) (cdr lst))
-        (t (cons (car lst) (delete1-equal x (cdr lst))))))
+        (t (cons (car lst) (remove1-equal x (cdr lst))))))
 
-(defun delete-assoc-eq (key alist)
+(defun remove1-assoc-eq (key alist)
   (declare (xargs :guard (if (symbolp key)
                              (alistp alist)
                            (symbol-alistp alist))))
   (cond ((endp alist) nil)
         ((eq key (caar alist)) (cdr alist))
-        (t (cons (car alist) (delete-assoc-eq key (cdr alist))))))
+        (t (cons (car alist) (remove1-assoc-eq key (cdr alist))))))
 
 (defun strip-cadrs (x)
   (cond ((endp x) nil)
@@ -236,7 +236,7 @@
       l
     (last (cdr l))))
 
-(defun symbol-< (x y)
+(defun symbol< (x y)
   (declare (xargs :guard (and (symbolp x) (symbolp y))))
   (let ((x1 (symbol-name x))
         (y1 (symbol-name y)))
@@ -274,7 +274,7 @@
         (t
          (cond ((symbolp x)
                 (cond ((symbolp y)
-                       (not (symbol-< y x)))
+                       (not (symbol< y x)))
                       (t t)))
                ((symbolp y) nil)
                (t (acl2::bad-atom<= x y))))))

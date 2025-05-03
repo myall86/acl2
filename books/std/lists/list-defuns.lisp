@@ -31,7 +31,6 @@
 ; definitions, e.g., from Centaur libraries.
 
 (in-package "ACL2")
-(include-book "std/util/bstar" :dir :system)
 
 ; This book is intended to be a rather bare-minimum set of list definitions.
 ; Historically it included most of the books in the std/lists library and then
@@ -40,25 +39,36 @@
 ; now prove the bare-minimum theorems inline and avoid including the other
 ; books.
 
-(local (defthm commutativity-2-of-+
-         (equal (+ x (+ y z))
-                (+ y (+ x z)))))
+; Mihir M. mod: list-fix-exec and list-fix were defined here earlier, but after
+; the migration of these definitions to the sources, we just have macros.
+(defmacro list-fix-exec (x) `(true-list-fix-exec ,x))
 
-(local (defthm fold-consts-in-+
-         (implies (and (syntaxp (quotep x))
-                       (syntaxp (quotep y)))
-                  (equal (+ x (+ y z)) (+ (+ x y) z)))))
+(table macro-aliases-table 'list-fix-exec 'true-list-fix-exec)
 
-(local (defthm distributivity-of-minus-over-+
-         (equal (- (+ x y)) (+ (- x) (- y)))))
+(in-theory (disable list-fix-exec))
 
+(defmacro list-fix (x) `(true-list-fix ,x))
 
-(defund list-fix (x)
-  (declare (xargs :guard t))
-  (if (consp x)
-      (cons (car x)
-            (list-fix (cdr x)))
-    nil))
+(table macro-aliases-table 'list-fix 'true-list-fix)
+
+(in-theory (disable list-fix))
+
+(encapsulate
+  ()
+  (local (in-theory (enable list-fix list-fix-exec)))
+
+  (defthm list-fix-exec-removal
+    (equal (list-fix-exec x)
+           (list-fix x)))
+
+  (local (defthm list-fix-when-true-listp
+           (implies (true-listp x)
+                    (equal (list-fix x) x))))
+
+  (defun-inline llist-fix (x)
+    (declare (xargs :guard (true-listp x)))
+    (mbe :logic (list-fix x)
+         :exec x)))
 
 (defund fast-list-equiv (x y)
   (declare (xargs :guard t))
@@ -69,6 +79,9 @@
     (atom y)))
 
 (defund list-equiv (x y)
+  (declare (xargs :guard t
+                  :guard-hints(("Goal" :in-theory (enable fast-list-equiv
+                                                          list-fix)))))
   (mbe :logic (equal (list-fix x) (list-fix y))
        :exec (fast-list-equiv x y)))
 
@@ -199,6 +212,12 @@
            (prefixp (cdr x) (cdr y)))
     t))
 
+(defund suffixp (x y)
+  (declare (xargs :guard t))
+  (or (equal x y)
+      (and (consp y)
+           (suffixp x (cdr y)))))
+
 (defund flatten (x)
   (declare (xargs :guard t))
   (if (consp x)
@@ -290,38 +309,16 @@
 
 (encapsulate
   ()
-  (local (defun simpler-take-induction (n xs)
-           (if (zp n)
-               nil
-             (cons (car xs)
-                   (simpler-take-induction (1- n) (cdr xs))))))
-
-  (local (defthm equivalence-lemma
-           (implies (true-listp acc)
-                    (equal (first-n-ac n xs acc)
-                           (revappend acc (simpler-take-induction n xs))))))
-
-  (local (defthm take-redefinition
-           (equal (take n x)
-                  (if (zp n)
-                      nil
-                    (cons (car x)
-                          (take (1- n) (cdr x)))))
-           :rule-classes ((:definition :controller-alist ((TAKE T NIL))))))
-
-  (local (in-theory (disable take)))
 
   (local (defthm take-when-atom
            (implies (atom x)
                     (equal (take n x)
                            (replicate n nil)))
            :hints(("Goal"
-                   :induct (simpler-take-induction n x)
                    :in-theory (enable replicate)))))
 
   (verify-guards first-n
     :hints(("Goal" :in-theory (enable replicate)))))
-
 
 (defun same-lengthp (x y)
   (declare (xargs :guard t))

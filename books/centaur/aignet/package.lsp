@@ -31,9 +31,8 @@
 (in-package "ACL2")
 
 (include-book "std/portcullis" :dir :system)
-; Matt K. mod: The following is redundant with the line above.
-; (ld "tools/flag-package.lsp" :dir :system)
-(ld "centaur/satlink/package.lsp" :dir :system)
+(include-book "centaur/ipasir/portcullis" :dir :system)
+(include-book "centaur/bitops/portcullis" :dir :system)
 
 (defconst *aignet-exports*
   '(aignet-well-formedp
@@ -80,6 +79,7 @@
     defmvtypes
     std::defprojection
     std::deflist
+    std::defval
     b*
     aig-eval
     aig-not
@@ -126,13 +126,24 @@
     bitarr get-bit set-bit bits-length resize-bits bits-equiv
     tag
     list-equiv
-    duplicity))
+    duplicity
+    stobj
+    abstract-stobj
+    new old orig
+    ))
 
 (defpkg "AIGNET"
   (union-eq *acl2-exports*
             *common-lisp-symbols-from-main-lisp-package*
             *aignet-exports*
-            *aignet-imports*))
+            *aignet-imports*
+            satlink::*satlink-exports*
+            std::*std-exports*
+            *bitops-exports*
+            *stobjs-exports*
+            *ipasir-exports*))
+
+(defpkg "AIGNET-GENSYMS" nil)
 
 ;; (defconst *aignet$a-exports*
 ;;   #!AIGNET
@@ -210,9 +221,27 @@
              snode->fanin
              snode->ionum
              snode->regid
-             mk-snode))
+             mk-snode
+             snode->type^
+             snode->phase^
+             snode->regp^
+             snode->fanin^
+             snode->ionum^
+             snode->regid^
+             mk-snode^
+             ;; [Jared] added these for nicer aignet-base-api docs
+             f f0 f1 n regid lit
+             max-outs max-regs max-ins max-nodes
+             new old orig
+             ))
 
-(defpkg "AIGNET$A" nil)
+(defpkg "AIGNET$A"
+  #!AIGNET '(
+             ;; [Jared] added these for a nicer aignet-base-api docs
+             f f0 f1 n regid lit
+             max-outs max-regs max-ins max-nodes
+             new old orig))
+
 ;; (defpkg "AIGNET$A"
 ;;   (union-eq *acl2-exports*
 ;;             *common-lisp-symbols-from-main-lisp-package*
@@ -224,4 +253,7 @@
   (union-eq *acl2-exports*
             *common-lisp-symbols-from-main-lisp-package*
             *aignet-imports*
-            *aignet$c-imports*))
+            satlink::*satlink-exports*
+            *aignet$c-imports*
+            std::*std-exports*
+            *stobjs-exports*))

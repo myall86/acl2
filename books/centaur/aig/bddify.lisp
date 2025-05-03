@@ -88,7 +88,7 @@ from the ITP presentation are also available.</p>")
    x
    :true t
    :false nil
-   :var (aig-env-lookup x fal)
+   :var (aig-alist-lookup x fal)
    :inv (q-not (aig-q-compose (car x) fal))
    :and (let ((a (aig-q-compose (car x) fal)))
           (and a (q-and a (aig-q-compose (cdr x) fal))))))
@@ -148,7 +148,7 @@ from the ITP presentation are also available.</p>")
   (declare (xargs :guard (integerp n)
                   :verify-guards nil))
   (cond ((atom x)     (mv n acc))
-        ((hons-get x acc)  (mv n acc)) 
+        ((hons-get x acc)  (mv n acc))
         ((hqual (car x) (cdr x))
          (count-bdd-branches (car x) n (hut x t acc)))
         ((<= n 0)       (mv nil acc))
@@ -293,6 +293,16 @@ from the ITP presentation are also available.</p>")
           memo)
     (mv fmemo (hut x (list* hi lo a hc lc) memo))))
 
+(defun apqs-memo-lookup-aig (x fmemo memo)
+  ;; for visibility -- map x to its new version in fmemo or memo
+  (let ((m (hons-get x fmemo)))
+    (if m
+        (mv t (third m))
+      (let ((m (hons-get x memo)))
+        (if m
+            (mv t (fourth m))
+          (mv nil nil))))))
+
 ;!paper-note:  AIG-BDDIFY-X-WEAKENING is called BOUND-METHOD.
 
 ;; Six return values:
@@ -313,7 +323,7 @@ from the ITP presentation are also available.</p>")
    x
    :true (mv t t t 1 1 fmemo memo)
    :false (mv nil nil nil 1 1 fmemo memo)
-   :var (b* ((val (aig-env-lookup x al))
+   :var (b* ((val (aig-alist-lookup x al))
              (count (count-branches-to val max-nodes))
              (count (and count (1+ count))))
           (if count
@@ -355,8 +365,22 @@ from the ITP presentation are also available.</p>")
           (cons a ras)
           fmemo memo
           (and (hqual hi lo) exact)))))
-         
 
+
+(defun apqs-memo-aig-map (map   ;; current map from original subtrees to previously normalized versions
+                          fmemo ;; latest fmemo
+                          memo  ;; latest memo
+                          acc)
+
+  ;; for visibility -- take the current mapping from original AIG subtrees to
+  ;; rewritten ones, rewrite them further with the latest fmemo/memo.
+  (b* (((when (atom map)) acc)
+       ((when (atom (car map))) (apqs-memo-aig-map (cdr map) fmemo memo acc))
+       ((cons key val) (car map))
+       ((mv ok new-val) (apqs-memo-lookup-aig val fmemo memo))
+       (new-val (if ok new-val val))
+       (acc (cons (cons key new-val) acc)))
+    (apqs-memo-aig-map (cdr map) fmemo memo acc)))
 
 
 ;; AIG-BDDIFY-VAR-WEAKENING tries to simplify an AIG and produce its BDD
@@ -366,7 +390,7 @@ from the ITP presentation are also available.</p>")
 ;; alist, then this is the exact BDD representation for the AIG.
 
 (defn aig-bddify-var-weakening-var (x al max-count)
-  (b* ((val (aig-env-lookup x al)))
+  (b* ((val (aig-alist-lookup x al)))
     (if (booleanp val)
         (mv val val 1)
       (let* ((c (count-branches-to val max-count))
@@ -381,8 +405,29 @@ from the ITP presentation are also available.</p>")
         (if mem
             (mv t (cadr mem) (caddr mem) (cdddr mem) nil)
           (mv nil nil nil nil nil))))))
-        
-      
+
+(defun aig-bddify-var-weakening-lookup-aig (x fmemo memo)
+  (let ((look (or (hons-get x fmemo)
+                  (hons-get x memo))))
+    (if look
+        (mv t (third look))
+      (mv nil nil))))
+
+(defun aig-bddify-var-weakening-aig-map (map   ;; current map from original subtrees to previously normalized versions
+                                         fmemo ;; latest fmemo
+                                         memo  ;; latest memo
+                                         acc)
+
+  ;; for visibility -- take the current mapping from original AIG subtrees to
+  ;; rewritten ones, rewrite them further with the latest fmemo/memo.
+  (b* (((when (atom map)) acc)
+       ((when (atom (car map))) (aig-bddify-var-weakening-aig-map (cdr map) fmemo memo acc))
+       ((cons key val) (car map))
+       ((mv ok new-val) (aig-bddify-var-weakening-lookup-aig val fmemo memo))
+       (new-val (if ok new-val val))
+       (acc (cons (cons key new-val) acc)))
+    (aig-bddify-var-weakening-aig-map (cdr map) fmemo memo acc)))
+
 
 (defun and-bddify-var-weakening (bdd1 aig1 count1 exact1 bdd2 aig2 count2 exact2
                                   max-count bdd-al nxtbdd)
@@ -415,7 +460,7 @@ from the ITP presentation are also available.</p>")
               (hons nxtbdd nxtbdd)
               nil))))
     (mv bdd aig count bdd-al nxtbdd exact)))
-  
+
 
 (defn aig-bddify-var-weakening-cache-insert (exact x aig c-ans fmemo memo)
   (if exact
@@ -435,41 +480,44 @@ from the ITP presentation are also available.</p>")
   ;; already has a variable assigned to it and we use that.
   ;; Otherwise, we assign it a fresh variable.
   ;; The proof of correctness is in "aig-bddify-var-weakening-correct.lisp".
-  (if (booleanp x)
-      (mv x x 1 fmemo memo bdd-al nxtbdd t)
-    (if (atom x)
-        (mv-let (bdd aig count)
-          (aig-bddify-var-weakening-var x al max-count)
-          (mv bdd aig count fmemo memo bdd-al nxtbdd t))
-      (if (eq (cdr x) nil)
-          (b* (((mv bdd aig count fmemo memo bdd-al nxtbdd exact)
-                (aig-bddify-var-weakening
-                 (car x) al max-count fmemo memo bdd-al nxtbdd)))
-            (mv (q-not bdd) (aig-not aig) count fmemo memo bdd-al nxtbdd
-                exact))
-        (mv-let (cached bdd aig count exact)
-          (aig-bddify-var-weakening-cache-lookup x fmemo memo)
-          (if cached
-              (mv bdd aig count fmemo memo bdd-al nxtbdd exact)
-            (b* (((mv bdd aig count fmemo memo bdd-al nxtbdd exact)
-                  (mv-let (bdd1 aig1 count1 fmemo memo bdd-al nxtbdd exact1)
-                    (aig-bddify-var-weakening
-                     (car x) al max-count fmemo memo bdd-al nxtbdd)
-                    (if (eq bdd1 nil)
-                        (mv nil nil 1 fmemo memo bdd-al nxtbdd t)
-                      (b* (((mv bdd2 aig2 count2 fmemo memo bdd-al nxtbdd exact2)
-                            (aig-bddify-var-weakening
-                             (cdr x) al max-count fmemo memo bdd-al nxtbdd))
-                           ((mv bdd aig count bdd-al nxtbdd exact)
-                            (and-bddify-var-weakening bdd1 aig1 count1 exact1 bdd2
-                                                  aig2 count2 exact2 max-count
-                                                  bdd-al nxtbdd)))
-                        (mv bdd aig count fmemo memo bdd-al nxtbdd exact)))))
-                 (c-ans (list* bdd aig count))
-                 ((mv fmemo memo)
-                  (aig-bddify-var-weakening-cache-insert exact x aig
-                                                         c-ans fmemo memo)))
-              (mv bdd aig count fmemo memo bdd-al nxtbdd exact))))))))
+  (aig-cases
+   x
+   :true (mv x x 1 fmemo memo bdd-al nxtbdd t)
+   :false (mv x x 1 fmemo memo bdd-al nxtbdd t)
+   :var
+   (mv-let (bdd aig count)
+     (aig-bddify-var-weakening-var x al max-count)
+     (mv bdd aig count fmemo memo bdd-al nxtbdd t))
+   :inv
+   (b* (((mv bdd aig count fmemo memo bdd-al nxtbdd exact)
+         (aig-bddify-var-weakening
+          (car x) al max-count fmemo memo bdd-al nxtbdd)))
+     (mv (q-not bdd) (aig-not aig) count fmemo memo bdd-al nxtbdd
+         exact))
+   :and
+   (mv-let (cached bdd aig count exact)
+     (aig-bddify-var-weakening-cache-lookup x fmemo memo)
+     (if cached
+         (mv bdd aig count fmemo memo bdd-al nxtbdd exact)
+       (b* (((mv bdd aig count fmemo memo bdd-al nxtbdd exact)
+             (mv-let (bdd1 aig1 count1 fmemo memo bdd-al nxtbdd exact1)
+               (aig-bddify-var-weakening
+                (car x) al max-count fmemo memo bdd-al nxtbdd)
+               (if (eq bdd1 nil)
+                   (mv nil nil 1 fmemo memo bdd-al nxtbdd t)
+                 (b* (((mv bdd2 aig2 count2 fmemo memo bdd-al nxtbdd exact2)
+                       (aig-bddify-var-weakening
+                        (cdr x) al max-count fmemo memo bdd-al nxtbdd))
+                      ((mv bdd aig count bdd-al nxtbdd exact)
+                       (and-bddify-var-weakening bdd1 aig1 count1 exact1 bdd2
+                                                 aig2 count2 exact2 max-count
+                                                 bdd-al nxtbdd)))
+                   (mv bdd aig count fmemo memo bdd-al nxtbdd exact)))))
+            (c-ans (list* bdd aig count))
+            ((mv fmemo memo)
+             (aig-bddify-var-weakening-cache-insert exact x aig
+                                                    c-ans fmemo memo)))
+         (mv bdd aig count fmemo memo bdd-al nxtbdd exact))))))
 
 
 ;; FMEMO contains "exact" entries and MEMO contains "inexact" ones, but some
@@ -505,16 +553,16 @@ from the ITP presentation are also available.</p>")
        (- (flush-hons-get-hash-table-link done))
        (m (hons-get x fmemo)))
     (mv fmemo (consp m) (and (consp m) (cadr m)))))
-   
+
 
 
 
 (defun aig-bddify-list-var-weakening
   (lst al max-nodes fmemo memo bdd-al nxtbdd var-depth)
   (if (atom lst)
-      (progn$ (flush-hons-get-hash-table-link memo)
+      (progn$ ;; (flush-hons-get-hash-table-link memo)
               (flush-hons-get-hash-table-link bdd-al)
-              (mv nil nil fmemo t))
+              (mv nil nil fmemo memo t))
     (b* ((x (car lst))
          ((mv & aig1 & fmemo memo bdd-al1 nxtbdd1 &)
           (aig-bddify-var-weakening x al max-nodes fmemo memo
@@ -522,13 +570,14 @@ from the ITP presentation are also available.</p>")
          ((mv fmemo exact1 bdd1)
           (abs-recheck-exactness-top x fmemo memo
                                      var-depth))
-         ((mv rbdds ras fmemo exact)
+         ((mv rbdds ras fmemo memo exact)
           (aig-bddify-list-var-weakening
            (cdr lst) al max-nodes fmemo memo bdd-al1 nxtbdd1 var-depth)))
       (mv (cons bdd1 rbdds)
           (cons aig1 ras)
-          fmemo
+          fmemo memo
           (and exact1 exact)))))
+
 
 
 
@@ -558,7 +607,15 @@ from the ITP presentation are also available.</p>")
 
 ;!paper-note:  AIG-BDDIFY-LIST-ITER1 is called AIG-TO-BDD.
 
-(defun aig-bddify-list-iter1 (tries x al fmemo nxtbdd var-depth maybe-wash-args)
+;; Set this to T to compute the AIG map at each iteration so that you can map
+;; original AIG subtrees to their current simplified forms after extracting
+;; things from the backtrace...
+(defconst *aig-bddify-map-subtrees* nil)
+
+
+(defun aig-bddify-list-iter1 (tries x al fmemo nxtbdd var-depth maybe-wash-args map)
+  ;; map is just for visibility-debugging: maps subtrees of original AIG to
+  ;; their most current crunched-down versions.
   (declare (xargs :measure (len tries))
            (ignorable maybe-wash-args))
   (if (atom tries)
@@ -572,25 +629,32 @@ from the ITP presentation are also available.</p>")
                      (maybe-wash-memory (car maybe-wash-args)
                                         (cadr maybe-wash-args))
                    (maybe-wash-memory maybe-wash-args nil))))
-         ((mv bdds x fmemo exact)
+         ((mv bdds x fmemo exact map)
           (cond ((eq type 'xes)
                  (b* (((mv bdds x fmemo memo exact)
                        (aig-bddify-list-x-weakening x al threshold fmemo 'memo))
-                      (- (flush-hons-get-hash-table-link memo)))
-                   (mv bdds x fmemo exact)))
+                      (new-map (and *aig-bddify-map-subtrees*
+                                    (apqs-memo-aig-map map fmemo memo nil))))
+                   (fast-alist-free memo)
+                   (mv bdds x fmemo exact new-map)))
                 ((eq type 'vars)
-                 (aig-bddify-list-var-weakening x al threshold fmemo 'memo
-                                                'bdd-al nxtbdd var-depth))
+                 (b* (((mv bdds x fmemo memo exact)
+                       (aig-bddify-list-var-weakening x al threshold fmemo 'memo
+                                                      'bdd-al nxtbdd var-depth))
+                      (new-map (and *aig-bddify-map-subtrees*
+                                    (aig-bddify-var-weakening-aig-map map fmemo memo nil))))
+                   (fast-alist-free memo)
+                   (mv bdds x fmemo exact new-map)))
                 (t (prog2$ (er hard 'aig-bddify-list-iter1
                                "~x0: unrecognized strategy identifier~%"
                                type)
-                           (mv nil x fmemo nil)))))
+                           (mv nil x fmemo nil map)))))
          (- (and end-msg (cw "~@0" end-msg)))
          ((when (or exact (atom (cdr tries))))
           (prog2$ (flush-hons-get-hash-table-link fmemo)
                   (mv bdds x exact))))
       (aig-bddify-list-iter1 (cdr tries) x al fmemo nxtbdd var-depth
-                             maybe-wash-args))))
+                             maybe-wash-args map))))
 
 
 ;; makes a fast, honsed alist consisting of the pairs of x whose cdrs are boolean
@@ -620,16 +684,35 @@ from the ITP presentation are also available.</p>")
            (<= (max-depth (cdr (hons-assoc-equal x al))) n))
   :rule-classes (:rewrite :linear))
 
+(defun aig-initial-self-map (x acc)
+  (b* (((when (booleanp x)) acc)
+       ((when (and (not (aig-atom-p x)) (not (cdr x))))
+        (aig-initial-self-map (car x) acc))
+       ((when (hons-get x acc)) acc)
+       (acc (hons-acons x x acc))
+       ((when (aig-atom-p x)) acc)
+       (acc (aig-initial-self-map (car x) acc)))
+    (aig-initial-self-map (cdr x) acc)))
+
+(defun aiglist-initial-self-map (x acc)
+  (if (atom x)
+      acc
+    (aiglist-initial-self-map (cdr x) (aig-initial-self-map (car x) acc))))
+                    
+
+
 (defun aig-bddify-list (tries x al maybe-wash-args)
-  (let* ((var-depth (al-max-depth al))
-         (bool-al (bddify-extract-bool-alist al al 'bddify-tmp-bool-alist))
-         (x (hons-copy x))
-         (reduced-x (if (consp bool-al)
-                        (aig-restrict-list x bool-al)
-                      x)))
-    (prog2$ (fast-alist-free bool-al)
-            (aig-bddify-list-iter1 tries reduced-x al 'fmemo (qv var-depth)
-                                   var-depth maybe-wash-args))))
+  (b* ((var-depth (al-max-depth al))
+       (bool-al (bddify-extract-bool-alist al al 'bddify-tmp-bool-alist))
+       (x (hons-copy x))
+       (reduced-x (if (consp bool-al)
+                      (aig-restrict-list x bool-al)
+                    x))
+       (- (fast-alist-free bool-al))
+       (init-map (and *aig-bddify-map-subtrees*
+                      (fast-alist-free (aiglist-initial-self-map reduced-x nil)))))
+    (aig-bddify-list-iter1 tries reduced-x al 'fmemo (qv var-depth)
+                           var-depth maybe-wash-args init-map)))
 
 
 
@@ -653,7 +736,7 @@ from the ITP presentation are also available.</p>")
              (bddify-mk-old-style-tries
               (ceiling (* incr thresh) 1)
               incr (1- times) vars-thresh))))))
-  
+
 (defconst *bddify-default-tries*
   (bddify-mk-old-style-tries 256 2 20 2048))
 
@@ -744,7 +827,7 @@ from the ITP presentation are also available.</p>")
                 (,fn-symbol ,@formals *bddify-default-tries* nil))
          :hints (("goal" :in-theory (disable ,fn)))
          :rule-classes nil))))
-    
+
 
 (defmacro def-with-bddify (fn)
   `(make-event (def-with-bddify-fn ',fn (w state))))
@@ -785,7 +868,7 @@ from the ITP presentation are also available.</p>")
    (defthm aig-eval-is-aig-eval-list
      (equal (car (aig-eval-list-with-bddify (list x) al tries mwa))
             (aig-eval-with-bddify x al tries mwa)))
-   
+
    (in-theory (disable aig-eval-with-bddify
                        aig-eval-list-with-bddify
                        aig-eval-alist-with-bddify

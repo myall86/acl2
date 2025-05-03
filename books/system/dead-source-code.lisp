@@ -49,7 +49,7 @@
           (constraint-info fn wrld)
           (cond ((null flg)
                  (all-fnnames x))
-                ((eq x *unknown-constraints*)
+                ((unknown-constraints-p x)
                  nil)
                 (t
                  (all-fnnames-lst x)))))
@@ -228,7 +228,7 @@
                          (primitive-event-macros-fns (primitive-event-macros)
                                                      wrld)
                          (fns-with-lemmas wrld nil))))))
-                                                    
+
 (defun initial-live-names-array (wrld state)
   (let* ((size (1+ (max-absolute-event-number wrld)))
          (ar (compress1 'live-names
@@ -286,7 +286,7 @@
           times-expt-2-16-mod-m31 ; only used by GCL ;
           show-poly-lst ; for system debugging ;
           brr-prompt ; argument of set-ld-prompt ;
-          proof-checker-cl-proc
+          proof-builder-cl-proc
           ext-ancestors-attachments ; called by memoize-fn ;
           tree-occur-eq ; called by #-acl2-loop-only definition
 ; The following are hidden by wormholes, e.g., ;

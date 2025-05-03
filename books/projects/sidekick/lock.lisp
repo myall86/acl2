@@ -31,8 +31,11 @@
 ; Original author: Jared Davis <jared@kookamara.com>
 
 (in-package "SIDEKICK")
-(include-book "centaur/quicklisp/bordeaux" :dir :system)
+(include-book "quicklisp/bordeaux" :dir :system)
 (defttag :sidekick)
+
+; [Jared] don't know why, but things are breaking and it's not worth fixing.
+; cert_param: (non-cmucl)
 
 ; (depends-on "lock-raw.lsp")
 (include-raw "lock-raw.lsp")

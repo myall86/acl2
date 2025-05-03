@@ -1,5 +1,5 @@
 ; XDOC Documentation System for ACL2
-; Copyright (C) 2009-2011 Centaur Technology
+; Copyright (C) 2009-2015 Centaur Technology
 ;
 ; Contact:
 ;   Centaur Technology Formal Verification Group
@@ -31,7 +31,8 @@
 (in-package "XDOC")
 (include-book "parse-xml")
 (include-book "save-classic")
-(include-book "misc/assert" :dir :system)
+(include-book "std/testing/assert-bang" :dir :system)
+(include-book "centaur/vl/util/cwtime" :dir :system)
 (set-state-ok t)
 (program)
 
@@ -66,7 +67,7 @@
 ;
 ; Our top level function is
 ;
-;  (order-topics-by-importance all-topics state) 
+;  (order-topics-by-importance all-topics state)
 ;     --> (mv all-topics xtopics state)
 ;
 ; It just permutes the input topics into a "good" order so that "more
@@ -93,6 +94,8 @@
    parents      ; copy of parents from normal topic
    short-tokens ; already preprocessed
    long-tokens  ; already preprocessed
+   short-err
+   long-err
    links        ; collected up links (short+long combined) keys (i.e., "ACL2____FOO")
    size         ; heuristic for how much content there is
    ))
@@ -116,6 +119,9 @@
          (car xtopics))
         (t
          (find-xtopic name (cdr xtopics)))))
+
+(defun xtopics-fal (xtopics)
+  (make-fast-alist (pairlis$ (xtopiclist->names xtopics) xtopics)))
 
 (defun extract-links
   (ctx       ; Context for warnings about malformed XML
@@ -166,7 +172,7 @@
 ;
 ; Below, a LINKS-FAL is a fast alist that binds
 ;
-;          TARGET (key) -> SOURCE LIST (names) 
+;          TARGET (key) -> SOURCE LIST (names)
 ;
 ; For instance, the LINKS-FAL might bind:
 ;
@@ -261,10 +267,29 @@
        (state (set-fmt-soft-right-margin 10000 state))
        (state (set-fmt-hard-right-margin 10000 state))
        (num (sum-lengths (strip-cdrs broken)))
-       (- (cw "~%;;; WARNING: Found ~x0 broken topic links: ~%" num)
-          (cw ";;;~%")
-          (report-broken-links-aux broken)
-          (cw ";;;~%"))
+       (broken-links-limit ; set in save-fancy and save-rendered
+        (f-get-global 'broken-links-limit state))
+       (-
+        (cw "~%;;; WARNING: Found ~x0 broken topic link~#1~[~/s~]: ~%"
+            num
+            (if (eql num 1) 0 1))
+        (cw ";;;~%")
+        (report-broken-links-aux broken)
+        (cw ";;;~%")
+
+        ;; [Matt K. addition] Starting late April 2017, we cause an error if
+        ;; there is more than one broken link in the combined manual.  (There
+        ;; is an intentional broken link, some-broken-link, in :doc acl2-doc.)
+        ;; It seems useful to cause an error so that broken links are caught
+        ;; early, without the need to inspect doc/top.cert.out for the broken
+        ;; links report.
+
+        (and broken-links-limit
+             (< broken-links-limit num)
+             (er hard! 'find-broken-links
+                 "Found more than the maximum expected number, ~x0, of broken ~
+                  topic links."
+                 broken-links-limit)))
        (state (set-fmt-soft-right-margin soft state))
        (state (set-fmt-hard-right-margin hard state)))
     state))
@@ -390,7 +415,6 @@
 
 (defun xtopic-from-topic
   (topic      ; ordinary xdoc topic to convert
-   topics-fal ; for the preprocessor
    state      ; for the preprocessor
    )
   ; returns the corresponding xtopic
@@ -400,35 +424,47 @@
        (long     (or (cdr (assoc :long topic)) ""))
        (parents  (cdr (assoc :parents topic)))
 
-       ((mv long-rchars state) (preprocess-main long name topics-fal base-pkg state nil))
-       (long-str (str::rchars-to-string long-rchars))
-       ((mv err long-tokens) (parse-xml long-str))
+       ;; ((mv long-printtree state) (preprocess-main long name
+       ;;                                          topics-fal nil
+       ;;                                          base-pkg state nil))
+       ;; (long-str (str::printtree->str long-printtree))
+       ;; ((mv long-err long-tokens) (parse-xml long-str))
+       ((mv long-err long-tokens) (parse-xml long))
        (state
-        (if err
+        (if long-err
             (pprogn
-             (fms "~|~%WARNING: problem with :long in topic ~x0:~%"
+             (prog2$ (note-xdoc-error) state)
+; See comment regarding the use of "; xdoc error" instead of "WARNING"
+; in preprocess-topic (file prepare-topic.lisp).
+             (fms "~|~%; xdoc error: problem with :long in topic ~x0:~%"
                   (list (cons #\0 name))
                     *standard-co* state nil)
-             (princ$ err *standard-co* state)
+             (princ$ long-err *standard-co* state)
              (fms "~%~%" nil *standard-co* state nil))
           state))
-       ((when err)
-        (mv nil state))
+       ;; ((when err)
+       ;;  (mv nil state))
 
-       ((mv short-rchars state) (preprocess-main short name topics-fal base-pkg state nil))
-       (short-str (str::rchars-to-string short-rchars))
-       ((mv err short-tokens) (parse-xml short-str))
+       ;; ((mv short-printtree state) (preprocess-main short name
+       ;;                                           topics-fal nil
+       ;;                                           base-pkg state nil))
+       ;; (short-str (str::printtree->str short-printtree))
+       ;; ((mv short-err short-tokens) (parse-xml short-str))
+       ((mv short-err short-tokens) (parse-xml short))
        (state
-        (if err
+        (if short-err
             (pprogn
-               (fms "~|~%WARNING: problem with :short in topic ~x0:~%"
-                    (list (cons #\0 name))
-                    *standard-co* state nil)
-               (princ$ err *standard-co* state)
-               (fms "~%~%" nil *standard-co* state nil))
+             (prog2$ (note-xdoc-error) state)
+; See comment regarding the use of "; xdoc error" instead of "WARNING"
+; in preprocess-topic (file prepare-topic.lisp).
+             (fms "~|~%; xdoc error: problem with :short in topic ~x0:~%"
+                  (list (cons #\0 name))
+                  *standard-co* state nil)
+             (princ$ short-err *standard-co* state)
+             (fms "~%~%" nil *standard-co* state nil))
           state))
-       ((when err)
-        (mv nil state))
+       ;; ((when short-err)
+       ;;  (mv nil state))
 
        (short-links (extract-links (list name :short) short-tokens nil))
        (long-links  (extract-links (list name :long) long-tokens nil))
@@ -456,28 +492,30 @@
                             :parents parents
                             :short-tokens short-tokens
                             :long-tokens long-tokens
+                            :short-err short-err
+                            :long-err long-err
                             :links (append short-links long-links)
                             :size normalized-size)))
     (mv xtopic state)))
 
-(defun xtopics-from-topics-aux (topics topics-fal state)
+
+
+(defun xtopics-from-topics (topics state)
   (b* (((when (atom topics))
         (mv nil state))
        ((mv first state)
-        (xtopic-from-topic (car topics) topics-fal state))
+        (xtopic-from-topic (car topics) state))
        ((mv rest state)
-        (xtopics-from-topics-aux (cdr topics) topics-fal state))
-       (ret (if first
-                (cons first rest)
-              rest)))
-    (mv ret state)))
+        (xtopics-from-topics (cdr topics) state)))
+    (mv (cons first rest) state)))
 
-(defun xtopics-from-topics (topics state)
-  (b* ((topics-fal (topics-fal topics))
-       ((mv xtopics state)
-        (xtopics-from-topics-aux topics topics-fal state)))
-    (fast-alist-free topics-fal)
-    (mv xtopics state)))
+(defun xtopics-remove-errors (xtopics)
+  (if (atom xtopics)
+      nil
+    (if (b* (((xtopic x) (car xtopics)))
+          (or x.short-err x.long-err))
+        (xtopics-remove-errors (cdr xtopics))
+      (cons (car xtopics) (xtopics-remove-errors (cdr xtopics))))))
 
 ; Cross-reference/subtopic scoring.
 
@@ -504,7 +542,7 @@
         rank-fal)
        (rank-fal
         ;; You get a point for existing at all.
-        (dumb-increment-ranks 
+        (dumb-increment-ranks
          (list (make-key (xtopic->name (car xtopics))))
          rank-fal
          1))
@@ -619,7 +657,7 @@
                               (<= x 1))))
   (if (equal x 1)
       "1.0"
-    (str::cat "0." (str::natstr (floor (* x 100) 1)))))
+    (str::cat "0." (str::nat-to-dec-string (floor (* x 100) 1)))))
 
 (assert! (equal (priority-float 1/10) "0.10"))
 (assert! (equal (priority-float 37/100) "0.37"))
@@ -641,38 +679,38 @@
               (er hard? 'make-sitemap-aux "Expected rank for ~x0 to be in [0, 200].~%")))
        (priority-str (priority-float (/ rank 200)))
 
-       (acc (str::revappend-chars " <url>" acc))
+       (acc (str::printtree-rconcat " <url>" acc))
        (acc (cons #\Newline acc))
        ;; The following three lines were used to generate a sitemap for
        ;; index.html.  But, we don't use index.html for indexing, because
        ;; search engines don't use javascript.
-       ;; (acc (str::revappend-chars "  <loc>XDOCMANUALBASEURL?topic=" acc))
-       ;; (acc (str::revappend-chars key acc))
-       ;; (acc (str::revappend-chars "</loc>" acc))
-       (acc (str::revappend-chars "  <loc>XDOCMANUALBASEURL/HTML/" acc))
-       (acc (str::revappend-chars key acc))
-       (acc (str::revappend-chars ".html</loc>" acc))
+       ;; (acc (str::printtree-rconcat "  <loc>XDOCMANUALBASEURL?topic=" acc))
+       ;; (acc (str::printtree-rconcat key acc))
+       ;; (acc (str::printtree-rconcat "</loc>" acc))
+       (acc (str::printtree-rconcat "  <loc>XDOCMANUALBASEURL/HTML/" acc))
+       (acc (str::printtree-rconcat key acc))
+       (acc (str::printtree-rconcat ".html</loc>" acc))
        (acc (cons #\Newline acc))
-       (acc (str::revappend-chars "  <changefreq>daily</changefreq>" acc))
+       (acc (str::printtree-rconcat "  <changefreq>daily</changefreq>" acc))
        (acc (cons #\Newline acc))
-       (acc (str::revappend-chars "  <priority>" acc))
-       (acc (str::revappend-chars priority-str acc))
-       (acc (str::revappend-chars "</priority>" acc))
+       (acc (str::printtree-rconcat "  <priority>" acc))
+       (acc (str::printtree-rconcat priority-str acc))
+       (acc (str::printtree-rconcat "</priority>" acc))
        (acc (cons #\Newline acc))
-       (acc (str::revappend-chars " </url>" acc))
+       (acc (str::printtree-rconcat " </url>" acc))
        (acc (cons #\Newline acc)))
     (make-sitemap-aux (cdr xtopics) keys->ranks acc)))
 
 (defun make-sitemap (xtopics keys->ranks)
   (b* ((acc nil)
-       (acc (str::revappend-chars "<?xml version=\"1.0\" encoding=\"utf-8\"?>" acc))
+       (acc (str::printtree-rconcat "<?xml version=\"1.0\" encoding=\"utf-8\"?>" acc))
        (acc (cons #\Newline acc))
-       (acc (str::revappend-chars "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">" acc))
+       (acc (str::printtree-rconcat "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">" acc))
        (acc (cons #\Newline acc))
        (acc (make-sitemap-aux xtopics keys->ranks acc))
-       (acc (str::revappend-chars "</urlset>" acc))
+       (acc (str::printtree-rconcat "</urlset>" acc))
        (acc (cons #\Newline acc)))
-    (str::rchars-to-string acc)))
+    (str::printtree->str acc)))
 
 
 
@@ -700,21 +738,24 @@
     (cons topic1
           (collect-topics-by-importance (cdr keys) keymap topics-fal))))
 
-(defun order-topics-by-importance (all-topics state)
+
+
+(defun order-topics-by-importance (all-topics xtopics state)
   ;; Returns
   ;;  (mv result    ; reordered version of all-topics, in importance order
   ;;      xtopics   ; the computed xtopics
   ;;      sitemap   ; site map for search engines
   ;;      state)
-  (b* ((topics-fal   (topics-fal all-topics))
+  (b* ((topics-fal         (topics-fal all-topics))
        ;(- (cw "First 3 of topics-fal: ~x0.~%" (take 3 topics-fal)))
        ;(- (cw "Length of topics-fal: ~x0.~%" (len topics-fal)))
-       (topics-names (strip-cars topics-fal))
-       (topics-keys  (make-keys topics-names))
-       ((mv xtopics state) (xtopics-from-topics all-topics state))
-       (state        (report-broken-links xtopics state))
-       (keys->ranks  (make-keys->ranks topics-keys xtopics))
-       (ordered-keys (rank-xtopics topics-keys keys->ranks))
+       (topics-names       (strip-cars topics-fal))
+       (topics-keys        (acl2::cwtime (make-keys topics-names)))
+       ;; ((mv xtopics state) (acl2::cwtime (xtopics-from-topics all-topics state)))
+       (xtopics            (xtopics-remove-errors xtopics))
+       (state              (acl2::cwtime (report-broken-links xtopics state)))
+       (keys->ranks        (acl2::cwtime (make-keys->ranks topics-keys xtopics)))
+       (ordered-keys       (acl2::cwtime (rank-xtopics topics-keys keys->ranks)))
 
        ;(- (cw "First 3 ordered-keys: ~x0.~%" (take 3 ordered-keys)))
        ;(- (cw "First 3 topics-keys: ~x0.~%" (take 3 topics-keys)))
@@ -728,24 +769,21 @@
        ;       (er hard? 'order-topics-by-importance "Don't have the same keys!")))
        (keymap       (make-fast-alist (pairlis$ topics-keys topics-names)))
        ;(- (cw "Keymap is ~x0.~%" keymap))
-       (result       (collect-topics-by-importance ordered-keys keymap topics-fal))
+       (result       (acl2::cwtime (collect-topics-by-importance ordered-keys keymap topics-fal)))
        ;(- (cw "First 3 results: ~x0.~%" (take 3 result)))
        ;(- (cw "Length of result: ~x0.~%" (length result)))
        ;(- (cw "Names of result: ~x0.~%" (strip-cars (fast-alist-free (topics-fal result)))))
-       (site-map (time$ (make-sitemap xtopics keys->ranks)))
+       (site-map     (acl2::cwtime (make-sitemap xtopics keys->ranks)))
        )
     (fast-alist-free keys->ranks)
     (fast-alist-free topics-fal)
     (fast-alist-free keymap)
-    (or (equal (mergesort topics-names)
-               (mergesort (strip-cars (fast-alist-free (topics-fal result)))))
+    (or (acl2::cwtime (equal (mergesort topics-names)
+                             (mergesort (strip-cars (fast-alist-free (topics-fal result)))))
+                      :name order-topics-sanity-check)
         (er hard? 'order-topics-by-importance
             "Screwed up the database!"))
-    (mv result xtopics site-map state)))
-
-
-
-
+    (mv result site-map state)))
 
 
 
@@ -756,8 +794,8 @@
 For testing, get documentation loaded.  Newlines to avoid dependency scanner
 picking these up.
 
-(ld
- "importance.lisp")
+;; (ld
+;;  "importance.lisp")
 
 ;; (include-book "std/util/defconsts" :dir :system)
 ;; (include-book "centaur/aignet/portcullis" :dir :system)
@@ -769,13 +807,45 @@ picking these up.
 ;; (include-book "centaur/defrstobj/portcullis" :dir :system)
 ;; (include-book "projects/milawa/ACL2/portcullis" :dir :system)
 ;; (include-book "projects/doc" :dir :system)
-;; (include-book "cgen/defdata" :dir :system)
+;; (include-book "acl2s/portcullis" :dir :system)
+;; (include-book "centaur/sv/portcullis" :dir :system)
+;; (include-book "rtl/rel11/portcullis" :dir :system)
+
+;; (include-book "std/util/defconsts" :dir :system)
+
+(defmacro with-redef (&rest forms)
+  ;; A handy macro you can use to temporarily enable redefinition, but then
+  ;; keep it disabled for the rest of the session
+  `(progn
+     (defttag with-redef)
+     (progn!
+      (set-ld-redefinition-action '(:doit . :overwrite) state)
+      (progn . ,forms)
+      (set-ld-redefinition-action nil state))))
+
+(with-redef
+  (defun preprocess-eval-parse (str base-pkg state)
+    (declare (ignore str base-pkg))
+    ;; Returns (mv errmsg? parsed-sexpr state)
+    (mv nil "Elided @(`...`) result." state)))
 
 (acl2::defconsts (*xdoc.sao* state)
   (serialize-read "../doc/xdoc.sao" :verbosep t))
 
 (table xdoc 'doc
        (clean-topics *xdoc.sao*))
+
+(acl2::defconsts (*result* *xtopics* *sitemap* state)
+  (order-topics-by-importance (get-xdoc-table (w state)) state))
+
+
+
+
+
+
+
+
+
 
 (acl2::defconsts *all-topic-names*
                  (gather-topic-names (get-xdoc-table (w state))))
@@ -795,14 +865,14 @@ picking these up.
 ;;                                (car xtopics))
 ;;                              :exit nil))
 
-(defconst *page-ranks*
+(acl2::defconsts *page-ranks*
   (make-fast-alist (dumb-rank-pages *xtopics*)))
 
-(defconst *size-ranks*
+(acl2::defconst *size-ranks*
   (make-fast-alist (pairlis$ (make-keys (xtopiclist->names *xtopics*))
                              (xtopiclist->sizes *xtopics*))))
 
-(defconst *final-ranks*
+(acl2::defconsts *final-ranks*
   (make-fast-alist
    (merge-ranks (make-keys *all-topic-names*)
                 *page-ranks* *size-ranks*)))

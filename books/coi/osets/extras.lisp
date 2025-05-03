@@ -1,6 +1,36 @@
-#|-*-Lisp-*-=================================================================|#
-#|                                                                           |#
-#|===========================================================================|#
+; Fully Ordered Finite Sets
+; Copyright (C) 2003-2012 Kookamara LLC
+;
+; Contact:
+;
+;   Kookamara LLC
+;   11410 Windermere Meadows
+;   Austin, TX 78759, USA
+;   http://www.kookamara.com/
+;
+; License: (An MIT/X11-style license)
+;
+;   Permission is hereby granted, free of charge, to any person obtaining a
+;   copy of this software and associated documentation files (the "Software"),
+;   to deal in the Software without restriction, including without limitation
+;   the rights to use, copy, modify, merge, publish, distribute, sublicense,
+;   and/or sell copies of the Software, and to permit persons to whom the
+;   Software is furnished to do so, subject to the following conditions:
+;
+;   The above copyright notice and this permission notice shall be included in
+;   all copies or substantial portions of the Software.
+;
+;   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+;   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+;   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+;   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+;   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+;   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+;   DEALINGS IN THE SOFTWARE.
+
+;; COI version, modified by Jared Davis, 2014-10, to include std/osets books
+;; and only add the new functions and theorems that had been in COI.
+
 (in-package "SET")
 
 (include-book "sets")
@@ -211,7 +241,7 @@
              (implies (equal s1 (insert a s2))
                       (equal (delete a s1) s2)))
     :hints (("Goal" :do-not '(generalize eliminate-destructors)
-             :in-theory (e/d ( ;subset 
+             :in-theory (e/d ( ;subset
                               pick-a-point-subset-strategy) (delete in))))))
 
  (local
@@ -224,7 +254,7 @@
                       (equal s1 (insert a s2))))
     :rule-classes nil
     :hints (("Goal" :do-not '(generalize eliminate-destructors)
-             :in-theory (e/d ( ;subset 
+             :in-theory (e/d ( ;subset
                               pick-a-point-subset-strategy) (delete in))))))
 
 ;bzo prove the other one.  which way do we want to go?
@@ -243,7 +273,7 @@
          (emptyset))
   :hints (("Goal" :in-theory (enable INSERT))))
 
-;disable?        
+;disable?
 (defthmd subset-of-delete-helper
   (implies (and (not (subset (delete a x) y))
                 (setp y))
@@ -255,7 +285,7 @@
            (equal (subset (delete a x) y)
                   (if (in a x)
                       (if (in a y)
-                          (subset x (insert a y))    
+                          (subset x (insert a y))
                         (subset x (insert a y)))
                     (subset x y))))
   :hints (("Goal" :in-theory (enable subset-of-delete-helper))))
@@ -310,14 +340,14 @@
              (equal s (insert a (emptyset))))))
 
 ;; [jared] something like this is now in std/osets/top
-;; (defthmd tail-when-empty                
-;;   (implies (empty set) 
+;; (defthmd tail-when-empty
+;;   (implies (empty set)
 ;;            (equal (tail set)
 ;;                   (emptyset)))
 ;;   :hints (("Goal" :in-theory (enable tail))))
 
-(defthm tail-when-empty-cheap    
-  (implies (empty set) 
+(defthm tail-when-empty-cheap
+  (implies (empty set)
            (equal (tail set)
                   (emptyset)))
   :rule-classes ((:rewrite :backchain-limit-lst (1)))
@@ -326,7 +356,7 @@
 (defthm delete-head-of-self
   (equal (delete (head set) set)
          (tail set)))
- 
+
 (defthmd tail-when-not-setp
   (implies (not (setp s))
            (equal (tail s)

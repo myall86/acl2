@@ -45,6 +45,7 @@
 ;; would be no-ops.  This has the consequence that we can't just do (in the raw
 ;; Lisp executable version of our swap) what we say we're doing in the non-exec
 ;; version, namely, return the pointers, just swapped.
+
 (defmacro def-stobj-swap (stobj1 stobj2)
   (let* ((swap-nx (intern-in-package-of-symbol
                    (concatenate 'string "SWAP-" (symbol-name stobj1) "S-NX")
@@ -53,6 +54,7 @@
                    (concatenate 'string "SWAP-" (symbol-name stobj1) "S")
                    stobj1)))
   `(progn
+     (logic)
      (make-event
       (if (eq (congruent-stobj-rep ',stobj1 (w state))
               (congruent-stobj-rep ',stobj2 (w state)))
@@ -69,12 +71,19 @@
          (mv ,stobj1 ,stobj2)))
      (defttag ,swap)
      (progn!
+      ;; [Jared] magic code that I don't understand at all, which hopefully makes it
+      ;; OK to alter logic-fns-with-raw-code.
+      :state-global-bindings
+      ((temp-touchable-vars t set-temp-touchable-vars))
+      ;; Mark swap as having raw code, so that :comp won't screw it up.
+      (f-put-global 'logic-fns-with-raw-code
+                    (cons ',swap (f-get-global 'logic-fns-with-raw-code state))
+                    state)
+      ;; Install the under the hood definition.
       (set-raw-mode t)
       (defun ,swap (,stobj1 ,stobj2)
         (let* ((bound (1- (length ,stobj1))))
           (loop for i from 0 to bound do
-                (psetf (svref i ,stobj1) (svref i ,stobj2)
-                       (svref i ,stobj2) (svref i ,stobj1)))
+                (psetf (svref ,stobj1 i) (svref ,stobj2 i)
+                       (svref ,stobj2 i) (svref ,stobj1 i)))
           (mv ,stobj1 ,stobj2)))))))
-
-

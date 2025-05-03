@@ -249,7 +249,7 @@ approach.</p>")
 ;;   :parents (vl-depsort-functions)
 ;;   :short "Build a dependency graph for function definitions."
 ;;   ((x vl-fundecllist-p))
-;;   :returns (alist "Alist associating funtion names (strings) to the the lists
+;;   :returns (alist "Alist associating function names (strings) to the the lists
 ;;                    of all functions that are called in their bodies (string
 ;;                    lists, perhaps with duplicates).  Suitable for sorting with
 ;;                    @(see depgraph::toposort)."
@@ -357,7 +357,7 @@ approach.</p>")
 
 ;; <p>We don't expect many parameters in a function, so we use slow moditem
 ;; lookups here, figuring that it'll be cheaper than building a @(see
-;; vl-moditem-alist).</p>"
+;; vl-make-moditem-alist).</p>"
 
 ;;   (b* (((when (atom x))
 ;;         (mv t (ok)))
@@ -756,7 +756,7 @@ concerned.  But, I think it's nice to at least explicitly check for the
         (mv nil
             (fatal :type :vl-bad-function-stmt
                    :msg "In ~a0, the assignment to ~a1 is not permitted; we ~
-                         only allow assignments to the funtion's variables ~
+                         only allow assignments to the function's variables ~
                          and its name."
                    :args (list function x1.lvalue))
             written-vars read-vars read-inputs))
@@ -1087,10 +1087,12 @@ do this processing once, in the creation of templates, rather than each time we
 want to expand a call of the function.</p>
 
 <p>But a more important reason is that it allows us to support functions that
-call other functions in a straightforward way.  In @(see
-vl-flatten-funtemplates) we use our ordinary function-expansion code to expand
-any function calls within function templates, so that when we expand functions
-throughout the rest of the module we only need one pass.</p>")
+call other functions in a straightforward way.  BOZO: previously we claimed
+that ``in @('vl-flatten-funtemplates') we use our ordinary function-expansion
+code to expand any function calls within function templates, so that when we
+expand functions throughout the rest of the module we only need one pass.'' but
+that function no longer exists and Jared does not remember whether we changed
+how this worked.</p>")
 
 (fty::deflist vl-funtemplatelist :elt-type vl-funtemplate-p
   :elementp-of-nil nil
@@ -1246,8 +1248,9 @@ vl-fun-vardecllist-types-okp).</p>"
   :long "<p>We try to generate a @(see vl-funtemplate-p) corresponding to
 @('x').  On success, the template we generate is only an <b>initial</b>
 template; it isn't necessarily \"flat\" and might have function calls within
-its assignments.  We later flatten these initial templates with @(see
-vl-flatten-funtemplates).</p>
+its assignments.  BOZO we previously claimed: ``We later flatten these initial
+templates with @('vl-flatten-funtemplates').'' but that function no longer
+exists and Jared doesn't remember whether we changed how it works.</p>
 
 <p>Creating the template for a function is a pretty elaborate process which
 involves a lot of sanity checking, and will fail if the function includes
@@ -1750,7 +1753,7 @@ which is free of function calls on success.</p>"
                 nil))
            ((mv fndecl fndecl-ss) (vl-scopestack-find-item/ss funname ss))
            ((unless (and fndecl (eq (tag fndecl) :vl-fundecl)))
-            (mv nil 
+            (mv nil
                 (warn :type :vl-expand-functions-fail
                       :msg "Failed to expand call of function ~s0 because the ~
                             function declaration wasn't found."
@@ -1769,7 +1772,7 @@ which is free of function calls on success.</p>"
                                       (append-without-guard template1.inputs template1.locals))
                                 :minloc *vl-fakeloc*
                                 :maxloc *vl-fakeloc*)))
-           
+
            ((mv ok warnings nf assigns vardecls new-assigns)
             (vl-assignlist-expand-function-calls template1.assigns fndecl-ss nf
                                                  nil ;; vardecls
@@ -1823,7 +1826,7 @@ which is free of function calls on success.</p>"
        (warnings  vl-warninglist-p)
        (reclimit  natp))
       :measure (two-nats-measure reclimit (+ 1 (vl-expr-count (vl-assign->expr x))))
-      
+
       :returns (mv (successp booleanp :rule-classes :type-prescription)
                    (warnings vl-warninglist-p)
                    (nf       vl-namefactory-p)
@@ -1843,8 +1846,8 @@ which is free of function calls on success.</p>"
            (okp     (and okp1 okp2 okp3))
            (x-prime (change-vl-assign x :expr rhs-prime)))
         (mv okp warnings nf x-prime vardecls assigns)))
-    
-    
+
+
 
 
     ///
@@ -2472,4 +2475,3 @@ consider memoizing @(see vl-fnname->template).</p>"
        (res (change-vl-design x :mods (vl-modulelist-expand-functions x.mods ss))))
     (vl-scopestacks-free)
     res))
-

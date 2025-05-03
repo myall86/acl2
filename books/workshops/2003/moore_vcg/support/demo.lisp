@@ -1,19 +1,6 @@
-; Copyright (C) 2001 J Strother Moore
-
-; This book is free software; you can redistribute it and/or
-; modify it under the terms of the GNU General Public License as
-; published by the Free Software Foundation; either version 2 of
-; the License, or (at your option) any later version.
-
-; This book is distributed in the hope that it will be useful,
-; but WITHOUT ANY WARRANTY; without even the implied warranty of
-; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-; GNU General Public License for more details.
-
-; You should have received a copy of the GNU General Public
-; License along with this book; if not, write to the Free
-; Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
-; USA.
+; Copyright (C) 2001, Regents of the University of Texas
+; Written by J Strother Moore
+; License: A 3-clause BSD license.  See the LICENSE file distributed with ACL2.
 
 ; This book proves the correctness of a recursive static method
 ; for factorial on M5.
@@ -28,7 +15,7 @@
 
 J Moore
 
-Here is the Java for a factorial method.  
+Here is the Java for a factorial method.
 
 class Demo {
 
@@ -55,7 +42,7 @@ If you put this into Demo.java and run
 you get the following:
 
 Compiled from Demo.java
-synchronized class Demo extends java.lang.Object 
+synchronized class Demo extends java.lang.Object
     /* ACC_SUPER bit set */
 {
     static int ans;
@@ -403,7 +390,7 @@ Below is the output of jvm2acl2 for M5.
        (PUTSTATIC "Demo" "ans" NIL)
        (RETURN)))
      (REF 5))))
-  
+
 (defconst *Demo-state*
   (make-state *demo-thread-table*
               *demo-heap*
@@ -658,9 +645,9 @@ T
                    nil))
                  *demo-heap*
                  *demo-class-table*)))))
-                                                    
+
     (int-fix (* 2 (factorial (+ 1 k)))))))
-           
+
 ; In the steps below we demonstrate the key steps in the
 ; simplification above, to check the claims made in the paper.
 
@@ -694,7 +681,7 @@ T
                (run (fact-sched 0 (+ 1 k))
                     (run (repeat 0 4)
                          (alpha 0 (list v0 v1 v2 k) stk)))))))
-                  
+
 (defthm symbolic-computation-step2
   (implies
    (intp (+ 1 k))

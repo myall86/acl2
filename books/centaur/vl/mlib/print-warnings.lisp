@@ -49,7 +49,9 @@
     (vl-ps-seq (vl-print (symbol-name x.type))
                (vl-println note)
                (vl-indent (vl-ps->autowrap-ind))
-               (vl-cw-obj x.msg x.args)
+               (if x.context
+                   (vl-cw-obj "~a0: ~@1" (list x.context (vl-msg x.msg x.args)))
+                 (vl-cw-obj x.msg x.args))
                (vl-println ""))))
 
 (define vl-print-warning-html-mode ((x vl-warning-p) &key (ps 'ps))
@@ -68,12 +70,14 @@
      ;; We don't constrain the message size because it's hard to deal with
      ;; tag closing in html mode.
      (vl-print-markup " ")
-     (vl-cw-obj x.msg x.args)
+     (if x.context
+         (vl-cw-obj "~a0: ~@1" (list x.context (vl-msg x.msg x.args)))
+       (vl-cw-obj x.msg x.args))
      (vl-println-markup "</li>"))))
 
 (define vl-print-warning ((x vl-warning-p) &key (ps 'ps))
   :parents (warnings)
-  :short "Pretty-print a @(see vl-warning-p)."
+  :short "Pretty-print a @(see vl-warning)."
   (if (vl-ps->htmlp)
       (vl-print-warning-html-mode x)
     (vl-print-warning-text-mode x)))
@@ -89,8 +93,8 @@
                (vl-print-warnings-aux (cdr x)))))
 
 (define vl-print-warnings ((x vl-warninglist-p) &key (ps 'ps))
-  :parents (warnings)
-  :short "Pretty-print a @(see vl-warninglist-p)."
+  :parents (vl-warninglist)
+  :short "Pretty-print a @(see vl-warninglist)."
   :long "<p>We automatically clean the warnings; see @(see vl-clean-warnings).</p>
 
 <p>Note that no header information is printed, this just prints the list of
@@ -112,8 +116,8 @@ vl-warnings-to-string).</p>"
             (vl-println-markup "</ul>"))))))
 
 (define vl-print-warnings-with-header ((x vl-warninglist-p) &key (ps 'ps))
-  :parents (warnings)
-  :short "Pretty-print a @(see vl-warninglist-p) with a header saying how many
+  :parents (vl-warninglist)
+  :short "Pretty-print a @(see vl-warninglist) with a header saying how many
 warnings there are."
   :long "<p>This is almost identical to @(see vl-print-warnings), but it also
 prefaces the list of warnings with a header that says how many warnings there
@@ -149,15 +153,15 @@ warnings\".</p>"
 
 (define vl-warnings-to-string ((warnings vl-warninglist-p))
   :returns (str stringp :rule-classes :type-prescription)
-  :parents (warnings)
-  :short "Pretty-print a @(see vl-warninglist-p) into a string."
+  :parents (vl-warninglist)
+  :short "Pretty-print a @(see vl-warninglist) into a string."
   :long "<p>See @(see vl-print-warnings-with-header) and @(see with-local-ps).</p>"
   (with-local-ps (vl-print-warnings-with-header warnings)))
 
 (define vl-print-warnings-with-named-header ((modname stringp)
                                              (x vl-warninglist-p)
                                              &key (ps 'ps))
-  :parents (warnings)
+  :parents (vl-warninglist)
   (b* ((htmlp (vl-ps->htmlp))
        (x    (vl-clean-warnings x))
        (msg  (cond ((atom x) "No Warnings")
@@ -205,7 +209,7 @@ warnings\".</p>"
    (acc        vl-warninglist-p))
   :returns (mv (acc        vl-warninglist-p)
                (counts-fal )
-               (suppressed symbol-listp :hyp (symbol-listp suppressed)))
+               (suppressed symbol-listp))
   :measure (len x)
   :guard-debug t
   (b* ((x          (vl-warninglist-fix x))
@@ -213,14 +217,14 @@ warnings\".</p>"
        (cutoff     (lnfix cutoff))
 
        ((when (atom x))
-        (mv acc cutoff suppressed))
+        (mv acc cutoff (acl2::symbol-list-fix suppressed)))
 
        ((vl-warning x1) (car x))
        (curr            (nfix (cdr (hons-get x1.type counts-fal))))
        (counts-fal      (hons-acons x1.type (+ 1 curr) counts-fal))
        (keep-p          (< curr cutoff))
        (acc             (if keep-p (cons x1 acc) acc))
-       (suppressed      (if keep-p suppressed (cons x1.type suppressed))))
+       (suppressed      (if keep-p suppressed (cons x1.type (acl2::symbol-list-fix suppressed)))))
     (vl-elide-warnings-main (cdr x) cutoff suppressed counts-fal acc)))
 
 (define vl-elide-warnings
@@ -253,7 +257,9 @@ warnings\".</p>"
        (elide (maybe-natp-fix elide))
        ((when (atom x))
         ps)
-       ((cons name warnings) (car x)))
+       ((cons name warnings) (car x))
+       ((unless warnings)
+        (vl-print-reportcard-aux (cdr x) elide)))
     (vl-ps-seq (vl-print-warnings-with-named-header
                 (if (equal name :design) "Design Root" name)
                 (vl-elide-warnings warnings elide))

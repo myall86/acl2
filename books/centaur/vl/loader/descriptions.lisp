@@ -42,16 +42,22 @@
    vl-interface
    vl-package
    vl-program
+   vl-class
    vl-config
-   ;; bozo add bind directives
+   vl-bind
+   vl-property
+   vl-sequence
 
    ;; package items
+   vl-vardecl
    vl-taskdecl
    vl-fundecl
    vl-paramdecl
    vl-import
    vl-fwdtypedef
    vl-typedef
+   vl-dpiimport
+   vl-dpiexport
 
    ;; bozo lots of package items are missing
    )
@@ -62,25 +68,6 @@ can occur at the top level of a SystemVerilog design.</p>
 <p>These are a temporary structure created by the loader. Most code in VL
 should never know or care about descriptions because, at the end of the loading
 process, we convert all of the descriptions into a @(see vl-design-p).</p>")
-
-(defrule tag-when-vl-description-p-forward
-  ;; bozo integrate into deftranssum?
-  (implies (vl-description-p x)
-           (or (equal (tag x) :vl-module)
-               (equal (tag x) :vl-udp)
-               (equal (tag x) :vl-interface)
-               (equal (tag x) :vl-package)
-               (equal (tag x) :vl-program)
-               (equal (tag x) :vl-config)
-               (equal (tag x) :vl-taskdecl)
-               (equal (tag x) :vl-fundecl)
-               (equal (tag x) :vl-paramdecl)
-               (equal (tag x) :vl-import)
-               (equal (tag x) :vl-fwdtypedef)
-               (equal (tag x) :vl-typedef)
-               ))
-  :rule-classes ((:forward-chaining :trigger-terms ((vl-description-p x))))
-  :enable vl-description-p)
 
 (fty::deflist vl-descriptionlist
   :elt-type vl-description-p
@@ -100,13 +87,20 @@ process, we convert all of the descriptions into a @(see vl-design-p).</p>")
        (implies (vl-interfacelist-p x) (vl-descriptionlist-p x))
        (implies (vl-packagelist-p x) (vl-descriptionlist-p x))
        (implies (vl-programlist-p x) (vl-descriptionlist-p x))
+       (implies (vl-classlist-p x) (vl-descriptionlist-p x))
        (implies (vl-configlist-p x) (vl-descriptionlist-p x))
+       (implies (vl-vardecllist-p x) (vl-descriptionlist-p x))
        (implies (vl-taskdecllist-p x) (vl-descriptionlist-p x))
        (implies (vl-fundecllist-p x) (vl-descriptionlist-p x))
        (implies (vl-paramdecllist-p x) (vl-descriptionlist-p x))
        (implies (vl-importlist-p x) (vl-descriptionlist-p x))
        (implies (vl-fwdtypedeflist-p x) (vl-descriptionlist-p x))
        (implies (vl-typedeflist-p x) (vl-descriptionlist-p x))
+       (implies (vl-dpiimportlist-p x) (vl-descriptionlist-p x))
+       (implies (vl-dpiexportlist-p x) (vl-descriptionlist-p x))
+       (implies (vl-bindlist-p x) (vl-descriptionlist-p x))
+       (implies (vl-propertylist-p x) (vl-descriptionlist-p x))
+       (implies (vl-sequencelist-p x) (vl-descriptionlist-p x))
        )
   :hints(("Goal" :induct (len x))))
 
@@ -122,7 +116,9 @@ doesn't introduce a name (e.g., an @('import') statement."
       (:vl-interface  (vl-interface->name x))
       (:vl-package    (vl-package->name x))
       (:vl-program    (vl-program->name x))
+      (:vl-class      (vl-class->name x))
       (:vl-config     (vl-config->name x))
+      (:vl-vardecl    (vl-vardecl->name x))
       (:vl-taskdecl   (vl-taskdecl->name x))
       (:vl-fundecl    (vl-fundecl->name x))
       (:vl-paramdecl  (vl-paramdecl->name x))
@@ -135,7 +131,18 @@ doesn't introduce a name (e.g., an @('import') statement."
        ;; typedef or anything like that.
        nil)
       (:vl-typedef   (vl-typedef->name x))
+      (:vl-dpiimport (vl-dpiimport->name x))
+      (:vl-dpiexport
+       ;; Subtle: DPI exports shouldn't really look like they have names for
+       ;; basically the same reason as forward typedefs.  We want to find the
+       ;; actual definition, not the fact that it's exported.
+       nil)
+      (:vl-bind nil)
+      (:vl-property  (vl-property->name x))
+      (:vl-sequence  (vl-sequence->name x))
       (otherwise     (impossible)))))
+
+
 
 
 (define vl-descriptionlist->names-nrev ((x vl-descriptionlist-p) nrev)
@@ -161,7 +168,9 @@ the number of descriptions in the list.</p>"
                             (vl-descriptionlist->names (cdr x)))
                     (vl-descriptionlist->names (cdr x)))
                 nil)
-       :exec (with-local-nrev (vl-descriptionlist->names-nrev x nrev)))
+       :exec (if (atom x)
+                 nil
+               (with-local-nrev (vl-descriptionlist->names-nrev x nrev))))
   ///
   (defthm vl-descriptionlist->names-nrev-removal
     (equal (vl-descriptionlist->names-nrev x nrev)
@@ -192,7 +201,7 @@ the number of descriptions in the list.</p>"
             :in-theory (e/d (list-equiv)
                             (vl-descriptionlist->names-of-list-fix))
             :use ((:instance vl-descriptionlist->names-of-list-fix (x x))
-                  (:instance vl-descriptionlist->names-of-list-fix (x acl2::x-equiv))))))
+                  (:instance vl-descriptionlist->names-of-list-fix (x x-equiv))))))
 
   (defthm vl-descriptionlist->names-of-append
     (equal (vl-descriptionlist->names (append x y))
@@ -209,21 +218,134 @@ the number of descriptions in the list.</p>"
   (defthm no-nil-in-vl-descriptionlist->names
     (not (member nil (vl-descriptionlist->names x)))))
 
+
+
+(define vl-description->origname ((x vl-description-p))
+  :short "Get the name from most descriptions -- original version, i.e. not modified
+          by unparameterization, in the cases of modules and interfaces."
+  :returns (name maybe-stringp :rule-classes :type-prescription)
+  (b* ((x (vl-description-fix x)))
+    (case (tag x)
+      (:vl-module     (vl-module->origname x))
+      (:vl-udp        (vl-udp->name x))
+      (:vl-interface  (vl-interface->origname x))
+      (:vl-package    (vl-package->name x))
+      (:vl-program    (vl-program->name x))
+      (:vl-class      (vl-class->name x))
+      (:vl-config     (vl-config->name x))
+      (:vl-vardecl    (vl-vardecl->name x))
+      (:vl-taskdecl   (vl-taskdecl->name x))
+      (:vl-fundecl    (vl-fundecl->name x))
+      (:vl-paramdecl  (vl-paramdecl->name x))
+      (:vl-import     nil)
+      (:vl-fwdtypedef
+       ;; SUBTLE: I don't want forward typedefs to look like they have names,
+       ;; because they aren't really a complete definition, and if we haven't
+       ;; loaded the "real" typedef, then I don't want to count these as loaded
+       ;; yet.  Moreover, a forward typedef shouldn't ever overwrite a real
+       ;; typedef or anything like that.
+       nil)
+      (:vl-typedef   (vl-typedef->name x))
+      (:vl-dpiimport (vl-dpiimport->name x))
+      (:vl-dpiexport
+       ;; Subtle: DPI exports shouldn't really look like they have names for
+       ;; basically the same reason as forward typedefs.  We want to find the
+       ;; actual definition, not the fact that it's exported.
+       nil)
+      (:vl-bind nil)
+      (:vl-property  (vl-property->name x))
+      (:vl-sequence  (vl-sequence->name x))
+      (otherwise     (impossible)))))
+
+
+(define vl-descriptionlist->orignames-nrev ((x vl-descriptionlist-p) nrev)
+  :parents (vl-descriptionlist->orignames)
+  (b* (((when (atom x))
+        (nrev-fix nrev))
+       (name (vl-description->origname (car x)))
+       (nrev (if name
+                 (nrev-push name nrev)
+               nrev)))
+    (vl-descriptionlist->orignames-nrev (cdr x) nrev)))
+
+(define vl-descriptionlist->orignames ((x vl-descriptionlist-p))
+  :short "Collect all names introduced by a @(see vl-descriptionlist-p)."
+  :parents (vl-descriptionlist-p)
+  :long "<p>Note that descriptions may not have names, in which case we don't
+add anything.  In other words, the list of names returned may be shorter than
+the number of descriptions in the list.</p>"
+  :verify-guards nil
+  (mbe :logic (if (consp x)
+                  (if (vl-description->origname (car x))
+                      (cons (vl-description->origname (car x))
+                            (vl-descriptionlist->orignames (cdr x)))
+                    (vl-descriptionlist->orignames (cdr x)))
+                nil)
+       :exec (if (atom x)
+                 nil
+               (with-local-nrev (vl-descriptionlist->orignames-nrev x nrev))))
+  ///
+  (defthm vl-descriptionlist->orignames-nrev-removal
+    (equal (vl-descriptionlist->orignames-nrev x nrev)
+           (append nrev (vl-descriptionlist->orignames x)))
+    :hints(("Goal" :in-theory (enable vl-descriptionlist->orignames-nrev))))
+
+  (verify-guards vl-descriptionlist->orignames)
+
+  (defthm vl-descriptionlist->orignames-when-not-consp
+    (implies (not (consp x))
+             (equal (vl-descriptionlist->orignames x)
+                    nil)))
+
+  (defthm vl-descriptionlist->orignames-of-cons
+    (equal (vl-descriptionlist->orignames (cons a x))
+           (if (vl-description->origname a)
+               (cons (vl-description->origname a)
+                     (vl-descriptionlist->orignames x))
+             (vl-descriptionlist->orignames x))))
+
+  (defthm vl-descriptionlist->orignames-of-list-fix
+    (equal (vl-descriptionlist->orignames (list-fix x))
+           (vl-descriptionlist->orignames x)))
+
+  (defcong list-equiv equal (vl-descriptionlist->orignames x) 1
+    :event-name vl-descriptionlist->orignames-preserves-list-equiv
+    :hints(("Goal"
+            :in-theory (e/d (list-equiv)
+                            (vl-descriptionlist->orignames-of-list-fix))
+            :use ((:instance vl-descriptionlist->orignames-of-list-fix (x x))
+                  (:instance vl-descriptionlist->orignames-of-list-fix (x x-equiv))))))
+
+  (defthm vl-descriptionlist->orignames-of-append
+    (equal (vl-descriptionlist->orignames (append x y))
+           (append (vl-descriptionlist->orignames x)
+                   (vl-descriptionlist->orignames y))))
+
+  (defthm vl-descriptionlist->orignames-of-rev
+    (equal (vl-descriptionlist->orignames (rev x))
+           (rev (vl-descriptionlist->orignames x))))
+
+  (defthm string-listp-of-vl-descriptionlist->orignames
+    (string-listp (vl-descriptionlist->orignames x)))
+
+  (defthm no-nil-in-vl-descriptionlist->orignames
+    (not (member nil (vl-descriptionlist->orignames x)))))
+
 (fty::defalist vl-descalist
   :key-type stringp
   :val-type vl-description-p
   :keyp-of-nil nil
   :valp-of-nil nil)
 
-(define vl-descalist ((x vl-descriptionlist-p))
+(define vl-make-descalist ((x vl-descriptionlist-p))
   :returns (alist vl-descalist-p)
   (b* (((when (atom x))
         nil)
        (x1    (vl-description-fix (car x)))
        (name1 (vl-description->name x1))
        ((unless name1)
-        (vl-descalist (cdr x))))
-    (hons-acons name1 x1 (vl-descalist (cdr x)))))
+        (vl-make-descalist (cdr x))))
+    (hons-acons name1 x1 (vl-make-descalist (cdr x)))))
 
 
 
@@ -282,7 +404,7 @@ descriptions.  See @(see vl-fast-find-description) for a faster alternative.</p>
 
 (define vl-fast-find-description ((name         stringp)
                                   (descriptions vl-descriptionlist-p)
-                                  (descalist    (equal descalist (vl-descalist descriptions))))
+                                  (descalist    (equal descalist (vl-make-descalist descriptions))))
   :enabled t
   :inline t
   :hooks nil
@@ -292,9 +414,9 @@ descriptions.  See @(see vl-fast-find-description) for a faster alternative.</p>
   ((local (defthm l0
             (implies (and (vl-descriptionlist-p descriptions)
                           (stringp name))
-                     (equal (cdr (hons-assoc-equal name (vl-descalist descriptions)))
+                     (equal (cdr (hons-assoc-equal name (vl-make-descalist descriptions)))
                             (vl-find-description name descriptions)))
-            :hints(("Goal" :in-theory (enable vl-descalist)))))))
+            :hints(("Goal" :in-theory (enable vl-make-descalist)))))))
 
 (def-vl-filter-by-name description)
 
@@ -305,39 +427,60 @@ descriptions.  See @(see vl-fast-find-description) for a faster alternative.</p>
                               (udps        vl-udplist-p)
                               (interfaces  vl-interfacelist-p)
                               (programs    vl-programlist-p)
+                              (classes     vl-classlist-p)
                               (packages    vl-packagelist-p)
                               (configs     vl-configlist-p)
+                              (vardecls    vl-vardecllist-p)
                               (taskdecls   vl-taskdecllist-p)
                               (fundecls    vl-fundecllist-p)
                               (paramdecls  vl-paramdecllist-p)
                               (imports     vl-importlist-p)
                               (fwdtypedefs vl-fwdtypedeflist-p)
-                              (typedefs    vl-typedeflist-p))
+                              (typedefs    vl-typedeflist-p)
+                              (dpiimports  vl-dpiimportlist-p)
+                              (dpiexports  vl-dpiexportlist-p)
+                              (binds       vl-bindlist-p)
+                              (properties  vl-propertylist-p)
+                              (sequences   vl-sequencelist-p))
   :returns (mv (modules     vl-modulelist-p)
                (udps        vl-udplist-p)
                (interfaces  vl-interfacelist-p)
                (programs    vl-programlist-p)
+               (classes     vl-classlist-p)
                (packages    vl-packagelist-p)
                (configs     vl-configlist-p)
+               (vardecls    vl-vardecllist-p)
                (taskdecls   vl-taskdecllist-p)
                (fundecls    vl-fundecllist-p)
                (paramdecls  vl-paramdecllist-p)
                (imports     vl-importlist-p)
                (fwdtypedefs vl-fwdtypedeflist-p)
-               (typedefs    vl-typedeflist-p))
+               (typedefs    vl-typedeflist-p)
+               (dpiimports  vl-dpiimportlist-p)
+               (dpiexports  vl-dpiexportlist-p)
+               (binds       vl-bindlist-p)
+               (properties  vl-propertylist-p)
+               (sequences   vl-sequencelist-p))
   (b* (((when (atom x))
         (mv (vl-modulelist-fix modules)
             (vl-udplist-fix udps)
             (vl-interfacelist-fix interfaces)
             (vl-programlist-fix programs)
+            (vl-classlist-fix classes)
             (vl-packagelist-fix packages)
             (vl-configlist-fix configs)
+            (vl-vardecllist-fix vardecls)
             (vl-taskdecllist-fix taskdecls)
             (vl-fundecllist-fix fundecls)
             (vl-paramdecllist-fix paramdecls)
             (vl-importlist-fix imports)
             (vl-fwdtypedeflist-fix fwdtypedefs)
-            (vl-typedeflist-fix typedefs)))
+            (vl-typedeflist-fix typedefs)
+            (vl-dpiimportlist-fix dpiimports)
+            (vl-dpiexportlist-fix dpiexports)
+            (vl-bindlist-fix binds)
+            (vl-propertylist-fix properties)
+            (vl-sequencelist-fix sequences)))
        (x1  (vl-description-fix (car x)))
        (tag (tag x1)))
     (vl-sort-descriptions
@@ -346,14 +489,22 @@ descriptions.  See @(see vl-fast-find-description) for a faster alternative.</p>
      :udps        (if (eq tag :vl-udp)        (cons x1 udps)        udps)
      :interfaces  (if (eq tag :vl-interface)  (cons x1 interfaces)  interfaces)
      :programs    (if (eq tag :vl-program)    (cons x1 programs)    programs)
+     :classes     (if (eq tag :vl-class)      (cons x1 classes)     classes)
      :packages    (if (eq tag :vl-package)    (cons x1 packages)    packages)
      :configs     (if (eq tag :vl-config)     (cons x1 configs)     configs)
+     :vardecls    (if (eq tag :vl-vardecl)    (cons x1 vardecls)    vardecls)
      :taskdecls   (if (eq tag :vl-taskdecl)   (cons x1 taskdecls)   taskdecls)
      :fundecls    (if (eq tag :vl-fundecl)    (cons x1 fundecls)    fundecls)
      :paramdecls  (if (eq tag :vl-paramdecl)  (cons x1 paramdecls)  paramdecls)
      :imports     (if (eq tag :vl-import)     (cons x1 imports)     imports)
      :fwdtypedefs (if (eq tag :vl-fwdtypedef) (cons x1 fwdtypedefs) fwdtypedefs)
-     :typedefs    (if (eq tag :vl-typedef)    (cons x1 typedefs)    typedefs))))
+     :typedefs    (if (eq tag :vl-typedef)    (cons x1 typedefs)    typedefs)
+     :dpiimports  (if (eq tag :vl-dpiimport)  (cons x1 dpiimports)  dpiimports)
+     :dpiexports  (if (eq tag :vl-dpiexport)  (cons x1 dpiexports)  dpiexports)
+     :binds       (if (eq tag :vl-bind)       (cons x1 binds)       binds)
+     :properties  (if (eq tag :vl-property)   (cons x1 properties)  properties)
+     :sequences   (if (eq tag :vl-sequence)   (cons x1 sequences)   sequences)
+     )))
 
 (define vl-design-from-descriptions ((x vl-descriptionlist-p))
   :returns (design vl-design-p)
@@ -361,31 +512,47 @@ descriptions.  See @(see vl-fast-find-description) for a faster alternative.</p>
             udps
             interfaces
             programs
+            classes
             packages
             configs
+            vardecls
             taskdecls
             fundecls
             paramdecls
             imports
             fwdtypedefs
-            typedefs)
+            typedefs
+            dpiimports
+            dpiexports
+            binds
+            properties
+            sequences)
         (vl-sort-descriptions x)))
     (make-vl-design :mods        modules
                     :udps        udps
                     :interfaces  interfaces
                     :programs    programs
+                    :classes     classes
                     :packages    packages
                     :configs     configs
+                    :vardecls    vardecls
                     :taskdecls   taskdecls
                     :fundecls    fundecls
                     :paramdecls  paramdecls
                     :imports     imports
                     :fwdtypes    fwdtypedefs
-                    :typedefs    typedefs)))
+                    :typedefs    typedefs
+                    :dpiimports  dpiimports
+                    :dpiexports  dpiexports
+                    :binds       binds
+                    :properties  properties
+                    :sequences   sequences)))
 
 (local (in-theory (disable acl2::true-listp-append
                            acl2::consp-append
                            acl2::consp-of-append
+                           acl2::subsetp-append1
+                           VL-DESCRIPTIONLIST-P-WHEN-SUBLIST
                            )))
 
 (define vl-design-descriptions ((x vl-design-p))
@@ -395,14 +562,22 @@ descriptions.  See @(see vl-fast-find-description) for a faster alternative.</p>
                           x.udps
                           x.interfaces
                           x.programs
+                          x.classes
                           x.packages
                           x.configs
+                          x.vardecls
                           x.taskdecls
                           x.fundecls
                           x.paramdecls
                           x.imports
                           x.fwdtypes
-                          x.typedefs)))
+                          x.typedefs
+                          x.dpiimports
+                          x.dpiexports
+                          x.binds
+                          x.properties
+                          x.sequences
+                          )))
 
 ;; BOZO could probably prove something like this, some day...
 ;; (defthm vl-design-descriptions-identity

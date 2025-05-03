@@ -106,15 +106,10 @@
             (lisp-implementation-type)
             (lisp-implementation-version))
     (setq ccl::*inhibit-greeting* t))
-  #+hons (funcall 'hons-init)
+  (funcall 'hons-init) ; formerly (before 9/2021) guarded with #+hons
   (format t *saved-string*
-          *copy-of-acl2-version*
-          *saved-build-date*
-          (cond (*saved-mode*
-                 (format nil "~% Initialized with ~a." *saved-mode*))
-                (t ""))
-          (eval '(latest-release-note-string)) ; avoid possible warning
-          )
+          (acl2-version+)
+          *saved-build-date*)
   (maybe-load-acl2-init)
   (eval `(in-package ,*startup-package-name*))
 
@@ -141,7 +136,7 @@
 
 #+openmcl
 (defun save-acl2-in-openmcl (sysout-name &optional mode core-name)
-  (setq *saved-mode* mode)
+  (declare (ignore mode))
   (eval `(in-package ,*startup-package-name*))
   #-acl2-mv-as-values (proclaim-files)
 ; We do the following load when *suppress-compile* in save-acl2, but it's
@@ -206,10 +201,6 @@
             (f-put-global 'distributed-books-dir system-dir *the-live-state*))
           (when user-home-dir
             (f-put-global 'user-home-dir user-home-dir *the-live-state*)))
-        #-hons
-; Hons users are presumably advanced enough to tolerate the lack of a
-; "[RAW LISP]" prompt.
-        (install-new-raw-prompt)
         (setq *lp-ever-entered-p* t)
         #+(and (not acl2-loop-only) acl2-rewrite-meter)
         (setq *rewrite-depth-alist* nil)

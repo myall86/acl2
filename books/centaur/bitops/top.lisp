@@ -42,6 +42,7 @@
 (include-book "install-bit")
 (include-book "integer-length")
 (include-book "merge")
+(include-book "parity")
 (include-book "part-select")
 (include-book "part-install")
 (include-book "rotate")
@@ -50,9 +51,9 @@
 (include-book "signed-byte-p")
 
 (defxdoc bitops
-  :parents (acl2::arithmetic)
-  :short "Bitops is <a href='http://www.centtech.com/'>Centaur Technology</a>'s
-library for reasoning about bit-vector arithmetic.  It grew out of an extension
+  :parents (acl2::bit-vectors)
+  :short "Bitops is a library originally developed at Centaur Technology
+for reasoning about bit-vector arithmetic.  It grew out of an extension
 to the venerable @(see acl2::ihs) library, and is now fairly comprehensive."
 
   :long "<h3>Introduction</h3>
@@ -258,6 +259,11 @@ result, etc.</p>
 <p>This book provides optimized implementations of @(see logrev) at various
 widths; these definitions are logically just the ordinary, nice, logical
 definition of @('logrev'), thanks to @(see mbe).</p>
+
+<h5>@(see bitops/parity)</h5>
+
+<p>This book provides a simple recursive definition of a parity (i.e.,
+reduction xor) function, and also a faster version for execution.</p>
 
 <h5>@(see bitops/part-select)</h5>
 

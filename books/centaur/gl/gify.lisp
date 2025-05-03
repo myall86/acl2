@@ -207,7 +207,7 @@ be gified.  If not, implement this case.  Culprit (in function ~x0): ~x1~%"
                 :verify-guards nil
                 . ,(and recursivep
                         `(:measure
-                          (vl::two-nats-measure clk ,(if endp 0 idx))
+                          (acl2::two-nats-measure clk ,(if endp 0 idx))
                           . ,(and endp
                                   `(:hints (("goal" :in-theory
                                              (e/d** ((:ruleset
@@ -979,6 +979,10 @@ Warning: Clock ran out in ~x0~%" ',(gl-fnsym top-fn))
                  _newgeval_-ev-rules
                  _newgeval_-ev-of-fncall-args
                  _oldgeval_-ev-of-fncall-args
+                 _newgeval_-ev-of-nonsymbol-atom
+                 _oldgeval_-ev-of-nonsymbol-atom
+                 _newgeval_-ev-of-bad-fncall
+                 _oldgeval_-ev-of-bad-fncall
                  car-cons cdr-cons nth-0-cons (nfix)))
     :expand (; (_oldgeval_ x env)
              (:with _newgeval_ (_newgeval_ x env))
@@ -1031,7 +1035,7 @@ Warning: Clock ran out in ~x0~%" ',(gl-fnsym top-fn))
 
 (defmacro eval-g-prove-f-i
   (thmname eval oldeval
-           &key (output '(:off (warning warning! observation prove acl2::proof-checker
+           &key (output '(:off (warning warning! observation prove acl2::proof-builder
                                         acl2::history event  proof-tree))))
   `(with-output ,@output
                 (make-event (eval-g-prove-f-i-fn ',eval ',oldeval ',thmname))))
@@ -1301,9 +1305,9 @@ Warning: Clock ran out in ~x0~%" ',(gl-fnsym top-fn))
 (defmacro make-g-world
   (fns ev
        &key (output
-             '(:off (warning warning! observation prove acl2::proof-checker
+             '(:off (warning warning! observation prove acl2::proof-builder
                              acl2::history event proof-tree)
-                    :summary (acl2::form)
+                    :summary-off (:other-than acl2::form)
                     :gag-mode nil)))
   `(with-output ,@output (make-event (make-g-world-fn ',fns ',ev
                                                       state))))
@@ -1336,9 +1340,9 @@ Warning: Clock ran out in ~x0~%" ',(gl-fnsym top-fn))
 
 (defmacro make-geval
   (geval fns &key (output '(:off (warning warning! observation prove
-                                          acl2::proof-checker
+                                          acl2::proof-builder
                                           acl2::history event proof-tree)
-                                 :summary (acl2::form)
+                                 :summary-off (:other-than acl2::form)
                                  :gag-mode nil)))
   `(with-output ,@output
                 (make-event (make-geval-fn ',geval ',fns state))))

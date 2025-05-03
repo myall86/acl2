@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -282,9 +270,9 @@
            (integerp x))
    :hints (("Goal" :in-theory (disable rational-implies2)
            :use (rational-implies2
-                 (:instance Lowest-terms 
+                 (:instance Lowest-terms
                            (n (denominator x))
-                           (r x) 
+                           (r x)
                            (q 1))))))
 |#
 
@@ -320,9 +308,9 @@
                (implies (and (integerp x) (< 0 x) (integerp y) (< 0 y))
                         (equal (nonnegative-integer-quotient (numerator (/ x y))
                                                              (denominator (/ x y)))
-                               (nonnegative-integer-quotient x y)))) 
+                               (nonnegative-integer-quotient x y))))
 
-             (defthm 
+             (defthm
                acl2::Numerator-minus
                (equal (numerator (- i))
                       (- (numerator i))))
@@ -333,13 +321,13 @@
                         (equal (denominator (- x))
                                (denominator x))))
 
-             (defthm 
+             (defthm
                acl2::Denominator-plus
                (implies (and (rationalp r)
                              (integerp i))
                         (equal (denominator (+ i r))
                                (denominator r))))
-             (defthm 
+             (defthm
                Denominator-plus-2
                (implies (and (rationalp r)
                              (integerp i))
@@ -366,14 +354,14 @@
 (defthm Numerator-minus-eric
   (equal (numerator (* -1 i))
          (* -1 (numerator i)))
-  :hints (("Goal" :in-theory (disable acl2::Numerator-minus) 
+  :hints (("Goal" :in-theory (disable acl2::Numerator-minus)
            :use acl2::Numerator-minus)))
 
 (defthm Denominator-unary-minus-eric
   (implies (rationalp x)
            (equal (denominator (* -1 x))
                   (denominator x)))
-  :hints (("Goal" :in-theory (disable acl2::Denominator-unary-minus) 
+  :hints (("Goal" :in-theory (disable acl2::Denominator-unary-minus)
            :use acl2::Denominator-unary-minus)))
 
 
@@ -610,7 +598,7 @@
 
 
 
-i/j = (nniq i j) + (mod/rem i j)  
+i/j = (nniq i j) + (mod/rem i j)
 
 
 

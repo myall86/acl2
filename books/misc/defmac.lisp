@@ -44,16 +44,17 @@
 
 <p>where @('name') is a new symbolic name (see @(see name)), @(see macro-args)
 specifies the formals of the macro (see @(see macro-args) for a description),
-and @('body') is a term.  @(see Doc-string) is an optional @(see documentation)
-string; see @(see doc-string).  Each @('dcl') is an optional declaration as for
-@(see defun) (see @(see declare)).</p>
+and @('body') is a term.  @('Doc-string') is an optional @(see documentation)
+string, which (as for @(tsee defmacro)) is essentially ignored by ACL2.  Each
+@('dcl') is an optional declaration as for @(see defun) (see @(see
+declare)).</p>
 
 <p>See @(see defmacro) for a discussion of @('defmacro'), which is the
 traditional way of introducing macros.  @('Defmac') is similar to @('defmacro')
 except that the resulting macro may execute significantly more efficiently, as
 explained below.  You can use @('defmac') just as you would normally use
 @('defmacro'), though your @('defmac') form should include the declaration
-@('(declare (xargs :mode :program)) to be truly compatible with @('defmacro'),
+@('(declare (xargs :mode :program))') to be truly compatible with @('defmacro'),
 which allows calls of @(':')@(see program) mode functions in its body.</p>
 
 <p>A @('defmac') form generates the following form, which introduces a @(see

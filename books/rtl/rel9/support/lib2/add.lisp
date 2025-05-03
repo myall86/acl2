@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -59,7 +47,7 @@
                 (bvecp v 1)
                 (bvecp w 1))
            (equal (+ u v w)
-                  (cat (lior (land u v 1) (lior (land u w 1) (land v w 1) 1) 1) 1 
+                  (cat (lior (land u v 1) (lior (land u w 1) (land v w 1) 1) 1) 1
                        (lxor u (lxor v w 1) 1) 1)))
   :rule-classes ())
 
@@ -279,8 +267,8 @@
            (equal (bits (+ 1 x y) i j)
                   (bits (+ (bits x i j)
                            (bits y i j)
-                           (lior (prop x y (1- j) 0) 
-                                 (gen x y (1- j) 0) 
+                           (lior (prop x y (1- j) 0)
+                                 (gen x y (1- j) 0)
                                  1))
                         (- i j) 0)))
   :rule-classes ())
@@ -321,10 +309,10 @@
                 (natp x)
                 (natp y)
                 (bvecp z (1+ j))
-                (= (land y z (1+ j)) 0))		  
+                (= (land y z (1+ j)) 0))
            (equal (gen (+ x y) z i 0)
                   (land (prop x y i (1+ j))
-                        (gen (+ x y) z j 0)			  
+                        (gen (+ x y) z j 0)
                         1))))
 
 
@@ -383,7 +371,7 @@
   (lnot (lior a (lnot b (1+ e)) (1+ e)) (1+ e)))
 
 (defun lam1 (a b e)
-  (land (bits (lamt a b e) e 2) 
+  (land (bits (lamt a b e) e 2)
 	(land (bits (lamg a b e) (1- e) 1)
 	      (lnot (bits (lamz a b e) (- e 2) 0) (1- e))
 	      (1- e))
@@ -397,7 +385,7 @@
 	(1- e)))
 
 (defun lam3 (a b e)
-  (land (bits (lamt a b e) e 2) 
+  (land (bits (lamt a b e) e 2)
 	(land (bits (lamz a b e) (1- e) 1)
 	      (lnot (bits (lamg a b e) (- e 2) 0) (1- e))
 	      (1- e))
@@ -460,9 +448,9 @@
                 (< k n)
                 (or (equal c 0) (equal c 1)))
            (equal (equal (bits (+ a b c) k 0) 0)
-                  (equal (bits (lxor (lxor a b n) 
+                  (equal (bits (lxor (lxor a b n)
                                      (cat (lior a b n) n c 1)
-                                     (1+ n)) 
-                               k 0) 
+                                     (1+ n))
+                               k 0)
                          0)))
   :rule-classes ())

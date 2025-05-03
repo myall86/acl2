@@ -25,9 +25,11 @@
 
 (in-package "ACL2")
 
-(include-book "sorting/perm" :dir :system)
-(include-book "sorting/ordered-perms" :dir :system)
-(include-book "sorting/convert-perm-to-how-many" :dir :system)
+;;(include-book "sorting/perm" :dir :system)
+;;(include-book "sorting/ordered-perms" :dir :system)
+(include-book "sorting/orderedp" :dir :system)
+(include-book "sorting/how-many" :dir :system)
+(local (include-book "sorting/convert-perm-to-how-many" :dir :system))
 
 (include-book "leftist-tree-defuns")
 (include-book "leftist-tree-defthms")
@@ -45,11 +47,11 @@
 ; the books/sorting contribution, except it uses leftist trees to sort
 ; its input. There are a number of theorems provided that prove the
 ; heapsort algorithm correct.
-; 
+;
 ; ------------------------------------------------------------
 ; Functions and Constants
 ; ------------------------------------------------------------
-; 
+;
 ; Function/Constant Name      Result
 ;   (supporting function)     Type
 ; ----------------------      ----
@@ -65,8 +67,8 @@
 ;; -- At this point, heapsort is fairly simple. We define
 ;;    "ltree-to-list" which constructs a list by calling
 ;;    find-min and delete-min repeatedly on the tree.
-;;    Then to sort a list, we just need to convert it to 
-;;    a leftist tree via build-lt, and then call 
+;;    Then to sort a list, we just need to convert it to
+;;    a leftist tree via build-lt, and then call
 ;;    ltree-to-list on the result.
 
 (defun ltree-to-list (tree)
@@ -77,7 +79,7 @@
 ; Assuming the leftist tree in question is proper, this will result in a
 ; sorted list.
 ; ~/"
-  (declare 
+  (declare
    (xargs :measure (size-lt tree)))
   (cond ((atom tree) nil)
         (t (cons (find-min-lt tree)
@@ -118,7 +120,7 @@
 ;; HEAPSORT IS CORRECT ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;; Note: This comes down to proving that the car of the 
+;; Note: This comes down to proving that the car of the
 ;;       ltree-to-list of a proper-lt tree is equal to the
 ;;       root of the original tree. These rewrite rules
 ;;       are disabled in general, since neither is really
@@ -139,7 +141,7 @@
             (equal (car (ltree-to-list tree))
                    (cadr tree)))))
 
-(local 
+(local
  (defthmd orderedp-proper-ltree-to-list-ltree-L1
    (implies (and (consp left_tree)
                  (consp right_tree)
@@ -190,7 +192,7 @@
 ; root(tree1) > root(tree2)
 ; root(tree2) > e
 ; ==> (how-many-lt e tree1) = 0
-(local 
+(local
  (defthmd how-many-merge-lt-L1
    (implies (and (consp tree1)
                  (consp tree2)

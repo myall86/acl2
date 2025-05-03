@@ -1,5 +1,5 @@
-; CUTIL - Centaur Basic Utilities
-; Copyright (C) 2008-2011 Centaur Technology
+; ACL2 Standard Library
+; Copyright (c) 2008-2015 Centaur Technology
 ;
 ; Contact:
 ;   Centaur Technology Formal Verification Group
@@ -94,7 +94,7 @@
    (mv x
        (mbe :logic (if (stringp y) y "")
             :exec y)
-       (append (str::natchars x) acc)))
+       (append (str::nat-to-dec-chars x) acc)))
 
 (assert-return-thms foo)
 

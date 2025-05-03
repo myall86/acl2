@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -40,7 +28,7 @@
 (local (include-book "../../arithmetic/expo"))
 (local (include-book "../../arithmetic/arith2"))
 (local (include-book "../../arithmetic/fp2"))
-(local (include-book "../../arithmetic/integerp"))                
+(local (include-book "../../arithmetic/integerp"))
 
 (local (in-theory (enable expt-minus)))
 
@@ -65,7 +53,7 @@
 ;became less general when we made ocat nfix its args
 (defthm ocat-0
     (implies (and (case-split (<= 0 y))
-                  (case-split (integerp y)))		  
+                  (case-split (integerp y)))
 	     (equal (ocat 0 y n) y))
     :hints (("Goal" :in-theory (enable ocat))))
 
@@ -169,7 +157,7 @@
                                      (c (expt 2 n))))))))
 
  (local (in-theory (enable bvecp)))
-           
+
  (local (defthm ocat-bvecp-rewrite-bk
           (implies (and (integerp n)
                         (<= 0 n)
@@ -199,7 +187,7 @@
                  )
             (equal (bvecp (ocat x y n) k)
                    (bvecp x (- k n))))
-   :hints (("goal" 
+   :hints (("goal"
             :use (ocat-bvecp-rewrite-fw ocat-bvecp-rewrite-bk))
            ))
 
@@ -268,7 +256,7 @@
            (equal (highbits (OCAT x y n) n)
                   x))
   :hints (("Goal" :in-theory (enable expt-split
-                                     ocat 
+                                     ocat
                                      highbits))))
 |#
 

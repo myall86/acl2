@@ -1,19 +1,5 @@
-; Arithmetic-3 Library
-; Copyright (C) 2004 Robert Krug <rkrug@cs.utexas.edu>
-;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT
-; ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-; FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
-; details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; if not, write to the Free Software Foundation, Inc., 51
-; Franklin Street, Suite 500, Boston, MA 02110-1335, USA.
+; See the top-level arithmetic-3 LICENSE file for authorship,
+; copyright, and license information.
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
@@ -84,7 +70,7 @@
 
 (include-book "../bind-free/top")
 
-(set-default-hints '((nonlinearp-default-hint stable-under-simplificationp 
+(set-default-hints '((nonlinearp-default-hint stable-under-simplificationp
                                               hist pspv)))
 
 (include-book "../bind-free/building-blocks")
@@ -261,7 +247,9 @@
               (equal (mod x 1)
                      0))))
 
-(defthm floor-mod-elim
+; Name changed 3/15/2016 by Matt K. to avoid name clash with lemma
+; floor-mod-elim in ihs/quotient-remainder-lemmas.
+(defthm floor-mod-elim-weak
   (implies (rationalp-guard x y)
 	   (equal (+ (mod x y)
 		     (* y (floor x y)))
@@ -360,7 +348,7 @@
 		   (floor x y))
 		(<= (floor x y)
 		    (/ x y))))
-  :rule-classes ((:generalize) 
+  :rule-classes ((:generalize)
 		 (:linear :trigger-terms ((floor x y)))))
 
 (defthm floor-bounds-2
@@ -368,7 +356,7 @@
 		(integerp (/ x y)))
 	   (equal (floor x y)
 		  (/ x y)))
-  :rule-classes ((:generalize) 
+  :rule-classes ((:generalize)
 		 (:linear :trigger-terms ((floor x y)))))
 
 (defthm floor-bounds-3
@@ -376,7 +364,7 @@
 		(not (integerp (/ x y))))
 	   (< (floor x y)
 	      (/ x y)))
-  :rule-classes ((:generalize) 
+  :rule-classes ((:generalize)
 		 (:linear :trigger-terms ((floor x y)))))
 
 (defthm mod-bounds-1
@@ -485,7 +473,7 @@
 		 (:rewrite
                   :backchain-limit-lst 1
 		  :corollary
-		  (implies (and (syntaxp 
+		  (implies (and (syntaxp
                                  (not (rewriting-goal-literal x mfc state)))
                                 (rationalp-guard x y)
                                 (< 0 y)
@@ -494,7 +482,7 @@
 		 (:rewrite
                   :backchain-limit-lst 1
 		  :corollary
-		  (implies (and (syntaxp 
+		  (implies (and (syntaxp
                                  (not (rewriting-goal-literal x mfc state)))
                                 (rationalp-guard x y)
                                 (< y 0)
@@ -525,7 +513,7 @@
 		 (:rewrite
                   :backchain-limit-lst 1
 		  :corollary
-		  (implies (and (syntaxp 
+		  (implies (and (syntaxp
                                  (not (rewriting-goal-literal x mfc state)))
                                 (rationalp-guard x y)
                                 (< 0 x)
@@ -534,7 +522,7 @@
 		 (:rewrite
                   :backchain-limit-lst 1
 		  :corollary
-		  (implies (and (syntaxp 
+		  (implies (and (syntaxp
                                  (not (rewriting-goal-literal x mfc state)))
                                 (rationalp-guard x y)
                                 (< x 0)
@@ -637,7 +625,7 @@
                  (:rewrite
                   :backchain-limit-lst 1
 		  :corollary
-		   (implies (and (syntaxp 
+		   (implies (and (syntaxp
                                   (not (rewriting-goal-literal x mfc state)))
                                  (rationalp-guard x y)
                                  (equal y 0)
@@ -646,7 +634,7 @@
                  (:rewrite
                   :backchain-limit-lst 1
 		  :corollary
-		   (implies (and (syntaxp 
+		   (implies (and (syntaxp
                                   (not (rewriting-goal-literal x mfc state)))
                                  (rationalp-guard x y)
                                  (< 0 y)
@@ -677,7 +665,7 @@
                  (:rewrite
                   :backchain-limit-lst 1
 		  :corollary
-		   (implies (and (syntaxp 
+		   (implies (and (syntaxp
                                   (not (rewriting-goal-literal x mfc state)))
                                  (rationalp-guard x y)
                                  (equal y 0)
@@ -686,7 +674,7 @@
                  (:rewrite
                   :backchain-limit-lst 1
 		  :corollary
-		   (implies (and (syntaxp 
+		   (implies (and (syntaxp
                                   (not (rewriting-goal-literal x mfc state)))
                                  (rationalp-guard x y)
                                  (< y 0)
@@ -743,7 +731,7 @@
                  (:rewrite
                   :backchain-limit-lst 1
                   :corollary
-                  (implies (and (syntaxp 
+                  (implies (and (syntaxp
                                  (not (rewriting-goal-literal x mfc state)))
                                 (rationalp-guard x y)
                                 (equal y 0))
@@ -787,7 +775,9 @@
 ;;
 ;;-----------------------------------------------------------------
 
-(defthm floor-+
+; Name changed 3/15/2016 by Matt K. to avoid name clash with lemma
+; floor-+ in ihs/quotient-remainder-lemmas.
+(defthmd floor-+-weak
   (implies (and (rationalp-guard x y z)
                 (syntaxp (not (equal (fn-symb x) 'MOD)))
                 (syntaxp (not (equal (fn-symb x) 'MOD))))
@@ -795,17 +785,15 @@
 		  (+ (floor (+ (mod x z) (mod y z)) z)
 		     (+ (floor x z) (floor y z))))))
 
-(in-theory (disable floor-+))
-
-(defthm mod-+
+; Name changed 3/15/2016 by Matt K. to avoid name clash with lemma
+; mod-+ in ihs/quotient-remainder-lemmas.
+(defthmd mod-+-weak
   (implies (and (rationalp-guard x y z)
                 (syntaxp (not (equal (fn-symb x) 'MOD)))
                 (syntaxp (not (equal (fn-symb x) 'MOD))))
 	   (equal (mod (+ x y) z)
 		  (mod (+ (mod x z) (mod y z)) z)))
   :hints (("Goal" :in-theory (enable mod))))
-
-(in-theory (disable mod-+))
 
 ;; This rule below should probably be used to ``normalize''
 ;; expressions such as
@@ -819,22 +807,22 @@
 
 ;; Add other direction of the next two rules, or generalize them.
 
-(defthm rewrite-floor-x*y-z-right
+; Name changed 3/15/2016 by Matt K. to avoid name clash with lemma
+; rewrite-floor-x*y-z-right in ihs/quotient-remainder-lemmas.
+(defthmd rewrite-floor-x*y-z-right-weak
   (implies (rationalp-guard x y z)
 	   (equal (floor (* x y) z)
 		  (floor x (/ z y)))))
 
-(in-theory (disable rewrite-floor-x*y-z-right))
-
-(defthm rewrite-mod-x*y-z-right
+(defthmd rewrite-mod-x*y-z-right
   (implies (rationalp-guard x y z)
 	   (equal (mod (* x y) z)
 		  (* y (mod x (/ z y)))))
   :hints (("Goal" :in-theory (enable mod))))
 
-(in-theory (disable rewrite-mod-x*y-z-right))
-
-(defthm floor-minus
+; Name changed 3/15/2016 by Matt K. to avoid name clash with lemma
+; floor-minus in ihs/quotient-remainder-lemmas.
+(defthm floor-minus-weak
   (implies (and (rationalp-guard x y)
                 (syntaxp (negative-addends-p x)))
            (equal (floor x y)
@@ -871,21 +859,25 @@
 		    (- (mod x (- y)) (- y)))))
   :hints (("Goal" :in-theory (enable mod))))
 
-(defthm rewrite-floor-mod
+; Name changed 3/15/2016 by Matt K. to avoid name clash with lemma
+; rewrite-floor-mod in ihs/quotient-remainder-lemmas.
+(defthm rewrite-floor-mod-weak
   (implies (and (rationalp-guard x y z)
 		(equal i (/ y z))
 		(integerp i))
 	   (equal (floor (mod x y) z)
 		  (- (floor x z) (* i (floor x y))))))
 
-(defthm rewrite-mod-mod
+; Name changed 3/15/2016 by Matt K. to avoid name clash with lemma
+; rewrite-mod-mod in ihs/quotient-remainder-lemmas.
+(defthm rewrite-mod-mod-weak
   (implies (and (rationalp-guard x y z)
                 (not (equal z 0))
 		(equal i (/ y z))
 		(integerp i))
 	   (equal (mod (mod x y) z)
 		  (mod x z)))
-  :hints (("Goal" :in-theory (enable mod-+)
+  :hints (("Goal" :in-theory (enable mod-+-weak)
                   :cases ((equal (floor x y) 0)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -917,12 +909,14 @@
                           (equal (mod x z) x))))
    :hints (("Goal" :cases ((< 0 z) (< z 0) (equal z 0)))
            ("Subgoal 3.10" :in-theory (enable mod))
-           ("Subgoal 3.4" :in-theory (enable mod-+))
+           ("Subgoal 3.4" :in-theory (enable mod-+-weak))
            ("Subgoal 2.5" :in-theory (enable mod))
-           ("Subgoal 2.2" :in-theory (enable mod-+)))
+           ("Subgoal 2.2" :in-theory (enable mod-+-weak)))
    :rule-classes nil))
 
-(defthm mod-+-cancel-0
+; Name changed 3/15/2016 by Matt K. to avoid name clash with lemma
+; mod-+-cancel-0 in ihs/quotient-remainder-lemmas.
+(defthm mod-+-cancel-0-weak
     (implies (and (rationalp-guard x y z)
                   (syntaxp (mod-+-cancel-0-fn x z)))
              (equal (equal (mod x y) z)
@@ -975,18 +969,21 @@
         (list (cons 'common-factors (make-product-ccc common-factors)))
       nil)))
 
-(defthm floor-cancel-*
+; Name changed 3/15/2016 by Matt K. to avoid name clash with lemma
+; floor-cancel-* in ihs/quotient-remainder-lemmas.
+(defthm floor-cancel-*-weak
     (implies (and (rationalp-guard x y)
-                  (bind-free 
+                  (bind-free
                    (find-common-factors x y mfc state)
                    (common-factors))
                   (rationalp common-factors)
                   (not (equal common-factors 0)))
              (equal (floor x y)
                     (floor (* x (/ common-factors)) (* y (/ common-factors))))))
+
 (defthm mod-cancel-*
     (implies (and (rationalp-guard x y)
-                  (bind-free 
+                  (bind-free
                    (find-common-factors x y mfc state)
                    (common-factors))
                   (rationalp common-factors)
@@ -1005,19 +1002,19 @@
 (defun find-cancelling-addends (x y mfc state)
   (declare (xargs :guard (pseudo-termp x)))
   (cond ((eq (fn-symb x) 'BINARY-+)
-         (cond ((proveably-integer 
+         (cond ((proveably-integer
                  `(BINARY-* ,(fargn x 1) (UNARY-/ ,y))
                  mfc state)
                 (list (cons 'addend (fargn x 1))))
                ((eq (fn-symb (fargn x 2)) 'BINARY-+)
                 (find-cancelling-addends (fargn x 2) y mfc state))
-               ((proveably-integer 
+               ((proveably-integer
                  `(BINARY-* ,(fargn x 2) (UNARY-/ ,y))
                  mfc state)
                 (list (cons 'addend (fargn x 2))))
                (t
                 nil)))
-        ((proveably-integer 
+        ((proveably-integer
           `(BINARY-* ,x (UNARY-/ ,y))
           mfc state)
          (list (cons 'addend x)))
@@ -1025,7 +1022,7 @@
          nil)))
 
 (defthm cancel-floor-+
-    (implies (and (bind-free 
+    (implies (and (bind-free
                    (find-cancelling-addends x y mfc state)
                    (addend))
                   (rationalp-guard x y addend)
@@ -1036,7 +1033,7 @@
 
 (defthm cancel-mod-+
     (implies (and (not (equal y 0))
-                  (bind-free 
+                  (bind-free
                    (find-cancelling-addends x y mfc state)
                    (addend))
                   (rationalp-guard x y addend)
@@ -1077,9 +1074,11 @@
         (t
          nil)))
 
-(defthm simplify-mod-+-mod
+; Name changed 3/15/2016 by Matt K. to avoid name clash with lemma
+; simplify-mod-+-mod in ihs/quotient-remainder-lemmas.
+(defthm simplify-mod-+-mod-weak
     (implies (and (not (equal y 0))
-                  (bind-free 
+                  (bind-free
                    (simplify-mod-+-mod-fn x y mfc state)
                    (w z))
                   (rationalp-guard w x y z)
@@ -1122,7 +1121,7 @@
 
 (defthm simplify-mod-+-minus-mod
     (implies (and (not (equal y 0))
-                  (bind-free 
+                  (bind-free
                    (simplify-mod-+-minus-mod-fn x y mfc state)
                    (w z))
                   (rationalp-guard w x y z)
@@ -1150,7 +1149,11 @@
   (equal (floor 0 x)
          0)))
 
-(defthm floor-floor-integer
+; Name changed 3/15/2016 by Matt K. to avoid name clash with lemma
+; floor-floor-integer in ihs/quotient-remainder-lemmas.  (Interestingly, other
+; than the use of real-rationalp in that other lemma, the lemma below is the
+; stronger of the two.)
+(defthm floor-floor-integer-alt
     (implies (and (rationalp x)
                   (integerp i)
                   (integerp j)

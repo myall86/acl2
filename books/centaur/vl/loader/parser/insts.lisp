@@ -29,11 +29,10 @@
 ; Original author: Jared Davis <jared@centtech.com>
 
 (in-package "VL")
-(include-book "ranges")
-(include-book "lvalues")
+(include-book "expressions")
+(include-book "assignments")
 (include-book "delays")
 (include-book "strengths")
-(include-book "datatypes")
 (include-book "../../mlib/expr-tools")
 (include-book "../../mlib/port-tools")
 (local (include-book "../../util/arithmetic"))
@@ -185,7 +184,7 @@ tests at the bottom of this file.</p>")
           (return-raw (vl-parse-error "Expected argument to named port connect.")))
         ;; SystemVerilog-2012: no port argument is okay, this is a .name style port.
         (return (make-vl-namedarg :name (vl-idtoken->name id)
-                                  :expr (vl-idexpr (vl-idtoken->name id) nil nil)
+                                  :expr (vl-idexpr (vl-idtoken->name id))
                                   :nameonly-p t
                                   :atts atts))))
 
@@ -311,128 +310,17 @@ tests at the bottom of this file.</p>")
             (vl-idtoken-p (car (vl-tokstream->tokens))))
    :hints(("Goal" :in-theory (enable vl-is-token?)))))
 
-(defparser vl-parse-param-expression ()
-  ;; Verilog-2005:       Matches mintypmax_expression
-  ;; SystemVerilog-2012: Matches mintypmax_expression | data_type | $
-  ;;
-  ;; Except that our SystemVerilog expression parser already accepts $ as an
-  ;; expression, so we really just match:
-  ;;
-  ;; param_expression ::= mintypmax_expression | data_type
-  :result (vl-paramvalue-p val)
-  :resultp-of-nil nil
-  :fails gracefully
-  :count strong
-  (seq tokstream
-        ;; Datatype and expression are ambiguous when we just have an identifier, so
-        ;; check for this case first.
-        (when (and (vl-is-token? :vl-idtoken)
-                   (not (vl-parsestate-is-user-defined-type-p
-                         (vl-idtoken->name (car (vl-tokstream->tokens)))
-                         (vl-tokstream->pstate))))
-          ;; Non-type identifier.
-          (ans := (vl-parse-mintypmax-expression))
-          (return ans))
-        (return-raw
-         ;; Otherwise, use backtracking: arbitrarily try to get a datatype
-         ;; first, then try to get an expr.
-         (b* ((backup (vl-tokstream-save))
-              ((mv dt-err dt-val tokstream)
-               (vl-parse-datatype))
-              ((unless dt-err)
-               (mv dt-err dt-val tokstream))
-              (tokstream (vl-tokstream-restore backup)))
-           (seq tokstream
-                 (ans := (vl-parse-mintypmax-expression))
-                 (return ans))))))
-
-(defparser vl-parse-named-parameter-assignment ()
-  :result (vl-namedparamvalue-p val)
-  :resultp-of-nil nil
-  :fails gracefully
-  :count strong
-  (seq tokstream
-        (:= (vl-match-token :vl-dot))
-        (id := (vl-match-token :vl-idtoken))
-        (:= (vl-match-token :vl-lparen))
-        (unless (vl-is-token? :vl-rparen)
-          (value := (vl-parse-param-expression)))
-        (:= (vl-match-token :vl-rparen))
-        (return (make-vl-namedparamvalue :name (vl-idtoken->name id)
-                                         :value value))))
-
-(defparser vl-parse-list-of-named-parameter-assignments ()
-  :result (vl-namedparamvaluelist-p val)
-  :resultp-of-nil t
-  :true-listp t
-  :fails gracefully
-  :count strong
-  (seq tokstream
-        (first := (vl-parse-named-parameter-assignment))
-        (when (vl-is-token? :vl-comma)
-          (:= (vl-match-token :vl-comma))
-          (rest := (vl-parse-list-of-named-parameter-assignments)))
-        (return (cons first rest))))
-
-(defparser vl-parse-list-of-ordered-parameter-assignments ()
-  :result (vl-paramvaluelist-p val)
-  :resultp-of-nil t
-  :true-listp t
-  :fails gracefully
-  :count strong
-  (seq tokstream
-        (first := (vl-parse-param-expression))
-        (when (vl-is-token? :vl-comma)
-          (:= (vl-match-token :vl-comma))
-          (rest := (vl-parse-list-of-ordered-parameter-assignments)))
-        (return (cons first rest))))
-
-(defparser vl-parse-list-of-parameter-assignments ()
-  :result (vl-paramargs-p val)
-  :resultp-of-nil nil
-  :fails gracefully
-  :count strong
-  (seq tokstream
-        (when (vl-is-token? :vl-dot)
-          (args := (vl-parse-list-of-named-parameter-assignments))
-          (return (make-vl-paramargs-named :args args)))
-        (exprs := (if (eq (vl-loadconfig->edition config) :verilog-2005)
-                      ;; Verilog-2005 doesn't allow mintypmax exprs here.
-                      (vl-parse-1+-expressions-separated-by-commas)
-                    ;; SystemVerilog-2012 does.
-                    (vl-parse-list-of-ordered-parameter-assignments)))
-        (return (make-vl-paramargs-plain :args exprs))))
-
-(defparser vl-parse-parameter-value-assignment ()
-  :result (vl-paramargs-p val)
-  :resultp-of-nil nil
-  :fails gracefully
-  :count strong
-  (seq tokstream
-        (:= (vl-match-token :vl-pound))
-        (:= (vl-match-token :vl-lparen))
-
-        (when (and (vl-is-token? :vl-rparen)
-                   (not (eq (vl-loadconfig->edition config) :verilog-2005)))
-          ;; In SystemVerilog, #() is allowed.  However, in Verilog-2005 it's a
-          ;; parse error.
-          (:= (vl-match))
-          (return (make-vl-paramargs-plain :args nil)))
-
-        (args := (vl-parse-list-of-parameter-assignments))
-        (:= (vl-match-token :vl-rparen))
-        (return args)))
 
 
 
-; module_instantiation ::=
-;    identifier [ parameter_value_assignment ]
-;      module_instance { ',' module_instance } ';'
+; Verilog-2005:
 ;
-; module_instance ::=
-;    identifier [range] '(' [list_of_port_connections] ')'
+; module_instantiation ::= identifier [ parameter_value_assignment ]
+;                            module_instance { ',' module_instance } ';'
+;
+; module_instance ::= identifier [range] '(' [list_of_port_connections] ')'
 
-(defparser vl-parse-module-instance (modname paramargs atts)
+(defparser vl-parse-module-instance-2005 (modname paramargs atts)
   :guard (and (stringp modname)
               (vl-paramargs-p paramargs)
               (vl-atts-p atts))
@@ -456,6 +344,63 @@ tests at the bottom of this file.</p>")
                                 :paramargs paramargs
                                 :portargs (or portargs (make-vl-arguments-plain :args nil))
                                 :atts atts))))
+
+; SystemVerilog-2012:
+;
+; module_instantiation ::=  identifier [ parameter_value_assignment ]
+;                              hierarchical_instance { ',' hierarchical_instance } ';'
+;
+; hierarchical_instance ::= name_of_instance '(' [ list_of_port_connections ] ')'
+;
+; name_of_instance ::= identifier { unpacked_dimension }
+;
+; unpacked_dimension ::= '[' constant_range ']'
+;                      | '[' constant_expression ']'
+;
+; So basically we can now have single-expression instance arrays like [5], and
+; also multi-dimensional instance arrays.
+
+(defparser vl-parse-module-instance-2012 (modname paramargs atts)
+  :guard (and (stringp modname)
+              (vl-paramargs-p paramargs)
+              (vl-atts-p atts))
+  :result (vl-modinst-p val)
+  :resultp-of-nil nil
+  :fails gracefully
+  :count strong
+  (seq tokstream
+       (instname := (vl-match-token :vl-idtoken))
+       (udims := (vl-parse-0+-unpacked-dimensions))
+       (when (> (len udims) 1)
+         (return-raw
+          (vl-parse-error "Not yet implemented: multi-dimensional instance arrays.")))
+       (:= (vl-match-token :vl-lparen))
+       ;; Note special avoidance of actually parsing () lists.
+       (unless (vl-is-token? :vl-rparen)
+         (portargs := (vl-parse-list-of-port-connections)))
+       (:= (vl-match-token :vl-rparen))
+       (return (make-vl-modinst :loc (vl-token->loc instname)
+                                :instname (vl-idtoken->name instname)
+                                :modname modname
+                                :range (and (consp udims)
+                                            (car udims))
+                                :paramargs paramargs
+                                :portargs (or portargs (make-vl-arguments-plain :args nil))
+                                :atts atts))))
+
+(defparser vl-parse-module-instance (modname paramargs atts)
+  :guard (and (stringp modname)
+              (vl-paramargs-p paramargs)
+              (vl-atts-p atts))
+  :result (vl-modinst-p val)
+  :resultp-of-nil nil
+  :fails gracefully
+  :count strong
+  (if (eq (vl-loadconfig->edition config) :verilog-2005)
+      (vl-parse-module-instance-2005 modname paramargs atts)
+    (vl-parse-module-instance-2012 modname paramargs atts)))
+
+
 
 (defparser vl-parse-1+-module-instances (modname paramargs atts)
   :guard (and (stringp modname)
@@ -499,7 +444,7 @@ tests at the bottom of this file.</p>")
 ; udp_instantiation ::= identifier [drive_strength] [delay2] udp_instance { ',' udp_instance } ';'
 ;
 ; udp_instance ::=
-;    [name_of_udp_instance] '(' lvalue ',' expression { ',' expression } ')'
+;    [name_of_udp_instance] '(' net_lvalue ',' expression { ',' expression } ')'
 ;
 ; name_of_udp_instance ::= identifier [range]
 
@@ -519,7 +464,7 @@ tests at the bottom of this file.</p>")
           (when (vl-is-token? :vl-lbrack)
             (range := (vl-parse-range))))
         (:= (vl-match-token :vl-lparen))
-        (lvalue := (vl-parse-lvalue))
+        (lvalue := (vl-parse-net-lvalue))
         (:= (vl-match-token :vl-comma))
         (exprs := (vl-parse-1+-expressions-separated-by-commas))
         (:= (vl-match-token :vl-rparen))
@@ -637,4 +582,102 @@ tests at the bottom of this file.</p>")
     (mv (vl-udp/modinst-pick-error-to-report m-err u-err)
         nil tokstream)))
 
+
+
+; Bind directives
+
+; SystemVerilog-2012 Grammar:
+;
+;   bind_directive ::=
+;      'bind' bind_target_scope [ ':' bind_target_instance_list ] bind_instantiation ';'
+;    | 'bind' bind_target_instance bind_instantiation ';'
+;
+;   bind_target_scope ::= module_identifier | interface_identifier
+;
+;   bind_target_instance ::= hierarchical_identifier constant_bit_select
+;
+;   bind_target_instance_list ::= bind_target_instance { ',' bind_target_instance }
+;
+;   bind_instantiation ::= program_instantiation
+;                        | module_instantiation
+;                        | interface_instantiation
+;                        | checker_instantiation
+;
+; But we make some simplifications:
+;
+;   - A bind_target_scope is really just an identifier.
+;
+;   - The rule for bind_target_instance seems wrong: SystemVerilog-2012 Section 23.11
+;     shows examples where they don't have constant_bit_select, etc.  So we just match
+;     expressions instead.
+;
+;   - The rules for bind directives seem wrong -- they have a semicolon but if
+;     you look at module_instantiation, program_instantiation,
+;     interface_instantiation, and checker_instantiation, they all have their
+;     own semicolon.  So we think bind_directive should NOT have a semicolon
+;     and we do not eat one.
+;
+;   - We don't distinguish program/module/interface/checker instantiation and just
+;     try to parse modinsts.
+;
+; With these in place we have:
+;
+;    bind_directive ::=
+;       'bind' identifier [ ':' expression_list ] module_instantiation
+;     | 'bind' expression module_instantiation
+;
+; These are ambiguous so I'll just try to handle them with backtracking.
+
+
+(defparser vl-parse-bind-directive-scoped (atts)
+  ;; Matches 'bind' identifier [ ':' expression_list ] module_instantiation
+  :guard (vl-atts-p atts)
+  :result (vl-bind-p val)
+  :fails gracefully
+  :count strong
+  (seq tokstream
+       (:= (vl-match-token :vl-kwd-bind))
+       (target := (vl-match-token :vl-idtoken))
+       (when (vl-is-token? :vl-colon)
+         (:= (vl-match))
+         (addto := (vl-parse-1+-expressions-separated-by-commas)))
+       (modinsts := (vl-parse-module-instantiation nil)) ;; atts??
+       (return (make-vl-bind :scope (vl-idtoken->name target)
+                             :addto addto
+                             :modinsts modinsts
+                             :loc (vl-token->loc target)
+                             :atts atts))))
+
+(defparser vl-parse-bind-directive-scopeless (atts)
+  ;; Matches 'bind' expression module_instantiation
+  :guard (vl-atts-p atts)
+  :result (vl-bind-p val)
+  :fails gracefully
+  :count strong
+  (seq tokstream
+       (kwd := (vl-match-token :vl-kwd-bind))
+       (addto := (vl-parse-expression))
+       (modinsts := (vl-parse-module-instantiation nil)) ;; atts??
+       (return (make-vl-bind :scope nil
+                             :addto (list addto)
+                             :modinsts modinsts
+                             :loc (vl-token->loc kwd)
+                             :atts atts))))
+
+(defparser vl-parse-bind-directive (atts)
+  :guard (vl-atts-p atts)
+  :result (vl-bind-p val)
+  :fails gracefully
+  :count strong
+  (b* ((backup (vl-tokstream-save))
+       ((mv m-err val tokstream) (vl-parse-bind-directive-scoped atts))
+       ((unless m-err)
+        (mv m-err val tokstream))
+       (tokstream (vl-tokstream-restore backup))
+       ((mv u-err val tokstream) (vl-parse-bind-directive-scopeless atts))
+       ((unless u-err)
+        (mv u-err val tokstream))
+       (tokstream (vl-tokstream-restore backup)))
+    (mv (vl-udp/modinst-pick-error-to-report m-err u-err)
+        nil tokstream)))
 

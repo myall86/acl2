@@ -111,8 +111,10 @@ acl2::local).</p>
 
 <p>We often write lemmas in support of one larger theorem.  In this case, you
 can provide these lemmas as a list of events with the @(':prep-lemmas')
-argument.  Note that including a book via the @(':prep-lemmas') keyword does
-not work.</p>
+argument.  Despite the name, it is also possible to include function
+definitions with the @(':prep-lemmas') keyword; for instance, when a recursive
+function is needed to serve as an induction scheme. Note that including a book
+via @(':prep-lemmas') does not work.</p>
 
 <p>To include a book or many books for use in the main theorem you are proving,
 supply a list of include-book commands with the @(':prep-books')
@@ -165,6 +167,20 @@ argument.</p>
   :long "<p>This is identical to @('defrule') except that the theorem is
 generated using @(see defthmd) instead of @(see defthm).</p>")
 
+(defxdoc defrulel
+  :parents (defrule)
+  :short "Variant of @(see defrule) that makes the theorem local."
+  :long "<p>This is identical to @('defrule') except that the @(':local')
+argument is set to @('t').</p>")
+
+(defxdoc defruledl
+  :parents (defrule)
+  :short "Variant of @(see defrule) that disables the theorem afterwards and
+  makes it local."
+  :long "<p>This is identical to @('defrule') except that the theorem is
+ generated using @(see defthmd) instead of @(see defthm) and the @(':local')
+ argument is set to @('t').</p>")
+
 (defconst *defrule-keywords*
   (union-equal '(:hints
                  :rule-classes
@@ -178,6 +194,13 @@ generated using @(see defthmd) instead of @(see defthm).</p>")
                  :disable
                  :e/d
                  :local
+                 ;; [Jared] BOZO I kind of wish we didn't have prep-lemmas and
+                 ;; prep-books; we could just have :prepwork instead, which
+                 ;; would be more consistent with, e.g., define.  Maybe a good
+                 ;; compromise for backwards compatibility would be to just add
+                 ;; a :prepwork option, but continue to support prep-lemmas and
+                 ;; prep-books just as they are now, but remove them from the
+                 ;; documentation...?
                  :prep-lemmas
                  :prep-books)
                acl2::*hint-keywords*))
@@ -202,12 +225,12 @@ generated using @(see defthmd) instead of @(see defthm).</p>")
         (t
          (find-goal-entry-in-user-hints (cdr user-hints)))))
 
-(defun hints-alist-to-plist (hints-al)
-  (if (atom hints-al)
+(defun alist-to-plist (al)
+  (if (atom al)
       nil
-    (list* (caar hints-al)
-           (cdar hints-al)
-           (hints-alist-to-plist (cdr hints-al)))))
+    (list* (caar al)
+           (cdar al)
+           (alist-to-plist (cdr al)))))
 
 (defun merge-keyword-hints-alist-into-ordinary-hints (hints-al user-hints)
   (b* (((when (atom hints-al))
@@ -218,7 +241,7 @@ generated using @(see defthmd) instead of @(see defthm).</p>")
        ;; We just arbitrarily say the top-level hints come first.
        ;; We could eventually try to do some smarter merge, e.g., for
        ;; theory hints, but that's just awful anyway.
-       (new-goal        (append (hints-alist-to-plist hints-al)
+       (new-goal        (append (alist-to-plist hints-al)
                                 user-goal))
        (new-entry       (cons "Goal" new-goal)))
     (cons new-entry user-hints)))
@@ -255,6 +278,8 @@ generated using @(see defthmd) instead of @(see defthm).</p>")
 
        (hints (cdr (assoc :hints kwd-alist)))
        (hints (merge-keyword-hints-alist-into-ordinary-hints hint-alist hints))
+       (kwd-alist (if hints (put-assoc-eq :hints hints kwd-alist) kwd-alist))
+
        (local (cdr (assoc :local kwd-alist)))
        (prep-lemmas (cdr (assoc :prep-lemmas kwd-alist)))
        (prep-books (cdr (assoc :prep-books kwd-alist)))
@@ -275,22 +300,21 @@ generated using @(see defthmd) instead of @(see defthm).</p>")
 
        (prep-lemmas-form
         (if prep-lemmas
-            `((local (encapsulate () ,@prep-lemmas)))
+            `(local (encapsulate () ,@prep-lemmas))
           nil))
 
        (prep-books-form
         (if prep-books
-            `((local (progn ,@prep-books)))
+            `(local (progn ,@prep-books))
           nil))
 
+       ((mv thm-kwd-alist &)
+        (split-alist '(:hints :rule-classes :otf-flg :instructions)
+                     kwd-alist))
+
        (thm `(,(if disablep 'defthmd 'defthm) ,name
-               ,formula
-               :hints        ,hints
-               ,@(let ((look (assoc :rule-classes kwd-alist)))
-                   (and look `(:rule-classes ,(cdr look))))
-               :otf-flg      ,(cdr (assoc :otf-flg kwd-alist))
-               :instructions ,(cdr (assoc :instructions kwd-alist))
-               :doc          ,(cdr (assoc :doc kwd-alist))))
+              ,formula
+              ,@(alist-to-plist thm-kwd-alist)))
 
        (event
         (if (and (not want-xdoc)
@@ -298,17 +322,33 @@ generated using @(see defthmd) instead of @(see defthm).</p>")
                  (not prep-lemmas)
                  (not prep-books))
             thm
-          `(defsection ,name
-             ,@(and parents `(:parents ,parents))
-             ,@(and short   `(:short ,short))
-             ,@(and long    `(:long ,long))
-             ,@prep-lemmas-form
-             ,@prep-books-form
-; The theory-hint has to come after the inclusion of books, so we can disable
-; rules that come from the books.
-             ,@(and theory-hint
-                    `(,theory-hint))
-             ,thm))))
+          `(with-output
+             :stack :push
+             :off :all
+             (defsection ,name
+               ,@(and parents `(:parents ,parents))
+               ,@(and short   `(:short ,short))
+               ,@(and long    `(:long ,long))
+               ,@(and prep-lemmas-form
+                      `((with-output :stack :pop ,prep-lemmas-form)))
+               ,@(and prep-books-form
+                      `((with-output :stack :pop ,prep-books-form)))
+               ;; The theory-hint has to come after the inclusion of books, so
+               ;; we can disable rules that come from the books.
+               ,@(and theory-hint
+                      `((with-output
+                          ;; I think we don't want to show the user the theory
+                          ;; event happening because that'd be verbose.  But
+                          ;; the theory hint could cause errors in case of things
+                          ;; like theory invariant violations or trying to enable
+                          ;; or disable rules that don't exist, so we need to be
+                          ;; sure to turn on error output at least.  BOZO maybe
+                          ;; we should also turn on warnings here, e.g., for
+                          ;; theory warnings?  (but those are usually annoying
+                          ;; anyway...)
+                          :on (error)
+                          ,theory-hint)))
+               (with-output :stack :pop ,thm))))))
     (if local
         `(local ,event)
       event)))
@@ -324,3 +364,48 @@ generated using @(see defthmd) instead of @(see defthm).</p>")
 
 (defmacro defruledl (name &rest rst)
   `(defruled ,name :local t ,@rst))
+
+
+(defxdoc rule
+  :parents (defrule thm)
+  :short "A @(see thm)-like version of @(see defrule)."
+  :long "<p>The @('rule') macro is a thin wrapper around @(see defrule).  It
+supports all of the same syntax extensions like top-level @(':enable') and
+@(':expand') @(see acl2::hints).  However, like @(see thm), @('rule') does not
+take a rule name and does not result in the introduction of a rule
+afterward.</p>
+
+<p>Examples:</p>
+
+@({
+    (rule (implies x x))                    ;; will work
+
+    (rule (equal (append x y)               ;; will fail
+                 (append y x))
+          :enable append
+          :expand (append y x))
+
+    (rule (equal (consp x)                  ;; will work
+                 (if (atom x) nil t))
+          :do-not '(generalize fertilize))
+})
+
+<p>The @('rule') command is implemented with a simple @(see make-event), and
+its calls are valid embedded events.  However, on
+success a @('rule') merely expands into @('(value-triple :success)').  No
+record of the rule's existence is found in the world, so there is no way to use
+the rule once it has been proven, etc.</p>")
+
+(defmacro rule (&rest args)
+  `(with-output
+     ;; You might think we shouldn't turn off error here, but the interior
+     ;; er-progn is going to run the actual event, and we don't want to see a
+     ;; bunch of extra junk about the error here.
+     :off :all
+     :stack :push
+     (make-event
+      (er-progn (with-output :stack :pop
+                  (defrule temporary-rule
+                    ,@args
+                    :rule-classes nil))
+                (value '(value-triple :invisible))))))

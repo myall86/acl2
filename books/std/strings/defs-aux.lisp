@@ -48,14 +48,16 @@
     ;; Including this type-prescription rule improves the type-prescriptions of
     ;; some subsequent functions such as upcase-string.
     acl2::stringp-of-implode
+    acl2::pos-fix
 
     ;; eqv.lisp
+    character-list-fix
     charlisteqv
     charlisteqv-is-an-equivalence
 
     ;; cat.lisp
-    fast-string-append
-    fast-string-append-lst
+    ;; fast-string-append
+    ;; fast-string-append-lst
     fast-concatenate
     cat
     append-chars-aux
@@ -63,7 +65,7 @@
     revappend-chars-aux
     revappend-chars
     prefix-strings
-    rchars-to-string
+    ;; rchars-to-string
     join-aux
     join
 
@@ -116,97 +118,99 @@
     istreqv-is-an-equivalence
 
     ;; decimal.lisp
-    digitp
-    nonzero-digitp
-    digit-val
-    digit-listp
-    digit-list-value1
-    digit-list-value
+    dec-digit-char-p
+    nonzero-dec-digit-char-p
+    dec-digit-char-value
+    dec-digit-char-listp
+    dec-digit-chars-value1
+    dec-digit-chars-value
     skip-leading-digits
-    take-leading-digits
-    digit-string-p-aux
-    digit-string-p
-    basic-natchars
-    natchars-aux
-    natchars
-    revappend-natchars-aux
-    revappend-natchars
-    natstr
-    natstr-list
-    natsize-slow
-    natsize-fast
-    natsize
+    take-leading-dec-digit-chars
+    dec-digit-string-p-aux
+    dec-digit-string-p
+    basic-nat-to-dec-chars
+    nat-to-dec-chars-aux
+    nat-to-dec-chars
+    revappend-nat-to-dec-chars-aux
+    revappend-nat-to-dec-chars
+    nat-to-dec-string
+    nat-to-dec-string-list
+    int-to-dec-string
+    int-to-dec-string-list
+    nat-to-dec-string-size-slow
+    nat-to-dec-string-size-fast
+    nat-to-dec-string-size
     parse-nat-from-charlist
     parse-nat-from-string
     strval
 
     ;; binary.lisp
-    bit-digitp
-    bit-digit-listp
-    bit-digit-val
-    bit-digit-list-value1
-    bit-digit-list-value
+    bin-digit-char-p
+    bin-digit-char-listp
+    bin-digit-char-value
+    bin-digit-chars-value1
+    bin-digit-chars-value
     skip-leading-bit-digits
-    take-leading-bit-digits
-    bit-digit-string-p-aux
-    bit-digit-string-p
-    basic-natchars2
-    natchars2-aux
-    natchars2
-    revappend-natchars2-aux
-    revappend-natchars2
-    natstr2
-    natstr2-list
-    natsize2
+    take-leading-bin-digit-chars
+    bin-digit-string-p-aux
+    bin-digit-string-p
+    basic-nat-to-bin-chars
+    nat-to-bin-chars-aux
+    nat-to-bin-chars
+    revappend-nat-to-bin-chars-aux
+    revappend-nat-to-bin-chars
+    nat-to-bin-string
+    nat-to-bin-string-list
+    nat-to-bin-string-size
     parse-bits-from-charlist
     parse-bits-from-string
     strval2
 
     ;; hex.lisp
-    hex-digitp
-    hex-digit-listp
-    hex-digit-val
-    hex-digit-list-value1
-    hex-digit-list-value
+    hex-digit-char-p
+    hex-digit-char-listp
+    hex-digit-char-value
+    hex-digit-chars-value1
+    hex-digit-chars-value
     skip-leading-hex-digits
-    take-leading-hex-digits
+    take-leading-hex-digit-chars
     hex-digit-string-p-aux
     hex-digit-string-p
     hex-digit-to-char
-    basic-natchars16
-    natchars16-aux
-    natchars16
-    revappend-natchars16-aux
-    revappend-natchars16
-    natstr16
-    natstr16-list
-    natsize16-aux
-    natsize16
+    basic-nat-to-hex-chars
+    nat-to-hex-chars-aux
+    nat-to-hex-chars
+    revappend-nat-to-hex-chars-aux
+    revappend-nat-to-hex-chars
+    nat-to-hex-string
+    nat-to-hex-string-list
+    nat-to-hex-string-size-aux
+    nat-to-hex-string-size
     parse-hex-from-charlist
     parse-hex-from-string
     strval16
 
     ;; octal
-    octal-digitp
-    nonzero-octal-digitp
-    octal-digit-val
-    octal-digit-listp
-    octal-digit-list-value1
-    octal-digit-list-value
+    oct-digit-char-p
+    nonzero-oct-digit-char-p
+    oct-digit-char-value
+    oct-digit-char-listp
+    oct-digit-chars-value1
+    oct-digit-chars-value
     skip-leading-octal-digits
-    take-leading-octal-digits
-    octal-digit-string-p-aux
-    octal-digit-string-p
+    take-leading-oct-digit-chars
+    oct-digit-string-p-aux
+    oct-digit-string-p
     octal-digit-to-char
-    basic-natchars8
-    natchars8-aux
-    natchars8
-    revappend-natchars8-aux
-    revappend-natchars8
-    natstr8
-    natstr8-list
-    natsize8-aux
-    natsize8
+    basic-nat-to-oct-chars
+    nat-to-oct-chars-aux
+    nat-to-oct-chars
+    revappend-nat-to-oct-chars-aux
+    revappend-nat-to-oct-chars
+    nat-to-oct-string
+    nat-to-oct-string-list
+    nat-to-oct-string-size-aux
+    nat-to-oct-string-size
     parse-octal-from-charlist
     parse-octal-from-string
     strval8
@@ -225,6 +229,8 @@
     html-quote
     repeated-revappend
     distance-to-tab
+    html-encode-next-col
+    html-encode-push
     html-encode-chars-aux
     html-encode-string-aux
     html-encode-string
@@ -324,5 +330,16 @@
     symbol-list-names
     intern-list-fn
     intern-list
-    ))
 
+    ;; url-encode
+    url-encode-char
+    make-url-encode-array
+    *url-encode-array*
+    fast-url-encode-char
+    url-encode-chars-aux
+    url-encode-chars
+    url-encode-string-aux
+    url-encode-string
+
+    strrange-equiv
+    ))

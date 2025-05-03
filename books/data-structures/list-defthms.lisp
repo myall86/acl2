@@ -7,6 +7,9 @@
 ; 1717 West Sixth Street, Suite 290
 ; Austin, TX 78703-4776 U.S.A.
 
+; Includes tweaks made by Mihir Mehta 4/2019 for a change to the
+; definition of take.
+
 (in-package "ACL2")
 (include-book "list-defuns")
 
@@ -183,8 +186,7 @@
    :rule-classes ((:rewrite)
                   (:type-prescription :corollary
                                       (implies (not (zp n))
-                                               (consp (take n l)))))
-   :hints (("Goal" :do-not-induct t))))
+                                               (consp (take n l)))))))
 
 (defthm consp-butlast
 ; Changed for ACL2 Version 5.1 by Matt Kaufmann, due to change in the
@@ -329,17 +331,20 @@
            (true-listp (reverse a)))
   :rule-classes (:type-prescription))
 
+; Matt K. mod: The following two lemmas are now type-prescription rules built
+; into ACL2.  So these are now only rewrite rules.
+
 (local
-   (defthm true-listp-first-n-ac
+   (defthm true-listp-first-n-ac-rewrite
      (implies (true-listp ac)
               (true-listp (first-n-ac i l ac)))
-     :rule-classes (:rewrite :type-prescription)
+     :rule-classes (:rewrite) ; Matt K. mod, explained above
      :hints (("Goal" :induct (first-n-ac i l ac)))))
 
 (local
- (defthm true-listp-take
+ (defthm true-listp-take-rewrite
    (true-listp (take n l))
-   :rule-classes (:rewrite :type-prescription)))
+   :rule-classes (:rewrite))) ; Matt K. mod, explained above
 
 (defthm true-listp-butlast
     (true-listp (butlast lst n))
@@ -700,8 +705,7 @@
  (defthm take-append1
    (implies (<= n (len a))
             (equal (take n (append a b))
-                   (take n a)))
-   :hints (("Goal" :do-not-induct t))))
+                   (take n a)))))
 
 
 (defthm butlast-append1-crock
@@ -1524,12 +1528,18 @@
              (append (update-nth n v a) b)
              (append a (update-nth (- n (len a)) v b)))))
 
+;; [Jared] strengthening this rule to agree with coi/nary/nth-rules.lisp
 (defthm update-nth-nth
-  (implies (and (integerp n)
-                (<= 0 n)
-                (< n (len l)))
-           (equal (update-nth n (nth n l) l)
-                  l)))
+  (implies
+   (< (nfix n) (len x))
+   (equal (update-nth n (nth n x) x) x)))
+
+;; (defthm update-nth-nth
+;;   (implies (and (integerp n)
+;;                 (<= 0 n)
+;;                 (< n (len l)))
+;;            (equal (update-nth n (nth n l) l)
+;;                   l)))
 
 (defthm update-nth-update-nth
   (equal (update-nth j b (update-nth i a l))

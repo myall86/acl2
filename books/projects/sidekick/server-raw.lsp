@@ -32,7 +32,6 @@
 
 (in-package "SIDEKICK")
 
-#+hons
 (acl2::mf-multiprocessing t)
 
 (defvar *server* nil)
@@ -53,13 +52,13 @@
   (let* ((port (or port
                    (b* ((state acl2::*the-live-state*)
                         ((mv ? port state) (getenv$ "SIDEKICK_PORT" state))
-                        (port-num (str::strval port))
+                        (port-num (and port (str::strval port)))
                         ((when port-num)
                          port-num)
                         ;; Special hack for Centaur: fall back to FVQ_PORT if
                         ;; it is defined.
                         ((mv ? port state) (getenv$ "FVQ_PORT" state))
-                        (port-num (str::strval port))
+                        (port-num (and port (str::strval port)))
                         ((when port-num)
                          port-num))
                      ;; Else, just use the default port

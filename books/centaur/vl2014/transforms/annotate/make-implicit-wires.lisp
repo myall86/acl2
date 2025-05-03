@@ -42,7 +42,9 @@
 (local (defthm vl-modelement-p-when-vl-blockitem-p
          (implies (vl-blockitem-p x)
                   (vl-modelement-p x))
-         :hints(("Goal" :in-theory (enable vl-blockitem-p vl-modelement-p)))))
+         :hints(("Goal" :in-theory (enable tag-reasoning
+                                           vl-blockitem-p
+                                           vl-modelement-p)))))
 
 (local (defthm vl-modelementlist-p-when-vl-blockitemlist-p
          (implies (vl-blockitemlist-p x)
@@ -435,7 +437,8 @@ We produce a list of one-bit @(see vl-vardecl-p)s, one for each name in
       (set-equiv (append (mv-nth 0 ret)
                          (mv-nth 1 ret))
                  (vl-modinst-allexprs x)))
-    :hints(("Goal" :in-theory (enable set-equiv vl-modinst-allexprs)))))
+    :hints(("Goal" :in-theory (e/d (set-equiv vl-modinst-allexprs)
+                                   (acl2::subsetp-append1))))))
 
 (define vl-gateinst-exprs-for-implicit-wires
   :short "Gets the expressions from a gate instance, for making implicit wires."
@@ -1113,6 +1116,9 @@ don't care, but it might be good to look into this again.</p>"
 
        (new-decl (make-vl-vardecl :name    portdecl.name
                                   :type    portdecl.type
+                                  ;; [Jared] patch 2016-02-24: I want implicit wires to be
+                                  ;; printed as "wire" instead of "logic" for legacy tools
+                                  :nettype :vl-wire
                                   :atts    (cons (cons "VL_PORT_IMPLICIT" nil) portdecl.atts)
                                   :loc     portdecl.loc)))
     (cons new-decl
@@ -1143,7 +1149,7 @@ all of its identifiers.</p>"
     (b* ((ifports (vl-interfaceportlist-fix ifports))
          (st (make-vl-implicitst :decls     (make-fast-alist
                                              (pairlis$ (vl-portlist->names ifports)
-                                                       (redundant-list-fix ifports)))
+                                                       (list-fix ifports)))
                                  :portdecls nil
                                  :imports   nil
                                  :ss        ss))

@@ -1,19 +1,5 @@
-; Arithmetic-3 Library
-; Copyright (C) 2004 Robert Krug <rkrug@cs.utexas.edu>
-;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT
-; ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-; FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
-; details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; if not, write to the Free Software Foundation, Inc., 51
-; Franklin Street, Suite 500, Boston, MA 02110-1335, USA.
+; See the top-level arithmetic-3 LICENSE file for authorship,
+; copyright, and license information.
 
 ;;
 ;; prefer-times.lisp
@@ -45,8 +31,8 @@
 (local (include-book "inequalities"))
 
 
-(set-default-hints 
- '((nonlinearp-default-hint-pass1 stable-under-simplificationp 
+(set-default-hints
+ '((nonlinearp-default-hint-pass1 stable-under-simplificationp
                                   hist pspv)))
 
 
@@ -91,7 +77,7 @@
 (defthm normalize-<-/-to-*-1
   (implies (and (rationalp x)
 		(rationalp y))
-	   (equal (< x (/ y)) 
+	   (equal (< x (/ y))
 		  (cond ((< y 0) (< 1 (* x y)))
 			((< 0 y) (< (* x y) 1))
 			(t (< x 0))))))
@@ -99,7 +85,7 @@
 (defthm normalize-<-/-to-*-2
   (implies (and (rationalp x)
 		(rationalp y))
-		(equal (< (/ y) x) 
+		(equal (< (/ y) x)
 		       (cond ((< y 0) (< (* x y) 1))
 			     ((< 0 y) (< 1 (* x y)))
 			     (t (< 0 x))))))
@@ -112,7 +98,7 @@
 		  (cond ((< z 0) (< y (* x z)))
 			((< 0 z) (< (* x z) y))
 			(t (< x 0))))))
- 
+
 (defthm normalize-<-/-to-*-3-2
   (implies (and (rationalp x)
 		(rationalp y)

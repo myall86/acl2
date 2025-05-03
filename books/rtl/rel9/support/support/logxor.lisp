@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -139,7 +127,7 @@
                   (+ (* 2 (logxor (fl (* 1/2 i)) (fl (* 1/2 j))))
                      (logxor (mod i 2) (mod j 2)))))
   :rule-classes ((:definition :controller-alist ((acl2::binary-logxor t t))))
-  :hints (("goal" :use (:instance fl-mod-equal 
+  :hints (("goal" :use (:instance fl-mod-equal
                                   (x (logxor i j))
                                   (y (+ (* 2 (logxor (fl (* 1/2 i)) (fl (* 1/2 j))))
                      (logxor (mod i 2) (mod j 2)))))
@@ -172,7 +160,7 @@
            :use (LOGXOR-ASSOCIATIVE
                  logxor-commutative
                  (:instance LOGXOR-ASSOCIATIVE (j i) (i j))))))
- 
+
 (defthm logxor-combine-constants
   (implies (syntaxp (and (quotep i)
                          (quotep j)))

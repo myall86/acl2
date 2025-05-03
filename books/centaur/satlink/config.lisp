@@ -50,15 +50,29 @@ invoke the SAT solver.</p>"
    (verbose "Should we print excessive output for debugging?"
             booleanp :rule-classes :type-prescription)
 
-   (mintime "Minimum amount of time that is worth reporting.  This gets passed
-             to @(see time$) as we do, e.g., our export to DIMACS and invoke
-             the SAT solver.")
+   (timing  "Should we print stylized timing messages from the solver?  E.g.,
+             \"c Sat solving took 103 seconds.\"
+             The verbose setting overrides this."
+            booleanp :rule-classes :type-prescription
+            :default t)
+
+   (mintime "Minimum amount of time that is worth reporting for the overall run.
+              This gets passed to @(see time$) as we do, e.g., our export to DIMACS
+             and invoke the SAT solver.")
 
    (remove-temps "Should temporary files (e.g., DIMACS files) be removed after
                   we're done calling SAT?  Usually you will want to remove
                   them, but occasionally they may be useful for debugging, or
-                  for comparing SAT solvers' performance."
-                  booleanp :rule-classes :type-prescription)))
+                  for comparing SAT solvers' performance.  Note that these
+                  files are created with @(see oslib::tempfile), see its
+                  documentation for details about their paths and filenames."
+                  booleanp :rule-classes :type-prescription)
+
+   (lrat-check  "Should we check an LRAT proof output by the solver? When this
+                 is set, SATLINK will use the Heule/Hunt/Kaufmann checker from
+                 projects/sat/lrat/stobj-based to check an LRAT proof which should
+                 be output to file [input filename].lrat."
+                booleanp :rule-classes :type-prescription)))
 
 (defsection *default-config*
   :parents (config-p)
@@ -67,7 +81,7 @@ invoke the SAT solver.</p>"
 @(def *default-config*)"
 
   (defconst *default-config*
-    (make-config :cmdline "glucose-cert"
+    (make-config :cmdline "glucose -model"
                  :verbose t
                  :mintime 1/2
                  :remove-temps t)))

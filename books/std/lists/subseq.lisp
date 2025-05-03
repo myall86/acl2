@@ -33,18 +33,6 @@
 (include-book "list-defuns")
 (local (include-book "take"))
 
-(local (defthm commutativity-2-of-+
-         (equal (+ x (+ y z))
-                (+ y (+ x z)))))
-
-(local (defthm fold-consts-in-+
-         (implies (and (syntaxp (quotep x))
-                       (syntaxp (quotep y)))
-                  (equal (+ x (+ y z)) (+ (+ x y) z)))))
-
-(local (defthm distributivity-of-minus-over-+
-         (equal (- (+ x y)) (+ (- x) (- y)))))
-
 (defsection subseq-list
   :parents (std/lists subseq)
   :short "Lemmas about @(see subseq-list) available in the @(see std/lists)
@@ -97,7 +85,7 @@ ability to write nice rules about @('subseq-list').</p>
     (implies (natp n)
              (equal (subseq-list x n (len x))
                     (nthcdr n (list-fix x))))
-    :hints(("Goal" :in-theory (enable take-redefinition))))
+    :hints(("Goal" :in-theory (enable take))))
 
 ; We could strengthen the above rules by turning them into something like (take
 ; n (append x (repeat (- start) nil))) in the negative case, but that is

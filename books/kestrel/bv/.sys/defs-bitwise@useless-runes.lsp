@@ -1,0 +1,2 @@
+(BVNOT)
+(BITNOT)

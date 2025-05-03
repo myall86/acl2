@@ -103,11 +103,25 @@
                 (pseudo-term-listp args))
            (pseudo-termp (cons-term fn args))))
 
+(local ;; because this is gross
+ (defthm pseudo-termp-cons-term-lambda
+   (implies (and (consp fn)
+                 (consp (cdr fn))
+                 (true-listp (cddr fn))
+                 (equal (+ 2 (len (cddr fn))) 3) ;; gross
+                 (eq (car fn) 'lambda)
+                 (symbol-listp (cadr fn))
+                 (pseudo-termp (caddr fn))
+                 (equal (len args) (len (cadr fn)))
+                 (pseudo-term-listp args))
+            (pseudo-termp (cons-term fn args)))))
+
 (defthm pseudo-termp-cons-term1-mv2
   (implies (and (symbolp fn)
                 (not (eq fn 'quote))
-                (pseudo-term-listp args))
-           (pseudo-termp (cons-term1-mv2 fn args (cons fn args)))))
+                (pseudo-term-listp args)
+                (pseudo-termp x))
+           (pseudo-termp (mv-nth 1 (cons-term1-mv2 fn args x)))))
 
 (in-theory (disable cons-term cons-term1-mv2))
 
@@ -135,8 +149,8 @@
            (termlist-subst (cdr x) alist)))))
 
 (make-flag term-subst-flg term-subst
-           :flag-mapping ((term-subst . term)
-                          (termlist-subst . list)))
+           :flag-mapping ((term-subst term)
+                          (termlist-subst list)))
 
 ;; (defthm-term-subst-flg
 ;;   (defthm term-subst-when-unchanged
@@ -155,15 +169,38 @@
 (defthm-term-subst-flg
   (defthm sublis-var1-when-unchanged
     (implies (not (mv-nth 0 (sublis-var1 alist x)))
-             (equal (cterm-ev (mv-nth 1 (sublis-var1 alist x)) a)
-                    (cterm-ev x a)))
+             (equal (mv-nth 1 (sublis-var1 alist x))
+                    x))
     :flag term)
   (defthm sublis-var1-lst-when-unchanged
     (implies (not (mv-nth 0 (sublis-var1-lst alist x)))
-             (equal (cterm-ev-lst (mv-nth 1 (sublis-var1-lst alist x)) a)
-                    (cterm-ev-lst x a)))
+             (equal (mv-nth 1 (sublis-var1-lst alist x))
+                    x))
     :flag list))
 
+(defthm len-of-sublis-var1-lst
+  (equal (len (mv-nth 1 (sublis-var1-lst alist x)))
+         (len x)))
+
+(defthm-term-subst-flg
+  (defthm pseudo-termp-of-sublis-var1
+    (implies (and (pseudo-termp x)
+                  (pseudo-term-listp (strip-cdrs alist)))
+             (pseudo-termp (mv-nth 1 (sublis-var1 alist x))))
+    :hints ('(:expand ((pseudo-termp x)
+                       (sublis-var1 alist x))))
+    :flag term)
+  (defthm pseudo-term-listp-of-sublis-var1-lst
+    (implies (and (pseudo-term-listp x)
+                  (pseudo-term-listp (strip-cdrs alist)))
+             (pseudo-term-listp (mv-nth 1 (sublis-var1-lst alist x))))
+    :flag list))
+
+(defthm pseudo-termp-of-sublis-var
+  (implies (and (pseudo-termp x)
+                (pseudo-term-listp (strip-cdrs alist)))
+           (pseudo-termp (sublis-var alist x)))
+  :hints(("Goal" :in-theory (enable sublis-var))))
 
 (defthm-term-subst-flg
   (defthm sublis-var1-is-term-subst
@@ -234,7 +271,7 @@
     :flag term)
   (defthm eval-of-termlist-subst
     (implies (and (pseudo-term-listp x)
-                  (not (assoc nil alist))) 
+                  (not (assoc nil alist)))
              (equal (cterm-ev-lst (termlist-subst x alist) a)
                     (cterm-ev-lst x (append (cterm-ev-alist alist a) a))))
     :flag list))
@@ -248,5 +285,35 @@
 
 (in-theory (disable sublis-var))
 
+
+(defthm subcor-var1-in-terms-of-cdr-assoc
+  (equal (subcor-var1 vars terms var)
+         (let ((look (assoc var (pairlis$ vars terms))))
+           (if look (cdr look) var))))
+
+(local (defthm cons-term1-equals-cons-term1-mv2
+         (equal (cons-term1 fn args)
+                (mv-nth 1 (cons-term1-mv2 fn args (cons fn args))))
+         :hints(("Goal" :in-theory (enable cons-term1-mv2)))))
+
+(local (defthm cons-term1-mv2-when-not-symbolp
+         (implies (not (symbolp fn))
+                  (equal (mv-nth 1 (cons-term1-mv2 fn args x))
+                         x))
+         :hints(("Goal" :in-theory (enable cons-term1-mv2)))))
+
+(defthm-term-subst-flg
+  (defthm subcor-var-is-sublis-var1
+    (implies (pseudo-termp x)
+             (equal (subcor-var vars terms x)
+                    (mv-nth 1 (sublis-var1 (pairlis$ vars terms) x))))
+    :hints ((and stable-under-simplificationp
+                 '(:in-theory (e/d (cons-term) (cons-term1)))))
+    :flag term)
+  (defthm subcor-var-lst-is-sublis-var1-lst
+    (implies (pseudo-term-listp x)
+             (equal (subcor-var-lst vars terms x)
+                    (mv-nth 1 (sublis-var1-lst (pairlis$ vars terms) x))))
+    :flag list))
 
 

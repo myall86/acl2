@@ -37,6 +37,7 @@
 
 (include-book "append")
 (include-book "all-equalp")
+(include-book "bits-equiv")
 (include-book "duplicity")
 (include-book "equiv")
 (include-book "final-cdr")
@@ -49,12 +50,14 @@
 (include-book "len")
 (include-book "list-fix")
 (include-book "mfc-utils")
+(include-book "nats-equiv")
 (include-book "no-duplicatesp")
 (include-book "nth")
 (include-book "nthcdr")
 (include-book "prefixp")
 (include-book "remove")
 (include-book "remove-duplicates")
+(include-book "remove1-equal")
 (include-book "repeat")
 (include-book "resize-list")
 (include-book "revappend")
@@ -64,10 +67,12 @@
 (include-book "set-difference")
 (include-book "sublistp")
 (include-book "subseq")
+(include-book "suffixp")
 (include-book "take")
 (include-book "true-listp")
 (include-book "update-nth")
 (include-book "list-defuns")
+(include-book "union")
 
 ; BOZO it might be best to move these disables into the corresponding
 ; books, to make things more consistent when you load the individual
@@ -81,7 +86,7 @@
                     revappend
                     no-duplicatesp-equal
                     make-character-list
-                    take-redefinition
+                    take
                     nthcdr
                     subseq-list
                     resize-list
@@ -189,5 +194,3 @@ rev), etc.</dd>
 <p>These rules allow for some very powerful equivalence-based reasoning.  When
 introducing new list-processing functions, it is generally a good idea to
 define the appropriate @(see congruence) rules for these relations.</p>")
-
-

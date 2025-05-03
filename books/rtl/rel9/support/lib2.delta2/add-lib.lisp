@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -145,7 +133,7 @@
   :hints (("Goal" :in-theory (enable lognot)
 		  :use ((:instance mod-mult (m (1- (- x))) (a 1) (n n))
 			(:instance mod-diff (a (1- n)) (b x) (n n))
-			(:instance mod-does-nothing 
+			(:instance mod-does-nothing
 				   (m (- (1- n) (mod x n)))
 				   (n n))
 			(:instance mod-bnd-2 (m x) (n n))
@@ -175,10 +163,10 @@
 		  (<= j i)
 		  (integerp x))
 	     (equal (bits (lognot x) i j)
-		    (+ (expt 2 (- (1+ i) j)) 
+		    (+ (expt 2 (- (1+ i) j))
 		       (fl (/ (1- (- (mod x (expt 2 (1+ i))))) (expt 2 j))))))
   :hints (("Goal" :in-theory (enable bits-lognot-1)
-		  :use ((:instance fl+int-rewrite 
+		  :use ((:instance fl+int-rewrite
 				   (x (/ (1- (- (mod x (expt 2 (1+ i))))) (expt 2 j)))
 				   (n (expt 1 (- (1+ i) j))))))))
 
@@ -197,7 +185,7 @@
 (defthm bits-sum-shift
     (implies (and (integerp x)
 		  (integerp y)
-		  (natp i) 
+		  (natp i)
 		  (natp j)
 		  (> j 0)
 		  (>= i j))

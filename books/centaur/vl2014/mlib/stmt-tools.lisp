@@ -252,7 +252,7 @@ expressions.</p>"
   (local (Defthm vl-stmtlist-count-of-append
            (equal (vl-stmtlist-count (append a b))
                   (+ -1 (vl-stmtlist-count a) (vl-stmtlist-count b)))
-           :hints(("Goal" 
+           :hints(("Goal"
                    :in-theory (enable append)
                    :induct (append a b)
                    :expand ((vl-stmtlist-count a)
@@ -277,7 +277,7 @@ expressions.</p>"
     (if initval
         (cons initval (vl-vardecllist->initvals (cdr x)))
       (vl-vardecllist->initvals (cdr x)))))
-    
+
 
 
 (define vl-compoundstmt->exprs ((x vl-stmt-p))
@@ -447,7 +447,8 @@ directly part of the statement.</p>"
   (local (defthmd c3
            (implies (<= (nfix n) (len x))
                     (equal (append (take n x) (nthcdr n (list-fix x)))
-                           (list-fix x)))))
+                           (list-fix x)))
+           :hints (("Goal" :in-theory (enable take)))))
 
   (local (defthm c4
            (implies (<= (nfix n) (len x))
@@ -582,7 +583,8 @@ directly part of the statement.</p>"
   (defthm vl-stmtlist-fix-of-take
     (implies (<= (nfix n) (len x))
              (equal (vl-stmtlist-fix (take n x))
-                    (take n (vl-stmtlist-fix x)))))
+                    (take n (vl-stmtlist-fix x))))
+    :hints (("Goal" :in-theory (enable take))))
 
   (defthm vl-stmtlist-fix-of-nthcdr
     (equal (vl-stmtlist-fix (nthcdr n x))
@@ -599,32 +601,48 @@ directly part of the statement.</p>"
             :induct (nth n x)
             :expand ((nth n x)))))
 
-  (defthm vl-compoundstmt->stmts-of-change-vl-compoundstmt-core
-    (implies (and (same-lengthp stmts (vl-compoundstmt->stmts x))
-                  (same-lengthp exprs (vl-compoundstmt->exprs x)))
-             (equal (vl-compoundstmt->stmts (change-vl-compoundstmt-core x stmts exprs ctrl vardecls paramdecls))
-                    (vl-stmtlist-fix stmts)))
+  (local (in-theory (disable (:rewrite nth-of-vl-stmtlist-fix))))
+
+  (defthm
+    vl-compoundstmt->stmts-of-change-vl-compoundstmt-core
+    (implies
+     (same-lengthp stmts (vl-compoundstmt->stmts x))
+     (equal
+      (vl-compoundstmt->stmts
+       (change-vl-compoundstmt-core x stmts exprs ctrl vardecls paramdecls))
+      (vl-stmtlist-fix stmts)))
     :hints ((and stable-under-simplificationp
                  (acl2::equal-by-nths-hint))))
 
-  (defthm vl-compoundstmt->exprs-of-change-vl-compoundstmt-core
-    (implies (and (same-lengthp stmts (vl-compoundstmt->stmts x))
-                  (same-lengthp exprs (vl-compoundstmt->exprs x)))
-             (equal (vl-compoundstmt->exprs (change-vl-compoundstmt-core x stmts exprs ctrl vardecls paramdecls))
-                    (list-fix (vl-exprlist-fix exprs)))))
+  (defthm
+    vl-compoundstmt->exprs-of-change-vl-compoundstmt-core
+    (implies
+     (same-lengthp exprs (vl-compoundstmt->exprs x))
+     (equal
+      (vl-compoundstmt->exprs
+       (change-vl-compoundstmt-core x stmts exprs ctrl vardecls paramdecls))
+      (list-fix (vl-exprlist-fix exprs)))))
 
-  (defthm vl-compoundstmt->ctrl-of-change-vl-compoundstmt-core
-    (implies (iff ctrl (vl-compoundstmt->ctrl x))
-             (equal (vl-compoundstmt->ctrl (change-vl-compoundstmt-core x stmts exprs ctrl vardecls paramdecls))
-                    (vl-maybe-delayoreventcontrol-fix ctrl)))
-    :hints(("Goal" :in-theory (enable vl-maybe-delayoreventcontrol-fix))))
+  (defthm
+    vl-compoundstmt->ctrl-of-change-vl-compoundstmt-core
+    (implies
+     (iff ctrl (vl-compoundstmt->ctrl x))
+     (equal
+      (vl-compoundstmt->ctrl
+       (change-vl-compoundstmt-core x stmts exprs ctrl vardecls paramdecls))
+      (vl-maybe-delayoreventcontrol-fix ctrl)))
+    :hints (("goal" :in-theory (enable vl-maybe-delayoreventcontrol-fix))))
 
-  (defthm vl-compoundstmt->ctrl-of-change-vl-compoundstmt-vardecls
-    (implies (or (not vardecls)
-                 (equal (vl-stmt-kind x) :vl-blockstmt)
-                 (equal (vl-stmt-kind x) :vl-forstmt))
-             (equal (vl-compoundstmt->vardecls (change-vl-compoundstmt-core x stmts exprs ctrl vardecls paramdecls))
-                    (vl-vardecllist-fix vardecls))))
+  (defthm
+    vl-compoundstmt->ctrl-of-change-vl-compoundstmt-vardecls
+    (implies
+     (or (not vardecls)
+         (equal (vl-stmt-kind x) :vl-blockstmt)
+         (equal (vl-stmt-kind x) :vl-forstmt))
+     (equal
+      (vl-compoundstmt->vardecls
+       (change-vl-compoundstmt-core x stmts exprs ctrl vardecls paramdecls))
+      (vl-vardecllist-fix vardecls))))
 
   (defthm vl-compoundstmt->ctrl-of-change-vl-compoundstmt-paramdecls
     (implies (or (not paramdecls)
@@ -678,7 +696,9 @@ provide a :ctrl when there is one, etc.</p>
 
   (defmacro change-vl-compoundstmt (x &rest args)
     (change-vl-compoundstmt-fn x
-                               (std::da-changer-args-to-alist args '(:stmts :exprs :ctrl :vardecls :paramdecls))))
+                               (std::da-changer-args-to-alist 'change-vl-compoundstmt
+                                                              args
+                                                              '(:stmts :exprs :ctrl :vardecls :paramdecls))))
 
   (local (defthm test0
            (equal (change-vl-compoundstmt x)
@@ -873,6 +893,3 @@ process them.</p>"
   :inline t
   :enabled t
   (eq (vl-stmt-kind x) :vl-timingstmt))
-
-
-

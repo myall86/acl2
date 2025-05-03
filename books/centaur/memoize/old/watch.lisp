@@ -15,8 +15,6 @@
 
 (include-book "tools/include-raw" :dir :system)
 
-; cert_param: (hons-only)
-
 ; [Jared]: I pulled the WATCH related functionality out of ACL2(h) and into
 ; this ttag-based book.  In the process I ripped out the previous if-profiling
 ; stuff, which made it much easier to disentangle watch from memoize.
@@ -68,7 +66,7 @@
  })
 
  <p>You can look at the above ``temporary'' file and see some interesting
- information related to features provided by your @(see hons-enabled) ACL2
+ information related to features provided by your (@(see hons-enabled)) ACL2
  executable.  For a further experiment, continue in ACL2 as follows.</p>
 
  @({

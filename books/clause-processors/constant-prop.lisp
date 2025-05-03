@@ -1,3 +1,31 @@
+; Copyright (C) 2008-2013 Centaur Technology
+;
+; Contact:
+;   Centaur Technology Formal Verification Group
+;   7600-C N. Capital of Texas Highway, Suite 300, Austin, TX 78731, USA.
+;   http://www.centtech.com/
+;
+; License: (An MIT/X11-style license)
+;
+;   Permission is hereby granted, free of charge, to any person obtaining a
+;   copy of this software and associated documentation files (the "Software"),
+;   to deal in the Software without restriction, including without limitation
+;   the rights to use, copy, modify, merge, publish, distribute, sublicense,
+;   and/or sell copies of the Software, and to permit persons to whom the
+;   Software is furnished to do so, subject to the following conditions:
+;
+;   The above copyright notice and this permission notice shall be included in
+;   all copies or substantial portions of the Software.
+;
+;   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+;   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+;   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+;   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+;   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+;   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+;   DEALINGS IN THE SOFTWARE.
+;
+; Original author: Sol Swords <sswords@centtech.com>
 
 
 (in-package "ACL2")
@@ -69,8 +97,8 @@
            (termlist-ind (cdr x))))))
 
 (flag::make-flag term-flg term-ind
-                 :flag-mapping ((term-ind . term)
-                                (termlist-ind . list)))
+                 :flag-mapping ((term-ind term)
+                                (termlist-ind list)))
 
 (local (defthm assoc-append-when-key
          (implies k
@@ -273,8 +301,8 @@
 
 
 (flag::make-flag deep-substitute-flg deep-substitute-term
-                 :flag-mapping ((deep-substitute-term . term)
-                                (deep-substitute-term-list . list)))
+                 :flag-mapping ((deep-substitute-term term)
+                                (deep-substitute-term-list list)))
 
 (defthm-deep-substitute-flg
   (defthm true-listp-deep-substitute-term-list
@@ -380,8 +408,8 @@
          (mv nil x))))))
 
 (flag::make-flag deep-substitute/alist-flg deep-substitute-term/alist
-                 :flag-mapping ((deep-substitute-term/alist . term)
-                                (deep-substitute-term-list/alist . list)))
+                 :flag-mapping ((deep-substitute-term/alist term)
+                                (deep-substitute-term-list/alist list)))
 
 (local
  (defthm-deep-substitute/alist-flg

@@ -67,7 +67,8 @@
                       (hole   natp))
   :parents (pigeon-hole)
   :returns (lit litp "This bird is in this hole.")
-  (b* ((var (make-var (acl2::hl-nat-combine bird hole))))
+  :guard-hints (("goal" :in-theory (enable varp)))
+  (b* ((var (lnfix (acl2::hl-nat-combine bird hole))))
     (make-lit var 0)))
 
 (define bird-in-some-hole ((bird natp "Fixed")
@@ -274,7 +275,7 @@ is producing the expected results.</p>"
 
 (value-triple
  (check-config
-  (make-config :cmdline "glucose"
+  (make-config :cmdline "glucose -model"
                :verbose t
                :mintime nil
                :remove-temps t)))

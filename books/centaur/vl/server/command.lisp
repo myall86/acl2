@@ -33,14 +33,15 @@
 (include-book "../mlib/fmt")
 (include-book "centaur/bridge/to-json" :dir :system)
 (local (include-book "../util/arithmetic"))
+(include-book "std/testing/assert-bang" :dir :system)
 
 (defsection vls-commands
-  :parents (server)
+  :parents (vl-server)
   :short "A simple command format for interfacing between Lisp and Javascript."
 
   :long #{"""<h3>Introduction</h3>
 
-<p>The VL @(see server) makes many Lisp functions available for use by the
+<p>The @(see vl-server) makes many Lisp functions available for use by the
 Javascript code that runs the module browser.  To make interfacing between
 Javascript and Lisp simpler, we adopt certain conventions for how these
 commands work.</p>

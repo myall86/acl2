@@ -34,20 +34,24 @@
 
 use warnings;
 use strict;
-use Getopt::Long qw(:config bundling); 
+use Getopt::Long qw(:config bundling);
 use File::Spec;
 use FindBin qw($RealBin);
-use Storable;
+use lib "$RealBin/lib";
+use Storable qw(nstore retrieve);
+use Critpath;
+use Certlib;
+use Bookscan;
 
 # Note: Trying out FindBin::$RealBin.  If breaks, we can go back to
 # the system below.
 
-(do "$RealBin/certlib.pl") or die("Error loading $RealBin/certlib.pl:\n $!");
+# (do "$RealBin/certlib.pl") or die("Error loading $RealBin/certlib.pl:\n $!");
 
 
 my $HELP_MESSAGE = "
 
- critpath.pl [OPTIONS] <top-book1> <top-book2> ... 
+ critpath.pl [OPTIONS] <top-book1> <top-book2> ...
 
  This program displays the longest dependency chain leading up to any of the
  top-books specified, measured in sequential certification time.  This is the
@@ -76,9 +80,11 @@ my $HELP_MESSAGE = "
 
        --nowarn     Suppress warnings.
        --nopath     Suppress critical path information.
+       --nodepthpath Suppress max-depth path information.
        --nolist     Suppress individual-files list.
 
-       -r, --real   Toggle real time versus user+system
+       -r, --real   Toggle real time versus user+system (not relevant
+                    with --costs-file or --build-log options).
 
        --help       Print this help message and exit.
 
@@ -110,6 +116,20 @@ my $HELP_MESSAGE = "
                     correctly if all targets/dependencies are the
                     same.
 
+       --build-log <filename>
+                    Read the start and end times for each file from a
+                    build log from cert.pl.  This allows computation
+                    of lag times. The build log must have been created
+                    with the CERT_PL_PARSEABLE_TIMESTAMPS environment
+                    variable set.
+
+       -f, --from-file <filename>
+                    This option may be given multiple times.  Instead
+                    of assuming that everything starts out
+                    uncertified, assume that the given file(s) are the
+                    only ones that have been updated, and compute
+                    paths relative to them.
+
    --pcert-all
           Compute dependencies assuming provisional certification is used
           for all books, not just the ones with the \'pcert\' cert_param.
@@ -135,6 +155,7 @@ my %OPTIONS = (
   'pcert'   => $ENV{'ACL2_PCERT'},
   'write_costs' => 0,
   'costs_file' => 0,
+  'build_log' =>0,
   'pcert_all' => 0,
   'target_ext' => "cert",
 );
@@ -142,21 +163,34 @@ my %OPTIONS = (
 my @user_targets = ();
 my @targets = ();
 my @deps_of = ();
+my @user_from_files = ();
+my %from_files = ();
 
 my $debug = 0;
 
 my $cache_file = 0;
 my $params_file = 0;
+
+my %certlib_opts = ( "debugging" => 0,
+		     "clean_certs" => 0,
+		     "print_deps" => 0,
+		     "all_deps" => 1,
+                     "pcert_all" => 0,
+		     "include_excludes" => 0,
+    );
+
+
 my $options_okp = GetOptions('h|html' => \$OPTIONS{'html'},
 			     'help'   => \$OPTIONS{'help'},
 			     'nowarn' => \$OPTIONS{'nowarn'},
 			     'nopath' => \$OPTIONS{'nopath'},
+			     'nodepthpath' => \$OPTIONS{'nodepthpath'},
 			     'nolist' => \$OPTIONS{'nolist'},
 			     'short=i' =>  \$OPTIONS{'short'},
 			     'max-depth|m=i' =>  \$OPTIONS{'short'},
 			     'real|r'  => \$OPTIONS{'real'},
 			     'debug|d' => \$debug,
-			     "targets|t=s"          
+			     "targets|t=s"
 			              => sub { shift;
 					       read_targets(shift, \@user_targets);
 					   },
@@ -167,8 +201,11 @@ my $options_okp = GetOptions('h|html' => \$OPTIONS{'html'},
 			     "params=s"             => \$params_file,
 			     "write-costs|w=s" => \$OPTIONS{'write_costs'},
 			     "costs-file=s" => \$OPTIONS{'costs_file'},
-                             "pcert-all"    => \$OPTIONS{'pcert_all'},
+			     "build-log=s" => \$OPTIONS{'build_log'},
+                             "pcert-all"    => \$certlib_opts{'pcert_all'},
+                             "include-excludes"  => \$certlib_opts{'include_excludes'},
                              "target-ext|e=s"    => \$OPTIONS{'target_ext'},
+                             "from-file|f=s"     => \@user_from_files,
 			     );
 
 my $cache = {};
@@ -186,13 +223,6 @@ if (!$options_okp || $OPTIONS{"help"})
 
 my $costs = {};
 my $warnings = [];
-
-my %certlib_opts = ( "debugging" => 0,
-		     "clean_certs" => 0,
-		     "print_deps" => 0,
-		     "all_deps" => 1,
-                     "pcert_all" => $OPTIONS{'pcert_all'},
-    );
 
 certlib_set_opts(\%certlib_opts);
 
@@ -234,12 +264,23 @@ foreach my $target (@targets) {
     }
 }
 
+foreach my $from (@user_from_files) {
+    my $path = canonical_path(to_cert_name($from, $OPTIONS{'target_ext'}));
+    if ($path) {
+	$from_files{$path}=1;
+    } else {
+	print "Warning: bad from_file path $from\n";
+    }
+
+}
+
+
 if ($params_file && open (my $params, "<", $params_file)) {
     while (my $pline = <$params>) {
 	my @parts = $pline =~ m/([^:]*):(.*)/;
 	if (@parts) {
 	    my ($certname, $paramstr) = @parts;
-	    my $certpars = cert_get_params($certname, $depdb);
+	    my $certpars = $depdb->cert_get_params($certname);
 	    if ($certpars) {
 		my $passigns = parse_params($paramstr);
 		foreach my $pair (@$passigns) {
@@ -253,9 +294,18 @@ if ($params_file && open (my $params, "<", $params_file)) {
 
 store_cache($cache, $cache_file);
 
+my $start_end_times = {};
+my $begin_time = 0;
+if ($OPTIONS{'build_log'}) {
+    ($begin_time, $start_end_times) = read_build_log($OPTIONS{'build_log'});
+}
+
 my $basecosts;
 if ($OPTIONS{'costs_file'}) {
     $basecosts = retrieve($OPTIONS{'costs_file'});
+} elsif ($OPTIONS{'build_log'}) {
+    $basecosts = {};
+    $basecosts = costs_from_start_end_times($depdb, $begin_time, $start_end_times, $basecosts);
 } else {
     $basecosts = {};
     read_costs($depdb, $basecosts, $warnings, $OPTIONS{'real'});
@@ -272,15 +322,16 @@ if ($OPTIONS{'write_costs'}) {
     nstore($basecosts, $OPTIONS{'write_costs'});
 }
 
+my $updateds = (@user_from_files) ? \%from_files : 1;
+compute_cost_paths($depdb, $basecosts, $costs, $updateds, $warnings);
 
-compute_cost_paths($depdb, $basecosts, $costs, $warnings);
 print "done compute_cost_paths\n" if $debug;
 
 print "costs: " .  $costs . "\n" if $debug;
 
-(my $topbook, my $topbook_cost) = find_most_expensive(\@targets, $costs);
+(my $topbook, my $topbook_cost) = find_most_expensive(\@targets, $costs, $updateds);
 
-my $savings = compute_savings($costs, $basecosts, \@targets, $debug, $depdb); 
+my $savings = compute_savings($costs, $basecosts, \@targets, $updateds, $debug, $depdb);
 
 
 	# ($costs, $warnings) = make_costs_table($target, $depdb, $costs, $warnings, $OPTIONS{"short"});
@@ -292,11 +343,15 @@ unless ($OPTIONS{'nowarn'}) {
 }
 
 unless ($OPTIONS{'nopath'}) {
-    print critical_path_report($costs, $basecosts, $savings, $topbook, $OPTIONS{"html"}, $OPTIONS{"short"});
+    print critical_path_report($costs, $basecosts, $start_end_times, $savings, $topbook, $OPTIONS{"html"}, $OPTIONS{"short"});
 }
 
 unless ($OPTIONS{'nolist'}) {
-    print individual_files_report($costs, $basecosts, $OPTIONS{"html"}, $OPTIONS{"short"});
+    print individual_files_report($costs, $basecosts, $start_end_times, $OPTIONS{"html"}, $OPTIONS{"short"});
+}
+
+unless ($OPTIONS{'nodepthpath'}) {
+    print deepest_path_report($costs, $basecosts, $savings, $topbook, $OPTIONS{"html"}, $OPTIONS{"short"});
 }
 
 
@@ -307,6 +362,11 @@ my ($max_parallel, $max_start_time, $max_end_time, $avg_parallel, $sum_parallel)
 if (! $OPTIONS{"html"}) {
     print "Maximum parallelism: $max_parallel processes, from time $max_start_time to $max_end_time\n";
     print "Average level of parallelism: $avg_parallel.\n";
+    if ($OPTIONS{"build_log"}) {
+	(my $total_lag, my $avg_lag) = @{lagtime_stats($basecosts, $start_end_times)};
+	print("Total lag time: " . human_time($total_lag) . "\n");
+	print("Average lag time: " . human_time($avg_lag) . "\n");
+    }
     print "Total time for all files: " . human_time($sum_parallel,0) . ".\n";
 }
 

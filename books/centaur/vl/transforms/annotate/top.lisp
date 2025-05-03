@@ -30,55 +30,73 @@
 
 (in-package "VL")
 (include-book "argresolve")
-;; not ready yet (include-book "increment-elim")
-(include-book "designwires")
+(include-book "bind")
 (include-book "make-implicit-wires")
-(include-book "origexprs")
+(include-book "type-disambiguation")
+(include-book "enumnames")
 (include-book "portdecl-sign")
-(include-book "resolve-indexing")
+(include-book "port-resolve")
 (include-book "udp-elim")
-(include-book "../clean-warnings")
-(include-book "../cn-hooks")
-(include-book "../../lint/duplicate-detect")
-(include-book "../../lint/portcheck")
+(include-book "basicsanity")
+(include-book "increment-elim")
 (include-book "../../util/cwtime")
+(include-book "../../simpconfig")
 
 (defsection annotate
   :parents (transforms)
-  :short "A first step in most transformation sequences.  Applies several
-basic, preliminary transforms to normalize the original design.")
+  :short "Typically the first step after <see topic='@(url
+loader)'>loading</see> a design.  Applies several basic, preliminary transforms
+to normalize the design and check it for well-formedness."
+
+  :long "<p>The @(see vl-design)s produced by VL's @(see loader) are not yet in
+a very finished or error-checked form.  The function @(see vl-annotate-design)
+transforms such a ``raw'' design into something that is much more reasonable to
+work with.  Typically it should be invoked immediately after loading as the
+first step in any VL-based tool.</p>"
+
+  ;; BOZO it would be nice to explain this better.
+
+  )
 
 (local (xdoc::set-default-parents annotate))
 
 (define vl-annotate-design
   :short "Top level @(see annotate) transform."
-  ((design vl-design-p))
+  ((design vl-design-p)
+   (config vl-simpconfig-p))
   :returns (new-design vl-design-p)
-
-  (b* ((design (xf-cwtime (vl-design-make-implicit-wires design)
-                          :name xf-make-implicit-wires))
-       (design (xf-cwtime (vl-design-portdecl-sign design)
-                          :name xf-portdecl-sign))
-       (design (xf-cwtime (vl-design-udp-elim design)
-                          :name xf-udp-elim))
-       ;;(design (xf-cwtime (vl-design-increment-elim design)
-       ;;                   :name xf-increment-elim))
-       (design (xf-cwtime (vl-design-duplicate-detect design)
-                          :name xf-duplicate-detect))
-       (design (xf-cwtime (vl-design-portcheck design)
-                          :name xf-portcheck))
-       (design (xf-cwtime (vl-design-designwires design)
-                          :name xf-mark-design-wires))
-       (design (xf-cwtime (vl-design-resolve-indexing design)
-                          :name xf-resolve-indexing))
-       (design (xf-cwtime (vl-design-argresolve design)
-                          :name xf-argresolve))
-       (design (xf-cwtime (vl-design-origexprs design)
-                          :name xf-origexprs))
-       (design (xf-cwtime (mp-verror-transform-hook design)
-                          :name xf-mp-verror))
-       (design (xf-cwtime (vl-design-clean-warnings design)
-                          :name xf-clean-warnings)))
-
+  (b* ((design (xf-cwtime (vl-design-resolve-ansi-portdecls design)))
+       (design (xf-cwtime (vl-design-resolve-nonansi-interfaceports design)))
+       (design (xf-cwtime (vl-design-add-enumname-declarations design)))
+       (design (xf-cwtime (vl-design-make-implicit-wires design)))
+       (design (xf-cwtime (vl-design-portdecl-sign design)))
+       (design (xf-cwtime (vl-design-bindelim design)))
+       (design (xf-cwtime (vl-design-udp-elim design)))
+       (design (xf-cwtime (vl-design-basicsanity design)))
+       (design (xf-cwtime (vl-design-increment-elim design)))
+       (design (if (vl-simpconfig->defer-argresolve config)
+                   design
+                 (xf-cwtime (vl-design-argresolve design))))
+       (design (xf-cwtime (vl-design-type-disambiguate design))))
     design))
+
+(define vl-annotate-module ((x vl-module-p)
+                            (design vl-design-p)
+                            (config vl-simpconfig-p))
+  :returns (new-x vl-module-p)
+  (b* ((ss (vl-scopestack-init (vl-design-fix design)))
+       (x (vl-module-resolve-ansi-portdecls x ss))
+       (x (vl-module-resolve-nonansi-interfaceports x ss))
+       (x (vl-module-add-enumname-declarations x))
+       (x (vl-module-make-implicit-wires x ss))
+       (x (vl-module-portdecl-sign x))
+       ;; udp-elim doesn't apply
+       (x (vl-module-basicsanity x))
+       (x (vl-module-increwrite x))
+       (x (vl-module-prohibit-incexprs x))
+       (x (if (vl-simpconfig->defer-argresolve config)
+              x
+            (vl-module-argresolve x ss)))
+       ((mv warnings x) (vl-module-type-disambiguate x ss)))
+    (change-vl-module x :warnings (append-without-guard warnings (vl-module->warnings x)))))
 

@@ -124,6 +124,7 @@ SystemVerilog-2012.</p>")
   :short "Match @('real_number') or @('time_literal')."
 
   ((echars vl-echarlist-p "Characters we're lexing.")
+   (breakp booleanp)
    (st     vl-lexstate-p  "Governs whether @('time_literal')s are valid."))
   :returns (mv token? remainder)
 
@@ -165,13 +166,14 @@ extra possibilities, e.g., @('37.45us') is a time literal whereas @('37.45')
 followed by something else is a real number.</p>"
 
   (b* (;; Match initial unsigned_number part
+       (breakp (and breakp t))
        ((mv ipart ipart-rest) (vl-read-unsigned-number echars))
        ((unless ipart)        (mv nil echars))
 
        ;; Check for 123e+45 -- if so, can only be a real number
        ((mv tail tail-rest)   (vl-read-real-tail ipart-rest))
        ((when tail)
-        (mv (make-vl-realtoken :etext (append ipart tail))
+        (mv (make-vl-realtoken :etext (append ipart tail) :breakp breakp)
             tail-rest))
 
        ((vl-lexstate st) st)
@@ -184,7 +186,8 @@ followed by something else is a real number.</p>"
         (mv (make-vl-timetoken
              :etext    (append ipart units)
              :quantity (vl-echarlist->string ipart)
-             :units    (vl-timeunit-lookup (vl-echarlist->string units)))
+             :units    (vl-timeunit-lookup (vl-echarlist->string units))
+             :breakp   breakp)
             units-rest))
 
        ;; Not simply an integer with an expt/time tail, so now try
@@ -197,7 +200,8 @@ followed by something else is a real number.</p>"
        ;; Check for 123.45e+67 -- if so, can only be a real number
        ((mv tail tail-rest) (vl-read-real-tail fpart-rest))
        ((when tail)
-        (mv (make-vl-realtoken :etext (append ipart dot fpart tail))
+        (mv (make-vl-realtoken :etext (append ipart dot fpart tail)
+                               :breakp breakp)
             tail-rest))
 
        ;; Check for 123.45us -- if so, can only be a time literal
@@ -208,15 +212,17 @@ followed by something else is a real number.</p>"
         (mv (make-vl-timetoken
              :etext    (append ipart dot fpart units)
              :quantity (vl-echarlist->string (append ipart dot fpart))
-             :units    (vl-timeunit-lookup (vl-echarlist->string units)))
+             :units    (vl-timeunit-lookup (vl-echarlist->string units))
+             :breakp   breakp)
             units-rest)))
 
     ;; Else we found 123.45 with no expt/time tail -- it's a valid real number
-    (mv (make-vl-realtoken :etext (append ipart dot fpart))
+    (mv (make-vl-realtoken :etext (append ipart dot fpart)
+                           :breakp breakp)
         fpart-rest))
   ///
   (def-token/remainder-thms vl-lex-time-or-real-number
-    :formals (echars st)))
+    :formals (echars breakp st)))
 
 
 
@@ -486,6 +492,14 @@ z.</p>"
     (equal (len (vl-decimal-digits-to-bitlist x))
            1)))
 
+;; get some extra rules about vl-bitlist-p.  BOZO we should have a way of doing
+;; this without providing the whole form
+(local (fty::deflist vl-bitlist
+         :elt-type vl-bit-p
+         :elementp-of-nil nil
+         :true-listp nil
+         :parents (vl-weirdint-p)))
+
 (define vl-correct-bitlist
   :short "Extend (or truncate) a bit-list to match the size specifier for an
 integer token."
@@ -670,6 +684,7 @@ therefore detect and warn about this very unusual case.</p>"
 (define vl-lex-integer
   :short "Match any @('integral_number')."
   ((echars   vl-echarlist-p)
+   (breakp   booleanp)
    (warnings vl-warninglist-p))
   :returns (mv token?
                remainder
@@ -703,6 +718,7 @@ grammar is:</p>
 
   :verify-guards nil
   (b* ((warnings (vl-warninglist-fix warnings))
+       (breakp   (and breakp t))
 
        ;; We first try to read any numeric portion of echars into NUMBER.
        ;; When there is no number, REMAINDER1 == ECHARS and NUMBER == NIL.
@@ -769,26 +785,30 @@ grammar is:</p>
                                         :signedp t
                                         :value val-fix
                                         :bits nil
-                                        :wasunsized t)))
+                                        :wasunsized t
+                                        :breakp breakp)))
             (mv token remainder1 warnings)))
 
          ;; Otherwise there is a base.  This means that if there is a NUMBER,
          ;; it is the size specifier.
 
-         ((when (and number (equal value-of-number 0)))
-          ;; It's illegal to have a width of zero.  After reading the
-          ;; Verilog-2005 grammar, we believe it is never allowed for two
-          ;; numbers to follow one another when separated only by whitespace.
-          ;; So there is no way to parse this, and we are justified in causing
-          ;; an error rather than returning number as its own inttoken.
+         ;; ((when (and number (equal value-of-number 0)))
+         ;;  ;; It's illegal to have a width of zero.  After reading the
+         ;;  ;; Verilog-2005 grammar, we believe it is never allowed for two
+         ;;  ;; numbers to follow one another when separated only by whitespace.
+         ;;  ;; So there is no way to parse this, and we are justified in causing
+         ;;  ;; an error rather than returning number as its own inttoken.
 
-          ;; BOZO is this still true for the SystemVerilog-2012 grammar?
-          (mv (cw "Lexer error (~s0): found a number whose size is zero.~%"
-                  (vl-location-string (vl-echar->loc firstchar)))
-              echars warnings))
+         ;;  ;; BOZO is this still true for the SystemVerilog-2012 grammar?
+         ;;  (mv (cw "Lexer error (~s0): found a number whose size is zero.~%"
+         ;;          (vl-location-string (vl-echar->loc firstchar)))
+         ;;      echars warnings))
 
-         (unsizedp (not number))
-         (width    (or value-of-number 32))
+         (width-was-0 (eql 0 value-of-number))
+         (unsizedp (or (not number) width-was-0))
+         (width (if unsizedp
+                    32
+                  value-of-number))
 
          ;; The signedness and radix are determined by the base.
          (chars-of-base  (vl-echarlist->chars base))
@@ -829,7 +849,18 @@ grammar is:</p>
                                           :signedp signedp
                                           :value val-fix
                                           :bits nil
-                                          :wasunsized unsizedp))
+                                          :wasunsized unsizedp
+                                          :breakp breakp))
+               (warnings
+                (if width-was-0
+                    (warn :type :vl-0-width-number-literal
+                          :msg "~l0: Number ~s1 has explicit width 0, which ~
+                                is not allowed by the SystemVerilog standard. ~
+                                Implementations usually interpret these as ~
+                                unsized (that is, actually 32 bits wide)."
+                          :args (list (vl-echar->loc firstchar)
+                                      (vl-echarlist->string etext)))
+                  warnings))
                (warnings
                 ;; Truncation warnings.
                 (cond ((not unsizedp)
@@ -844,7 +875,7 @@ grammar is:</p>
                                            (vl-echarlist->string etext)
                                            width
                                            val-fix
-                                           (str::natstr16 val-fix)))))
+                                           (str::nat-to-hex-string val-fix)))))
                       ((< value (expt 2 31))
                        warnings)
                       ((and signedp (< value (expt 2 32)))
@@ -869,7 +900,7 @@ grammar is:</p>
                               :args (list (vl-echar->loc firstchar)
                                           (vl-echarlist->string number)
                                           val-fix
-                                          (str::natstr16 val-fix)))))))
+                                          (str::nat-to-hex-string val-fix)))))))
             (mv token remainder2 warnings)))
 
          ;; Otherwise, we weren't able to interpret the normalized edigits as a
@@ -892,7 +923,7 @@ grammar is:</p>
          ((mv warnings bits)
           (vl-correct-bitlist (vl-echar->loc firstchar)
                               bits
-                              value-of-number
+                              (and (not width-was-0) value-of-number)
                               etext
                               warnings))
          (token (make-vl-inttoken :etext etext
@@ -900,7 +931,8 @@ grammar is:</p>
                                   :signedp signedp
                                   :value value
                                   :bits bits
-                                  :wasunsized unsizedp)))
+                                  :wasunsized unsizedp
+                                  :breakp breakp)))
       (mv token remainder2 warnings))
 
   ///
@@ -913,16 +945,19 @@ grammar is:</p>
   (with-output
    :gag-mode :goals
    (def-token/remainder-thms vl-lex-integer
-     :formals (echars warnings))))
+     :formals (echars breakp warnings))))
+
 
 
 
 (define vl-lex-unbased-unsized-literal
   :short "@('unbased_unsized_literal ::= '0 | '1 | 'z_or_x')."
   :long "<p>Embedded spaces are not allowed.</p>"
-  ((echars vl-echarlist-p))
+  ((echars vl-echarlist-p)
+   (breakp booleanp))
   :returns (mv token? remainder)
-  (b* (((mv prefix val remainder)
+  (b* ((breakp (and breakp t))
+       ((mv prefix val remainder)
         (b* (((mv prefix remainder) (vl-read-literal "'0" echars))
              ((when prefix)         (mv prefix :vl-0val remainder))
              ((mv prefix remainder) (vl-read-literal "'1" echars))
@@ -935,16 +970,18 @@ grammar is:</p>
              ((when prefix)         (mv prefix :vl-zval remainder)))
           (mv nil nil echars)))
        ((when prefix)
-        (mv (make-vl-extinttoken :etext prefix :value val)
+        (mv (make-vl-extinttoken :etext prefix :value val :breakp breakp)
             remainder)))
     (mv nil echars))
   ///
-  (def-token/remainder-thms vl-lex-unbased-unsized-literal))
+  (def-token/remainder-thms vl-lex-unbased-unsized-literal
+    :formals (echars breakp)))
 
 
 (define vl-lex-number
   :short "Match @('number'), @('time_literal'), and @('unbased_unsized_literal')."
   ((echars   vl-echarlist-p)
+   (breakp   booleanp)
    (st       vl-lexstate-p)
    (warnings vl-warninglist-p))
   :returns (mv token?
@@ -957,18 +994,17 @@ grammar is:</p>
        ;; fooled by things like 123.45 or 123us: we don't want to turn just
        ;; "123" into an integer and leave the ".45" or "us" sitting there in
        ;; the remainder.
-       ((mv token remainder) (vl-lex-time-or-real-number echars st))
+       ((mv token remainder) (vl-lex-time-or-real-number echars breakp st))
        ((when token) (mv token remainder warnings))
 
        ;; Ordinary numbers
-       ((mv token remainder warnings) (vl-lex-integer echars warnings))
+       ((mv token remainder warnings) (vl-lex-integer echars breakp warnings))
        ((when token) (mv token remainder warnings))
 
        ((unless (vl-lexstate->extintsp st))
         (mv nil echars warnings))
-       ((mv token remainder) (vl-lex-unbased-unsized-literal echars)))
+       ((mv token remainder) (vl-lex-unbased-unsized-literal echars breakp)))
     (mv token remainder warnings))
   ///
   (def-token/remainder-thms vl-lex-number
-    :formals (echars st warnings)))
-
+    :formals (echars breakp st warnings)))

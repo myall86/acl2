@@ -32,26 +32,31 @@
 (include-book "shape-spec-defs")
 
 (std::defaggregate glcp-config
-  ((abort-unknown booleanp :default t)
+  ((abort-indeterminate booleanp :default t)
    (abort-ctrex booleanp :default t)
    (exec-ctrex booleanp :default t)
+   (ctrex-transform :default '(lambda (x) x))
    (abort-vacuous booleanp :default t)
    (check-vacuous booleanp :default t)
-   (nexamples natp :rule-classes :type-prescription :default 3)
-   (hyp-clk natp :rule-classes :type-prescription :default 1000000)
-   (concl-clk natp :rule-classes :type-prescription :default 1000000)
-   (clause-proc-name symbolp :rule-classes :type-prescription)
+   (n-counterexamples natp :rule-classes (:rewrite :type-prescription) :default 3)
+   (hyp-clk posp :rule-classes (:rewrite :type-prescription) :default 1000000)
+   (concl-clk posp :rule-classes (:rewrite :type-prescription) :default 1000000)
+   (clause-proc symbolp :rule-classes (:rewrite :type-prescription))
    (overrides) ;;  acl2::interp-defs-alistp but might be too expensive to check
      ;;  the guards in clause processors
    (param-bfr :default t)
+   (term-level-counterexample-scheme symbolp :default :depgraph)
    top-level-term
    (shape-spec-alist shape-spec-bindingsp)
-   run-before
-   run-after
+   run-before-cases
+   run-after-cases
    case-split-override
    (split-conses booleanp :default nil)
    (split-fncalls booleanp :default nil)
-   (lift-ifsp booleanp :default nil)
+   (lift-ifsp booleanp :default t)
+   (prof-enabledp booleanp :default nil)
+   (rewrite-rule-table :default nil)
+   (branch-merge-rules :default nil)
    )
   :tag :glcp-config)
 

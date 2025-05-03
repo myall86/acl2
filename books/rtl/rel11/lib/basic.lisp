@@ -1,26 +1,13 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
 ;
 ; Contact:
-;   David Russinoff
+;   David M. Russinoff
 ;   1106 W 9th St., Austin, TX 78703
-;   http://www.russsinoff.com/
+;   david@russinoff.com
+;   http://www.russinoff.com
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
+; See license file books/rtl/rel11/license.txt.
 ;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
-;
-; Author: David M. Russinoff (david@russinoff.com)
 
 (in-package "RTL")
 
@@ -42,7 +29,7 @@
   (floor x 1))
 
 (defthm fl-def
-  (and (integerp (fl x))    
+  (and (integerp (fl x))
        (implies (case-split (rationalp x))
 	        (and (<= (fl x) x)
 		     (< x (1+ (fl x))))))
@@ -94,8 +81,9 @@
 
 (defthm fl+int-rewrite
     (implies (and (integerp n)
-		  (rationalp x))
-	     (equal (fl (+ x n)) (+ (fl x) n))))
+		  (real/rationalp x))
+	     (and (equal (fl (+ x n)) (+ (fl x) n))
+                  (equal (fl (+ n x)) (+ n (fl x))))))
 
 (defthm fl/int-rewrite
   (implies (and (integerp n)
@@ -111,6 +99,20 @@
            (equal (fl (* (/ n) (fl x)))
                   (fl (/ x n)))))
 
+(defthm fl*1/int-rewrite
+  (implies (and (integerp (/ n))
+                (<= 0 n)
+                (real/rationalp x))
+           (equal (fl (* (fl x) n))
+                  (fl (* x n)))))
+
+(defthm fl*1/int-rewrite-alt
+  (implies (and (integerp (/ n))
+                (<= 0 n)
+                (real/rationalp x))
+           (equal (fl (* n (fl x)))
+                  (fl (* x n)))))
+
 (defthm fl-half-int
   (implies (and (integerp n)
                 (not (= n 0))
@@ -118,12 +120,12 @@
            (< (abs (fl (/ n 2))) (abs n)))
   :rule-classes ())
 
-(defthmd fl-minus
+(defthmd minus-fl
   (implies (rationalp x)
-           (equal (fl (* -1 x))
+           (equal (fl (- x))
                   (if (integerp x)
-                      (* -1 x)
-                    (1- (* -1 (fl x)))))))
+                      (- x)
+                    (1- (- (fl x)))))))
 
 (defthm fl-m-n
   (implies (and (< 0 n)
@@ -313,6 +315,11 @@
 	     (= m n))
   :rule-classes ())
 
+(defthmd fl-mod
+  (implies (not (zp m))
+	   (equal (fl (/ (mod a (* m n)) n))
+	          (mod (fl (/ a n)) m))))
+
 (defthm mod-0-0
   (implies (and (integerp p)
                 (rationalp m)
@@ -346,6 +353,13 @@
           (iff (= (mod a n) (mod b n))
                (= a b)))
   :rule-classes ())
+
+(defund congruent (a b n)
+  (declare (xargs :guard (and (real/rationalp a)
+                              (real/rationalp b)
+                              (real/rationalp n)
+                              (not (= n 0)))))
+  (equal (mod a n) (mod b n)))
 
 (defthmd mod-mult
     (implies (and (integerp a)
@@ -413,13 +427,13 @@
 		(mod (* a b) n)))
   :rule-classes ())
 
-(defthm mod-plus-mod
+(defthm mod-plus-mod-iff
     (implies (and (integerp a)
 		  (integerp b)
 		  (integerp c)
-		  (not (zp n))
-		  (= (mod a n) (mod b n)))
-	     (= (mod (+ a c) n) (mod (+ b c) n)))
+		  (not (zp n)))
+             (iff (= (mod a n) (mod b n))
+	          (= (mod (+ a c) n) (mod (+ b c) n))))
   :rule-classes ())
 
 (defthm mod-times-mod
@@ -452,4 +466,121 @@
 (defthm mod-2*m+1-rewrite
   (implies (integerp m)
            (equal (mod (1+ (* 2 m)) 2) 1)))
+
+(defthmd mod-neg
+  (implies (and (posp n) (integerp m))
+	   (equal (mod (- m) n)
+	          (- (1- n) (mod (1- m) n)))))
+)
+
+;;;**********************************************************************
+;;;                         CHOP
+;;;**********************************************************************
+
+(defsection-rtl |Chop| |Basic Arithmetic Functions|
+
+(defund chop (x k)
+  (declare (xargs :guard (and (real/rationalp x)
+                              (integerp k))))
+  (/ (fl (* (expt 2 k) x)) (expt 2 k)))
+
+(defthmd chop-mod
+  (implies (and (rationalp x)
+                (integerp k))
+           (equal (chop x k)
+                  (-  x (mod x (expt 2 (- k)))))))
+
+(defthm chop-down
+  (implies (and (rationalp x)
+                (integerp n))
+           (<= (chop x n) x))
+  :rule-classes ())
+
+(defthm chop-monotone
+  (implies (and (rationalp x)
+                (rationalp y)
+                (integerp n)
+                (<= x y))
+           (<= (chop x n) (chop y n)))
+  :rule-classes ())
+
+(defthmd chop-chop
+  (implies (and (rationalp x)
+                (integerp k)
+                (integerp m)
+                (<= k m))
+           (and (equal (chop (chop x m) k)
+                       (chop x k))
+                (equal (chop (chop x k) m)
+                       (chop x k))
+		(<= (chop x k) (chop x m)))))
+
+(defthmd chop-plus
+  (implies (and (rationalp x)
+	        (rationalp y)
+	        (integerp k))
+           (and (equal (chop (+ x (chop y k)) k)
+		       (+ (chop x k) (chop y k)))
+		(equal (chop (+ (chop x k) (chop y k)) k)
+		       (+ (chop x k) (chop y k)))
+		(equal (chop (- x (chop y k)) k)
+		       (- (chop x k) (chop y k)))
+		(equal (chop (- (chop x k) (chop y k)) k)
+		       (- (chop x k) (chop y k))))))
+
+(defthmd chop-shift
+  (implies (and (rationalp x)
+                (integerp k)
+                (integerp m))
+           (equal (chop (* (expt 2 k) x) m)
+                  (* (expt 2 k) (chop x (+ k m))))))
+
+
+
+(defthm chop-bound
+  (implies (and (rationalp x)
+                (integerp n)
+                (natp m))
+           (iff (<= n x) (<= n (chop x m))))
+  :rule-classes ())
+
+(defthmd chop-small
+  (implies (and (rationalp x)
+                (integerp m)
+                (< x (expt 2 (- m)))
+                (<= (- (expt 2 (- m))) x))
+           (equal (chop x m)
+                  (if (>= x 0)
+                      0
+                    (- (expt 2 (- m)))))))
+
+(defthm chop-0
+  (implies (and (rationalp x)
+                (integerp m)
+                (< (abs (chop x m)) (expt 2 (- m))))
+           (equal (chop x m) 0)))
+
+(defthm chop-int-bounds
+  (implies (and (natp k)
+                (natp n)
+                (rationalp x))
+           (and (<= (chop (fl (/ x (expt 2 n))) (- k))
+                    (/ (chop x (- k)) (expt 2 n)))
+                (<= (/ (+ (chop x (- k)) (expt 2 k))
+                       (expt 2 n))
+                    (+ (chop (fl (/ x (expt 2 n))) (- k))
+                       (expt 2 k)))))
+  :rule-classes ())
+
+(defthmd chop-int-neg
+  (implies (and (natp k)
+                (natp n)
+                (rationalp x)
+                (rationalp y)
+                (= (fl (/ x (expt 2 k)))
+                   (fl (/ y (expt 2 k))))
+                (not (integerp (/ x (expt 2 k)))))
+           (equal (chop (1- (- (fl (/ y (expt 2 n))))) (- k))
+                  (chop (- (/ x (expt 2 n))) (- k)))))
+
 )

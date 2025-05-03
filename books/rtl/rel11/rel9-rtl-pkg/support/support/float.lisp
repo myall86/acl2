@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -61,18 +49,34 @@
 	((< x 1) (cons 1 (fl (/ x))))
 	(t (fl x))))
 
-(defund expo (x)
-  (declare (xargs :guard t
-                  :measure (expo-measure x)))
-  (cond ((or (not (rationalp x)) (equal x 0)) 0)
-	((< x 0) (expo (- x)))
-	((< x 1) (1- (expo (* 2 x))))
-	((< x 2) 0)
-	(t (1+ (expo (/ x 2))))))
+(defnd expo (x)
+  (declare (xargs :measure (expo-measure x)
+                  :verify-guards nil))
+  (mbe
+   :logic
+   (cond ((or (not (rationalp x)) (equal x 0)) 0)
+         ((< x 0) (expo (- x)))
+         ((< x 1) (1- (expo (* 2 x))))
+         ((< x 2) 0)
+         (t (1+ (expo (/ x 2)))))
+   :exec
+   (if (rationalp x)
+       (let* ((n (abs (numerator x)))
+              (d (denominator x))
+              (ln (integer-length n))
+              (ld (integer-length d))
+              (l (- ln ld)))
+         (if (>= ln ld)
+             (if (>= (ash n (- l)) d) l (1- l))
+           (if (> ln 1)
+               (if (> n (ash d l)) l (1- l))
+             (- (integer-length (1- d))))))
+     0)))
 
 ;could redefine to divide by the power of 2 (instead of making it a negative power of 2)...
 (defund sig (x)
-  (declare (xargs :guard t))
+  (declare (xargs :guard t
+                  :verify-guards nil))
   (if (rationalp x)
       (if (< x 0)
           (- (* x (expt 2 (- (expo x)))))
@@ -125,7 +129,7 @@
   (implies (not (rationalp x))
            (equal (expo x) 0)))
 
-;make a vesion whose max term is consistent with split exponents?                
+;make a vesion whose max term is consistent with split exponents?
 (defthm expo-upper-bound
   (implies (rationalp x)
            (< (abs x) (expt 2 (1+ (expo x)))))
@@ -208,7 +212,7 @@
 (defthmd sig-minus
   (equal (sig (* -1 x))
          (sig x))
-  :hints (("Goal" :in-theory (enable sig) 
+  :hints (("Goal" :in-theory (enable sig)
            :cases ((rationalp x)))))
 
 (defthm sig-minus-gen
@@ -277,14 +281,14 @@
   (implies (and (< 0 x)
                 (rationalp x)
                 )
-           (equal (sgn x) 
+           (equal (sgn x)
                   1))
   :rule-classes ())
 
 (defthm sgn-1
   (implies (and (< x 0)
                 (rationalp x))
-           (equal (sgn x) 
+           (equal (sgn x)
                   -1))
   :rule-classes ())
 
@@ -490,7 +494,7 @@
   (implies (and (rationalp x)
                 (not (equal x 0))
                 (integerp n))
-           (equal (expo (* (expt 2 n) x)) 
+           (equal (expo (* (expt 2 n) x))
                   (+ n (expo x))))
   :hints (("Goal" :use (sig-expo-shift))))
 
@@ -498,22 +502,22 @@
   (implies (and (case-split (rationalp x))
                 (case-split (not (equal x 0)))
                 (case-split (integerp n)))
-           (equal (expo (* x (expt 2 n))) 
+           (equal (expo (* x (expt 2 n)))
                   (+ n (expo x))))
-  :hints (("Goal" :in-theory (disable expo-shift) 
+  :hints (("Goal" :in-theory (disable expo-shift)
            :use expo-shift)))
 
 ;(in-theory (disable expo-shift-2)) ; can cause loops if enabled?
 
 (defthm sig-shift
-  (equal (sig (* (expt 2 n) x)) 
+  (equal (sig (* (expt 2 n) x))
          (sig x))
   :hints (("Goal" :in-theory (set-difference-theories (enable sig expt)
                                                       '( expo-shift-2))
            :use (sig-expo-shift))))
 
 (defthm sig-shift-2
-  (equal (sig (* x (expt 2 n))) 
+  (equal (sig (* x (expt 2 n)))
          (sig x))
   :hints (("Goal" :in-theory (disable sig-shift)
            :use (sig-shift))))
@@ -548,7 +552,7 @@
 
 
 (defthm sig-sig
-  (equal (sig (sig x)) 
+  (equal (sig (sig x))
          (sig x))
   :hints (("Goal" :in-theory (enable sig))))
 
@@ -568,7 +572,7 @@
            (<= (+ (expo x) (expo y)) (expo (* x y))))
   :rule-classes :linear
   :hints (("Goal" :in-theory (enable a15)
-           :use ((:instance *-doubly-monotonic 
+           :use ((:instance *-doubly-monotonic
                             (x (expt 2 (expo x)))
                             (y (abs x))
                             (a (expt 2 (expo y)))
@@ -797,7 +801,7 @@
 		  (not (= y 0)))
 	     (integerp (expt 2 (+ (expo x) (expo y) 1 (- (expo (* x y)))))))
   :rule-classes ()
-  :hints (("Goal" 
+  :hints (("Goal"
 		  :use ((:instance expo-prod-upper)))))
 
 (defthm integerp-x-y-z
@@ -817,7 +821,7 @@
   :hints (("Goal" :in-theory (enable exactp2 expt-split)
 		  :use ((:instance exactp-prod-1)
 			(:instance exactp-prod-2)
-			(:instance integerp-x-y-z 
+			(:instance integerp-x-y-z
 				   (x (* x (expt 2 (- (1- m) (expo x)))))
 				   (y (* y (expt 2 (- (1- n) (expo y)))))
 				   (z (expt 2 (+ (expo x) (expo y) 1 (- (expo (* x y)))))))))))
@@ -883,7 +887,7 @@
   :rule-classes ()
   :hints (("Goal" :in-theory (e/d (expt-split exactp2 expt-with-product-exponent) ())
 		  :use ((:instance expo-prod-lower (y x))
-			(:instance integerp-x-y 
+			(:instance integerp-x-y
 				   (x (* (* x x) (expt 2 (- (1- (* 2 n)) (expo (* x x))))))
 				   (y (expt 2 (- (expo (* x x)) (* 2 (expo x))))))
 			(:instance exactp-x2-5 (e (expo x)) (e2 (expo (* x x))))))))
@@ -919,8 +923,8 @@
            (exactp x n))
   :hints (("Goal" :in-theory (enable exactp2 expt-split)
            :use (;(:instance expt-split (r 2) (i (- (1- m) (expo x))) (j (- n m)))
-                 (:instance integerp-x-y 
-                            (x (* x (expt 2 (- (1- m) (expo x))))) 
+                 (:instance integerp-x-y
+                            (x (* x (expt 2 (- (1- m) (expo x)))))
                             (y (expt 2 (- n m))))))))
 
 
@@ -934,8 +938,8 @@
   :rule-classes ()
   :hints (("Goal" :in-theory (enable exactp2 expt-split)
            :use ( ;(:instance expt-split (r 2) (i (- (1- n) (expo x))) (j (- (expo x) e)))
-                 (:instance integerp-x-y 
-                            (x (* x (expt 2 (- (1- n) (expo x))))) 
+                 (:instance integerp-x-y
+                            (x (* x (expt 2 (- (1- n) (expo x)))))
                             (y (expt 2 (- (expo x) e))))))))
 
 (defthm exactp->=-expo
@@ -948,7 +952,7 @@
   :rule-classes ()
   :hints (("Goal" :in-theory (enable exactp2 expt-split)
            :use ((:instance expt-split (r 2) (i (- (1- n) e)) (j (- e (expo x))))
-			(:instance integerp-x-y 
+			(:instance integerp-x-y
 				   (x (* x (expt 2 (- (1- n) e))))
 				   (y (expt 2 (- e (expo x)))))))))
 
@@ -1148,7 +1152,7 @@
   :rule-classes ()
   :hints (("Goal" :in-theory (disable EXPO-COMPARISON-REWRITE-TO-BOUND-2
                                        EXPO-COMPARISON-REWRITE-TO-BOUND)
-		  :use ((:instance expo-diff-min-1)			
+		  :use ((:instance expo-diff-min-1)
 			(:instance expo-monotone)))))
 
 
@@ -1344,7 +1348,7 @@
 		  :use ((:instance xy2-2 (z (* x y y)))
 			(:instance xy2-4)
 			(:instance xy2-5)
-			(:instance abs+3 
+			(:instance abs+3
 				   (x1 (- (* 2 (expo y)) (expo (* y y))))
 				   (x2 (expo (* x y y)))
 				   (x3 (- (+ (expo (* y y)) (expo x)) (expo (* x y y)))))))))
@@ -1601,7 +1605,7 @@
 		 (+ (expo x) (1- n))))
   :rule-classes ()
   :hints (("Goal"
-		  :use (;(:instance expo-2x-upper)		 
+		  :use (;(:instance expo-2x-upper)
 			(:instance expo-monotone (x (+ x y)) (y (* 2 x)))))))
 
 (defthm expo-diff-abs-neg-2
@@ -1850,7 +1854,7 @@
 #|
 bad name
 (defthm only-1-has-integerp-sig
-  (implies (and 
+  (implies (and
             (rationalp x)
             (not (equal x 0))
             (integerp (sig x)))
@@ -1992,7 +1996,7 @@ bad name
   :hints (("Goal" :in-theory (set-difference-theories
                               (enable sig expt-minus)
                               '(expt-inverse))
-                              
+
            :use ())))
 
 (defthm sig-less-than-1-means-x-0

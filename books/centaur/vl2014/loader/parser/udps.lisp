@@ -138,7 +138,8 @@ statement is well-formed.</p>")
   :parents (vl-parse-edge-symbol)
   (case (vl-token->type x)
     (:vl-times t)
-    (:vl-idtoken (consp (member-equal (vl-idtoken->name x) '("r" "R" "f" "F" "p" "P" "n" "N"))))))
+    (:vl-idtoken (consp (member-equal (vl-idtoken->name x) '("r" "R" "f" "F" "p" "P" "n" "N"))))
+    (otherwise nil)))
 
 (define vl-udp-edge-symbol-token->interp ((x vl-token-p))
   :parents (vl-parse-edge-symbol)
@@ -453,7 +454,7 @@ statement is well-formed.</p>")
 
 (defaggregate vl-udp-head
   :tag nil
-  :legiblep nil
+  :layout :fulltree
   :short "Temporary structure for parsing UDPs."
   ((output vl-portdecl-p     "Output port for this UDP.")
    (inputs vl-portdecllist-p "Input ports for this UDP, in order.")
@@ -461,6 +462,8 @@ statement is well-formed.</p>")
 
 (defaggregate vl-udp-body
   :short "Temporary structure for parsing UDPs."
+  :tag nil
+  :layout :fulltree
   ((init  vl-maybe-expr-p "Initial value for the sequential UDP register, if applicable.")
    (table vl-udptable-p   "The parsed state table.")))
 
@@ -978,7 +981,7 @@ their declarations.</p>"
                                :msg "[[ Remaining ]]: ~s0 ~s1.~%"
                                :args (list (vl-tokenlist->string-with-spaces
                                             (take (min 4 (len tokens))
-                                                  (redundant-list-fix tokens)))
+                                                  (list-fix tokens)))
                                            (if (> (len tokens) 4) "..." ""))
                                :fatalp t
                                :fn __function__)))

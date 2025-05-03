@@ -18,10 +18,8 @@
 
 (comp t) ; for other than CCL and SBCL
 
-#+hons
 (memoize 'fib)
 
-#+hons
 (defthm fib-test0
 
 ; SBCL 1.03 has given the following error for fib-test, below, when not
@@ -35,7 +33,6 @@
 
   (equal (integer-length (fib 5000)) 3471))
 
-#+hons
 (defthm fib-test
   (equal (integer-length (fib 10000)) 6942))
 
@@ -55,13 +52,10 @@
       (hons (build-tree (1- n)) (build-tree (1- n)))
     nil))
 
-#+hons
 (memoize 'build-tree)
 
-#+hons
 (memoize 'tree-depth)
 
-#+hons
 (defthm build-tree-test
   (let ((n 1000))
     (equal (tree-depth (build-tree n)) n)))
@@ -329,6 +323,8 @@
 
 (defconst *b1* t
 
+; Matt K. mod: Comment out doc string (disallowed after ACL2 8.3).
+#|
   "The constant *B1*, which has value T, plays at least four roles:
 
      (a) *B1* represents 'true'.
@@ -338,13 +334,17 @@
      (c) *B1* represents 'negative' as an arithmetic sign in a general
          integer.
 
-     (d) *B1* refers to the the CAR side of a CONSP NORMP.")
+     (d) *B1* refers to the the CAR side of a CONSP NORMP."
+|#)
 
 (defconst *b0* nil
 
+; Matt K. mod: Comment out doc string (disallowed after ACL2 8.3).
+#|
   "The constant *B0*, which always has value NIL, represents 'false',
   'bit 0', 'positive as an arithmetic sign', 'CDR side', and, of
-  course, the empty list.")
+  course, the empty list."
+|#)
 
 (defconst *list-b1* (hist *b1*))
 
@@ -501,7 +501,7 @@
 
 (defn q-iff-ite (x y)   ; why call q-not rather than q-ite?
   (if-bbb x y (q-not y)))
-      
+
 (defn q-nand (x y)
   (if (atom x)
       (if x (q-not y) t)
@@ -512,7 +512,7 @@
         (let ((l (q-nand (car x) (car y)))
               (r (q-nand (cdr x) (cdr y))))
           (qcons l r))))))
-      
+
 (defn q-nand-ite (x y)
   (if-bbb x (q-not y) t))
 
@@ -607,7 +607,7 @@
           (q-compose-list (cdr xs) l))))
 
 (defn q-restrict (x n v vars)
-  
+
   ;; Needs to be memoized.  Q-RESTRICT takes an ubdd X, a value N (T
   ;; or NIL), a variable V, which is a member of the list of variables
   ;; VARS with respect to which X is an ubdd.  Q-RESTRICT returns the
@@ -632,7 +632,7 @@
              (q-restrict (cdr x) n v (cdr vars))))))
 
 (defn q-restrict-shrink (x n v vars)
-  
+
   ;; Q-RESTRICT-SHRINK should to be memoized.  Q-RESTRICT-SHRINK takes
   ;; an ubdd X, a value N (t or nil), a variable V, which is a member
   ;; of the list of variables VARS with respect to which X is an ubdd.
@@ -670,12 +670,12 @@
            (eqlable-listp (delete-hql x l))))
 
 (defn q-reorder (x vars nvars)
-  
+
   ;; Needs to be memoized.  VARS and NVARS should be of the same
   ;; length.  X is an ubdd.  Q-REORDER returns the ubdd whose meaning
   ;; with respect to NVARS is equivalent to to the meaning of X with
   ;; respect to VARS.
-  
+
   (declare (xargs :guard (and (eqlable-listp vars)
                               (eqlable-listp nvars))
                   :measure (acl2-count nvars)))
@@ -739,7 +739,7 @@
           (qcons (qcons (qcar (qcar x))
                         (qcar (qcdr x)))
                  (qcons (qcdr (qcar x))
-                        (qcdr (qcdr x))))          
+                        (qcdr (qcdr x))))
         (hons (q-reorder-down-one (car x) var (cdr vars))
               (q-reorder-down-one (cdr x) var (cdr vars)))))))
 
@@ -747,7 +747,7 @@
 #||
 
 (defn find-best-position-helper (bdd var max-var)
-  (loop for 
+  (loop for
 
 (defn find-best-position (bdd var)
   (let ((max-var (max-depth bdd)))
@@ -1133,7 +1133,7 @@
          (if (characterp v2)
              nil
            (if (symbolp v2)
-               (symbol-< v1 v2)
+               (symbol< v1 v2)
              t)))
         (t (if (acl2-numberp v2)
                (if (< (imagpart v1) (imagpart v2))
@@ -1144,7 +1144,7 @@
              nil))))
 
 (in-theory (disable eql-var-lessp))
-           
+
 (defn var-lessp (v1 v2 var-order)
   (declare (xargs :guard (and (eqlablep v1)
                               (eqlablep v2)
@@ -1564,7 +1564,7 @@
 
 (defn and-c2 (x y) (and x (not y)))
 
- 
+
 ; Finds a satisfying assignment for an ubdd.
 
 (defn q-sat (x)
@@ -1639,16 +1639,12 @@
 
 ;; ---------------- end of previous qi.lisp
 
-#+hons
 (memoize 'q-ite :condition '(and (consp x) (or (consp y) (consp z))))
-#+hons
 (memoize 'qnorm1)
-#+hons
 (memoize 'qvar-n)
 
 (defn lfoo (x) (if (atom x) 0 (+ 1 (lfoo (cdr x)))))
 
-#+hons
 (memoize 'lfoo)
 
 (defthm l-thm (equal (lfoo (hons-copy '(a b c))) 3))

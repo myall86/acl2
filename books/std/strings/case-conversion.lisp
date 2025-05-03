@@ -133,7 +133,17 @@ logical definition.</p>"
 
   (defthm string-upcase1-is-upcase-charlist
     (equal (acl2::string-upcase1 x)
-           (upcase-charlist (double-rewrite x)))))
+           (upcase-charlist (double-rewrite x))))
+
+  ;; Mihir M. mod: added a lemma.
+  (defthm
+    not-charlist-has-some-down-alpha-p-of-upcase-charlist
+    (not (charlist-has-some-down-alpha-p
+          (upcase-charlist x)))
+    :hints
+    (("goal"
+      :in-theory (enable charlist-has-some-down-alpha-p
+                         upcase-charlist)))))
 
 
 (define charlist-has-some-up-alpha-p ((x character-listp))
@@ -563,7 +573,7 @@ unchanged when its first character is not a lower-case letter.</p>"
 
 (define downcase-first-charlist ((x character-listp))
   :parents (cases)
-  :short "Convert the first character of a character list to downper case."
+  :short "Convert the first character of a character list to lower case."
   :returns (downcased character-listp)
   (mbe :logic
        (if (atom x)
@@ -601,7 +611,7 @@ unchanged when its first character is not a lower-case letter.</p>"
 
 (define downcase-first
   :parents (cases)
-  :short "Convert the first character of a string to downper case."
+  :short "Convert the first character of a string to lower case."
   ((x :type string))
   :returns (downcased stringp :rule-classes :type-prescription)
 
@@ -630,4 +640,3 @@ unchanged when its first character is not an upper-case letter.</p>"
   ///
   (defcong streqv equal (downcase-first x) 1)
   (defcong istreqv istreqv (downcase-first x) 1))
-

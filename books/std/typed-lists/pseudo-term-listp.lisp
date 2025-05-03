@@ -27,6 +27,7 @@
 ;   DEALINGS IN THE SOFTWARE.
 ;
 ; Original author: Jared Davis <jared@centtech.com>
+; Contributing author: Alessandro Coglio <coglio@kestrel.edu>
 
 (in-package "ACL2")
 (include-book "std/util/deflist" :dir :system)
@@ -54,9 +55,17 @@ std::deflist).</p>"
     (implies (pseudo-term-listp x)
              (pseudo-term-listp (remove-equal a x))))
 
+  (defthm pseudo-term-listp-of-remove1-equal
+    (implies (pseudo-term-listp x)
+             (pseudo-term-listp (remove1-equal a x))))
+
   (defthm pseudo-term-listp-of-make-list-ac
     ;; BOZO probably silly given REPEAT as the normal form...
     (equal (pseudo-term-listp (make-list-ac n x ac))
            (and (pseudo-term-listp ac)
                 (or (pseudo-termp x)
-                    (zp n))))))
+                    (zp n)))))
+
+  (defthm pseudo-term-listp-when-symbol-listp
+    (implies (symbol-listp syms)
+             (pseudo-term-listp syms))))

@@ -1,11 +1,15 @@
-; Copyright (C) 2014, Regents of the University of Texas
+; Copyright (C) 2013, Regents of the University of Texas
 ; License: A 3-clause BSD license.  See the LICENSE file distributed with ACL2.
 
 ; This total order book, put together by Matt Kaufmann, is culled from events
 ; contributed by Pete Manolios and also benefits from contributions by Rob
 ; Sumners.
 
+; Modified 2013-01-15 by Jared Davis to add FAST- functions and correctness
+; proofs, for compatibility with the GPL'd total-order book.
+
 (in-package "ACL2")
+
 (include-book "xdoc/top" :dir :system)
 
 ; Jared added the definitions of fast-lexorder and fast-<< in order to speed up
@@ -22,7 +26,7 @@
 symbols, and strings.  That is, non-integer numbers and characters are probably
 somewhat rare.</p>
 
-<p>ACL2's built-in @(see alphorder) to first checks checks whether the elements
+<p>ACL2's built-in @(see alphorder) first checks whether the elements
 are real or complex numbers, then characters, then finally strings or symbols.
 This order isn't great if the conjecture above is true.  It seems especially
 unfortunate as @(see real/rationalp) and @(see complex/complex-rationalp) seem
@@ -99,7 +103,7 @@ speedup for our expected kinds of data:</p>
                     ;; call and two string compares.  And if it hits,
                     ;; it's a big win.
                     (or (eq x y)
-                        (not (symbol-< y x)))
+                        (not (symbol< y x)))
                   ;; Ugh.  We should just know this is true, but we have
                   ;; to consider these cases because of bad atoms:
                   (not (or (integerp y)
@@ -213,7 +217,7 @@ speedup for our expected kinds of data:</p>
                           ;; call and two string compares.  And if it hits,
                           ;; it's a big win.
                           (or (eq x y)
-                              (not (symbol-< y x)))
+                              (not (symbol< y x)))
                         ;; Ugh.  We should just know this is true, but we have
                         ;; to consider these cases because of bad atoms:
                         (not (or (integerp y)
@@ -314,7 +318,7 @@ is probably faster because:</p>
                      ((symbolp x)
                       (if (symbolp y)
                           (and (not (eq x y))
-                               (symbol-< x y)
+                               (symbol< x y)
                                t)
                         (not (or (integerp y)
                                  (stringp y)
@@ -440,10 +444,3 @@ a Total Order to ACL2</a>.</i> ACL2 Workshop, 2002.</p>
 
 (verify-guards <<
   :hints(("Goal" :in-theory (enable <<))))
-
-
-
-;; This include-book ensures that the definitions above are compatible with
-;; those from total-order-bsd.  DO NOT MOVE IT TO THE TOP OF THE FILE, or the
-;; definitions here will be redundant and hence won't show up in the xdoc.
-(local (include-book "total-order-bsd"))

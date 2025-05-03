@@ -47,11 +47,11 @@
 ; of modules.
 
 
-(defthm take-leading-digits-under-iff
+(defthm take-leading-dec-digit-chars-under-iff
   ;; BOZO consider moving to string library
-  (iff (str::take-leading-digits x)
-       (str::digitp (car x)))
-  :hints(("Goal" :in-theory (enable str::take-leading-digits))))
+  (iff (str::take-leading-dec-digit-chars x)
+       (str::dec-digit-char-p (car x)))
+  :hints(("Goal" :in-theory (enable str::take-leading-dec-digit-chars))))
 
 
 
@@ -96,7 +96,7 @@ assign bcNxtWCBEntSrc_P =
 
 (defaggregate sd-key
   :tag :sd-key
-  :legiblep nil
+  :layout :fulltree
   :short "Keys are derived from wire names and are the basis of our skip
           detection."
 
@@ -153,7 +153,7 @@ wire name, and accumulates them into @('acc')."
                  (key      (make-sd-key :pat x-honsed :index nil :orig x-honsed)))
             (cons key acc)))
          (char (char x n))
-         ((unless (str::digitp char))
+         ((unless (str::dec-digit-char-p char))
           (sd-keygen-aux (+ 1 n) x xl acc))
          ;; Else, we found a number.
          ((mv val len) (str::parse-nat-from-string x 0 0 n xl))
@@ -282,6 +282,7 @@ patterns, producing a @(see sd-patalist-p)."
 
 (defaggregate sd-problem
   :tag :sd-problem
+  :layout :fulltree
   :short "An alleged problem noticed by skip detection."
   ((type symbolp :rule-classes :type-prescription
          "What kind of problem this is.  At the moment the type is always
@@ -477,7 +478,7 @@ of three wires, but it's really suspicious to omit one out of ten.</p>"
          the list of all pattern names that were found in the expression, and
          which we need to investigate.")
    (x sd-patalist-p "The pattern produced for some particular expression.")
-   (y sd-patalist-p "The global @(see sd-patalist-p) that we assume was 
+   (y sd-patalist-p "The global @(see sd-patalist-p) that we assume was
                      produced for the entire module.")
    (ctx vl-context1-p "Where this expression came from."))
   :returns (probs sd-problemlist-p :hyp :fguard)
@@ -715,6 +716,3 @@ names in the module, which is needed by @(see sd-patalist-compare).</li>
       ps
     (vl-ps-seq (sd-pp-problem-long (car x))
                (sd-pp-problemlist-long (cdr x)))))
-
-
-

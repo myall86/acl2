@@ -31,21 +31,18 @@
 (in-package "VL")
 
 ;; This showed up in the critical path, so we try to reduce our dependencies
+(include-book "locations")
 (include-book "ihs/basic-definitions" :dir :system)
-(include-book "centaur/fty/deftypes" :dir :system)
-(include-book "centaur/fty/basetypes" :dir :system)
 (include-book "std/util/defaggregate" :dir :system)
 (include-book "std/util/defprojection" :dir :system)
 (include-book "std/util/defval" :dir :system)
 (include-book "std/util/deflist" :dir :system)
-(include-book "std/strings/cat" :dir :system)
-(include-book "std/strings/decimal" :dir :system)
 (include-book "centaur/nrev/pure" :dir :system)
 (include-book "xdoc/alter" :dir :system)
-(local (include-book "centaur/misc/arith-equivs" :dir :system))
+(local (include-book "std/basic/arith-equivs" :dir :system))
 (local (include-book "arithmetic/top" :dir :system))
 (local (include-book "std/lists/top" :dir :system))
-(local (include-book "misc/assert" :dir :system))
+(local (include-book "std/testing/assert-bang" :dir :system))
 (local (include-book "arithmetic"))
 (local (std::add-default-post-define-hook :fix))
 
@@ -82,67 +79,6 @@ simply have a file name, line number, and column number.  We represent each
 extended character as an @(see vl-echar-p), a structure that associates a
 character with its location.</p>")
 
-
-(defprod vl-location
-  :parents (extended-characters)
-  :short "Representation of a point in a source file."
-  :tag :vl-location
-  :layout :tree
-
-  ((filename stringp :rule-classes :type-prescription)
-   (line     posp    :rule-classes :type-prescription)
-   (col      natp    :rule-classes :type-prescription))
-
-  :long "<p>Each vl-location-p represents some location in a source code file.
-These locations are attached to characters and module items to provide context
-during error reporting.</p>")
-
-(defval *vl-fakeloc*
-  :parents (vl-location)
-  :short "A \"fake\" @(see vl-location-p) which we use when generating our
-own @(see extended-characters) and module items."
-
-  (vl-location "[[[ fake location ]]]" 1 0))
-
-(fty::deflist vl-locationlist :elt-type vl-location)
-
-
-(define vl-location-string ((loc vl-location-p))
-  :parents (vl-location)
-  :short "Convert an @(see vl-location-p) into a string."
-  :long "<p>@(call vl-location-string) is often useful in generating warning
-or error messages.  It converts a @(see vl-location-p) object into a string
-of the form <i>filename:line:col</i>.</p>"
-  :returns (str stringp :rule-classes :type-prescription)
-  (cat (vl-location->filename loc)
-       ":"
-       (natstr (vl-location->line loc))
-       ":"
-       (natstr (vl-location->col loc))))
-
-
-(define vl-location-between-p ((x vl-location-p)
-                               (min vl-location-p)
-                               (max vl-location-p))
-  :parents (vl-location)
-  :short "@(call vl-location-between-p) is true exactly when @('x') is in the
-same file as @('min') and @('max'), and inclusively falls between these
-bounds."
-
-  (b* (((vl-location x) x)
-       ((vl-location low) min) ;; bozo awful symbol problems with min/max
-       ((vl-location high) max))
-
-      (and (equal x.filename low.filename)
-           (equal x.filename high.filename)
-
-           (or (< low.line x.line)
-               (and (eql low.line x.line)
-                    (<= low.col x.col)))
-
-           (or (< x.line high.line)
-               (and (eql x.line high.line)
-                    (<= x.col high.col))))))
 
 (defsection vl-echar-p
   :autodoc nil
@@ -198,10 +134,10 @@ bounds."
         (let* ((line-shift (the (unsigned-byte 60) (ash (the (unsigned-byte 30) line) 30)))
                (col-shift  (the (unsigned-byte 30) (ash (the (unsigned-byte 22) col) 8))))
           (the (unsigned-byte 60)
-            (logior (the (unsigned-byte 60)
-                      (logior (the (unsigned-byte 60) line-shift)
-                              (the (unsigned-byte 30) col-shift)))
-                    (the (unsigned-byte 8) code))))
+               (logior (the (unsigned-byte 60)
+                            (logior (the (unsigned-byte 60) line-shift)
+                                    (the (unsigned-byte 30) col-shift)))
+                       (the (unsigned-byte 8) code))))
       ;; Degenerate case: something too big, just make a cons structure
       (cons (cons line col) code))
     ///
@@ -219,16 +155,16 @@ bounds."
                    :hyp :fguard
                    :rule-classes ((:rewrite)
                                   (:type-prescription :corollary
-                                                      (implies (vl-echarpack-p x)
-                                                               (natp (vl-echarpack->code x))))
+                                   (implies (vl-echarpack-p x)
+                                            (natp (vl-echarpack->code x))))
                                   (:linear :corollary
-                                           (implies (vl-echarpack-p x)
-                                                    (< (vl-echarpack->code x) 256)))))
+                                   (implies (vl-echarpack-p x)
+                                            (< (vl-echarpack->code x) 256)))))
     :inline t
     (if (consp x)
         (the (unsigned-byte 8) (cdr x))
       (the (unsigned-byte 8)
-        (logand (the (unsigned-byte 60) x) #xFF)))
+           (logand (the (unsigned-byte 60) x) #xFF)))
     ///
     (defthm vl-echarpack->code-of-vl-echarpack
       (implies (and (force (unsigned-byte-p 8 code))
@@ -247,7 +183,7 @@ bounds."
     (if (consp x)
         (the (integer 0 *) (caar x))
       (the (unsigned-byte 30)
-        (ash (the (unsigned-byte 60) x) -30)))
+           (ash (the (unsigned-byte 60) x) -30)))
     ///
     (defthm vl-echarpack->line-of-vl-echarpack
       (implies (and (force (unsigned-byte-p 8 code))
@@ -265,9 +201,9 @@ bounds."
     (if (consp x)
         (the (integer 0 *) (cdar x))
       (the (unsigned-byte 60)
-        (logand (the (unsigned-byte 22) (1- (expt 2 22)))
-                (the (unsigned-byte 52)
-                  (ash (the (unsigned-byte 60) x) -8)))))
+           (logand (the (unsigned-byte 22) (1- (expt 2 22)))
+                   (the (unsigned-byte 52)
+                        (ash (the (unsigned-byte 60) x) -8)))))
     ///
     (defthm vl-echarpack->col-of-vl-echarpack
       (implies (and (force (unsigned-byte-p 8 code))
@@ -354,8 +290,8 @@ bounds."
     :short "High-level accessor: get the character from an @(see vl-echar-p)."
     :inline t
     (the character
-      (code-char (the (unsigned-byte 8)
-                   (vl-echarpack->code (vl-echar-raw->pack x)))))
+         (code-char (the (unsigned-byte 8)
+                         (vl-echarpack->code (vl-echar-raw->pack x)))))
     ///
     (deffixequiv vl-echar->char)
     (defthm vl-echar->char-of-vl-echar
@@ -364,15 +300,54 @@ bounds."
       :hints(("Goal" :in-theory (e/d (char-fix)
                                      ((force)))))))
 
+
+
+  (define vl-echarpack->linecol ((x vl-echarpack-p))
+    :verify-guards nil
+    :inline t
+    :enabled t
+    (mbe :logic (make-vl-linecol :line (vl-echarpack->line x)
+                                 :col  (vl-echarpack->col x))
+         :exec
+         (if (consp x)
+             ;; Unlikely case that the thing is somehow too big, eh, whatever.
+             (make-vl-linecol :line (vl-echarpack->line x)
+                              :col  (vl-echarpack->col x))
+           (the (unsigned-byte 52)
+                (ash (the (unsigned-byte 60) x) -8))))
+    ///
+    (local (defthm xx1
+             (implies (and (< x (expt 2 60))
+                           (natp x))
+                      (< (acl2::logtail 30 x) (expt 2 30)))
+             :rule-classes :linear
+             :hints(("Goal"
+                     :in-theory (disable bitops::unsigned-byte-p-of-logtail)
+                     :use ((:instance bitops::unsigned-byte-p-of-logtail
+                            (acl2::size 30)
+                            (acl2::size1 30)
+                            (acl2::i x)))))))
+    (verify-guards vl-echarpack->linecol$inline
+      :hints(("Goal" :in-theory (enable vl-echarpack-p
+                                        vl-linecol
+                                        vl-echarpack->line
+                                        vl-echarpack->col))
+             (acl2::equal-by-logbitp-hammer))))
+
   (define vl-echar->loc ((x vl-echar-p))
     :returns (loc vl-location-p)
     :parents (vl-echar-p)
     :short "High-level accessor: get the location from an @(see vl-echar-p)."
     :long "<p>Note that this has to construct a @(see vl-location-p) object.</p>"
     (b* (((vl-echar-raw x) x))
-      (make-vl-location :filename x.filename
-                        :line (vl-echarpack->line x.pack)
-                        :col  (vl-echarpack->col x.pack)))
+      (mbe :logic
+           (make-vl-location :filename x.filename
+                             :line (vl-echarpack->line x.pack)
+                             :col  (vl-echarpack->col x.pack))
+           :exec
+           (cons (vl-echarpack->linecol x.pack)
+                 (hons :vl-location x.filename))))
+    :guard-hints(("Goal" :in-theory (enable vl-location)))
     ///
     (deffixequiv vl-echar->loc)
     (defthm vl-echar->loc-of-vl-echar
@@ -384,10 +359,8 @@ bounds."
    (let ((name 'vl-echar)
          (fields '(char loc)))
      `(progn
-        ,(std::da-make-maker-fn name fields nil)
-        ,(std::da-make-maker name fields)
-        ,(std::da-make-changer-fn name fields)
-        ,(std::da-make-changer name fields)
+        ,(std::da-make-maker name fields nil)
+        ,(std::da-make-changer name fields nil)
         ,(std::da-make-binder name fields))))
 
   ;; Rudimentary testing of defaggregate stuff
@@ -408,7 +381,7 @@ bounds."
 (xdoc::delete-topic vl-echar-p)
 
 (defxdoc vl-echar-p
-  :parents (extended-characters)
+  :parents (extended-characters vl-echar-raw)
   :short "Representation of a single extended character."
   :long "<p>Historically, a @('vl-echar-p') was an ordinary aggregate with a
 character and a location.  This was nice and simple, but required a lot of
@@ -475,7 +448,7 @@ the interface for constructing echars can be kept simple and bounds-free.</p>
 
 (fty::deflist vl-echarlist :elt-type vl-echar-p
   :elementp-of-nil nil
-  :true-listp nil)
+  :true-listp t)
 
 (defprojection vl-echarlist->chars ((x vl-echarlist-p))
   :returns (chars character-listp)
@@ -492,7 +465,7 @@ the interface for constructing echars can be kept simple and bounds-free.</p>
   ;;   (implies (force (<= (nfix n) (len x)))
   ;;            (equal (vl-echarlist->chars (take n x))
   ;;                   (take n (vl-echarlist->chars x))))
-  ;;   :hints(("Goal" :in-theory (enable acl2::take-redefinition))))
+  ;;   :hints(("Goal" :in-theory (enable acl2::take))))
   )
 
 
@@ -597,8 +570,10 @@ handling more sensible.</p>"
             (col  (if (eql x1 #\Newline) 0 (+ 1 col))))
          (cons echar
                (vl-echarlist-from-chars-fn (cdr x) filename line col)))
-       :exec (with-local-nrev
-              (vl-echarlist-from-chars-aux x filename line col nrev)))
+       :exec (if (atom x)
+                 nil
+               (with-local-nrev
+                 (vl-echarlist-from-chars-aux x filename line col nrev))))
   ///
   (defthm true-listp-of-vl-echarlist-from-chars-fn
     (true-listp (vl-echarlist-from-chars-fn x filename line col))

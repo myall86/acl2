@@ -13,6 +13,8 @@
 ; independently.  Our approach seems considerably simpler than Greve's
 ; development, but for example, his utility handles reflexive functions --
 ; recursive calls like (mc91 (mc91 (+ n 11))) -- while ours probably does not.
+; Another potentially related utility may be found in
+; books/workshops/2004/matthews-vroon/.
 
 ; Examples are towards the end of this file.
 
@@ -22,7 +24,12 @@
 ;;; define functions like fact-test (below).  We might also consider automating
 ;;; the production of additional stuff, as described in comments below.
 
-; (depends-on "arithmetic-top-theory.cert")
+#||
+;; [Jared] this was previously a depends-on arithmetic-top-theory.cert line.
+;; However that didn't seem to work right; see Issue 383 for details.  As a
+;; workaround, replacing it with this phony include-book.
+(include-book "arithmetic-top-theory")
+||#
 
 (in-package "ACL2")
 
@@ -134,8 +141,8 @@
  })
 
  <p>With the events above (not necessarily including the definition of
- @('fact'), we can prove that @('fact') terminates on natural number inputs.  A
- second macro, @('defthm-domain'), automates much of that task:</p>
+ @('fact')), we can prove that @('fact') terminates on natural number inputs.
+ A second macro, @('defthm-domain'), automates much of that task:</p>
 
  @({
  (defthm-domain fact-terminates-holds-on-natp
@@ -256,10 +263,9 @@
 
  <p>The implementation of @('defpm') (i.e., @('def-partial-measure') has been
  designed to make proofs efficient.  It should be completely unnecessary to
- know anything about the implementation in order to use @('defpm')
- effectively.  If however you are interested, you can execute @(':')@(tsee
- trans1) on your @('defpm') call to see what the @(see events) it
- generates.</p>
+ know anything about the implementation in order to use @('defpm') effectively.
+ If however you are interested, you can execute @(':')@(tsee trans1) on your
+ @('defpm') call to see the @(see events) that it generates.</p>
 
  <h3>More Information</h3>
 
@@ -267,15 +273,15 @@
  and @('defthm-domain') to define ``partial'' functions.  Search for calls of
  @('my-test') in that book to see examples.</p>
 
- <p>Related work of Dave Greve, in particular his utility @('def::un'), may be
- found in community books directory @('books/coi/termination/assuming/').  Our
- utilities @('def-partial-measure') and @(tsee defthm-domain) were developed
+ <p>Related work of Dave Greve, in particular his utility @('def::ung'), may be
+ found in community books directory @('books/coi/defung/').  Our utilities
+ @('def-partial-measure') and @(tsee defthm-domain) were developed
  independently using an approach that seems considerably simpler than Greve's
- development; but for example, his utility handles reflexive functions &mdash;
- definitions with recursive calls like @('(mc91 (mc91 (+ n 11)))') &mdash;
- while ours were not designed to do so.</p>")
-
-(defpointer defpm def-partial-measure)
+ development.  However, his utility is much more powerful in that it generates
+ a termination test, rather than requiring the user to provide it, and also it
+ handles reflexive functions &mdash; definitions with recursive calls like
+ @('(mc91 (mc91 (+ n 11)))') &mdash; while ours were not designed to do
+ so.</p>")
 
 (defxdoc defthm-domain
   :parents (macro-libraries)

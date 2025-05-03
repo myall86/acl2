@@ -30,14 +30,23 @@
 
 (in-package "STD")
 (include-book "../define")
-(include-book "misc/assert" :dir :system)
+(include-book "utils")
+(include-book "std/testing/assert-bang" :dir :system)
+(include-book "std/testing/must-fail" :dir :system)
 
 (define foo ()
   :returns (ans integerp)
   3)
 
+(assert-disabled foo)
+(assert-guard-verified foo)
+
 (define foo2 ()
+  :enabled t
   (mv 3 "hi"))
+
+(assert-enabled foo2)
+(assert-guard-verified foo2)
 
 (define foo3 ()
   (mv 3 "hi"))
@@ -53,6 +62,8 @@
   :returns (ans integerp :hyp :guard)
   (- x 1))
 
+(assert-guard-verified foo5)
+
 (define foo6 ((x oddp :type (integer 0 *)))
   :returns (ans natp :hyp :guard)
   (- x 1))
@@ -61,6 +72,8 @@
   :parents (|look ma, parents before formals, even!|)
   (x)
   (consp x))
+
+(assert-guard-verified foo7)
 
 (encapsulate
   ()
@@ -81,7 +94,8 @@
   (program)
   (define foo10 ((x natp))
     (declare (xargs :mode :logic))
-    (+ 2 x)))
+    (+ 2 x))
+  (assert-guard-verified foo10))
 
 (encapsulate
   ()
@@ -140,6 +154,8 @@
 
 (define m0 (x)
   (consp x))
+
+(assert-guard-verified m0)
 
 (assert! (let ((topic (xdoc::find-topic 'm0 (xdoc::get-xdoc-table (w state)))))
            (not topic)))
@@ -215,6 +231,8 @@
   (defthm frags-of-cons
     (equal (frags (cons a x)) (+ 1 (frags x)))))
 
+(assert-guard-verified frags)
+
 
 
 ;; tests of evaluation of short/long strings
@@ -240,10 +258,13 @@
                    (b natp))
   :returns (mv (sum natp :rule-classes :type-prescription)
                (prod natp :rule-classes :type-prescription))
+  :ret-patbinder t
   (b* ((a (nfix a))
        (b (nfix b)))
     (mv (+ a b)
         (* a b))))
+
+(assert-guard-verified mathstuff)
 
 ;; (def-b*-binder mathstuff-ret
 ;;   :decls
@@ -260,11 +281,42 @@
   (b* ((a (nfix a))
        (b (nfix b))
        ((ret stuff) (mathstuff a b)))
-    (list :sum stuff.sum 
+    (list :sum stuff.sum
           :prod stuff.prod))
   ///
   (assert! (equal (do-math-stuff 1 2) (list :sum 3 :prod 2))))
-  
+
+(make-define-config :ret-patbinder t)
+
+(define mathstuff2 ((a natp)
+                    (b natp))
+  :returns (mv (sum natp :rule-classes :type-prescription)
+               (prod natp :rule-classes :type-prescription))
+  (b* ((a (nfix a))
+       (b (nfix b)))
+    (mv (+ a b)
+        (* a b))))
+
+;; (def-b*-binder mathstuff-ret
+;;   :decls
+;;   ((declare (xargs :guard (and (eql (len forms) 1)
+;;                                (consp (car forms))
+;;                                (symbolp (caar forms))))))
+;;   :body
+;;   (patbind-ret-fn '((sum . nil) (prod . nil))
+;;                   '(a b)
+;;                   args forms rest-expr))
+
+(define do-math-stuff2 ((a natp)
+                       (b natp))
+  (b* ((a (nfix a))
+       (b (nfix b))
+       ((ret stuff) (mathstuff2 a b)))
+    (list :sum stuff.sum
+          :prod stuff.prod))
+  ///
+  (assert! (equal (do-math-stuff2 1 2) (list :sum 3 :prod 2))))
+
 
 
 (defstobj foost (foo-x))
@@ -510,6 +562,7 @@
           :name integer-listp-strip-cars-my-make-alist-and-len)
    (alist true-listp :rule-classes :type-prescription)))
 
+(remove-default-post-define-hook :silly)
 
 
 (define inline-test (x)
@@ -528,5 +581,102 @@
 
 
 
+;; Alessandro Coglio reported a bug to do with giving hints when using :t-proof.
+;; The following is a modified version of his example.  Previously, ac-g2 failed
+;; basically because it ended up generating multiple hints xargs:
+;;
+;;      (DEFUND AC-G2 (X)
+;;        (DECLARE (XARGS :HINTS (("Goal" :IN-THEORY (ENABLE AC-F)))))
+;;        (DECLARE (XARGS :HINTS ('(:BY ACL2::AC-G2-T))
+;;                                 :VERIFY-GUARDS NIL))
+;;         ...
+;;
+;; Now we work harder to try to sensibly extract :hints from the xargs and the
+;; top-level keywords for use in the t-proof.
 
+(defund ac-f (x) (- x 1))
 
+; Matt K.: Avoid ACL2(p) error in ac-g1 below pertaining to override hints.
+(local (set-waterfall-parallelism nil))
+
+(define ac-g1 (x)
+  :verify-guards nil
+  :t-proof t
+  :hints (("Goal" :in-theory (enable ac-f)))
+  (if (zp x)
+      nil
+    (ac-g1 (ac-f x))))
+
+(assert-guard-unverified ac-g1)
+
+(define ac-g2 (x)
+  :verify-guards nil
+  :t-proof t
+  :verbosep t
+  (declare (xargs :hints (("Goal" :in-theory (enable ac-f)))))
+  (if (zp x)
+      nil
+    (ac-g2 (ac-f x))))
+
+(assert-guard-unverified ac-g2)
+
+(define another-guard-test-1 (x)
+  (declare (type integer x))
+  x)
+
+(define another-guard-test-2 ((x integerp))
+  x)
+
+(define another-guard-test-3 ((x :type integer))
+  x)
+
+(define another-guard-test-4 (x)
+  (declare (xargs :guard (integerp x)))
+  x)
+
+(define another-guard-test-5 (x state)
+  (declare (xargs :stobjs state))
+  (declare (ignorable state))
+  x)
+
+(define another-guard-test-6 (x state)
+  (declare (ignorable state))
+  x)
+
+;; Should be able to :PE these functions and see that no (declare (xargs :guard
+;; t)) are added except for 5/6 (stobjs aren't good enough to trigger guard
+;; verif.)
+(assert-guard-verified another-guard-test-1)
+(assert-guard-verified another-guard-test-2)
+(assert-guard-verified another-guard-test-3)
+(assert-guard-verified another-guard-test-4)
+(assert-guard-verified another-guard-test-5)
+(assert-guard-verified another-guard-test-6)
+
+;; [Shilpi] Added some basic config and :after-returns related tests below.
+
+(make-define-config
+ :inline t
+ :no-function t)
+
+(define inline-and-no-function ((x natp))
+  :returns (new-x natp :hyp :guard)
+  (+ x 54))
+
+(define not-inline-and-no-function ((x natp))
+  ;; config object's :inline directive overridden.
+  :inline nil
+  :returns (new-x natp :hyp :guard)
+  (+ x 54))
+
+(make-define-config :inline t :no-function nil
+                    :ruler-extenders (cons)
+                    :verify-guards :after-returns)
+
+(define guards-after-ret ((x natp))
+  :returns (ret natp :hyp :guard)
+  (+ x 54)
+  ///
+  (defret natp-of-qux-alt
+    (implies (and (integerp x) (<= -54 x))
+             (natp ret))))

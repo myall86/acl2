@@ -36,9 +36,13 @@
 (include-book "typed-lists/top")
 (include-book "io/top")
 (include-book "strings/top")
-(include-book "misc/top")
+(include-book "stobjs/top")
+(include-book "obags/top")
 (include-book "osets/top")
 (include-book "util/top")
+(include-book "typed-alists/top")
+(include-book "testing/top")
+(include-book "system/top")
 
 (defsection std
   :parents (top)
@@ -56,11 +60,11 @@ but please be aware that things may change out from under you.</p>
    <see topic='@(url std/lists)'>lists</see>,
    <see topic='@(url std/osets)'>sets</see>,
    <see topic='@(url std/alists)'>alists</see>,
-   <see topic='@(url std/typed-lists)'>typed-lists</see>, and
+   <see topic='@(url std/typed-lists)'>typed-lists</see>,
+   <see topic='@(url acl2::std/stobjs)'>stobjs</see>,
    <see topic='@(url std/io)'>input/output</see>.
 Each of these libraries provides many lemmas for reasoning about built-in
 ACL2 functions, and also many additional functions.  There is also a very
 convenient @(see std/util) macro library, with macros that automate many
-otherwise-tedious tasks.</p>")
-
-
+otherwise-tedious tasks.  There is also a @(see std/testing) library with
+utilities to create tests.</p>")

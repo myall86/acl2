@@ -7,11 +7,12 @@
 (in-package "DEFDATA")
 (set-verify-guards-eagerness 2)
 (include-book "std/util/bstar" :dir :system)
+(include-book "acl2s/utilities" :dir :system)
 (local (include-book "arithmetic-3/floor-mod/floor-mod" :dir :system))
 ;(local (include-book "arithmetic-5/top" :dir :system))
 
-(defconst *M31* 2147483647);1 less than 2^31
-(defconst *P1* 16807)
+(def-const *M31* 2147483647);1 less than 2^31
+(def-const *P1* 16807)
 
 (make-event
  (er-progn
@@ -63,7 +64,7 @@ current random seed is seed. and also returns the new seed."
                        
                   (b* (((the (unsigned-byte 31) seed.) (mod (* *P1* seed.) *M31*)))
                     (mv (the (unsigned-byte 31) (mod seed. max)) seed.))
-                (mv 0 seed.))
+                (mv 0 1382728371))
        :exec (b* (((the (unsigned-byte 31) seed.) (mod (* *P1* seed.) *M31*)))
                (mv (the (unsigned-byte 31) (mod seed. max)) (the (unsigned-byte 31) seed.)))))
 
@@ -120,10 +121,13 @@ current random seed is seed. and also returns the new seed."
            (unsigned-byte-p 31 (car (genrandom-seed max seed))))
    :rule-classes (:type-prescription))
 
-;; (defthm genrandom-ub31-2
-;;   (implies (and (natp seed))
-;;            (unsigned-byte-p 31 (mv-nth 1 (genrandom-seed max seed))))
-;;    :rule-classes :tau-system)
+
+(defthm genrandom-ub31-2
+  (implies (and (<= 1 max)
+                (unsigned-byte-p 31 max)
+                (natp seed))
+           (unsigned-byte-p 31 (mv-nth 1 (genrandom-seed max seed))))
+  :rule-classes :type-prescription)
  
 (defthm genrandom-minimum1
    (implies (and (posp max) (natp seed))

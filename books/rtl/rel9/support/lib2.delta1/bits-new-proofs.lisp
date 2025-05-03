@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -29,7 +17,7 @@
 (local (include-book "../../arithmetic/top"))
 
 
-(local 
+(local
   (defthmd bits_alt-mbe-lemma-subgoal-2
     (IMPLIES (AND (INTEGERP J)
                   (INTEGERP I)
@@ -40,13 +28,13 @@
                     0))))
 
 
-(encapsulate () 
+(encapsulate ()
              ;; a proof for logone-ones-g
-             
-             (local (encapsulate () 
-             
+
+             (local (encapsulate ()
+
                                  (encapsulate ()
-                                              (local (include-book "../support/log"))  
+                                              (local (include-book "../support/log"))
                                               (defthm bitn-logand
                                                 (implies (and (integerp x) ; (>= x 0)
                                                               (integerp y) ; (>= y 0)
@@ -57,23 +45,23 @@
 
 
                                               )
-   
+
 
 
 
                                  (encapsulate ()
-                                              (local (include-book "../support/merge"))  
+                                              (local (include-book "../support/merge"))
 
                                               (defthmd logand-1-x
                                                 (implies (bvecp x 1)
                                                          (equal (logand 1 x) x)))
 
                                               )
-   
 
 
 
-                                 (encapsulate () 
+
+                                 (encapsulate ()
                                               (local (include-book "../support/logand"))
 
                                               (defthm logand-bnd
@@ -86,7 +74,7 @@
                                               (defthm logand-commutative
                                                 (equal (logand j i)
                                                        (logand i j)))
-             
+
 
                                               (defthm logand-non-negative
                                                 (implies (or (<= 0 x)
@@ -136,7 +124,7 @@
                                                                 (<= 0 badguy)
                                                                 (< badguy k)))))
                                               )
-             
+
 
                                  (encapsulate ()
                                               (local (include-book "../lib2/bits"))
@@ -156,7 +144,7 @@
                                                  (> n 0)
                                                  (integerp k))
                                             (equal (bitn (+ -1 (expt 2 n)) k) 1))
-                                   :hints (("Goal" :in-theory (e/d (bitn bits 
+                                   :hints (("Goal" :in-theory (e/d (bitn bits
                                                                          expt-2-reduce-leading-constant)
                                                                    (bits-n-n-rewrite)))))
 
@@ -190,7 +178,7 @@
                                                          (sumbits-badguy (logand x (+ -1 (expt 2 n)))
                                                                          (mod x (expt 2 n))
                                                                          k))
-                                                   (bitn (mod x (expt 2 n)) 
+                                                   (bitn (mod x (expt 2 n))
                                                          (sumbits-badguy (logand x (+ -1 (expt 2 n)))
                                                                          (mod x (expt 2 n)) k))))
                                    :hints (("Goal" :in-theory (e/d (logand-ones-g-lemma-1)
@@ -202,11 +190,11 @@
                                    (implies (and (integerp x)
                                                  (natp n))
                                             (bvecp (logand x (+ -1 (expt 2 n))) n))
-                                   :hints (("Goal" 
+                                   :hints (("Goal"
                                             :cases ((equal (logand x (+ -1 (expt 2 n)))
                                                            (logand (+ -1 (expt 2 n)) x))))
-                                           ("Subgoal 1" 
-                                            :in-theory (e/d (bvecp) 
+                                           ("Subgoal 1"
+                                            :in-theory (e/d (bvecp)
                                                             (logand-bnd
                                                              logand-commutative
                                                              logand-non-negative))
@@ -243,14 +231,14 @@
                                                       (y (mod i (expt 2 n)))
                                                       (k n))))
                        ("Subgoal 1.1" :in-theory (enable acl2::binary-logand))))
-                            
+
 
              )
 
 
 
 
-(local 
+(local
  (defthmd bits_alt-mbe-lemma-subgoal-1-lemma-1
    (IMPLIES (AND (INTEGERP J)
                  (INTEGERP I)
@@ -261,13 +249,13 @@
                    (mod (FL (* X (EXPT 2 (* -1 J))))
                         (EXPT 2 (+ 1 I (* -1 J))))))
    :hints (("Goal" :in-theory (e/d (mod
-                                    expt-minus) 
+                                    expt-minus)
                                    ())))))
 
 
 
 
-(local 
+(local
  (defthmd bits_alt-mbe-lemma-subgoal-1-lemma-2
    (IMPLIES (AND (INTEGERP J)
                  (INTEGERP I)
@@ -283,7 +271,7 @@
 
 
 
-(local 
+(local
  (defthmd bits_alt-mbe-lemma-subgoal-1
    (IMPLIES (AND (INTEGERP J)
                  (INTEGERP I)
@@ -344,7 +332,7 @@
     :hints (("Goal" :in-theory (e/d (bits_alt-is-bits)
                                     ())
              :use ((:instance bits-bvecp)))))
-                    
+
 
 ;;Here is a variation of bits_alt-bvecp that is less general but does not
 ;;require an integerp hypothesis:
@@ -356,7 +344,7 @@
              :use ((:instance bits-bvecp-simple)))))
 
 (defthm mod-bits_alt-equal
-  (implies (= (mod x (expt 2 (1+ i))) 
+  (implies (= (mod x (expt 2 (1+ i)))
 	      (mod y (expt 2 (1+ i))))
 	   (= (bits_alt x i j) (bits_alt y i j)))
   :rule-classes ()
@@ -384,7 +372,7 @@
   :hints (("Goal" :in-theory (e/d (bits_alt-is-bits)
                                   ())
            :use ((:instance bits-mod)))))
-  
+
 
 (defthmd bits_alt-bits_alt-sum
   (implies (and (integerp x)
@@ -420,7 +408,7 @@
            :use ((:instance bits-neg)))))
 
 ;;;
-;;; may want to write an macro that does this proof step!!! 
+;;; may want to write an macro that does this proof step!!!
 ;;;
 
 (defthm bits_alt-with-indices-in-the-wrong-order
@@ -449,16 +437,16 @@
 ;;;;;;
 
 
-(local 
+(local
  (defthmd fl-small-neg
    (implies (and (real/rationalp x)
                  (<= -1 x)
                  (< x 0))
-            (equal (fl x) 
+            (equal (fl x)
                    -1))
    :hints (("Goal" :in-theory (e/d (fl floor)
                                    (floor-fl))))))
-            
+
 (defthmd neg-bits_alt-1
   (implies (and (integerp x)
                 (natp i)
@@ -466,7 +454,7 @@
                 (< x 0)
                 (>= x (- (expt 2 j)))
                 (>= i j))
-           (equal (bits_alt x i j) 
+           (equal (bits_alt x i j)
                   (+ -1 (expt 2 (+ 1 i (* -1 j))))))
   :hints (("Goal" :in-theory (e/d (bits_alt-is-bits
                                    fl-small-neg)
@@ -483,7 +471,7 @@
   (implies (and (natp i)
                 (natp j)
                 (>= i j))
-           (equal (bits_alt -1 i j) 
+           (equal (bits_alt -1 i j)
                   (+ -1  (expt 2 (+ 1 i (* -1 j))))))
   :hints (("Goal" :in-theory (e/d (bits_alt-is-bits fl-small-neg)
                                   ())
@@ -502,10 +490,10 @@
   :hints (("Goal" :in-theory (e/d (bits_alt-is-bits)
                                   ())
            :use ((:instance bits-tail)))))
-   
+
 
 ;;;;
-;;;; 
+;;;;
 
 ;; (i-am-here) ;; Mon Feb 23 16:31:22 2009
 
@@ -524,7 +512,7 @@
                                     fl-small-neg
                                     mod)
                                    ()))
-           ("Subgoal 2" 
+           ("Subgoal 2"
             :cases ((<= -1 (* x (/ (expt 2 (+ 1 i)))))))
            ("Subgoal 2.2" :in-theory (e/d (expt-2-reduce-leading-constant) ()))
            ("Subgoal 1" :in-theory (e/d (expt-2-reduce-leading-constant) ()))))
@@ -540,7 +528,7 @@
   :hints (("Goal" :in-theory (e/d (bits_alt-is-bits)
                                   ())
            :use ((:instance bits-drop-from-minus)))))
-  
+
 
 (defthmd bits_alt-shift-down-1
   (implies (and (<= 0 j)
@@ -635,7 +623,7 @@
   :hints (("Goal" :in-theory (e/d (bits_alt-is-bits)
                                   ())
            :use ((:instance bits-plus-bits)))))
-  
+
 
 (defthm bits_alt-bits_alt
   (implies (and (case-split (<= 0 l))
@@ -651,7 +639,7 @@
                                   ())
            :use ((:instance bits-bits)))))
 
-  
+
 
 ;;bits_alt-match can prove things like this:
 ;;(thm (implies (equal 12 (bits_alt x 15 6))
@@ -681,7 +669,7 @@
 ;;		(not (equal 4 (bits_alt x 15 6)))))
 ;;See also bits_alt-match.
 
-(defthmd bits_alt-dont-match 
+(defthmd bits_alt-dont-match
   (implies (and (syntaxp (and (quotep i)
 			      (quotep j)
 			      (quotep k)))
@@ -707,20 +695,20 @@
 ;;;				BITN_ALT
 ;;;**********************************************************************
 
-(local 
+(local
  (defthmd evenp-sum
    (implies (and (evenp x)
                  (evenp y))
             (evenp (- x y)))
    :hints (("Goal" :in-theory (e/d (evenp) ())))))
 
-(local 
+(local
  (defthmd evenp-2-factor
    (implies (integerp x)
             (evenp (* 2 x)))
    :hints (("Goal" :in-theory (e/d (evenp) ())))))
 
-(local 
+(local
  (defthmd bitn_alt-mbe-subgoal-2-lemma
    (IMPLIES (AND (INTEGERP N)
                  (INTEGERP X)
@@ -753,7 +741,7 @@
 
 
 
-(local 
+(local
  (defthmd not-evenp-sum
    (implies (and (not (evenp x))
                  (evenp y))
@@ -761,7 +749,7 @@
    :hints (("Goal" :in-theory (e/d (evenp) ())))))
 
 
-(local 
+(local
  (defthmd bitn_alt-mbe-subgoal-1-lemma
    (IMPLIES (AND (INTEGERP N)
                  (INTEGERP X)
@@ -810,7 +798,7 @@
                                    bitn_alt
                                    bits_alt)
                                   ()))))
-   
+
 
 
 (defthm bitn_alt-nonnegative-integer
@@ -994,12 +982,12 @@
     (+ (* (expt 2 (1- n)) (bitn_alt x (1- n)))
        (sumbits_alt x (1- n)))))
 
-(local 
+(local
  (defthmd sumbits_alt-is-sumbits
    (equal (sumbits_alt x n)
           (sumbits x n))
    :hints (("Goal" :in-theory (e/d (bitn_alt-is-bitn) ())))))
- 
+
 
 (defthmd sumbits_alt-bits_alt
   (implies (and (integerp x)
@@ -1011,7 +999,7 @@
                                    binary-cat
                                    sumbits_alt-is-sumbits) (cat-bitn-bits))
             :induct (sumbits x n))
-           ("Subgoal *1/2" 
+           ("Subgoal *1/2"
             :use ((:instance cat-bitn-bits
                              (x x)
                              (j (+ -1 n))
@@ -1028,7 +1016,7 @@
 		    x))
    :hints (("Goal" :in-theory (e/d (sumbits_alt-is-sumbits) ())
             :use ((:instance sumbits-thm)))))
-    
+
 
 ; The lemmas sumbits_alt-badguy-is-correct and sumbits_alt-badguy-bounds, below, let
 ; one prove equality of two bit vectors of width k by proving each of these has
@@ -1071,7 +1059,7 @@
                                    bitn_alt-is-bitn) ())
            :use ((:instance sumbits-badguy-bounds)))))
 
-;; from existing file. 
+;; from existing file.
 
 (defun all-bits-p (b k)
   (if (zp k)
@@ -1120,16 +1108,16 @@
 ;;;;
 
 ;;;
-;;; the leading 0. 
+;;; the leading 0.
 ;;;
-(local 
+(local
  (defthmd fl-neg-fact-2
    (implies (and (<= -2 x)
                  (< x -1)
                  (rationalp x))
             (equal (fl x)
                    -2))))
-            
+
 
 
 
@@ -1159,7 +1147,7 @@
           ("Subgoal 1" :in-theory (e/d (expt-2-reduce-leading-constant) ()))))
 
 ;;;;
-;;;; could have other way to prove this. 
+;;;; could have other way to prove this.
 ;;;;
 (defthm neg-bitn_alt-0
   (implies (and (integerp x)
@@ -1171,7 +1159,7 @@
                         (:instance bitn-0-1))
            :in-theory (e/d (bitn_alt-is-bitn) ()))))
 
-(local 
+(local
  (defthmd mod-x-is
   (implies (and (integerp x)
                 (integerp n)
@@ -1180,14 +1168,14 @@
                 (< x (- (expt 2 k) (expt 2 n)))
                 (>= x (- (expt 2 n))))
            (and (<= 0 (mod x (expt 2 n)))
-                (< (mod x (expt 2 n)) 
+                (< (mod x (expt 2 n))
                    (expt 2 k))))
   :hints (("Goal" :in-theory (e/d (mod fl-small-neg) ())
            :cases ((not (and (<= -1 (* x (/ (expt 2 n))))
                              (< x 0))))))))
 
-               
-  
+
+
 
 (defthm neg-bitn_alt-2
   (implies (and (integerp x)
@@ -1202,7 +1190,7 @@
            :use ((:instance mod-x-is)))
           ("Subgoal 1" :in-theory (e/d (bitn_alt-is-bitn) ())
            :use ((:instance bitn-mod)))))
-           
+
 
 (defthmd bitn_alt-expt
     (implies (case-split (integerp n))
@@ -1229,8 +1217,8 @@
             :use ((:instance bitn-plus-expt-1)))))
 
 (defthmd bitn_alt-plus-mult
-    (implies (and (< n m) 
-		  (integerp m) 
+    (implies (and (< n m)
+		  (integerp m)
 		  (integerp k))
 	     (equal (bitn_alt (+ x (* k (expt 2 m))) n)
 		    (bitn_alt x n)))
@@ -1271,7 +1259,7 @@
                                    binary-cat_alt
                                    binary-cat)
                                   ()))))
-  
+
 
 ;;Definition of the macro, cat_alt:
 
@@ -1301,9 +1289,9 @@
         ((endp (cddddr x))
          `(binary-cat_alt ,@x))
         (t
-         `(binary-cat_alt ,(car x) 
-                      ,(cadr x) 
-                      (cat_alt ,@(cddr x)) 
+         `(binary-cat_alt ,(car x)
+                      ,(cadr x)
+                      (cat_alt ,@(cddr x))
                       ,(cat-size (cddr x))))))
 
 
@@ -1313,7 +1301,7 @@
   :rule-classes (:type-prescription)
   :hints (("Goal" :in-theory (e/d (binary-cat_alt-is-binary-cat) ())
            :use ((:instance cat-nonnegative-integer-type)))))
-                                   
+
 
 (in-theory (disable (:type-prescription binary-cat_alt)))
 
@@ -1492,7 +1480,7 @@
 		    (if (>= j n)
 			(bits_alt x (if (< i (+ m n))
 				    (- i n)
-				  (1- m)) 
+				  (1- m))
 			      (- j n))
 		      (cat_alt (bits_alt x (if (< i (+ m n))
 					(- i n)
@@ -1521,7 +1509,7 @@
 		    (if (>= j n)
 			(bits_alt x (if (< i (+ m n))
 				    (- i n)
-				  (1- m)) 
+				  (1- m))
 			      (- j n))
 		      (cat_alt (bits_alt x (if (< i (+ m n))
 				       (- i n)
@@ -1605,7 +1593,7 @@
   :hints (("Goal" :in-theory (e/d (mulcat_alt-is-mul-cat)
                                   ())
            :use ((:instance mulcat-nonnegative-integer-type)))))
-  
+
 
 (in-theory (disable (:type-prescription mulcat_alt)))
 
@@ -1631,7 +1619,7 @@
 
 (defthm mulcat_alt-1
     (implies (natp l)
-	     (equal (mulcat_alt l 1 x) 
+	     (equal (mulcat_alt l 1 x)
 		    (bits_alt x (1- l) 0)))
   :hints (("Goal" :in-theory (e/d (mulcat_alt-is-mul-cat
                                    bits_alt-is-bits)
@@ -1669,9 +1657,9 @@
 
 ;; (i-am-here)  Fri Feb 13 12:04:51 2009
 
-;; new addition. 
+;; new addition.
 
-(local 
+(local
  (defthm bits-bits-times-1
    (implies (and (integerp x)
                  (integerp y)
@@ -1690,4 +1678,4 @@
                     (bits_alt (* x y) i 0)))
   :hints (("Goal" :use (bits-bits-times-1)
            :in-theory (e/d (bits_alt-is-bits) ()))))
-                            
+

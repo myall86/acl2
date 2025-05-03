@@ -1,6 +1,6 @@
 (in-package "ACL2")
 
-(include-book "misc/assert" :dir :system)
+(include-book "std/testing/assert-bang" :dir :system)
 (include-book "make-event/embeddable-event-forms" :dir :system)
 (include-book "matrix-multiplication-setup")
 
@@ -11,7 +11,7 @@
 
 (defun multiply-matrices-aux (A B)
   (declare (xargs :mode :program))
-  (if (endp A) 
+  (if (endp A)
       nil
     (cons (multiply-matrices-row (car A) B)
           (multiply-matrices-aux (cdr A) B))))

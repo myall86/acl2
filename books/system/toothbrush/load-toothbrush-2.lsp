@@ -24,6 +24,7 @@
 (def-nils
   CHECK-PROPOSED-IMPORTS ; Presumably the check was already done!
   MEMOIZE-LOOK-UP-DEF ; !! We should fix this when toothbrush can memoize.
+; ACL2H-INIT ; Done later below
   )
 
 (def-errors
@@ -49,9 +50,10 @@
   ONEIFY ; called in mv-let-for-with-local-stobj, but not with toothbrush
   INITIALIZE-DMR-INTERVAL-USED ; called by set-waterfall-parallelism-fn
   HARD-ERROR-IS-ERROR ; needs macro channel-to-string, which is defined late
+  CCL-INITIALIZE-GC-STRATEGY ; called by set-gc-strategy-fn
+  REMOVE-ADJACENT-DUPLICATES-EQ ; called by defpkg-raw1
   )
 
-#+hons ; memoize only here
 (def-errors
 
 ; !! We should revisit the following when we are ready to implement memoization
@@ -96,20 +98,39 @@
  (let ((*default-pathname-defaults* COMMON-LISP-USER::*acl2-dir*))
    #+acl2-par (load "multi-threading-raw.lisp")
    (load "axioms.lisp")
+   (load "hons.lisp")
+   (load "hons-raw.lisp")
    (load "basis-a.lisp")
-   #+hons (load "memoize.lisp")
-   #+hons (load "hons.lisp")
+   (load "memoize.lisp")
    #+acl2-par (load "parallel.lisp")
    #+acl2-par (load "futures-raw.lisp")
    #+acl2-par (load "parallel-raw.lisp")
-   #+hons (load "hons-raw.lisp")
-   #+hons (load "memoize-raw.lisp")))
+   (load "memoize-raw.lisp")))
+
+(def-nils
+  ACL2H-INIT ; calls ccl-initialize-gc-strategy, which we define to cause error
+  )
+
+#+static-hons
+(setq *print-array*
+; Copied from acl2h-init, which is defined just above to be nil.
+      nil)
 
 ; Code for saving an image.
 
-(setq *saved-mode*
-      "toothbrush mechanism.
-    SO PLEASE NOTE: This executable contains only a part of ACL2")
+; For SBCL, it seems a bit challenging to get setenv$ defined.  I tried what's
+; below, and some variants of it, but kept getting errors.  If anyone gets
+; serious about using the toothbrush, it would be good to fix this.
+#-sbcl
+(setenv$ "ACL2_SNAPSHOT_INFO"
+         "PLEASE NOTE: This \"toothbrush\" contains only a part of ACL2")
+#||
+#+sbcl
+(require :sb-posix)
+#+sbcl
+(funcall (intern "PUTENV" "SB-POSIX")
+         "ACL2_SNAPSHOT_INFO=PLEASE NOTE: This \"toothbrush\" contains only a part of ACL2")
+||#
 
 (setq *saved-build-date-lst*
       (list (saved-build-date-string)))
@@ -127,3 +148,10 @@
          (eval `(in-package ,*startup-package-name*))
          (setq *lp-ever-entered-p* t)))
   nil)
+
+; Replacement definition (needed for caller SAVE-EXEC-FN)
+; (WARNING: This restricts us to Unix),
+; to avoid an error from looking up the os in the world:
+(defun os (wrld)
+  (declare (ignore wrld))
+  :UNIX)

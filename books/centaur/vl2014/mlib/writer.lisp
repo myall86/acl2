@@ -188,7 +188,7 @@ displays.  The module browser's web pages are responsible for defining the
      (vl-when-html (vl-print-markup "<a class=\"")
                    (b* ((misc  (vl-ps->misc))
                         (ports (cdr (hons-assoc-equal :portnames misc))))
-                     (vl-print-markup (if (member-equal x (redundant-list-fix ports))
+                     (vl-print-markup (if (member-equal x (list-fix ports))
                                           "vl_wirelink_port"
                                         "vl_wirelink")))
                    (vl-print-markup "\" href=\"javascript:void(0);\" onClick=\"showWire('")
@@ -1821,7 +1821,8 @@ expression into a string."
      "VL_DESIGN_WIRE"))
 
 (define vl-pp-vardecl-atts-begin ((x vl-atts-p) &key (ps 'ps))
-  :measure (vl-atts-count x)
+; Removed after v7-2 by Matt K. since the definition is non-recursive:
+; :measure (vl-atts-count x)
   (b* ((x (vl-atts-fix x))
        ((unless x)
         ps)
@@ -2567,7 +2568,7 @@ expression into a string."
        ((when (atom (cdr x))) ps)
        (ps (vl-print ", ")))
     (vl-pp-forloop-assigns (cdr x))))
-       
+
 
 (defines vl-pp-stmt
   :prepwork ((local (in-theory (disable not)))
@@ -3083,7 +3084,7 @@ expression into a string."
                    (vl-print ": ")
                    (vl-pp-genelement (cdar x))
                    (vl-pp-gencaselist (cdr x))))))
-                 
+
   (define vl-pp-genarrayblocklist ((x vl-genarrayblocklist-p) (name maybe-stringp)
                                    &key (ps 'ps))
     :measure (vl-genarrayblocklist-count x)
@@ -3115,7 +3116,7 @@ expression into a string."
                  (vl-println "end")))))
 
 
-                 
+
 
 
 (define vl-pp-module

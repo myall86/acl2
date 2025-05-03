@@ -31,8 +31,9 @@
 (in-package "GL")
 (include-book "bfr")
 (include-book "bfr-param")
-(include-book "centaur/misc/absstobjs" :dir :system)
-(include-book "tools/clone-stobj" :dir :system)
+(include-book "bfr-reasoning")
+(include-book "std/stobjs/absstobjs" :dir :system)
+(include-book "std/stobjs/clone" :dir :system)
 (include-book "std/lists/index-of" :dir :system)
 (local (include-book "centaur/aig/aig-vars" :dir :system))
 
@@ -114,7 +115,7 @@
 ;;         (calist-remassoc x (cdr calist))
 ;;       (cons (car calist)
 ;;             (calist-remassoc x (cdr calist)))))
-                    
+
 ;;   ///
 ;;   (defthm calist-lookup-of-calist-remassoc
 ;;     (equal (calist-lookup k1 (calist-remassoc k2 calist))
@@ -151,7 +152,8 @@
     (equal (calist-remassocs (calist-remassocs x seen1) seen2)
            (calist-remassocs x (append seen1 seen2))))
 
-  (defcong acl2::set-equiv equal (calist-remassocs x seen) 2))
+  (defcong acl2::set-equiv equal (calist-remassocs x seen) 2
+    :package :legacy))
 
 ;; (calist-remassoc (car x)
 ;;                      (calist-remassocs (cdr x) calist))))
@@ -308,7 +310,7 @@
                   t
                 (if (consp (car x))
                     (let ((rest (eval-constraint-alist
-                                 (calist-remassocs (cdr x) 
+                                 (calist-remassocs (cdr x)
                                                    (list (caar x)))
                                  env)))
                       (if (cdar x)
@@ -329,7 +331,7 @@
            (eval-constraint-alist x env))
     :hints(("Goal" :in-theory (enable eval-constraint-alist-aux
                                       calist-remassocs))))
-  
+
   (verify-guards eval-constraint-alist)
 
 
@@ -345,6 +347,22 @@
              (equal (equal 1 (calist-lookup x calist))
                     (and (calist-lookup x calist)
                          (acl2::aig-eval x env))))))
+
+(local
+
+; At least two lemmas below, eval-constraint-alist-witness and
+; constraint-alist-assume-aig-contradictionp, required this Matt K. mod April
+; 2016 for the addition of a type-set-bit for the set {1}.  The improved
+; type-prescription rule for calist-lookup$inline made progress in the proof
+; that was harmful.  (Technical note: When assume-true-false-rec never used an
+; equality (equal term 1) to extend the false-type-alist by subtracting
+; *ts-one* from the type of term, we didn't have this problem.  It arose when
+; we tweaked that heuristic to allow this extension when term is a variable,
+; which was important to do for the sake of bitp-compound-recognizer; see the
+; Essay on Strong Handling of *ts-one* in ACL2 source function
+; assume-true-false-rec.)
+
+ (in-theory (disable (:t calist-lookup$inline))))
 
 (define eval-constraint-alist-witness (x env)
   :measure (len x)
@@ -456,7 +474,7 @@
     (equal (constraint-alist->aig-aux x nil)
            (constraint-alist->aig x))
     :hints(("Goal" :in-theory (enable constraint-alist->aig-aux))))
-  
+
   (verify-guards constraint-alist->aig)
 
   (local (defthm set-equiv-of-cons-redundant
@@ -534,17 +552,18 @@
       nil
     (if (consp (car x))
         (if (cdar x)
-            (or (set::in (nfix v) (acl2::aig-vars (caar x)))
+            (or (set::in (aig-var-fix v) (acl2::aig-vars (caar x)))
                 (constr-alist-depends-on
-                 v (calist-remassocs (cdr x) 
+                 v (calist-remassocs (cdr x)
                                      (list (caar x)))))
           (constr-alist-depends-on
-           v (calist-remassocs (cdr x) 
+           v (calist-remassocs (cdr x)
                                (list (caar x)))))
       (constr-alist-depends-on v (cdr x))))
   ///
 
-  (defcong acl2::nat-equiv equal (constr-alist-depends-on v x) 1)
+  (defcong aig-var-equiv equal (constr-alist-depends-on v x) 1
+    :package :legacy)
 
   (local (defthm set-equiv-of-cons-redundant
            (implies (member k x)
@@ -555,7 +574,7 @@
   ;;          (constr-alist-depends-on v x))
   ;;   :hints(("Goal" :in-theory (enable constr-alist-depends-on-aux
   ;;                                     calist-remassocs))))
-  
+
   ;; (verify-guards constr-alist-depends-on)
 
 
@@ -575,7 +594,7 @@
 
   (defthm constr-alist-depends-on-correct
     (implies (and (not (constr-alist-depends-on (double-rewrite v) x))
-                  (natp v))
+                  (acl2::aig-var-p v))
              (equal (eval-constraint-alist x (cons (cons v val) env))
                     (eval-constraint-alist x env)))
     :hints(("Goal" :in-theory (enable eval-constraint-alist))))
@@ -589,7 +608,7 @@
 
   (defthm dependencies-of-constraint-alist->aig
     (implies (and (not (constr-alist-depends-on (double-rewrite v) x))
-                  (natp v))
+                  (acl2::aig-var-p v))
              (not (set::in v
                             (acl2::aig-vars
                              (constraint-alist->aig x)))))
@@ -605,23 +624,25 @@
 (define aig-under-constraint-alist (x calist)
   (b* (((when (booleanp x)) x)
        ((mv negp xabs)
-        (if (and (consp x) (eq (cdr x) nil))
+        (if (and (not (acl2::aig-atom-p x)) (eq (cdr x) nil))
             ;; negation
             (mv t (car x))
           (mv nil x)))
        (look (calist-lookup xabs calist))
        ((when look)
         (xor (eql 1 look) negp))
-       ((when (atom xabs)) x)
+       ((when (acl2::aig-atom-p xabs)) x)
        ((when negp) x)
        (car (aig-under-constraint-alist (car xabs) calist))
        ((when (eq car nil)) nil)
        (cdr (aig-under-constraint-alist (cdr xabs) calist))
-       (newx (acl2::aig-and car cdr))
+       ;; BOZO.  The new, smarter AIG-AND algorithm *might* work here if we can come
+       ;; up with a suitable measure.  For now, just use the dumb algorithm.
+       (newx (acl2::aig-and-dumb car cdr))
        (look (calist-lookup newx calist))
        ((when look) (eql 1 look)))
     newx)
-  /// 
+  ///
 
   (defthm aig-under-constraint-alist-of-shrink-constraint-alist
     (equal (aig-under-constraint-alist x (shrink-constraint-alist calist))
@@ -654,7 +675,7 @@
            (aig-under-constraint-alist x calist))
     :hints (("goal" :induct (aig-under-constraint-alist x calist))
             (and stable-under-simplificationp
-                 '(:in-theory (enable acl2::aig-and)))))
+                 '(:in-theory (enable acl2::aig-and-dumb)))))
 
   (defthm aig-under-constraint-alist-of-t-and-nil
     (and (equal (aig-under-constraint-alist t calist) t)
@@ -669,7 +690,7 @@
 ;;         (acl2::aig-not )))
 ;;     )
 
-;;   /// 
+;;   ///
 
 ;;   (defthm aig-under-constraint-alist-of-shrink-constraint-alist
 ;;     (equal (aig-under-constraint-alist x (shrink-constraint-alist calist))
@@ -744,7 +765,7 @@
     :hints(("Goal" :in-theory (enable shrink-constraint-alist calist-remassocs pairlis$)
             :expand ((shrink-constraint-alist calist)
                      (:free (seen) (calist-remassocs calist seen))))))
-  
+
   ;; (defcong constraint-alist-equiv constraint-alist-equiv
   ;;   (constraint-alist-delete-keys keys calist) 2)
 
@@ -761,7 +782,7 @@
   :returns (mv contradictionp calist num-aconses)
   (b* (((when (booleanp x)) (mv (not x) calist keys-acc))
        ((mv negp xabs)
-        (if (and (consp x) (eq (cdr x) nil))
+        (if (and (not (acl2::aig-atom-p x)) (eq (cdr x) nil))
             ;; negation
             (mv t (car x))
           (mv nil x)))
@@ -770,7 +791,7 @@
         (if (xor (eql 1 look) negp)
             (mv nil calist keys-acc)
           (mv t calist keys-acc)))
-       ((when (atom xabs))
+       ((when (acl2::aig-atom-p xabs))
         (mv nil (hons-acons xabs (if negp 0 1) calist) (cons xabs keys-acc)))
        ((when negp) (mv nil (hons-acons xabs 0 calist) (cons xabs keys-acc)))
        ((mv contradictionp1 calist keys-acc) (constraint-alist-assume-aig (car xabs) calist keys-acc))
@@ -782,13 +803,13 @@
    (defun shrink-ind (x calist keys-acc)
      (b* (((when (booleanp x)) keys-acc)
           ((mv negp xabs)
-           (if (and (consp x) (eq (cdr x) nil))
+           (if (and (not (acl2::aig-atom-p x)) (eq (cdr x) nil))
                ;; negation
                (mv t (car x))
              (mv nil x)))
           (look (calist-lookup xabs calist))
           ((when look) keys-acc)
-          ((when (atom xabs)) keys-acc)
+          ((when (acl2::aig-atom-p xabs)) keys-acc)
           ((when negp) keys-acc)
           (?ign (shrink-ind (car xabs) calist keys-acc))
           ((mv ?contradictionp1 scalist skeys-acc) (constraint-alist-assume-aig (car xabs) (shrink-constraint-alist calist) keys-acc))
@@ -874,7 +895,7 @@
                                       (cons k lst))
                     (calist-remassocs (shrink-constraint-alist calist)
                                       lst)))
-    :hints(("Goal" 
+    :hints(("Goal"
             :expand ((shrink-constraint-alist calist)
                      (:free (a b lst) (calist-remassocs (cons a b) lst))
                      (:free (lst) (calist-remassocs nil lst)))
@@ -894,7 +915,7 @@
   (defthm dependencies-of-constraint-alist-assume-aig
     (b* (((mv ?contradictionp ?new-calist ?keys-out)
           (constraint-alist-assume-aig x calist keys-in)))
-      (implies (and (not (set::in (nfix k) (acl2::aig-vars x)))
+      (implies (and (not (set::in (aig-var-fix k) (acl2::aig-vars x)))
                     (not (constr-alist-depends-on k calist)))
                (not (constr-alist-depends-on k new-calist))))
     :hints(("Goal" :in-theory (e/d ()
@@ -905,6 +926,7 @@
             :induct (constraint-alist-assume-aig x calist keys-in)
             :expand ((:free (a b)
                       (constr-alist-depends-on k (cons a b)))
+                     (acl2::aig-vars x)
                      (constraint-alist-assume-aig x calist keys-in))))))
 
 
@@ -924,6 +946,7 @@
                   :rule-classes nil))
          (local (in-theory '(calist-equiv)))
          (defcong calist-equiv ,resequiv ,call ,argnum
+           :package :legacy
            :hints (("goal" :use ((:instance calist-cong-lemma)
                                  (:instance calist-cong-lemma
                                   (x x-equiv)))))))))
@@ -983,6 +1006,7 @@
    :aig (shrink-constraint-alist hyp))
   ///
   (defcong bfr-hyp-equiv equal (bfr-hyp-fix hyp) 1
+    :package :legacy
     :hints(("Goal" :in-theory (enable bfr-hyp-equiv))))
   (defthm bfr-hyp-equiv-of-bfr-hyp-fix
     (bfr-hyp-equiv (bfr-hyp-fix hyp) hyp)
@@ -1035,6 +1059,7 @@
          :hints ,(or hyp-fix-hints hints))
 
        (defcong bfr-hyp-equiv equal (,fn . ,formals) ,(+ 1 (acl2::index-of hyp-var formals))
+         :package :legacy
          :hints (("goal" :in-theory '(bfr-hyp-equiv-in-terms-of-bfr-hyp-fix)
                   :use ((:instance ,hyp-fix-thm)
                         (:instance ,hyp-fix-thm (,hyp-var ,hyp-var-equiv)))))))))
@@ -1088,7 +1113,7 @@
   (defthm eval-of-bfr-hyp-init$a
     (equal (bfr-hyp-eval (bfr-hyp-init$a hyp$a) env) t)
     :hints(("Goal" :in-theory (enable bfr-hyp-eval)))))
-             
+
 
 
 (define bfr-assume$c (x hyp$c)
@@ -1363,7 +1388,8 @@
     :hints(("Goal" :in-theory (enable bfr-hyp-eval))
            (and stable-under-simplificationp
                 '(:in-theory (e/d (bfr-eval bfr-set-var
-                                            bfr-param-env)
+                                            bfr-param-env
+                                            bfr-varname-fix)
                                   (nfix))))))
 
   (defthm bfr-constr-depends-on-of-bfr-constr-assume
@@ -1376,7 +1402,8 @@
            (and stable-under-simplificationp
                 '(:in-theory (enable pbfr-depends-on
                                      bfr-depends-on
-                                     bfr-from-param-space)))))
+                                     bfr-from-param-space
+                                     bfr-varname-fix)))))
 
   (defthm pbfr-depends-on-of-bfr-constr->bfr
     (implies (not (bfr-constr-depends-on k p x))
@@ -1385,7 +1412,8 @@
            (and stable-under-simplificationp
                 '(:in-theory (e/d (pbfr-depends-on
                                    bfr-depends-on
-                                   bfr-from-param-space)
+                                   bfr-from-param-space
+                                   bfr-varname-fix)
                                   (nfix))))))
 
   (defthm bfr-constr-depends-on-of-bfr-constr-init
@@ -1399,7 +1427,7 @@
   (bfr-case
    :bdd nil
    :aig (shrink-constraint-alist nil)))
-  
+
 (define hyp$ap (hyp$a)
   (equal hyp$a (bfr-hyp-fix hyp$a))
   ///
@@ -1430,7 +1458,7 @@
                           ;;acl2::nth-when-zp
                           nth update-nth))))
   (acl2::defabsstobj-events hyp
-    :concrete hyp$c
+    :foundation hyp$c
     :recognizer (hyp-p :logic hyp$ap :exec hyp$cp)
     :creator (create-hyp :logic create-hyp$a :exec create-hyp$c)
     :corr-fn hyp-corr

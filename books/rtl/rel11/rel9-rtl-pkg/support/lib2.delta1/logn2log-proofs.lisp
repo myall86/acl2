@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -32,14 +20,14 @@
 ;;;;
 ;;;;
 
-(local 
+(local
  (defthm bvecp-fl-1/2
    (implies (bvecp x (+ 1 n))
             (BVECP (FL (* 1/2 X)) n))
    :hints (("Goal" :in-theory (e/d (bvecp
                                     expt-2-reduce-leading-constant) ())))))
 
-(local 
+(local
  (defthm bvecp-mod-2
    (implies (integerp x)
             (BVECP (MOD X 2) 1))
@@ -97,7 +85,7 @@
              (DEFTHM LOGIOR-BVECP
                (IMPLIES (AND (BVECP X N) (BVECP Y N))
                         (BVECP (LOGIOR X Y) N)))
-           
+
 
 
              (DEFTHM LOGAND-BVECP
@@ -113,7 +101,7 @@
              )
 
 
-(encapsulate () 
+(encapsulate ()
   (local (include-book "bvecp-raw-helpers"))
 
   (defthm lnot-bvecp
@@ -125,6 +113,6 @@
 
 
 
-         
 
-             
+
+

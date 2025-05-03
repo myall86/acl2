@@ -38,226 +38,224 @@
 (include-book "centaur/fty/portcullis" :dir :system)
 (include-book "centaur/depgraph/portcullis" :dir :system)
 
-(defmacro multi-union-eq (x y &rest rst)
-  (xxxjoin 'union-eq (list* x y rst)))
-
 (defpkg "VL2014"
-  (set-difference-eq
-   ;; Things to add:
-   (multi-union-eq
-    std::*std-exports*
-    getopt::*getopt-exports*
-    set::*sets-exports*
-    nrev::*nrev-exports*
-    acl2::*acl2-exports*
-    acl2::*common-lisp-symbols-from-main-lisp-package*
-    ;; Things we want to "export"
-    '(defmodules)
-    ;; Things we want to "import"
-    '(assert!
-      b*
-      fun
-      local-stobjs
-      append-without-guard
-      flatten
-      strip-cadrs
-      simpler-take
-      repeat
-      replicate
-      first-n
-      rest-n
-      list-fix
-      list-equiv
-      same-lengthp
-      rev
-      revappend-without-guard
-      unexplode-nonnegative-integer
-      base10-digit-char-listp
-      prefixp
-      set-equiv
-      set-reasoning
-      lnfix
-      lifix
-      lbfix
-      maybe-natp
-      maybe-natp-fix
-      maybe-stringp
-      maybe-posp
-      maybe-integerp
-      cons-listp
-      cons-list-listp
-      never-memoize
-      char-fix
-      chareqv
-      str-fix
-      str::string-list-fix
-      streqv
-      pos-fix
-      acl2::print-base-p
-      impossible
-      tuplep
-      all-equalp
-      ret
-      defret
+  (append '( ;; Things we want to "export"
+            defmodules
 
-      std::mksym
-      std::mksym-package-symbol
-      std::extract-keyword-from-args
-      std::throw-away-keyword-parts
-      std::defoption
+            ;; Things we want to "import"
+            assert!
+            b*
+            fun
+            local-stobjs
+            append-without-guard
+            flatten
+            strip-cadrs
+            simpler-take
+            repeat
+            replicate
+            first-n
+            rest-n
+            list-fix
+            llist-fix
+            list-equiv
+            same-lengthp
+            rev
+            revappend-without-guard
+            unexplode-nonnegative-integer
+            base10-digit-char-listp
+            prefixp
+            set-equiv
+            set-reasoning
+            lnfix
+            lifix
+            lbfix
+            maybe-natp
+            maybe-natp-fix
+            maybe-stringp
+            maybe-posp
+            maybe-integerp
+            cons-listp
+            cons-list-listp
+            never-memoize
+            char-fix
+            chareqv
+            str-fix
+            str::string-list-fix
+            streqv
+            pos-fix
+            acl2::print-base-p
+            impossible
+            tuplep
+            all-equalp
+            ret
+            defret
 
-      fty::defprod
-      fty::deftypes
-      fty::deftagsum
-      fty::deffixtype
-      fty::deffixequiv
-      fty::deffixequiv-mutual
-      true-p
-      true-fix
-      true-equiv
+            std::mksym
+            std::mksym-package-symbol
+            std::extract-keyword-from-args
+            std::throw-away-keyword-parts
+            std::defoption
 
-      value
-      file-measure
-      two-nats-measure
-      add-untranslate-pattern
-      conjoin
-      conjoin2
-      disjoin
-      disjoin2
-      access
-      rewrite-rule
-      augment-theory
-      find-rules-of-rune
-      signed-byte-p
-      unsigned-byte-p
-      cwtime
-      xf-cwtime
-      defxdoc
-      undocumented
-      progn$
+            fty::defprod
+            fty::deftypes
+            fty::deftagsum
+            fty::deffixtype
+            fty::deffixequiv
+            fty::deffixequiv-mutual
+            fty::deftranssum
 
-      make-fal
-      make-fast-alist
-      with-fast-alist
-      with-fast
-      with-stolen
-      fal-all-boundp
+            true-p
+            true-fix
+            true-equiv
 
-      run-when
-      run-if
-      run-unless
-      assocs
+            value
+            file-measure
+            two-nats-measure
+            add-untranslate-pattern
+            conjoin
+            conjoin2
+            disjoin
+            disjoin2
+            access
+            rewrite-rule
+            augment-theory
+            find-rules-of-rune
+            signed-byte-p
+            unsigned-byte-p
+            cwtime
+            xf-cwtime
+            defxdoc
+            undocumented
+            progn$
 
-      defconsts
-      definline
-      definlined
+            make-fal
+            make-fast-alist
+            with-fast-alist
+            with-fast
+            with-stolen
+            fal-all-boundp
 
-      cw-obj
-      return-raw
+            run-when
+            run-if
+            run-unless
+            assocs
 
-      uniquep
-      duplicity
-      duplicated-members
-      <<-sort
-      hons-duplicated-members
+            defconsts
+            definline
+            definlined
 
-      sneaky-load
-      sneaky-push
-      sneaky-save
+            cw-obj
+            return-raw
 
-      cw-unformatted
+            uniquep
+            duplicity
+            duplicated-members
+            <<-sort
+            hons-duplicated-members
 
-      alists-agree
-      alist-keys
-      alist-vals
-      alist-equiv
-      sub-alistp
-      hons-rassoc-equal
-      append-alist-keys
-      append-alist-keys-exec
-      append-alist-vals
-      append-alist-vals-exec
+            sneaky-load
+            sneaky-push
+            sneaky-save
 
-      autohide
-      autohide-delete
-      autohide-clear
-      autohide-summary
-      autohide-cp
-      authoide-hint
+            cw-unformatted
 
-      def-ruleset
-      def-ruleset!
-      add-to-ruleset
-      add-to-ruleset!
-      get-ruleset
-      ruleset-theory
+            alists-agree
+            alist-keys
+            alist-vals
+            alist-equiv
+            sub-alistp
+            hons-rassoc-equal
+            append-alist-keys
+            append-alist-keys-exec
+            append-alist-vals
+            append-alist-vals-exec
 
-      make-fast-alist
-      with-fast-alist
-      with-fast
-      with-fast-alists
+            autohide
+            autohide-delete
+            autohide-clear
+            autohide-summary
+            autohide-cp
+            authoide-hint
 
-      vcd-dump
+            def-ruleset
+            def-ruleset!
+            add-to-ruleset
+            add-to-ruleset!
+            get-ruleset
+            ruleset-theory
 
-      gpl
-      pat->al
-      pat->fal
-      al->pat
-      data-for-patternp
-      similar-patternsp
-      pat-flatten
-      pat-flatten1
-      collect-signal-list
-      good-esim-primitivep
-      good-esim-modulep
-      good-esim-occp
-      good-esim-occsp
-      bad-esim-modulep
-      bad-esim-occp
-      bad-esim-occsp
+            make-fast-alist
+            with-fast-alist
+            with-fast
+            with-fast-alists
 
-      str::cat
-      str::natstr
-      str::implode
-      str::explode
+            vcd-dump
 
-      non-parallel-book
+            gpl
+            pat->al
+            pat->fal
+            al->pat
+            data-for-patternp
+            similar-patternsp
+            pat-flatten
+            pat-flatten1
+            collect-signal-list
+            good-esim-primitivep
+            good-esim-modulep
+            good-esim-occp
+            good-esim-occsp
+            bad-esim-modulep
+            bad-esim-occp
+            bad-esim-occsp
 
-      ;; To make VL2014::VL show up as just VL in the ACL2 package, e.g., to
-      ;; make the XDOC index prettier.
-      vl2014
-      hardware-verification
-      esim
+            str::cat
+            str::natstr
+            str::implode
+            str::explode
 
-      ;; acl2-customization file stuff
-      why
-      with-redef
+            non-parallel-book
 
-      template-proj
-      template-append
-      make-tmplsubst
-      template-subst-top
-      template-subst
-      std::getargs
-      ))
+            ;; To make VL2014::VL show up as just VL in the ACL2 package, e.g., to
+            ;; make the XDOC index prettier.
+            vl
+            vl2014
+            hardware-verification
+            esim
+            sv
 
-   ;; Things to remove:
-   '(true-list-listp
-     substitute
-     union
-     delete
-     case
-     include-book
-     formatter
-     formatter-p
-     format
-     concatenate
-     enable
-     disable
-     e/d
-     warn
-     nat-listp ; included 12/4/2012 by Matt K., for addition to *acl2-exports*
-     )))
+            ;; acl2-customization file stuff
+            why
+            with-redef
+
+            template-proj
+            template-append
+            make-tmplsubst
+            template-subst-top
+            template-subst
+            std::getargs
+            )
+
+          std::*std-exports*
+          getopt::*getopt-exports*
+          set::*sets-exports*
+          nrev::*nrev-exports*
+
+            ;; ACL2 symbols, minus a few that we don't want.
+          (set-difference-eq acl2::*standard-acl2-imports*
+                             '(true-list-listp
+                               substitute
+                               case
+                               include-book
+                               formatter
+                               formatter-p
+                               format
+                               concatenate
+                               enable
+                               disable
+                               e/d
+                               warn
+                               nat-listp ; included 12/4/2012 by Matt K., for addition to *acl2-exports*
+                               ))))
 
 (assign acl2::verbose-theory-warning nil)
 

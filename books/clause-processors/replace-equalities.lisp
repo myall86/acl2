@@ -46,7 +46,7 @@
 
 (local (in-theory (disable w)))
 
-(defevaluator-fast repl-ev repl-ev-lst
+(defevaluator repl-ev repl-ev-lst
   ((typespec-check ts x)
    (if a b c)
    (equal a b)
@@ -101,8 +101,8 @@
   (local (in-theory (enable subst-subterms subst-subterms-list)))
 
   (flag::make-flag subst-subterms-flag subst-subterms
-                   :flag-mapping ((subst-subterms . term)
-                                  (subst-subterms-list . list)))
+                   :flag-mapping ((subst-subterms term)
+                                  (subst-subterms-list list)))
 
   (defthm len-subst-subterms-list
     (equal (len (subst-subterms-list x alist))
@@ -145,7 +145,7 @@
 
 
 
-(local (defthm match-tree-pseudo-termp
+(local (defthmd match-tree-pseudo-termp
          (b* (((mv ok subst) (match-tree pat x alist)))
            (implies ok
                     (equal (pseudo-termp x)
@@ -153,11 +153,14 @@
          :hints(("Goal" :in-theory (enable match-tree-is-subst-tree)))))
 
 
+(local (in-theory (enable match-tree-obj-equals-subst-when-successful
+                          match-tree-alist-opener-theory)))
+
 (defsection unify-lit-with-equality-rule
 
-  (local (def-match-tree-rewrites (implies (:? hyp-term)
-                                           (equal (:? lhs)
-                                                  (:? rhs)))))
+  ;; (local (def-match-tree-rewrites (implies (:? hyp-term)
+  ;;                                          (equal (:? lhs)
+  ;;                                                 (:? rhs)))))
 
   (defund unify-lit-with-equality-rule (lit rule)
     (declare (xargs :guard (and (pseudo-termp lit)
@@ -207,7 +210,7 @@
                            (x rule)
                            (a (repl-ev-alist
                                (mv-nth 1 (simple-one-way-unify
-                                          (hyp-term rule) lit nil))
+                                          (cadr rule) lit nil))
                                a))))))))
 
 
@@ -250,7 +253,7 @@
   (iff (repl-ev (disjoin (revappend x y)) a)
        (or (repl-ev (disjoin x) a)
            (repl-ev (disjoin y) a))))
-  
+
 
 (defsection dumb-negate-lit
   (in-theory (disable dumb-negate-lit))
@@ -304,7 +307,7 @@
     (implies (symbol-alistp x)
              (equal (remove-non-symbol-pairs x) x))))
 
-  
+
 
 (defsection replace-equalities-iter
 
@@ -403,13 +406,10 @@
 ;; (defmacro add-replace-equalities-rule (thmname)
 ;;   `(table replace-equalities-rules
 ;;           (replace-equalities-thm-fnsym ',thmname world)
-;;           (cons ',thmname 
+;;           (cons ',thmname
 ;;                 (cdr (assoc (replace-equalities-thm-fnsym ',thmname world)
 ;;                             (table-alist 'replace-equalities-rules world))))))
-                           
 
-;; NOTE: This is mostly an example of usage, but is also pretty useful so we'll
-;; leave it non-local.
 
 ;; This is the replacement we generally want to make...
 (defthm match-tree-replace-equalities
@@ -427,14 +427,16 @@
                   (match-tree pat x alist)))
   :rule-classes nil)
 
-(add-replace-equalities-rule match-tree-replace-equalities)
-(add-replace-equalities-rule match-tree-block-self-subst)
+(local (add-replace-equalities-rule match-tree-replace-equalities))
+(local (add-replace-equalities-rule match-tree-block-self-subst))
 
 
 
 (local
  (progn
-   (in-theory (disable match-tree-pseudo-termp))
+   (in-theory (disable match-tree-pseudo-termp
+                       match-tree-obj-equals-subst-when-successful
+                       match-tree-alist-rw-when-matched))
 
    (defthm foo
      (mv-let (ok alist)
@@ -449,4 +451,4 @@
                           (pseudo-termp (cdr (assoc 'rhs alist)))))))
      :hints ((and stable-under-simplificationp
                   '(:clause-processor (replace-equalities-cp clause nil state)))))))
-                       
+

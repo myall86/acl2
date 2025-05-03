@@ -30,6 +30,7 @@
 
 (in-package "ACL2")
 (include-book "../file-types")
+(include-book "../catpath")
 (include-book "std/util/defconsts" :dir :system)
 
 (defttag :sys-call)
@@ -62,7 +63,10 @@
 (check-file-kind "does-not-exist.txt" nil)
 
 (make-event
- (b* ((- (sys-call "./makelink.sh" nil)))
+ ;; Sys-call on my copy of CMUCL doesn't seem able to invoke ./makelink.sh so
+ ;; as a workaround use the full path explicitly.
+ (b* ((- (sys-call (oslib::catpath (cbd) "makelink.sh")
+                   nil)))
    (value '(value-triple :makelink))))
 
 (check-file-kind "test-link"
@@ -73,9 +77,19 @@
                  :regular-file
                  :follow-symlinks t)
 
+(check-file-kind "test-broken-link"
+                 :broken-symbolic-link
+                 :follow-symlinks t)
+
+(check-file-kind "test-broken-link"
+                 :symbolic-link
+                 :follow-symlinks nil)
 
 #+Unix ;; <-- maybe need to tweak this
 (progn
   (check-file-kind "/dev/null" :character-device)
-  #-darwin ;; fails on Mac OS 10.6.8, at least
+  ; #-(or darwin freebsd) ;; has failed on Mac OS 10.6.8 and 10.10.5, and FreeBSD
+  #+skip ; see comment just above; also fails with CCL on Linux 4.4.0-134-generic #160-Ubuntu
   (check-file-kind "/dev/sda1" :block-device))
+
+

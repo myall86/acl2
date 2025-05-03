@@ -31,8 +31,9 @@
 (in-package "BITOPS")
 (include-book "std/util/define" :dir :system)
 (include-book "std/basic/defs" :dir :system)
-(include-book "centaur/misc/arith-equivs" :dir :system)
+(include-book "std/basic/arith-equivs" :dir :system)
 (include-book "ihs/logops-definitions" :dir :system)
+(include-book "tools/templates" :dir :system)
 (local (include-book "ihsext-basics"))
 (local (include-book "arithmetic/top" :dir :system))
 (local (include-book "signed-byte-p"))
@@ -46,132 +47,167 @@ instructions.</p>")
 
 (local (in-theory (enable* arith-equiv-forwarding)))
 
-
-(define nth-slice2 ((n natp)
-                    (x integerp))
+(define nth-slice ((size natp  "size of a slice")
+                   (n    natp  "which slice")
+                   (x    integerp))
   :returns (slice natp :rule-classes :type-prescription)
-  :parents (bitops/extra-defs)
-  :short "Extract the @('n')th 2-bit slice of the integer @('x')."
-  :long "<p>We leave this enabled; we would usually not expect to try to reason
-about it.</p>"
-  :enabled t
-  :inline t
-  (mbe :logic
-       (logand (ash (ifix x) (* (nfix n) -2)) (1- (expt 2 2)))
-       :exec
-       (the (unsigned-byte 2)
-         (logand (ash x (the (integer * 0) (* n -2))) #x3)))
+  (loghead size (logtail (* (lnfix size) (lnfix n)) x))
   ///
-  (defcong nat-equiv equal (nth-slice2 n x) 1)
-  (defcong int-equiv equal (nth-slice2 n x) 2)
-  (defthm unsigned-byte-p-2-of-nth-slice2
-    (unsigned-byte-p 2 (nth-slice2 n x))))
+  (defcong nat-equiv equal (nth-slice size n x) 1)
+  (defcong nat-equiv equal (nth-slice size n x) 2)
+  (defcong int-equiv equal (nth-slice size n x) 3)
+
+  (defret unsigned-byte-p-of-nth-slice
+    (implies (and (<= (nfix size) width)
+                  (natp width))
+             (unsigned-byte-p width (nth-slice size n x)))))
 
 
-(define nth-slice8 ((n natp)
-                    (x integerp))
-  :returns (slice natp :rule-classes :type-prescription)
-  :parents (bitops/extra-defs)
-  :short "Extract the @('n')th 8-bit slice of the integer @('x')."
-  :long "<p>We leave this enabled; we would usually not expect to try to reason
-about it.</p>"
-  :enabled t
-  :inline t
+                  
+
+(define update-nth-slice ((size natp  "size of a slice")
+                          (n    natp  "which slice")
+                          (v    integerp "data to insert")
+                          (x    integerp))
+  :returns (new-x integerp :rule-classes :type-prescription)
   (mbe :logic
-       (logand (ash (ifix x) (* (nfix n) -8)) (1- (expt 2 8)))
-       :exec
-       (the (unsigned-byte 8)
-         (logand (ash x (* n -8)) #xFF)))
+       (logapp (* (nfix n) (nfix size))
+               x
+               (logapp size v (logtail (* (+ 1 (nfix n)) (nfix size)) x)))
+       :exec (b* ((mask (1- (ash 1 size)))
+                  (val (logand mask v))
+                  (low (* n size)))
+               (logior (logand x (lognot (ash mask low)))
+                       (ash val low))))
+  :prepwork ((local
+              (encapsulate nil
+                (local (defun logior-loghead-is-logapp-ind (w2 y x)
+                         (if (zp w2)
+                             (list y x)
+                           (logior-loghead-is-logapp-ind (1- w2) (logcdr y) (logcdr x)))))
+                (local (defthm logior-loghead-is-logapp
+                         (implies (natp w2)
+                                  (equal (logior (loghead w2 y)
+                                                 (logand x (lognot (+ -1 (ash 1 w2)))))
+                                         (logapp w2 y (logtail w2 x))))
+                         :hints(("Goal" :in-theory (e/d* (ihsext-inductions
+                                                          ash-minus-1-is-logmask)
+                                                         (logmask
+                                                          acl2::commutativity-of-logand
+                                                          acl2::commutativity-of-logior))
+                                 :expand ((loghead w2 y)
+                                          (logtail w2 x)
+                                          (:free (x) (logapp w2 y x))
+                                          (logmask w2)
+                                          (logand x -1)
+                                          (:free (a b) (lognot (logcons a b)))
+                                          (:free (a b) (logand x (logcons a b)))
+                                          (:free (a b c d) (logior (logcons a b) (logcons c d))))
+                                 :induct (logior-loghead-is-logapp-ind w2 y x)))))
+                (local (defun part-install-logior-is-logapp-ind (x w1)
+                         (if (zp w1)
+                             (list x)
+                           (part-install-logior-is-logapp-ind (logcdr x) (1- w1)))))
+                (defthm part-install-logior-is-logapp
+                  (implies (and (natp w1) (natp w2))
+                           (equal (logior (ash (loghead w2 y) w1)
+                                          (logand x (lognot (ash (+ -1 (ash 1 w2)) w1))))
+                                  (logapp w1 x (logapp w2 y (logtail (+ w1 w2) x)))))
+                  :hints (("goal" :induct (part-install-logior-is-logapp-ind x w1)
+                           :expand ((:free (y) (ash y w1))
+                                    (:free (a b) (lognot (logcons a b)))
+                                    (:free (y) (logapp w1 x y))
+                                    (:free (a b) (logand x (logcons a b)))
+                                    (:free (z) (logtail (+ w1 z) x))
+                                    (:free (a b c d) (logior (logcons a b) (logcons c d))))))))))
   ///
-  (defcong nat-equiv equal (nth-slice8 n x) 1)
-  (defcong int-equiv equal (nth-slice8 n x) 2)
-  (defthm unsigned-byte-p-8-of-nth-slice8
-    (unsigned-byte-p 8 (nth-slice8 n x))))
+  (defcong nat-equiv equal (update-nth-slice size n v x) 1)
+  (defcong nat-equiv equal (update-nth-slice size n v x) 2)
+  (defcong int-equiv equal (update-nth-slice size n v x) 3)
+  (defcong int-equiv equal (update-nth-slice size n v x) 4)
 
+  (local (defthm unsigned-byte-p-natp-fwd
+           (implies (unsigned-byte-p n x)
+                    (and (natp n) (natp x)))
+           :rule-classes :forward-chaining))
 
-(define nth-slice16 ((n natp)
-                     (x integerp))
-  :returns (slice natp :rule-classes :type-prescription)
-  :parents (bitops/extra-defs)
-  :short "Extract the @('n')th 16-bit slice of the integer @('x')."
-  :long "<p>We leave this enabled; we would usually not expect to try to reason
+  (defret unsigned-byte-p-of-update-nth-slice
+    (implies (and (<= (* (+ 1 (nfix n)) (nfix size)) width)
+                  (unsigned-byte-p width x))
+             (unsigned-byte-p width new-x))
+    :hints(("Goal" :in-theory (disable unsigned-byte-p))))
+
+  (defret natp-of-update-nth-slice
+    (implies (natp x)
+             (natp new-x))
+    :rule-classes :type-prescription))
+
+(def-ruleset nth-slices-normalize-to-nth-slice nil)
+(def-ruleset nth-slice-definitions nil)
+
+(defmacro def-nth-slice (width)
+  (b* ((str-alist `(("<W>" . ,(coerce (explode-atom width 10) 'string))))
+       ((mv shortstr &)
+        (acl2::tmpl-str-sublis
+         str-alist
+         "Extract the @('n')th <W>-bit slice of the integer @('x').")))
+    (acl2::template-subst
+     '(define nth-slice<W> ((n natp)
+                            (x integerp))
+        :returns (slice natp :rule-classes :type-prescription)
+        :parents (bitops/extra-defs)
+        :short <SHORTSTR>
+        :long "<p>We leave this enabled; we would usually not expect to try to reason
 about it.</p>"
-  :enabled t
-  :inline t
-  (mbe :logic
-       (logand (ash (ifix x) (* (nfix n) -16)) (1- (expt 2 16)))
-       :exec
-       (the (unsigned-byte 16)
-         (logand (ash x (* n -16)) #xFFFF)))
-  ///
-  (defcong nat-equiv equal (nth-slice16 n x) 1)
-  (defcong int-equiv equal (nth-slice16 n x) 2)
-  (defthm unsigned-byte-p-16-of-nth-slice16
-    (unsigned-byte-p 16 (nth-slice16 n x))))
+        :enabled t
+        :inline t
+        (mbe :logic
+             (logand (ash (ifix x) (* (nfix n) <-W>)) (1- (expt 2 <W>)))
+             :exec
+             (the (unsigned-byte <W>)
+                  (logand (ash x (the (integer * 0) (* n <-W>))) <WMASK>)))
+        ///
+        (add-to-ruleset nth-slice-definitions '((:d nth-slice<W>)))
+        (defcong nat-equiv equal (nth-slice<W> n x) 1)
+        (defcong int-equiv equal (nth-slice<W> n x) 2)
+        (defthm unsigned-byte-p-<W>-of-nth-slice<W>
+          (unsigned-byte-p <W> (nth-slice<W> n x)))
 
+        (defthmd nth-slice<W>-is-nth-slice
+          (equal (nth-slice<W> n x)
+                 (nth-slice <W> n x))
+          :hints(("Goal" :in-theory (enable nth-slice))))
 
-(define nth-slice32 ((n natp)
-                     (x integerp))
-  :returns (slice natp :rule-classes :type-prescription)
-  :parents (bitops/extra-defs)
-  :short "Extract the @('n')th 32-bit slice of the integer @('x')."
-  :long "<p>We leave this enabled; we would usually not expect to try to reason
-about it.</p>"
-  :enabled t
-  :inline t
-  (mbe :logic
-       (logand (ash (ifix x) (* (nfix n) -32)) (1- (expt 2 32)))
-       :exec
-       (the (unsigned-byte 32)
-         (logand (ash x (* n -32)) #ux_FFFF_FFFF)))
-  ///
-  (defcong nat-equiv equal (nth-slice32 n x) 1)
-  (defcong int-equiv equal (nth-slice32 n x) 2)
-  (defthm unsigned-byte-p-32-of-nth-slice32
-    (unsigned-byte-p 32 (nth-slice32 n x))))
+        (add-to-ruleset nth-slices-normalize-to-nth-slice nth-slice<W>-is-nth-slice))
+     :str-alist str-alist
+     :atom-alist `((<W> . ,width)
+                   (<-W> . ,(- width))
+                   (<WMASK> . ,(logmask width))
+                   (<SHORTSTR> . ,shortstr))
+     :pkg-sym nil)))
 
+(def-nth-slice 2  )
+(def-nth-slice 4  )
+(def-nth-slice 8  )
+(def-nth-slice 16 )
+(def-nth-slice 32 )
+(def-nth-slice 64 )
+(def-nth-slice 128)
+(def-nth-slice 256)
+(def-nth-slice 512)
 
-(define nth-slice64 ((n natp)
-                     (x integerp))
-  :returns (slice natp :rule-classes :type-prescription)
-  :parents (bitops/extra-defs)
-  :short "Extract the @('n')th 64-bit slice of the integer @('x')."
-  :long "<p>We leave this enabled; we would usually not expect to try to reason
-about it.</p>"
-  :enabled t
-  :inline t
-  (mbe :logic
-       (logand (ash (ifix x) (* (nfix n) -64)) (1- (expt 2 64)))
-       :exec
-       (the (unsigned-byte 64)
-         (logand (ash x (* n -64)) #ux_FFFF_FFFF_FFFF_FFFF)))
-  ///
-  (defcong nat-equiv equal (nth-slice64 n x) 1)
-  (defcong int-equiv equal (nth-slice64 n x) 2)
-  (defthm unsigned-byte-p-64-of-nth-slice64
-    (unsigned-byte-p 64 (nth-slice64 n x))))
-
-
-(define nth-slice128 ((n natp)
-                      (x integerp))
-  :returns (slice natp :rule-classes :type-prescription)
-  :parents (bitops/extra-defs)
-  :short "Extract the @('n')th 128-bit slice of the integer @('x')."
-  :long "<p>We leave this enabled; we would usually not expect to try to reason
-about it.</p>"
-  :enabled t
-  :inline t
-  (mbe :logic
-       (logand (ash (ifix x) (* (nfix n) -128)) (1- (expt 2 128)))
-       :exec
-       (the (unsigned-byte 128)
-         (logand (ash x (* n -128))
-                 #ux_FFFFFFFF_FFFFFFFF_FFFFFFFF_FFFFFFFF)))
-  ///
-  (defcong nat-equiv equal (nth-slice128 n x) 1)
-  (defcong int-equiv equal (nth-slice128 n x) 2)
-  (defthm unsigned-byte-p-128-of-nth-slice128
-    (unsigned-byte-p 128 (nth-slice128 n x))))
+(defmacro nth-slice$ (size n x)
+  (case size
+    (2   `(nth-slice2   ,n ,x))
+    (4   `(nth-slice4   ,n ,x))
+    (8   `(nth-slice8   ,n ,x))
+    (16  `(nth-slice16  ,n ,x))
+    (32  `(nth-slice32  ,n ,x))
+    (64  `(nth-slice64  ,n ,x))
+    (128 `(nth-slice128 ,n ,x))
+    (256 `(nth-slice256 ,n ,x))
+    (512 `(nth-slice512 ,n ,x))
+    (t `(nth-slice ,size ,n ,x))))
 
 
 
@@ -466,3 +502,108 @@ bit)."
   (defcong nat-equiv equal (bitscan-rev src) 1))
 
 
+
+
+(define install-bit ((n natp) (val bitp) (x integerp))
+  :parents (bitops)
+  :short "@(call install-bit) sets @('x[n] = val'), where @('x') is an integer,
+@('n') is a bit position, and @('val') is a bit."
+
+  (mbe :logic
+       (b* ((x     (ifix x))
+            (n     (nfix n))
+            (val   (bfix val))
+            (place (ash 1 n))
+            (mask  (lognot place)))
+         (logior (logand x mask)
+                 (ash val n)))
+       :exec
+       (logior (logand x (lognot (ash 1 n)))
+               (ash val n)))
+  ///
+
+  (defthmd install-bit**
+    (equal (install-bit n val x)
+           (if (zp n)
+               (logcons val (logcdr x))
+             (logcons (logcar x)
+                      (install-bit (1- n) val (logcdr x)))))
+    :hints(("Goal" :in-theory (enable* ihsext-recursive-redefs)))
+    :rule-classes
+    ((:definition
+      :clique (install-bit)
+      :controller-alist ((install-bit t nil nil)))))
+
+  (add-to-ruleset ihsext-redefs install-bit**)
+  (add-to-ruleset ihsext-recursive-redefs install-bit**)
+
+  (defthm natp-install-bit
+    (implies (not (and (integerp x)
+                       (< x 0)))
+             (natp (install-bit n val x)))
+    :rule-classes :type-prescription)
+
+  (defcong nat-equiv equal (install-bit n val x) 1)
+  (defcong bit-equiv equal (install-bit n val x) 2)
+  (defcong int-equiv equal (install-bit n val x) 3)
+
+  (defthmd logbitp-of-install-bit-split
+    ;; Disabled by default since it can cause case splits.
+    (equal (logbitp m (install-bit n val x))
+           (if (= (nfix m) (nfix n))
+               (equal val 1)
+             (logbitp m x)))
+    :hints(("Goal" :in-theory (enable logbitp-of-ash-split))))
+
+  (add-to-ruleset ihsext-advanced-thms logbitp-of-install-bit-split)
+  (acl2::add-to-ruleset! logbitp-case-splits logbitp-of-install-bit-split)
+
+  (local (in-theory (e/d (logbitp-of-install-bit-split)
+                         (install-bit))))
+
+  (defthm logbitp-of-install-bit-same
+    (equal (logbitp m (install-bit m val x))
+           (equal val 1)))
+
+  (defthm logbitp-of-install-bit-diff
+    (implies (not (equal (nfix m) (nfix n)))
+             (equal (logbitp m (install-bit n val x))
+                    (logbitp m x))))
+
+  (local
+   (defthm install-bit-induct
+     t
+     :rule-classes ((:induction
+                     :pattern (install-bit pos v i)
+                     :scheme (logbitp-ind pos i)))))
+
+  (defthm install-bit-of-install-bit-same
+    (equal (install-bit a v (install-bit a v2 x))
+           (install-bit a v x))
+    :hints(("Goal" :in-theory (enable install-bit**))))
+
+  (defthm install-bit-of-install-bit-diff
+    (implies (not (equal (nfix a) (nfix b)))
+             (equal (install-bit a v (install-bit b v2 x))
+                    (install-bit b v2 (install-bit a v x))))
+    :hints(("Goal" :in-theory (enable install-bit**)))
+    :rule-classes ((:rewrite :loop-stopper ((a b install-bit)))))
+
+  (add-to-ruleset ihsext-basic-thms
+                  '(logbitp-of-install-bit-same
+                    logbitp-of-install-bit-diff
+                    install-bit-of-install-bit-same
+                    install-bit-of-install-bit-diff))
+
+  (defthm install-bit-when-redundant
+    (implies (equal (logbit n x) b)
+             (equal (install-bit n b x)
+                    (ifix x)))
+    :hints(("Goal" :in-theory (enable install-bit**))))
+
+  (defthm unsigned-byte-p-of-install-bit
+    (implies (and (unsigned-byte-p n x)
+                  (< (nfix i) n))
+             (unsigned-byte-p n (install-bit i v x)))
+    :hints(("Goal" :in-theory (e/d (install-bit** unsigned-byte-p**)
+                                   (unsigned-byte-p))))))

@@ -1,24 +1,12 @@
-; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic 
-; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc. 
+; RTL - A Formal Theory of Register-Transfer Logic and Computer Arithmetic
+; Copyright (C) 1995-2013 Advanced Mirco Devices, Inc.
 ;
 ; Contact:
 ;   David Russinoff
 ;   1106 W 9th St., Austin, TX 78703
 ;   http://www.russsinoff.com/
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
-;
-; This program is distributed in the hope that it will be useful but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-; PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-;
-; You should have received a copy of the GNU General Public License along with
-; this program; see the file "gpl.txt" in this directory.  If not, write to the
-; Free Software Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA
-; 02110-1335, USA.
+; See license file books/rtl/rel9/license.txt.
 ;
 ; Author: David M. Russinoff (david@russinoff.com)
 
@@ -224,8 +212,8 @@
   :hints (("Goal"
 		  :use ((:instance near1-1)
 			(:instance near1-3)
-			(:instance near1-6 
-				   (p (expt 2 (- (1+ (expo x)) n))) 
+			(:instance near1-6
+				   (p (expt 2 (- (1+ (expo x)) n)))
 				   (f (re (* (expt 2 (1- n)) (sig x)))))
 			(:instance near))))))
 
@@ -250,8 +238,8 @@
   :hints (("Goal"
 		  :use ((:instance near1-1)
 			(:instance near1-3)
-			(:instance near1-8 
-				   (p (expt 2 (- (1+ (expo x)) n))) 
+			(:instance near1-8
+				   (p (expt 2 (- (1+ (expo x)) n)))
 				   (f (re (* (expt 2 (1- n)) (sig x)))))
 			(:instance near))))))
 
@@ -299,7 +287,7 @@
                  (:instance fl-unique (x (* 1/2 (SIG X) (EXPT 2 N))) (n 0))))))
 
 
-(local 
+(local
  (defthm near1-a-support
    (implies (and (< (- x (trunc x n)) (- (away x n) x))
                  (rationalp x)
@@ -316,7 +304,7 @@
 ;; (i-am-here)
 ;; Thu Oct 12 14:41:22 2006
 
-(local 
+(local
   (defthm trunc-abs-reduce
     (implies (and (< x 0)
                   (integerp n)
@@ -328,7 +316,7 @@
                               (x (* -1 x))))))))
 
 
-(local 
+(local
   (defthm trunc-abs-reduce-2
     (implies (and (>= x 0)
                   (integerp n)
@@ -340,8 +328,8 @@
 
 
 
-  
-(local 
+
+(local
   (defthm away-abs-reduce
     (implies (and (< x 0)
                   (integerp n)
@@ -353,7 +341,7 @@
                               (x (* -1 x))))))))
 
 
-(local 
+(local
   (defthm away-abs-reduce-2
     (implies (and (>= x 0)
                   (integerp n)
@@ -384,7 +372,7 @@
 
 
 
-(local 
+(local
  (defthm near1-b-support
     (implies (and (> (- x (trunc x n)) (- (away x n) x))
                   (rationalp x)
@@ -401,7 +389,7 @@
                         away-exactp-b)))))
 
 
-(local 
+(local
  (defthm near1-b-lemma ;; the interesting case.
    (implies (and (> (abs (- x (trunc x n))) (abs (- (away x n) x)))
                  (rationalp x)
@@ -418,12 +406,12 @@
                               (:instance trunc-upper-pos
                                          (x (* -1 x))))))))
 
- 
 
-(encapsulate () 
-         (local 
+
+(encapsulate ()
+         (local
           (encapsulate ()
-                       (local 
+                       (local
                         (defthm fl-1/2-sig-x-is-zero-lemma
                           (implies (and (rationalp x)
                                         (rationalp y)
@@ -442,7 +430,7 @@
                                          0))
                          :hints (("Goal" :use ((:instance fl-1/2-sig-x-is-zero-lemma
                                                           (y 1/2))))))
-           
+
 
                        (defthm near1-b-1-2-2
                          (implies (rationalp x)
@@ -450,16 +438,16 @@
                                          (* 2 (EXPT 2 (expo x)))))
                          :hints (("Goal" :use ((:instance a15 (i 2) (j1 1) (j2 (expo x)))))))))
 
-         (local 
+         (local
           (encapsulate ()
-                       (local 
+                       (local
                         (defthm local-expt-2-expand
                           (implies (rationalp x)
                                    (equal (EXPT 2 (+ 1 (EXPO X)))
                                           (* 2 (EXPT 2 (expo x)))))
                           :hints (("Goal" :use ((:instance a15 (i 2) (j1 1) (j2 (expo x))))))))
 
-    
+
                        (defthm integer-n-less-than-expt
                          (implies (and (integerp n)
                                        (rationalp x)
@@ -479,9 +467,9 @@
                          :rule-classes :linear)))
 
 
-         (local 
+         (local
           (encapsulate ()
-                       (local 
+                       (local
                         (defthm local-expt-2-expand-2
                           (implies (rationalp x)
                                    (equal (EXPT 2 (+ 2 (EXPO X)))
@@ -498,7 +486,7 @@
                                        (not (equal n 0)))
                                   (<= (* 2 x) (EXPT 2 (+ 1 (EXPO X) (* -1 N)))))
                          :hints (("Goal" :in-theory (disable expo-comparison-rewrite-to-bound-2
-                                                             EXPO-COMPARISON-REWRITE-TO-BOUND                                        
+                                                             EXPO-COMPARISON-REWRITE-TO-BOUND
                                                              expo-bound-eric
                                                              EXPT-COMPARE
                                                              expo-upper-bound)
@@ -506,7 +494,7 @@
                                         (:instance expt-weak-monotone-linear
                                                    (n (+ 2 (expo x)))
                                                    (m (+ 1 (expo x) (* -1 n))))))))))
-         
+
 
          (defthm near1-b
            (implies (and (> (abs (- x (trunc x n))) (abs (- (away x n) x)))
@@ -520,7 +508,7 @@
                    ("Subgoal 1" :in-theory (enable near away expo-minus re cg sgn)
                     :cases ((not (equal n 0))))
                    ("Subgoal 1.1" :cases ((not (< 0 x))))
-                   ("Subgoal 1.1.2" 
+                   ("Subgoal 1.1.2"
                     :in-theory (e/d (near away expo-minus re cg sgn)
                                     (expt-compare
                                      expo-bound-eric
@@ -532,7 +520,7 @@
                                           (:instance integer-n-less-than-expt-2
                                                      (x (* -1 x))))))
                    :rule-classes ()))
-             
+
 ;; (i-am-here)
 
 ;; (defthm near1-b
@@ -560,7 +548,7 @@
 		  (= (near x n) (trunc x n)))
 	     (>= (abs (- x y)) (- x (trunc x n))))
   :rule-classes ()
-  :hints (("Goal" :in-theory (disable away-exactp-c 
+  :hints (("Goal" :in-theory (disable away-exactp-c
 				      near trunc-exactp-c)
 		  :use ((:instance near1-b)
 			(:instance away-lower-bound)
@@ -579,7 +567,7 @@
 		  (= (near x n) (away x n)))
 	     (>= (abs (- x y)) (- (away x n) x)))
   :rule-classes ()
-  :hints (("Goal" :in-theory (disable away-exactp-c 
+  :hints (("Goal" :in-theory (disable away-exactp-c
 				      trunc-exactp-c)
 		  :use ((:instance near1-a)
 			(:instance away-lower-pos)
@@ -610,9 +598,9 @@
 
 
 
-(encapsulate () 
+(encapsulate ()
 
-     (local 
+     (local
      (defthm equal-diff-trunc-away-1
        (implies (and (exactp y n)
                      (rationalp x)
@@ -631,7 +619,7 @@
                                         (a y)))))))
 
 
-     (local 
+     (local
      (defthm equal-diff-trunc-away-2
        (implies (and (exactp y n)
                      (rationalp x)
@@ -717,7 +705,7 @@
      ;;                             (j2 (+ 1 (EXPO X) (* -1 N))))))))
 
 
-     (local 
+     (local
      (defthm near2-lemma-futher
          (implies (and (exactp y n)
                        (rationalp x)
@@ -775,7 +763,7 @@
 
 (defthm near-exactp-b
     (implies (and (rationalp x)
-		  (integerp n) 
+		  (integerp n)
 		  (> n 0))
 	     (iff (= x (near x n))
 		  (exactp x n)))
@@ -786,7 +774,7 @@
 
 
 
-(local 
+(local
  (defthm near-exactp-c-support
     (implies (and (exactp a n)
 		  (>= a x)
@@ -801,7 +789,7 @@
 			away-exactp-c
 			trunc-upper-pos)))))
 
-(local 
+(local
  (defthm near-exactp-d-support
     (implies (and (rationalp x)
 		  (> x 0)
@@ -816,7 +804,7 @@
 			trunc-exactp-c)))))
 
 
-(local 
+(local
   (defthmd near-minus
     (equal (near (* -1 x) n)
            (* -1 (near x n)))))
@@ -836,7 +824,7 @@
           ("Subgoal 1" :use ((:instance near-exactp-d-support
                                         (x (* -1 x))
                                         (a (* -1 a)))))))
-              
+
 
 ;; (i-am-here)
 
@@ -859,7 +847,7 @@
 
 
 ;BOZO gen!
-(local 
+(local
  (defthm near-monotone-support
   (implies (and (<= x y)
                 (rationalp x)
@@ -926,7 +914,7 @@
       (/ (+ (near x n) (near y n)) 2)
     (expt 2 (expo y))))
 
-(local 
+(local
  (defthm near-near-1
     (implies (and (rationalp x)
 		  (rationalp y)
@@ -1134,7 +1122,7 @@
 		  (<= (near-witness x y n) y)
 		  (exactp (near-witness x y n) (1+ n))))
   :rule-classes ()
-  :hints (("Goal" :in-theory (disable near near-monotone-support 
+  :hints (("Goal" :in-theory (disable near near-monotone-support
                                       near-monotone)
 		  :use ((:instance near-near-2)
 			(:instance near-near-1)
@@ -1149,7 +1137,7 @@
 		  (integerp n)
 		  (integerp k)
 		  (> k 0)
-		  (>= n k)		  
+		  (>= n k)
 		  (< 0 a)
 		  (< a x)
 		  (< 0 y)
@@ -1171,7 +1159,7 @@
 		  (integerp n)
 		  (integerp k)
 		  (> k 0)
-		  (>= n k)		  
+		  (>= n k)
 		  (< 0 a)
 		  (< a x)
 		  (< 0 y)
@@ -1229,7 +1217,7 @@
                  (<= (near x n) a)
                  (> x (+ a (expt 2 (- (expo a) n)))))
             (> (abs (- (near x n) x))
-               (abs (- (+ a 
+               (abs (- (+ a
                           (expt 2 (- (expo a) n))
                           (expt 2 (- (expo a) n)))
                        x))))
@@ -1289,7 +1277,7 @@
    (implies (and (rationalp x) (> x 0)
                  (rationalp a) (> a 0)
                  (integerp n) (> n 0)
-                 (>= (near x n) 
+                 (>= (near x n)
                      (+ a
                         (expt 2 (- (expo a) n))
                         (expt 2 (- (expo a) n))))
@@ -1308,7 +1296,7 @@
    (implies (and (rationalp x) (> x 0)
                  (rationalp a) (> a 0)
                  (integerp n) (> n 0)
-                 (>= (near x n) 
+                 (>= (near x n)
                      (+ a (expt 2 (- (1+ (expo a)) n))))
                  (< x (+ a (expt 2 (- (expo a) n)))))
             (> (abs (- (near x n) x))
@@ -1351,7 +1339,7 @@
 		  (integerp n) (> n 0)
 		  (exactp a n)
 		  (< x a))
-	     (>= a 
+	     (>= a
 		 (+ (expt 2 (expo x))
 		    (expt 2 (- (1+ (expo x)) n)))))
   :rule-classes ()
@@ -1723,7 +1711,7 @@
 
 
 (encapsulate ()
-        (local 
+        (local
          (defthm near-exact-support
          (implies (and (rationalp x) (> x 0)
                        (integerp n) (> n 1)
@@ -1736,7 +1724,7 @@
 
  (defthm near-exact
     (implies (and (rationalp x)
-		  (integerp n) 
+		  (integerp n)
 		  (> n 1)
 		  (exactp x (1+ n))
 		  (not (exactp x n)))
@@ -1815,7 +1803,7 @@
 			(:instance expo-trunc)
 			(:instance away-exactp-c (a (+ (trunc x n) (expt 2 (- (1+ (expo x)) n))))))))))
 
-(local 
+(local
  (defthm near-est-support
     (implies (and (integerp n) (> n 0)
 		  (rationalp x) (> x 0))
@@ -1829,7 +1817,7 @@
 
 
 (defthm near-est
-    (implies (and (integerp n) 
+    (implies (and (integerp n)
 		  (> n 0)
 		  (rationalp x))
 	     (<= (abs (- x (near x n)))
@@ -1935,7 +1923,7 @@
 			  (expt 2 (1+ (expo x)))))
 		  (>= (+ x (expt 2 (- (expo x) n)))
 		      (expt 2 (1+ (expo x)))))
-	     (= x 
+	     (= x
 		(- (expt 2 (1+ (expo x)))
 		   (expt 2 (- (expo x) n)))))
   :rule-classes ()
@@ -1975,7 +1963,7 @@
 	     (integerp (* x (expt 2 (- n (expo x))))))
   :rule-classes ()
   :hints (("goal" :use ((:instance near-power-a-7)
-			(:instance hack-90 
+			(:instance hack-90
 				   (y (- (expt 2 (1+ (expo x))) (expt 2 (- (expo x) n))))
 				   (e (expt 2 (- n (expo x)))))
 			(:instance near-power-a-8))))))
@@ -2084,7 +2072,7 @@
                               )
 		  :use ((:instance exactp-2**n (n (1+ (expo x))) (m n))
 ;			(:instance expt-pos (x (- (expo x) n)))
-			(:instance trunc-exactp-c 
+			(:instance trunc-exactp-c
 				   (x (+ x (expt 2 (- (expo x) n))))
 				   (a (expt 2 (1+ (expo x))))))))))
 
@@ -2120,7 +2108,7 @@
 			(:instance trunc-exactp-a (x (+ x (expt 2 (- (expo x) n)))))
 ;			(:instance expt-pos (x (1+ (expo x))))
 			(:instance expo-2**n (n (1+ (expo x))))
-			(:instance fp+2 
+			(:instance fp+2
 				   (x (expt 2 (1+ (expo x))))
 				   (y (trunc (+ x (expt 2 (- (expo x) n))) n))))))))
 
@@ -2281,7 +2269,7 @@
   :hints (("goal" :use ((:instance near-choice)
 			(:instance trunc-exactp-b)
 			(:instance away-exactp-b)))))
-			
+
 (local
  (defthm near-trunc-case-1
    (implies (and (rationalp x) (> x 0)
@@ -2481,7 +2469,7 @@
 		 (trunc (+ x (expt 2 (- (expo x) n))) (1- n))))
   :rule-classes ()
   :hints (("goal" :in-theory (enable expt-split)
-                              
+
 		  :use ((:instance trunc-upper-pos (x (+ x (expt 2 (- (expo x) n)))) (n (1- n)))
 			(:instance near-est))))))
 
@@ -2492,10 +2480,10 @@
 	     (> (+ (near x n)
 		   (expt 2 (- (+ 2 (expo x)) n)))
 		(+ (near x n)
-		   (expt 2 (- (1+ (expo x)) n)))))		 
+		   (expt 2 (- (1+ (expo x)) n)))))
   :rule-classes ()
-  :hints (("goal" :use ((:instance expt-strong-monotone 
-				   (n (- (1+ (expo x)) n)) 
+  :hints (("goal" :use ((:instance expt-strong-monotone
+				   (n (- (1+ (expo x)) n))
 				   (m (- (+ 2 (expo x)) n))))))))
 
 (local
@@ -2527,14 +2515,14 @@
             (>= (near x n)
                 (trunc (+ x (expt 2 (- (expo x) n))) (1- n))))
    :rule-classes ()
-   :hints (("goal" :in-theory (disable ;expt-pos 
+   :hints (("goal" :in-theory (disable ;expt-pos
                                near-exactp-d-support
                                )
             :use ((:instance near-exact)
 ;			(:instance expt-pos (x (- (expo x) n)))
                   (:instance trunc-exactp-a (x (+ x (expt 2 (- (expo x) n)))) (n (1- n)))
-                  (:instance fp+2 
-                             (x (near x n)) 
+                  (:instance fp+2
+                             (x (near x n))
                              (y (trunc (+ x (expt 2 (- (expo x) n))) (1- n)))
                              (n (1- n)))
                   (:instance near-pos)
@@ -2630,7 +2618,7 @@
                                     (1- (+ k (- (expo (+ x y)) (expo y)))))
                               (sig (+ x y)))))))
   :otf-flg t
-  :rule-classes nil 
+  :rule-classes nil
   :hints (("Goal" :in-theory (e/d (expt-split
                                    expt-minus
                                    exactp sig ; EXPT-SPLIT-leading-constant

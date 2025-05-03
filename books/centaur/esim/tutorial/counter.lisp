@@ -39,9 +39,21 @@
 ; alu16.lsp so we won't explain preliminary things.
 
 (in-package "ACL2")
+
+; Added by Matt K., May 2015.  Improvement observed when certification used
+; the :delay strategy:
+; 133.09 sec. vs. 139.82 sec.
+(value-triple (set-gc-strategy :delay))
+
 (include-book "intro")
-(value-triple (set-max-mem (* 3 (expt 2 30))))
-; cert_param: (hons-only)
+
+(value-triple
+ ;; [Jared]: Matt K. had once commented out the following line, but I think
+ ;; it's nicer to leave this here to make it explicit to remind us of how it
+ ;; works.  At the time of this writing, I believe that the above call of
+ ;; set-gc-strategy installs a 4 GB ceiling.  However, in some cases it may be
+ ;; important to set a larger ceiling:
+ (set-max-mem (* 4 (expt 2 30))))
 
 
 ; NOTE ---- ESIM is still available but it is no longer being actively

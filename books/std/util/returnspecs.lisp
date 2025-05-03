@@ -31,7 +31,6 @@
 (in-package "STD")
 (include-book "da-base")
 (include-book "look-up")
-(local (include-book "misc/assert" :dir :system))
 (program)
 
 (defxdoc returns-specifiers
@@ -78,7 +77,8 @@ See the section on xdoc integration, below, for more details.</dd>
 <dt>@('<return-type>'), a symbol or term</dt>
 
 <dd>When provided, the return type is used to generate a basic type-like
-theorems about the return values.</dd>
+theorems about the return values.  A default hint is provided if no @(':hints')
+keyword is present; see the discussion of @(':hints') below.</dd>
 
 <dd><b>Important Note</b> in the multiple-valued case, this approach assumes
 you are using the @('tools/mv-nth') book.  The theorems we prove target terms
@@ -124,9 +124,18 @@ hyp, so trying to refer to them in a hypothesis is generally an error.</dd>
 
 <dt>@(':hints hints-term')</dt>
 
-<dd>This option only makes sense when there is a return-type term.  By default,
-this is @('nil'), but when specified, the hints are passed to the proof attempt
-for the associated return-type.</dd>
+<dd>This option only makes sense when there is a return-type term; when
+specified, the given hints are passed to the proof attempt for the associated
+return-type.  When no @(':hints') keyword is present, a default hint is taken
+from the @('std::returnspec') entry of the @('std::default-hints-table') table,
+but this is overridden if the @(':hints') keyword is present, even for
+@(':hints nil').  To change the default hints, you may use
+@('set-returnspec-default-hints').  The setting for this provided in the
+std/util books provides an induction and expand hint when the
+function introduced is singly-recursive.</dd>
+
+<dd>A few special symbols (and even substrings of symbols) are substituted into
+hints; see the section \"Substitutions\" below.</dd>
 
 <dt>@(':rule-classes classes')</dt>
 
@@ -134,11 +143,62 @@ for the associated return-type.</dd>
 the return-type theorem is added as a @(':rewrite') rule.  If you want to use
 other @(see acl2::rule-classes), then you will want to override this default.</dd>
 
+<dd>A few special symbols (and even substrings of symbols) are substituted into
+hints; see the section \"Substitutions\" below.</dd>
+
 <dt>@(':name name')</dt>
 
 <dd>This allows you to control the name of the associated theorem.</dd>
 
-</dl>")
+<dd>The default value of @('name') is <it>type</it>-of-<it>your-function</it>.
+For example, @('natp-of-foo').</dd>
+
+<dt>@(':hints-sub-returnnames')</dt>
+
+<dd>This option determines whether the
+return-name substitution is applied to the hints. See \"Substitutions\"
+below.</dd>
+
+</dl>
+
+<h3>Substitutions</h3>
+
+<p>Certain symbols and certain substrings of symbols are
+replaced in the theorem body, hints, and rule-classes.</p>
+
+<p>The following substitutions replace any symbol matching the given name in
+all three places (body, hints, and rule-classes):</p>
+
+<ul>
+<li>@('<CALL>') is replaced by the function applied to the formals.</li>
+<li>@('<FN>') is replaced by the function's macro alias, if it has one, or else its name.  That is, for a form that introduces @('foo') with macro arguments, creating a function named @('foo-fn'), this produces @('foo').</li>
+<li>@('<FN!>') is replaced by the functions name, strictly, i.e. @('foo-fn') in the example above.</li>
+<li>@('<VALUES>') is replaced by the list of return value names.</li>
+</ul>
+
+<p>In the hints, the substrings @('<FN>') and @('<FN!>') of symbol names are
+also substituted as above.  This allows hints to refer to @(see defret)-style
+theorem names.</p>
+
+<p>In the rule-classes, the return value names are substituted for appropriate
+terms; i.e., if the second return value of @('foo') is named @('bar'), then
+@('bar') becomes @('(mv-nth 1 (foo ...))').  This substitution may also
+optionally be applied to the hints by setting the @(':hints-sub-returnnames') option.
+This return name substitution is not applied to the theorem body, but the let-binding
+of the return names to the function call has a similar effect.</p>
+
+<h3>Configuration Object</h3>
+
+<p>Similar to @(see define), a configuration object can be set up to set some
+options globally (local to a book).  At the moment only the
+@(':hints-sub-returnnames') option is read from this configuration object.  The
+following form sets that option:</p>
+
+@({
+ (make-returnspec-config :hints-sub-returnnames t)
+ })
+
+")
 
 (def-primitive-aggregate returnspec
   (name          ; a symbol, the name of this return value
@@ -149,6 +209,7 @@ other @(see acl2::rule-classes), then you will want to override this default.</d
    hintsp        ; t if hints were provided
    rule-classes  ; :rewrite when omitted
    thm-name      ; NIL (to generate a name) or the name for the theorem
+   opts          ; alist binding keywords to values
    )
   :tag :return-spec)
 
@@ -283,7 +344,8 @@ other @(see acl2::rule-classes), then you will want to override this default.</d
 
        ((mv kwd-alist other-opts)
         ;; bozo better context for error message here would be good
-        (extract-keywords fnname '(:hyp :hints :rule-classes :name) options nil))
+        (extract-keywords fnname '(:hyp :hints :rule-classes :name :props :hints-sub-returnnames)
+                          options nil))
        (hyp (if (assoc :hyp kwd-alist)
                 (cdr (assoc :hyp kwd-alist))
               t))
@@ -332,7 +394,8 @@ other @(see acl2::rule-classes), then you will want to override this default.</d
                      :hyp hyp
                      :hints hints
                      :hintsp hintsp
-                     :thm-name thm-name)))
+                     :thm-name thm-name
+                     :opts kwd-alist)))
 
 (defun parse-returnspecs-aux (fnname x world)
   "Returns a returnspeclist-p"
@@ -348,7 +411,7 @@ other @(see acl2::rule-classes), then you will want to override this default.</d
   ;;  :returns return-spec
   ;;  :returns (mv return-spec ... return-spec)
   ;; We require that return-value names are never MV, so we can just check for MV to
-  ;; tell thich kind of return spec we are dealing with.
+  ;; tell which kind of return spec we are dealing with.
   ;; This function just converts either form into a list of return specs
   ;; with no MV part.
   (declare (xargs :guard t))
@@ -366,7 +429,7 @@ other @(see acl2::rule-classes), then you will want to override this default.</d
        ((when (eq (car x) 'mv))
         (if (true-listp (cdr x))
             (cdr x)
-          (raise "Error in ~x0: :returns must be nil-terminated." fnname x))))
+          (raise "Error in ~x0: :returns must be nil-terminated, but ~x1 is not." fnname x))))
     (list x)))
 
 (defun parse-returnspecs (fnname x world)
@@ -416,16 +479,7 @@ other @(see acl2::rule-classes), then you will want to override this default.</d
            (cons (second x)
                  (untranslate-and (third x))))
           (t
-           (list x))))
-
-  (local
-   (progn
-     (assert! (equal (untranslate-and 'x) '(x)))
-     (assert! (equal (untranslate-and 't) '(t)))
-     (assert! (equal (untranslate-and '(if x y z)) '((if x y z))))
-     (assert! (equal (untranslate-and '(if x y 'nil)) '(x y)))
-     (assert! (equal (untranslate-and '(if x (if a b c) 'nil)) '(x (if a b c))))
-     (assert! (equal (untranslate-and '(if x (if a b 'nil) 'nil)) '(x a b))))))
+           (list x)))))
 
 (defun force-each (x)
   (declare (xargs :guard t))
@@ -509,7 +563,7 @@ other @(see acl2::rule-classes), then you will want to override this default.</d
      name)))
 
 (defun returnspec-default-default-hint (fnname id world)
-  (and (eql (len (acl2::recursivep fnname world)) 1) ;; singly recursive
+  (and (eql (len (acl2::recursivep fnname t world)) 1) ;; singly recursive
        (let* ((pool-lst (acl2::access acl2::clause-id id :pool-lst)))
          (and (eql 0 (acl2::access acl2::clause-id id :forcing-round))
               (cond ((not pool-lst)
@@ -532,7 +586,31 @@ other @(see acl2::rule-classes), then you will want to override this default.</d
 (set-returnspec-default-hints
  ((returnspec-default-default-hint 'fnname acl2::id world)))
 
-(defun returnspec-single-thm (name name-fn x badname-okp world)
+
+(defun returnspec-sublis (subst str-subst x)
+  "Like sublis, but only substitutes symbols, and looks them up both by value and by name."
+  (if (atom x)
+      (if (symbolp x)
+          (let ((look (assoc-equal x subst)))
+            (if look
+                (cdr look)
+              (let ((look (assoc-equal (symbol-name x) subst)))
+                (if look
+                    (cdr look)
+                  (let ((subst (dumb-str-sublis str-subst (symbol-name x))))
+                    (if (equal subst (symbol-name x))
+                        x
+                      (intern-in-package-of-symbol subst x)))))))
+        x)
+    (cons-with-hint (returnspec-sublis subst str-subst (car x))
+                    (returnspec-sublis subst str-subst (cdr x))
+                    x)))
+
+(defun returnspec-strsubst (fnname fnname-fn)
+  `(("<FN>" . ,(symbol-name fnname))
+    ("<FN!>" . ,(symbol-name fnname-fn))))
+
+(defun returnspec-single-thm (name name-fn x body-subst ruleclass-subst badname-okp config world)
   "Returns EVENTS"
   ;; Only valid to call AFTER the function has been submitted, because we look
   ;; up the guard/formals from the world.
@@ -543,42 +621,61 @@ other @(see acl2::rule-classes), then you will want to override this default.</d
   (b* (((returnspec x) x)
        (formals (look-up-formals name-fn world))
        (binds `(,x.name (,name-fn . ,formals)))
-       (formula (returnspec-thm-body name-fn binds x world))
+       (formula (returnspec-sublis body-subst nil (returnspec-thm-body name-fn binds x world)))
        ((when (eq formula t)) nil)
-       (hints (if x.hintsp x.hints
+       (strsubst (returnspec-strsubst name name-fn))
+       (hints-sub-returnnames (getarg :hints-sub-returnnames
+                                      (getarg :hints-sub-returnnames nil config)
+                                      x.opts))
+       (hints (if x.hintsp
+                  (returnspec-sublis ;; ruleclass-subst
+                   (if hints-sub-returnnames
+                       ruleclass-subst
+                     body-subst)
+                   strsubst x.hints)
                 (returnspec-default-hints name-fn world))))
     `((defthm ,(returnspec-generate-name name x t badname-okp)
         ,formula
         :hints ,hints
-        :rule-classes ,x.rule-classes))))
+        :rule-classes ,(returnspec-sublis ruleclass-subst nil x.rule-classes)))))
 
-(defun returnspec-multi-thm (name name-fn binds x badname-okp world)
+(defun returnspec-multi-thm (name name-fn binds x body-subst ruleclass-subst badname-okp config world)
   "Returns EVENTS"
   (declare (xargs :guard (and (symbolp name)
                               (symbolp name-fn)
                               (returnspec-p x)
+                              (symbol-alistp config)
                               (plist-worldp world))))
   (b* (((returnspec x) x)
-       (formula (returnspec-thm-body name-fn binds x world))
+       (formula (returnspec-sublis body-subst nil (returnspec-thm-body name-fn binds x world)))
        ((when (equal formula t)) nil)
+       (strsubst (returnspec-strsubst name name-fn))
+       (hints-sub-returnnames (getarg :hints-sub-returnnames
+                                      (getarg :hints-sub-returnnames nil config)
+                                      x.opts))
        (hints (if x.hintsp
-                  x.hints
+                  (returnspec-sublis ;; ruleclass-subst
+                   (if hints-sub-returnnames
+                       ruleclass-subst
+                     body-subst)
+                   strsubst x.hints)
                 (returnspec-default-hints name-fn world))))
     `((defthm ,(returnspec-generate-name name x nil badname-okp)
         ,formula
         :hints ,hints
-        :rule-classes ,x.rule-classes))))
+        :rule-classes ,(returnspec-sublis ruleclass-subst nil x.rule-classes)))))
 
-(defun returnspec-multi-thms (name name-fn binds x badname-okp world)
+(defun returnspec-multi-thms (name name-fn binds x body-subst ruleclass-subst badname-okp config world)
   "Returns EVENTS"
   (declare (xargs :guard (and (symbolp name)
                               (symbolp name-fn)
                               (returnspeclist-p x)
+                              (symbol-alistp config)
                               (plist-worldp world))))
   (if (atom x)
       nil
-    (append (returnspec-multi-thm name name-fn binds (car x) badname-okp world)
-            (returnspec-multi-thms name name-fn binds (cdr x) badname-okp world))))
+    (append (returnspec-multi-thm name name-fn binds (car x) body-subst ruleclass-subst badname-okp config world)
+            (returnspec-multi-thms name name-fn binds (cdr x) body-subst ruleclass-subst badname-okp config world))))
 
 
 
@@ -595,6 +692,43 @@ other @(see acl2::rule-classes), then you will want to override this default.</d
     (cons (make-symbol-ignorable (car x))
           (make-symbols-ignorable (cdr x)))))
 
+(defun returnspec-mv-nth-subst (names idx call)
+  (if (atom names)
+      nil
+    (cons (cons (car names) `(mv-nth ,idx ,call))
+          (returnspec-mv-nth-subst (cdr names) (1+ idx) call))))
+
+(defun returnspec-symbol-packages (syms)
+  (if (atom syms)
+      nil
+    (add-to-set-equal (symbol-package-name (car syms))
+                      (returnspec-symbol-packages (cdr syms)))))
+
+(defun returnspec-call-sym-pairs (packages call)
+  (if (atom packages)
+      nil
+    (cons (cons (intern$ "<CALL>" (car packages)) call)
+          (returnspec-call-sym-pairs (cdr packages) call))))
+
+
+
+
+(defun returnspec-return-value-subst (name name-fn formals names)
+  (declare (xargs :guard (and (symbolp name)
+                              (symbol-listp names))))
+  ;; NOTE: These are intended for use with returnspec-sublis, which only
+  ;; replaces symbols, but will also look up the name of a symbol.  So a
+  ;; binding whose key is a string affects all symbols with that name, whereas
+  ;; bindings of symbols only affect those exact symbols.
+  (b* ((call (cons name-fn formals))
+       (both-subst `(("<CALL>" . ,call)
+                     ("<FN>" . ,name)
+                     ("<FN!>" . ,name-fn)
+                     ("<VALUES>" . ,names)))
+       ((when (eql (len names) 1))
+        (mv both-subst (cons (cons (car names) call) both-subst))))
+    (mv both-subst (append both-subst (returnspec-mv-nth-subst names 0 call)))))
+
 (defun returnspec-thms (name name-fn specs world)
   "Returns EVENTS"
   (declare (xargs :guard (and (symbolp name)
@@ -605,13 +739,31 @@ other @(see acl2::rule-classes), then you will want to override this default.</d
        ((unless specs)
         nil)
        (badname-okp t)
-       ((when (equal (len specs) 1))
-        (returnspec-single-thm name name-fn (car specs) badname-okp world))
        (names   (returnspeclist->names specs))
-       (ignorable-names (make-symbols-ignorable names))
        (formals (look-up-formals name-fn world))
+       (config (cdr (assoc 'returnspec-config (table-alist 'define world))))
+       ((mv body-subst ruleclass-subst) (returnspec-return-value-subst name name-fn formals names))
+       ((when (equal (len specs) 1))
+        (returnspec-single-thm name name-fn (car specs) body-subst ruleclass-subst badname-okp config world))
+       (ignorable-names (make-symbols-ignorable names))
        (binds   `((mv . ,ignorable-names) (,name-fn . ,formals))))
-    (returnspec-multi-thms name name-fn binds specs badname-okp world)))
+    (returnspec-multi-thms name name-fn binds specs body-subst ruleclass-subst badname-okp config world)))
+
+(defun keyval-list-to-kwd-alist (args)
+  (if (atom args)
+      nil
+    (cons (cons (first args) (second args))
+          (keyval-list-to-kwd-alist (cddr args)))))
 
 
 
+
+
+(defmacro make-returnspec-config (&rest args)
+  (declare (xargs :guard (subsetp-eq (strip-cars (keyval-list-to-kwd-alist args))
+                                     ;; for now
+                                     '(:hints-sub-returnnames))))
+
+  `(local
+    (table define 'returnspec-config
+           (keyval-list-to-kwd-alist (quote ,args)))))

@@ -33,7 +33,7 @@
 (local (include-book "arithmetic"))
 
 (defsection prefix-lines
-  :parents (std/strings)
+  :parents (lines)
   :short "Add a prefix to every line in a string."
   :long "<p>@(call prefix-lines) builds a new string by adding @('prefix') to
 the start of every line in the string @('x').  The start of @('x') is regarded
@@ -88,7 +88,6 @@ into a character list and then coerce it back into a string at the end.</p>"
   (defthm character-listp-of-prefix-lines-aux
     (implies (and (natp n)
                   (stringp x)
-                  (natp xl)
                   (<= n xl)
                   (= xl (length x))
                   (stringp rprefix)
@@ -101,6 +100,3 @@ into a character list and then coerce it back into a string at the end.</p>"
   (defthm stringp-of-prefix-lines
     (stringp (prefix-lines x prefix))
     :rule-classes :type-prescription))
-
-
-

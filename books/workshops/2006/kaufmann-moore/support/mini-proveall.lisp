@@ -36,10 +36,10 @@
         (true-listp (rev x))
         :rule-classes (:REWRITE :GENERALIZE))
 
-; Here we test the proof-checker using the same theorem as the one that
+; Here we test the proof-builder using the same theorem as the one that
 ; follows (but not storing it as a :rewrite rule).
 
-      (defthm rev-app-proof-checker
+      (defthm rev-app-proof-builder
         (equal (rev (app a b)) (app (rev b) (rev a)))
         :rule-classes nil
         :instructions
@@ -138,7 +138,7 @@
       (defthm insert-is-cons
         (perm (insert a x) (cons a x)))
 
-      (defthm insert-sort-is-id 
+      (defthm insert-sort-is-id
         (perm (insert-sort x) x))
 
       (defcong perm perm (app x y) 2)
@@ -229,12 +229,12 @@
 
 ; This defthm has two forcing rounds and is very realistic.
 
-      (defthm ordered-symbol-alistp-delete-assoc-eq-test
+      (defthm ordered-symbol-alistp-remove1-assoc-eq-test
         (implies (and (ordered-symbol-alistp l)
                       (symbolp key)
                       (assoc-eq key l))
-                 (ordered-symbol-alistp (delete-assoc-eq key l)))
-        :hints (("Goal" :in-theory (disable ordered-symbol-alistp-delete-assoc-eq))))
+                 (ordered-symbol-alistp (remove1-assoc-eq key l)))
+        :hints (("Goal" :in-theory (disable ordered-symbol-alistp-remove1-assoc-eq))))
 
 ;;;      )
 ;;;    :ld-skip-proofsp nil

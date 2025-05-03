@@ -31,7 +31,7 @@
 
 (include-book "std/util/define" :dir :system)
 (include-book "tools/flag" :dir :system)
-(include-book "std/misc/two-nats-measure" :dir :system)
+(include-book "std/basic/two-nats-measure" :dir :system)
 (include-book "std/basic/defs" :dir :system)
 (include-book "misc/hons-help" :dir :system) ;; for alist-keys/vals
 (local (include-book "std/lists/sets" :dir :system))
@@ -107,8 +107,8 @@ seen.  This is just an aid to proving things about the faster, memoized version.
      (max depth1 depth2))))
 
 (flag::make-flag fg-depth-stack-flag fg-depth-stack
-                 :flag-mapping ((fg-depth-stack . node)
-                                (fg-depth-stack-list . list)))
+                 :flag-mapping ((fg-depth-stack node)
+                                (fg-depth-stack-list list)))
 
 (in-theory (disable fg-depth-stack
                     fg-depth-stack-list))
@@ -162,8 +162,8 @@ seen.  This is just an aid to proving things about the faster, memoized version.
            (fg-depth-dual-stack-list-ind (cdr x) stack stack2)))))
 
 (flag::make-flag fg-depth-dual-stack-flag fg-depth-dual-stack-ind
-                 :flag-mapping ((fg-depth-dual-stack-ind . node)
-                                (fg-depth-dual-stack-list-ind . list)))
+                 :flag-mapping ((fg-depth-dual-stack-ind node)
+                                (fg-depth-dual-stack-list-ind list)))
 
 
 ;; (defthm increment-not-equal-fg-loop
@@ -175,13 +175,13 @@ seen.  This is just an aid to proving things about the faster, memoized version.
 (defthm-fg-depth-dual-stack-flag
   (defthm fg-depth-stack-when-subsetp
     (implies (and (subsetp-equal stack stack2)
-                  (equal (fg-depth-stack x stack) :loop)) 
+                  (equal (fg-depth-stack x stack) :loop))
              (equal (fg-depth-stack x stack2) :loop))
     :hints ('(:expand ((:free (stack) (fg-depth-stack x stack)))))
     :flag node)
   (defthm fg-depth-stack-list-when-subsetp
     (implies (and (subsetp-equal stack stack2)
-                  (equal (fg-depth-stack-list x stack) :loop)) 
+                  (equal (fg-depth-stack-list x stack) :loop))
              (equal (fg-depth-stack-list x stack2) :loop))
     :hints ('(:expand ((:free (stack) (fg-depth-stack-list x stack)))))
     :flag list))
@@ -439,8 +439,8 @@ seen.  This is just an aid to proving things about the faster, memoized version.
 
 
 (flag::make-flag fg-depth-memo-flag fg-depth-memo
-                 :flag-mapping ((fg-depth-memo . node)
-                                (fg-depth-memo-list . list)))
+                 :flag-mapping ((fg-depth-memo node)
+                                (fg-depth-memo-list list)))
 
 
 (in-theory (disable fg-depth-memo fg-depth-memo-list))
@@ -479,7 +479,7 @@ seen.  This is just an aid to proving things about the faster, memoized version.
            (if (eq val :back)
                (cons key (fg-depth-memo->stack memo))
              (cdr (fg-depth-memo->stack memo)))))
-  
+
   (defthm fg-node-not-member-stack-when-not-in-memo
     (implies (not (hons-assoc-equal x memo))
              (not (member x (fg-depth-memo->stack memo))))

@@ -122,9 +122,9 @@ disabled and may be enabled using:</p>
 
 <p>Besides this @(see xdoc::xdoc) documentation, you may be interested in the
 2004 ACL2 workshop paper, <a
-href='http://www.cs.utexas.edu/users/jared/publications/2004-acl2-osets/set-theory.pdf'>Finite
+href='https://www.cs.utexas.edu/users/moore/acl2/workshop-2004/contrib/davis/set-theory.pdf'>Finite
 Set Theory based on Fully Ordered Lists</a>, and see also the <a
-href='http://www.cs.utexas.edu/users/jared/osets/Slides/2004-02-seminar-slides.pdf'>slides</a>
+href='https://www.cs.utexas.edu/users/moore/acl2/workshop-2004/contrib/davis/workshop-osets-slides.pdf'>slides</a>
 from the accompanying talk.</p>")
 
 ; We begin with the definitions of the set theory functions and a few trivial
@@ -432,6 +432,20 @@ from the accompanying talk.</p>")
   :predicate-rewrite (((predicate ?x ?y) (in ?x ?y)))
   :tagging-theorem pick-a-point-subset-strategy)
 
+(defthm pick-a-point-subset-constraint-helper
+  ;; When we do a pick-a-point proof of subset, we need to show that (SUBSET X
+  ;; Y) is just the same as (ALL X) with (PREDICATE A) = (IN A Y).  Since ALL
+  ;; is defined recursively, the proof goals we get end up mentioning
+  ;; HEAD/TAIL.  This doesn't always work well if the user's theory doesn't
+  ;; have the right rules enabled.  This rule is intended to open up SUBSET in
+  ;; only this very special case to solve such goals.
+  (implies (syntaxp (equal set-for-all-reduction 'set-for-all-reduction))
+           (equal (subset set-for-all-reduction rhs)
+                  (cond ((empty set-for-all-reduction) t)
+                        ((in (head set-for-all-reduction) rhs)
+                         (subset (tail set-for-all-reduction) rhs))
+                        (t nil)))))
+
 (defthm double-containment
   (implies (and (setp X)
                 (setp Y))
@@ -445,10 +459,27 @@ from the accompanying talk.</p>")
 ; -------------------------------------------------------------------
 ; Primitive Level Theorems
 
-(defthm sets-are-true-lists
+; Updated 9/2017 by Matt K. (following Eric Smith's suggestion after input from
+; Alessandro Coglio and David Rager): The following rule usually stays
+; disabled, as the ones below may be much cheaper.
+
+(defthmd sets-are-true-lists
   (implies (setp X)
-	   (true-listp X))
-  :rule-classes ((:rewrite) (:compound-recognizer)))
+	   (true-listp X)))
+
+(defthm sets-are-true-lists-compound-recognizer
+       (implies (setp X)
+                (true-listp X))
+       :rule-classes :compound-recognizer)
+
+; The following usually stays enabled.  The first try was with backchain-limit
+; of 0 but (define vl-lucid-pp-multibits ...) failed in
+; books/centaur/vl/lint/lucid.lisp, and (define vl-svex-keyvallist-vars ...)
+; failed in books/centaur/sv/vl/expr.lisp.
+(defthm sets-are-true-lists-cheap
+  (implies (setp X)
+           (true-listp X))
+  :rule-classes ((:rewrite :backchain-limit-lst (1))))
 
 (defthm tail-count
   (implies (not (empty X))

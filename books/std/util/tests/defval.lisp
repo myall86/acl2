@@ -30,7 +30,7 @@
 
 (in-package "ACL2")
 (include-book "../defval")
-(include-book "misc/assert" :dir :system)
+(include-book "std/testing/assert-bang" :dir :system)
 
 (defxdoc test-par1 :parents (defval))
 (defxdoc test-par2 :parents (defval))
@@ -171,4 +171,17 @@
 
 (assert! (equal *test-kwd5* :short))
 
+;; Old test from defval-tests
+(defun fib (n)
+  (declare (xargs :guard (natp n)))
+  (cond ((zp n) 1)
+        ((eql n 1) 1)
+        (t (+ (fib (- n 1)) (fib (- n 2))))))
 
+(defval *defval-example-number*
+  :parents (defval)
+  :short "Example of a constant for @(see defval)."
+  :long "<p>This number is not very important.</p>"
+  (fib 5))
+
+(assert! (equal *defval-example-number* (fib 5)))
